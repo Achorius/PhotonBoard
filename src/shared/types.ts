@@ -1,0 +1,278 @@
+// ============================================================
+// PhotonBoard - Shared Types (Main ↔ Renderer)
+// ============================================================
+
+// --- DMX Core ---
+
+export const DMX_CHANNELS_PER_UNIVERSE = 512
+export const MAX_UNIVERSES = 16
+export const DMX_MIN = 0
+export const DMX_MAX = 255
+
+export interface DmxOutput {
+  universes: Uint8Array[] // Array of 512-byte buffers
+}
+
+export interface ArtNetConfig {
+  host: string // Target IP (e.g., '192.168.1.100' or '255.255.255.255')
+  port: number // Default 6454
+  universe: number // 0-15
+  subnet: number // 0-15
+  net: number // 0-127
+}
+
+// --- Fixture Definitions (OFL-compatible) ---
+
+export interface FixtureCapability {
+  dmxRange: [number, number]
+  type: string
+  label?: string
+  color?: string
+  colorTemperature?: string
+  wheel?: string
+  comment?: string
+}
+
+export interface FixtureChannel {
+  name: string
+  type: 'intensity' | 'color' | 'pan' | 'tilt' | 'gobo' | 'prism' | 'shutter' | 'strobe' | 'speed' | 'effect' | 'maintenance' | 'fog' | 'generic'
+  defaultValue?: number
+  highlightValue?: number
+  fineChannelAliases?: string[]
+  capabilities?: FixtureCapability[]
+  precedence?: 'HTP' | 'LTP'
+}
+
+export interface FixtureMode {
+  name: string
+  shortName?: string
+  channels: string[]
+  channelCount: number
+}
+
+export interface FixturePhysical {
+  dimensions?: [number, number, number]
+  weight?: number
+  power?: number
+  DMXconnector?: string
+  bulb?: {
+    type?: string
+    lumens?: number
+    colorTemperature?: number
+  }
+  lens?: {
+    degreesMinMax?: [number, number]
+  }
+}
+
+export interface FixtureDefinition {
+  id: string // unique key: manufacturer/model
+  name: string
+  manufacturer: string
+  categories: string[]
+  channels: Record<string, FixtureChannel>
+  modes: FixtureMode[]
+  physical?: FixturePhysical
+}
+
+// --- Patch ---
+
+export interface PatchEntry {
+  id: string
+  fixtureDefId: string
+  modeName: string
+  universe: number // 0-based
+  address: number // 1-512
+  name: string
+  groupIds: string[]
+  stagePosition?: { x: number; y: number; rotation: number }
+}
+
+// --- Groups ---
+
+export interface Group {
+  id: string
+  name: string
+  color: string
+  fixtureIds: string[] // PatchEntry ids
+}
+
+// --- Presets ---
+
+export type PresetType = 'intensity' | 'color' | 'position' | 'gobo' | 'beam' | 'full'
+
+export interface Preset {
+  id: string
+  name: string
+  type: PresetType
+  values: Record<string, Record<string, number>> // fixtureId → { channelName → value }
+}
+
+// --- Cues & Cuelists ---
+
+export interface CueChannelValue {
+  fixtureId: string
+  channelName: string
+  value: number
+}
+
+export interface Cue {
+  id: string
+  name: string
+  number: number // Cue number (e.g., 1, 1.5, 2)
+  values: CueChannelValue[]
+  fadeIn: number // seconds
+  fadeOut: number // seconds
+  delay: number // seconds
+  followTime: number | null // null = manual GO, number = auto-follow seconds
+  color?: string // UI color tag
+}
+
+export interface Cuelist {
+  id: string
+  name: string
+  cues: Cue[]
+  currentCueIndex: number
+  isPlaying: boolean
+  isLooping: boolean
+  priority: number // 0-100, higher wins in LTP
+  faderLevel: number // 0-255, master level for this cuelist
+  flash: boolean
+}
+
+// --- Chases ---
+
+export interface Chase {
+  id: string
+  name: string
+  steps: ChaseStep[]
+  currentStepIndex: number
+  isPlaying: boolean
+  isLooping: boolean
+  bpm: number
+  fadePercent: number // 0-100, percentage of step time used for fade
+  direction: 'forward' | 'backward' | 'bounce' | 'random'
+  faderLevel: number
+}
+
+export interface ChaseStep {
+  id: string
+  values: CueChannelValue[]
+  holdTime?: number // Override step time (seconds)
+}
+
+// --- Effects ---
+
+export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random'
+
+export interface Effect {
+  id: string
+  name: string
+  waveform: WaveformType
+  speed: number // Hz
+  depth: number // 0-255 amplitude
+  offset: number // 0-360 phase offset
+  channelType: string // Which channel type to affect
+  fixtureIds: string[]
+  fan: number // Phase spread across fixtures (0-360)
+  isRunning: boolean
+}
+
+// --- MIDI ---
+
+export type MidiSourceType = 'cc' | 'note' | 'program'
+export type MidiTargetType = 'channel' | 'cuelist_go' | 'cuelist_fader' | 'chase_toggle' | 'chase_bpm' | 'master' | 'effect_toggle' | 'flash' | 'blackout' | 'tap_tempo'
+
+export interface MidiMapping {
+  id: string
+  name: string
+  source: {
+    deviceName?: string
+    type: MidiSourceType
+    channel: number // 1-16
+    number: number // CC# or note#
+  }
+  target: {
+    type: MidiTargetType
+    id?: string // cuelist/chase/fixture id
+    parameter?: string // channel name
+  }
+  options: {
+    min: number
+    max: number
+    inverted: boolean
+  }
+}
+
+export interface MidiDevice {
+  id: string
+  name: string
+  manufacturer: string
+  type: 'input' | 'output'
+  connected: boolean
+}
+
+// --- Stage Layout ---
+
+export interface StageLayout {
+  width: number
+  height: number
+  backgroundImage?: string
+  fixtures: StageFixture[]
+}
+
+export interface StageFixture {
+  patchId: string
+  x: number
+  y: number
+  rotation: number
+  scale: number
+}
+
+// --- Show File ---
+
+export interface ShowFile {
+  version: string
+  name: string
+  createdAt: string
+  modifiedAt: string
+  artnetConfig: ArtNetConfig[]
+  patch: PatchEntry[]
+  groups: Group[]
+  presets: Preset[]
+  cuelists: Cuelist[]
+  chases: Chase[]
+  effects: Effect[]
+  midiMappings: MidiMapping[]
+  stageLayout: StageLayout
+}
+
+// --- IPC Channel Names ---
+
+export const IPC = {
+  // DMX
+  DMX_SET_CHANNEL: 'dmx:set-channel',
+  DMX_SET_CHANNELS: 'dmx:set-channels',
+  DMX_GET_VALUES: 'dmx:get-values',
+  DMX_BLACKOUT: 'dmx:blackout',
+
+  // ArtNet
+  ARTNET_CONFIGURE: 'artnet:configure',
+  ARTNET_GET_STATUS: 'artnet:get-status',
+
+  // Show
+  SHOW_NEW: 'show:new',
+  SHOW_SAVE: 'show:save',
+  SHOW_LOAD: 'show:load',
+  SHOW_SAVE_AS: 'show:save-as',
+  SHOW_GET_RECENT: 'show:get-recent',
+
+  // Fixtures
+  FIXTURES_SCAN: 'fixtures:scan',
+  FIXTURES_GET_ALL: 'fixtures:get-all',
+  FIXTURES_IMPORT: 'fixtures:import',
+
+  // App
+  APP_GET_VERSION: 'app:get-version',
+  APP_QUIT: 'app:quit'
+} as const
