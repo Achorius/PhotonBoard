@@ -20,7 +20,7 @@ export function ThreeCanvas() {
     <div
       ref={containerRef}
       className="w-full h-full"
-      style={{ background: '#07070d', cursor: 'grab' }}
+      style={{ background: '#07070d', cursor: 'grab', minHeight: '200px', position: 'relative' }}
     />
   )
 }

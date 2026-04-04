@@ -13,8 +13,8 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   // ---- Floor ----
   const floorGeo = new THREE.PlaneGeometry(width, depth)
   floorGeo.rotateX(-Math.PI / 2)
-  const floorMat = new THREE.MeshLambertMaterial({
-    color: 0x0d0d14,
+  const floorMat = new THREE.MeshBasicMaterial({
+    color: 0x181822,
     side: THREE.FrontSide
   })
   const floor = new THREE.Mesh(floorGeo, floorMat)
@@ -30,8 +30,8 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   // ---- Ceiling ----
   const ceilGeo = new THREE.PlaneGeometry(width, depth)
   ceilGeo.rotateX(Math.PI / 2)
-  const ceilMat = new THREE.MeshLambertMaterial({
-    color: 0x0a0a10,
+  const ceilMat = new THREE.MeshBasicMaterial({
+    color: 0x141420,
     side: THREE.FrontSide
   })
   const ceiling = new THREE.Mesh(ceilGeo, ceilMat)
@@ -41,7 +41,7 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   group.add(ceiling)
 
   // ---- Back wall (upstage, +Z) ----
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x0c0c16, side: THREE.FrontSide })
+  const wallMat = new THREE.MeshBasicMaterial({ color: 0x1c1c28, side: THREE.FrontSide })
   const backGeo = new THREE.PlaneGeometry(width, height)
   const backWall = new THREE.Mesh(backGeo, wallMat)
   backWall.position.set(0, height / 2, depth / 2)
@@ -87,19 +87,20 @@ export function buildRoom(config: RoomConfig): THREE.Group {
 }
 
 function addTruss(group: THREE.Group, width: number, depth: number, height: number): void {
-  const trussMat = new THREE.MeshLambertMaterial({ color: 0x333355 })
+  const trussMat = new THREE.MeshBasicMaterial({ color: 0x555577 })
   const pipeR = 0.03
+  // Trusses numbered 0..N starting from audience side (downstage, -Z)
   const trussPositions = [
-    { z: -depth * 0.3, label: 'front' },
-    { z: 0,            label: 'mid'   },
-    { z: depth * 0.3,  label: 'back'  }
+    { z: -depth * 0.3, num: 0 },  // closest to audience (downstage)
+    { z: 0,            num: 1 },  // mid
+    { z: depth * 0.3,  num: 2 },  // most upstage
   ]
-  for (const { z, label } of trussPositions) {
+  for (const { z, num } of trussPositions) {
     const pipeGeo = new THREE.CylinderGeometry(pipeR, pipeR, width, 6)
     pipeGeo.rotateZ(Math.PI / 2)
     const pipe = new THREE.Mesh(pipeGeo, trussMat)
     pipe.position.set(0, height - 0.05, z)
-    pipe.name = `truss-${label}`
+    pipe.name = `truss-${num}`
     group.add(pipe)
   }
 }

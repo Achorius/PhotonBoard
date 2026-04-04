@@ -20,7 +20,7 @@ interface PatchState {
   getFixtureChannels: (patchEntry: PatchEntry) => { name: string; absoluteChannel: number; type: string }[]
 
   // Groups
-  addGroup: (name: string, color: string) => void
+  addGroup: (name: string, color: string, parentGroupId?: string) => void
   removeGroup: (id: string) => void
   addToGroup: (groupId: string, fixtureIds: string[]) => void
   removeFromGroup: (groupId: string, fixtureIds: string[]) => void
@@ -118,9 +118,9 @@ export const usePatchStore = create<PatchState>((set, get) => ({
     }))
   },
 
-  addGroup: (name, color) => {
+  addGroup: (name, color, parentGroupId?) => {
     set((state) => ({
-      groups: [...state.groups, { id: uuidv4(), name, color, fixtureIds: [] }]
+      groups: [...state.groups, { id: uuidv4(), name, color, fixtureIds: [], parentGroupId }]
     }))
   },
 

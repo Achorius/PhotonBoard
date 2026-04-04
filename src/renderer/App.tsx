@@ -15,6 +15,7 @@ import { MidiView } from './components/midi/MidiView'
 import { VisualizerView } from './components/visualizer/VisualizerView'
 import { SettingsView } from './components/settings/SettingsView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
+import { usePlaybackController } from './hooks/usePlaybackController'
 
 type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
 
@@ -33,6 +34,8 @@ export default function App() {
   const { activeTab, setActiveTab } = useUiStore()
   const { loadFixtures } = usePatchStore()
   const { initMidi } = useMidiStore()
+
+  usePlaybackController()
 
   useEffect(() => {
     loadFixtures()

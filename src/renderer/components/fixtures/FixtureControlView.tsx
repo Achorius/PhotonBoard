@@ -7,8 +7,15 @@ import { XYPad } from '../common/XYPad'
 import { getChannelTypeColor } from '../../lib/fixture-library'
 
 export function FixtureControlView() {
-  const { patch, fixtures, selectedFixtureIds, selectFixture, selectAll, clearSelection, getFixtureChannels } = usePatchStore()
+  const { patch, fixtures, groups, selectedFixtureIds, selectFixture, selectAll, clearSelection, getFixtureChannels } = usePatchStore()
   const { values, setChannel } = useDmxStore()
+
+  const selectGroup = (groupId: string) => {
+    const group = groups.find(g => g.id === groupId)
+    if (!group) return
+    clearSelection()
+    for (const fid of group.fixtureIds) selectFixture(fid, true)
+  }
 
   const selectedEntries = patch.filter(p => selectedFixtureIds.includes(p.id))
   const firstEntry = selectedEntries[0]
@@ -30,6 +37,24 @@ export function FixtureControlView() {
           </div>
         </div>
         <div className="flex-1 overflow-auto">
+          {/* Group quick-select */}
+          {groups.length > 0 && (
+            <div className="px-2 py-1 border-b border-surface-3 space-y-0.5">
+              <div className="text-[9px] text-gray-600 uppercase">Groups</div>
+              <div className="flex flex-wrap gap-1">
+                {groups.filter(g => !g.parentGroupId).map(g => (
+                  <button
+                    key={g.id}
+                    className="px-1.5 py-0.5 rounded text-[10px] hover:opacity-80"
+                    style={{ backgroundColor: g.color + '33', color: g.color }}
+                    onClick={() => selectGroup(g.id)}
+                  >
+                    {g.name} ({g.fixtureIds.length})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {patch.map(entry => {
             const isSelected = selectedFixtureIds.includes(entry.id)
             return (

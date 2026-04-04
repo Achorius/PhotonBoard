@@ -17,15 +17,18 @@ export function LayoutEditor2D() {
   const { roomConfig, selectedFixtureId, selectFixture, gridSize, snapToGrid } = useVisualizerStore()
   const { values } = useDmxStore()
 
-  const worldToCanvas = useCallback((wx: number, wz: number, canvas: HTMLCanvasElement) => {
-    const cx = canvas.width  / 2 + wx * METRE_TO_PX
-    const cy = canvas.height / 2 + wz * METRE_TO_PX
+  const worldToCanvas = useCallback((wx: number, wz: number, W: number, H: number) => {
+    const cx = W / 2 + wx * METRE_TO_PX
+    const cy = H / 2 - wz * METRE_TO_PX  // +Z (upstage) → top of screen
     return { cx, cy }
   }, [])
 
-  const canvasToWorld = useCallback((cx: number, cy: number, canvas: HTMLCanvasElement) => {
-    let wx = (cx - canvas.clientWidth  / 2) / METRE_TO_PX
-    let wz = (cy - canvas.clientHeight / 2) / METRE_TO_PX
+  const canvasToWorld = useCallback((cx: number, cy: number) => {
+    const container = containerRef.current
+    if (!container) return { wx: 0, wz: 0 }
+    const W = container.clientWidth, H = container.clientHeight
+    let wx = (cx - W / 2) / METRE_TO_PX
+    let wz = -(cy - H / 2) / METRE_TO_PX  // flip Z for stage-top orientation
     if (snapToGrid) {
       wx = Math.round(wx / gridSize) * gridSize
       wz = Math.round(wz / gridSize) * gridSize
@@ -79,8 +82,8 @@ export function LayoutEditor2D() {
     ctx.fillStyle = '#333'
     ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('← AUDIENCE', W / 2, H / 2 - 8)
-    ctx.fillText('UPSTAGE →', W / 2, H / 2 + 16)
+    ctx.fillText('UPSTAGE', W / 2, H / 2 - 8)
+    ctx.fillText('AUDIENCE', W / 2, H / 2 + 16)
 
     // Fixtures (top-down, X=left-right, Z=front-back)
     for (const entry of patch) {
@@ -88,9 +91,7 @@ export function LayoutEditor2D() {
       const pos = entry.position3D
       const wx = pos?.x ?? getAutoX(entry, patch, roomConfig)
       const wz = pos?.z ?? getAutoZ(entry, patch, roomConfig)
-      const { cx, cy } = worldToCanvas(wx, wz, { width: W * dpr, height: H * dpr } as any)
-      const cxs = cx / dpr
-      const cys = cy / dpr
+      const { cx: cxs, cy: cys } = worldToCanvas(wx, wz, W, H)
       const isMovingHead = def?.categories.includes('Moving Head')
       const isSelected = entry.id === selectedFixtureId
 
@@ -141,7 +142,7 @@ export function LayoutEditor2D() {
       ctx.font = '8px sans-serif'
       ctx.fillText(entry.name.length > 10 ? entry.name.slice(0, 9) + '…' : entry.name, cxs, cys - 11)
     }
-  }, [patch, fixtures, roomConfig, selectedFixtureId, values, worldToCanvas, gridSize])
+  }, [patch, fixtures, roomConfig, selectedFixtureId, values, worldToCanvas, gridSize, snapToGrid])
 
   // Redraw on changes
   useEffect(() => { draw() }, [draw])
@@ -164,7 +165,7 @@ export function LayoutEditor2D() {
       const wx = pos?.x ?? getAutoX(entry, patch, roomConfig)
       const wz = pos?.z ?? getAutoZ(entry, patch, roomConfig)
       const cx = W / 2 + wx * METRE_TO_PX
-      const cy = H / 2 + wz * METRE_TO_PX
+      const cy = H / 2 - wz * METRE_TO_PX  // flipped Z
       if (Math.hypot(mx - cx, my - cy) < 12) return entry
     }
     return null
@@ -181,7 +182,7 @@ export function LayoutEditor2D() {
       const wx = pos?.x ?? getAutoX(hit, patch, roomConfig)
       const wz = pos?.z ?? getAutoZ(hit, patch, roomConfig)
       const cx = W / 2 + wx * METRE_TO_PX
-      const cy = H / 2 + wz * METRE_TO_PX
+      const cy = H / 2 - wz * METRE_TO_PX  // flipped Z
       draggingRef.current = { id: hit.id, offsetX: cx - x, offsetZ: cy - y }
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     } else {
@@ -192,11 +193,9 @@ export function LayoutEditor2D() {
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!draggingRef.current) return
     const { x, y } = getCanvasPos(e as any)
-    const canvas = canvasRef.current!
     const { wx, wz } = canvasToWorld(
       x + draggingRef.current.offsetX,
-      y + draggingRef.current.offsetZ,
-      canvas
+      y + draggingRef.current.offsetZ
     )
     const entry = patch.find(p => p.id === draggingRef.current!.id)
     const curY = entry?.position3D?.y ?? (roomConfig.height - 0.05)

@@ -29,24 +29,24 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = false
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.2
+    renderer.toneMapping = THREE.NoToneMapping
     renderer.setClearColor(0x07070d, 1)
     container.appendChild(renderer.domElement)
     renderer.domElement.style.display = 'block'
+    renderer.domElement.style.position = 'absolute'
+    renderer.domElement.style.inset = '0'
     renderer.domElement.style.width = '100%'
     renderer.domElement.style.height = '100%'
 
     // ---- Scene ----
     const scene = new THREE.Scene()
-    scene.fog = new THREE.FogExp2(0x07070d, 0.008)
 
     // ---- Camera ----
     const rect = container.getBoundingClientRect()
     const aspect = rect.width / (rect.height || 1)
     const camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 200)
-    camera.position.set(0, 2, 12)
-    camera.lookAt(0, 4, 0)
+    camera.position.set(0, 3, -12)   // audience side (-Z)
+    camera.lookAt(0, 3, 0)
 
     // ---- Lights ----
     const ambient = new THREE.AmbientLight(0x8080a0, 0.6)
@@ -60,7 +60,7 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.08
-    controls.target.set(0, 4, 0)
+    controls.target.set(0, 3, 0)
     controls.maxPolarAngle = Math.PI * 0.88
     controls.minDistance = 1
     controls.maxDistance = 80
@@ -98,8 +98,9 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     // ---- Resize ----
     const ro = new ResizeObserver(() => {
       const { width: w, height: h } = container.getBoundingClientRect()
+      if (w < 1 || h < 1) return  // skip zero-size updates
       renderer.setSize(w, h, false)
-      camera.aspect = w / (h || 1)
+      camera.aspect = w / h
       camera.updateProjectionMatrix()
     })
     ro.observe(container)

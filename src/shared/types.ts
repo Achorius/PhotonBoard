@@ -133,6 +133,7 @@ export interface Group {
   name: string
   color: string
   fixtureIds: string[] // PatchEntry ids
+  parentGroupId?: string // for sub-groups
 }
 
 // --- Presets ---

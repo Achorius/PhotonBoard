@@ -35,9 +35,17 @@ export function useFixtureObjects(
       }
     }
 
-    // Create new fixtures
+    // Create new fixtures or re-attach to current scene (handles React Strict Mode remount)
+    let created = 0
     for (const entry of patch) {
-      if (map.has(entry.id)) continue
+      const existing = map.get(entry.id)
+      if (existing) {
+        // Re-attach to current scene if orphaned (Strict Mode recreates scene)
+        if (existing.group.parent !== scene) {
+          scene.add(existing.group)
+        }
+        continue
+      }
       const def = fixtures.find((f) => f.id === entry.fixtureDefId)
       const shape = getFixtureShape(def?.categories || [])
       const beamAngle = def?.physical?.lens?.degreesMinMax?.[1] ?? 25
@@ -45,6 +53,7 @@ export function useFixtureObjects(
       objects.group.name = `fixture-${entry.id}`
       map.set(entry.id, objects)
       scene.add(objects.group)
+      created++
     }
 
     // Position all

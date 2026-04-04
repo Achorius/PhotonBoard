@@ -124,6 +124,41 @@ function FixtureFaders({
     [patch, universe]
   )
 
+  // Build unified channel info for multi-select group view
+  const selectedEntries = useMemo(() =>
+    selectedFixtureIds.map(id => patch.find(p => p.id === id)).filter(Boolean) as typeof patch,
+    [patch, selectedFixtureIds]
+  )
+
+  const unifiedChannels = useMemo(() => {
+    if (selectedEntries.length < 2) return null
+
+    // Get channel lists for each selected fixture
+    const allChannelSets = selectedEntries.map(entry => {
+      const channels = getFixtureChannels(entry)
+      const def = fixtures.find(f => f.id === entry.fixtureDefId)
+      return channels.map(ch => ({
+        ...ch,
+        type: def?.channels[ch.name]?.type || 'generic'
+      }))
+    })
+
+    // Find channel names common to ALL selected fixtures (case-insensitive)
+    const firstNames = allChannelSets[0].map(ch => ch.name.toLowerCase())
+    const commonNames = firstNames.filter(name =>
+      allChannelSets.every(chs => chs.some(c => c.name.toLowerCase() === name))
+    )
+
+    // Build unified channel descriptors using the first fixture's channel info for type/color
+    return commonNames.map(name => {
+      const refCh = allChannelSets[0].find(c => c.name.toLowerCase() === name)!
+      return {
+        name: refCh.name,
+        type: refCh.type
+      }
+    })
+  }, [selectedEntries, fixtures, getFixtureChannels])
+
   if (fixturesInUniverse.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-600 text-sm">
@@ -132,6 +167,57 @@ function FixtureFaders({
     )
   }
 
+  // --- Unified group fader view (multiple fixtures selected) ---
+  if (unifiedChannels && unifiedChannels.length > 0 && selectedEntries.length > 1) {
+    // For the displayed value, use the first selected fixture's current value
+    const firstEntry = selectedEntries[0]
+    const firstChannels = getFixtureChannels(firstEntry)
+
+    return (
+      <div className="flex gap-1 h-full">
+        <div className="flex flex-col bg-surface-2 rounded border border-accent p-1.5 min-w-fit">
+          {/* Group header */}
+          <div className="text-[9px] text-center text-accent truncate max-w-40 mb-1">
+            Group ({selectedEntries.length} fixtures)
+          </div>
+          <div className="text-[8px] text-center text-gray-600 mb-1">
+            {selectedEntries.map(e => e.name).join(', ')}
+          </div>
+
+          {/* Unified channel faders */}
+          <div className="flex gap-0.5 flex-1 items-end">
+            {unifiedChannels.map(uch => {
+              const color = getChannelTypeColor(uch.type)
+              // Read value from first selected fixture
+              const refCh = firstChannels.find(c => c.name.toLowerCase() === uch.name.toLowerCase())
+              const displayValue = refCh ? (values[firstEntry.universe]?.[refCh.absoluteChannel] || 0) : 0
+
+              return (
+                <Fader
+                  key={uch.name}
+                  value={displayValue}
+                  onChange={(val) => {
+                    // Apply to ALL selected fixtures
+                    for (const entry of selectedEntries) {
+                      const chs = getFixtureChannels(entry)
+                      const match = chs.find(c => c.name.toLowerCase() === uch.name.toLowerCase())
+                      if (match) setChannel(entry.universe, match.absoluteChannel, val)
+                    }
+                  }}
+                  label={getChannelShortLabel(uch.name)}
+                  color={color}
+                  size="sm"
+                  showValue={false}
+                />
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Per-fixture fader view (single or no selection) ---
   return (
     <div className="flex gap-1 h-full">
       {fixturesInUniverse.map(entry => {
@@ -164,7 +250,9 @@ function FixtureFaders({
                   <Fader
                     key={ch.absoluteChannel}
                     value={values[universe][ch.absoluteChannel] || 0}
-                    onChange={(val) => setChannel(universe, ch.absoluteChannel, val)}
+                    onChange={(val) => {
+                      setChannel(universe, ch.absoluteChannel, val)
+                    }}
                     label={getChannelShortLabel(ch.name)}
                     color={color}
                     size="sm"

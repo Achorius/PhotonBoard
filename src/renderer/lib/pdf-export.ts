@@ -53,19 +53,26 @@ export function exportStagePDF(
   doc.line(offsetX, stageY, offsetX + roomW * scale, stageY)
   doc.setLineDashPattern([], 0)
 
-  // Labels
+  // Labels — stage at top, audience at bottom
   doc.setFontSize(6)
   doc.setTextColor(150)
-  doc.text('AUDIENCE', offsetX + roomW * scale / 2, stageY - 2, { align: 'center' })
-  doc.text('UPSTAGE', offsetX + roomW * scale / 2, stageY + 5, { align: 'center' })
+  doc.text('UPSTAGE', offsetX + roomW * scale / 2, stageY - 2, { align: 'center' })
+  doc.text('AUDIENCE', offsetX + roomW * scale / 2, stageY + 5, { align: 'center' })
 
-  // Truss lines
+  // Truss lines — numbered 0..N from audience side (downstage)
   doc.setDrawColor(160, 160, 180)
   doc.setLineWidth(0.3)
-  const trussPositions = [-0.3, 0, 0.3]
-  for (const tz of trussPositions) {
-    const ty = offsetY + (roomD / 2 + tz * roomD) * scale
+  const trussPositions = [
+    { tz: -0.3, num: 0 },  // closest to audience (downstage)
+    { tz: 0, num: 1 },     // mid
+    { tz: 0.3, num: 2 },   // most upstage
+  ]
+  for (const { tz, num } of trussPositions) {
+    const ty = offsetY + (roomD / 2 - tz * roomD) * scale  // flipped Z
     doc.line(offsetX + 5, ty, offsetX + roomW * scale - 5, ty)
+    doc.setFontSize(5)
+    doc.setTextColor(120)
+    doc.text(`Bar ${num}`, offsetX + 1, ty - 1)
   }
 
   // --- Fixtures ---
@@ -79,32 +86,15 @@ export function exportStagePDF(
     const wx = pos?.x ?? autoPositions[i].x
     const wz = pos?.z ?? autoPositions[i].z
 
-    // Convert world coords to PDF coords
+    // Convert world coords to PDF coords (flip Z: +Z upstage = top of page)
     const px = offsetX + (roomW / 2 + wx) * scale
-    const py = offsetY + (roomD / 2 + wz) * scale
+    const py = offsetY + (roomD / 2 - wz) * scale
     const iconSize = 4 // mm
 
-    // Draw fixture icon based on type
-    doc.setLineWidth(0.4)
-    doc.setDrawColor(40)
-
-    if (shape === 'moving-head') {
-      // Diamond
-      doc.setFillColor(220, 220, 240)
-      const half = iconSize / 2
-      doc.lines(
-        [[half, half], [half, -half], [-half, -half], [-half, half]],
-        px - half, py, [1, 1], 'FD', true
-      )
-    } else if (shape === 'strip') {
-      // Wide rectangle
-      doc.setFillColor(200, 200, 220)
-      doc.rect(px - iconSize, py - iconSize / 4, iconSize * 2, iconSize / 2, 'FD')
-    } else {
-      // Circle (PAR / wash)
-      doc.setFillColor(210, 210, 230)
-      doc.circle(px, py, iconSize / 2, 'FD')
-    }
+    // Draw fixture icon — USITT-style lighting plot symbols
+    doc.setLineWidth(0.3)
+    doc.setDrawColor(30)
+    drawFixtureIcon(doc, px, py, iconSize, shape, def?.categories || [])
 
     // Labels
     doc.setFontSize(5)
@@ -122,9 +112,11 @@ export function exportStagePDF(
   doc.text('Legend:', MARGIN, legendY)
 
   const legendItems = [
-    { label: 'PAR / Wash', draw: (x: number, y: number) => { doc.setFillColor(210, 210, 230); doc.circle(x, y, 2, 'FD') } },
-    { label: 'Moving Head', draw: (x: number, y: number) => { doc.setFillColor(220, 220, 240); doc.lines([[2,2],[2,-2],[-2,-2],[-2,2]], x-2, y, [1,1], 'FD', true) } },
-    { label: 'Strip / Batten', draw: (x: number, y: number) => { doc.setFillColor(200, 200, 220); doc.rect(x - 4, y - 1, 8, 2, 'FD') } }
+    { label: 'PAR / Wash', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'par', ['PAR']) },
+    { label: 'Moving Head Spot', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'moving-head', ['Moving Head']) },
+    { label: 'Fresnel', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'par', ['Fresnel']) },
+    { label: 'Strip / Batten', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'strip', ['Pixel Bar']) },
+    { label: 'Profile / Ellipsoidal', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'par', ['Profile']) },
   ]
 
   let lx = MARGIN + 20
@@ -165,4 +157,93 @@ function computeAutoPositions(
       z: rows > 1 ? (row / (rows - 1) - 0.5) * room.depth * 0.6 : 0
     }
   })
+}
+
+/**
+ * Draw USITT-style lighting fixture symbols on the PDF.
+ * Industry-standard symbols for lighting plots.
+ */
+function drawFixtureIcon(
+  doc: jsPDF,
+  cx: number, cy: number,
+  size: number,
+  shape: string,
+  categories: string[]
+): void {
+  const r = size / 2
+  const isMovingHead = categories.some(c => c === 'Moving Head')
+  const isFresnel = categories.some(c => c.toLowerCase().includes('fresnel'))
+  const isProfile = categories.some(c =>
+    c.toLowerCase().includes('profile') || c.toLowerCase().includes('ellipsoidal') || c.toLowerCase().includes('leko')
+  )
+  const isBlinder = categories.some(c => c.toLowerCase().includes('blinder'))
+  const isStrobe = categories.some(c => c.toLowerCase().includes('strobe'))
+
+  doc.setLineWidth(0.3)
+  doc.setDrawColor(30)
+
+  if (shape === 'moving-head') {
+    // Moving head: circle with yoke arms and crosshair
+    doc.setFillColor(240, 240, 250)
+    doc.circle(cx, cy, r, 'FD')
+    // Crosshair inside circle
+    doc.setLineWidth(0.2)
+    doc.line(cx - r * 0.6, cy, cx + r * 0.6, cy)
+    doc.line(cx, cy - r * 0.6, cx, cy + r * 0.6)
+    // Yoke arms
+    doc.setLineWidth(0.4)
+    doc.line(cx - r - 0.8, cy - r * 0.5, cx - r - 0.8, cy + r * 0.5)
+    doc.line(cx + r + 0.8, cy - r * 0.5, cx + r + 0.8, cy + r * 0.5)
+    // Connect arms
+    doc.line(cx - r, cy, cx - r - 0.8, cy)
+    doc.line(cx + r, cy, cx + r + 0.8, cy)
+  } else if (shape === 'strip') {
+    // LED strip/batten: long rectangle with LED dots
+    doc.setFillColor(230, 230, 245)
+    const w = size * 2.5, h = size * 0.5
+    doc.rect(cx - w / 2, cy - h / 2, w, h, 'FD')
+    // LED cells inside
+    doc.setLineWidth(0.15)
+    const cells = 5
+    const cellW = w / cells
+    for (let i = 1; i < cells; i++) {
+      const lx = cx - w / 2 + i * cellW
+      doc.line(lx, cy - h / 2, lx, cy + h / 2)
+    }
+  } else if (isFresnel) {
+    // Fresnel: circle with concentric rings (fresnel lens)
+    doc.setFillColor(235, 235, 250)
+    doc.circle(cx, cy, r, 'FD')
+    doc.setLineWidth(0.15)
+    doc.circle(cx, cy, r * 0.65, 'S')
+    doc.circle(cx, cy, r * 0.35, 'S')
+  } else if (isProfile) {
+    // Profile/ERS: ellipse with lens barrel
+    doc.setFillColor(235, 235, 250)
+    doc.ellipse(cx, cy, r, r * 0.75, 'FD')
+    // Lens barrel pointing down (toward audience)
+    doc.setFillColor(200, 200, 215)
+    doc.rect(cx - r * 0.25, cy + r * 0.75, r * 0.5, r * 0.8, 'FD')
+  } else if (isBlinder) {
+    // Blinder: double rectangle
+    doc.setFillColor(240, 240, 250)
+    const bw = size * 0.8
+    doc.rect(cx - bw - 0.3, cy - r * 0.6, bw, size * 0.6, 'FD')
+    doc.rect(cx + 0.3, cy - r * 0.6, bw, size * 0.6, 'FD')
+  } else if (isStrobe) {
+    // Strobe: rectangle with zigzag
+    doc.setFillColor(250, 250, 250)
+    doc.rect(cx - r, cy - r * 0.5, size, r, 'FD')
+    doc.setLineWidth(0.2)
+    // Lightning bolt
+    doc.line(cx - r * 0.3, cy - r * 0.3, cx + r * 0.1, cy)
+    doc.line(cx + r * 0.1, cy, cx - r * 0.1, cy)
+    doc.line(cx - r * 0.1, cy, cx + r * 0.3, cy + r * 0.3)
+  } else {
+    // PAR / Wash: circle with small dot in center (standard PAR symbol)
+    doc.setFillColor(235, 235, 250)
+    doc.circle(cx, cy, r, 'FD')
+    doc.setFillColor(80, 80, 100)
+    doc.circle(cx, cy, r * 0.2, 'F')
+  }
 }

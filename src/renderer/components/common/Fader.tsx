@@ -25,28 +25,15 @@ export function Fader({
 }: FaderProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
 
   const heights = { sm: 80, md: 120, lg: 180 }
   const widths = { sm: 28, md: 36, lg: 44 }
   const height = vertical ? heights[size] : 24
   const width = vertical ? widths[size] : heights[size]
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    isDragging.current = true
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    updateValue(e)
-  }, [])
-
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging.current) return
-    updateValue(e)
-  }, [])
-
-  const handlePointerUp = useCallback(() => {
-    isDragging.current = false
-  }, [])
-
-  const updateValue = useCallback((e: React.PointerEvent) => {
+  const computeValue = useCallback((e: React.PointerEvent) => {
     const track = trackRef.current
     if (!track) return
     const rect = track.getBoundingClientRect()
@@ -58,8 +45,23 @@ export function Fader({
       ratio = (e.clientX - rect.left) / rect.width
     }
     ratio = Math.max(0, Math.min(1, ratio))
-    onChange(Math.round(ratio * 255))
-  }, [vertical, onChange])
+    onChangeRef.current(Math.round(ratio * 255))
+  }, [vertical])
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    isDragging.current = true
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    computeValue(e)
+  }, [computeValue])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current) return
+    computeValue(e)
+  }, [computeValue])
+
+  const handlePointerUp = useCallback(() => {
+    isDragging.current = false
+  }, [])
 
   const percent = (value / 255) * 100
   const displayValue = Math.round(percent)

@@ -31,8 +31,11 @@ const EMPTY: ResolvedChannels = {
   shutter: 255, zoom: 128, focus: 128, gobo: 0, strobe: 0
 }
 
+// Numeric channel keys (excludes hasDimmerChannel which is boolean)
+type NumericChannelKey = Exclude<keyof ResolvedChannels, 'hasDimmerChannel'>
+
 // Name aliases for channel lookup (lowercase)
-const CHANNEL_ALIASES: Record<keyof ResolvedChannels, string[]> = {
+const CHANNEL_ALIASES: Record<NumericChannelKey, string[]> = {
   dimmer:    ['dimmer', 'intensity', 'master dimmer', 'master', 'brightness'],
   red:       ['red', 'r'],
   green:     ['green', 'g', 'lime', 'lime green'],
@@ -85,10 +88,10 @@ export function resolveChannels(
 
   // Match aliases
   let dimmerFound = false
-  for (const [key, aliases] of Object.entries(CHANNEL_ALIASES) as [keyof ResolvedChannels, string[]][]) {
+  for (const [key, aliases] of Object.entries(CHANNEL_ALIASES) as [NumericChannelKey, string[]][]) {
     for (const alias of aliases) {
       if (alias in channelValueMap) {
-        result[key] = channelValueMap[alias]
+        ;(result as unknown as Record<string, number>)[key] = channelValueMap[alias]
         if (key === 'dimmer') dimmerFound = true
         break
       }
@@ -110,7 +113,8 @@ export function resolveChannels(
  */
 export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number; b: number } {
   const hasColorChannels = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
-                           ch.white > 0 || ch.amber > 0 || ch.uv > 0
+                           ch.white > 0 || ch.amber > 0 || ch.uv > 0 ||
+                           ch.cyan > 0 || ch.magenta > 0 || ch.yellow > 0
 
   if (!hasColorChannels) {
     // No color channels active — only a dimmer (or nothing)
@@ -121,9 +125,13 @@ export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number;
 
   // Apply master dimmer only if fixture actually has a dimmer channel
   const masterDim = ch.hasDimmerChannel ? ch.dimmer / 255 : 1.0
-  const r = Math.min(1, (ch.red / 255 + ch.white / 510 + ch.amber / 510)) * masterDim
-  const g = Math.min(1, (ch.green / 255 + ch.white / 510)) * masterDim
-  const b = Math.min(1, (ch.blue / 255 + ch.uv / 510)) * masterDim
+  // CMY subtractive → additive RGB: cyan removes red, magenta removes green, yellow removes blue
+  const cyanSub = ch.cyan / 255
+  const magentaSub = ch.magenta / 255
+  const yellowSub = ch.yellow / 255
+  const r = Math.min(1, (ch.red / 255 + ch.white / 510 + ch.amber / 510) * (1 - cyanSub)) * masterDim
+  const g = Math.min(1, (ch.green / 255 + ch.white / 510) * (1 - magentaSub)) * masterDim
+  const b = Math.min(1, (ch.blue / 255 + ch.uv / 510) * (1 - yellowSub)) * masterDim
   return { r, g, b }
 }
 

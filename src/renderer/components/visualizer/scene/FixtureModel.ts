@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { FixtureShape } from '@shared/types'
 
-const BODY_COLOR = 0x3a3a55
+const BODY_COLOR = 0x6a6a8a  // brighter for visibility (was 0x3a3a55)
 const SELECTED_COLOR = 0xe85d04
 const LENS_COLOR = 0x222244
 
@@ -17,6 +17,8 @@ export interface FixtureObjects {
   headGroup: THREE.Group | null
   /** Beam cone mesh — additive transparent cone */
   coneMesh: THREE.Mesh
+  /** Haze disc inside beam for atmospheric effect */
+  hazeMesh: THREE.Mesh | null
   /** Actual Three.js SpotLight for illuminating surfaces */
   spotLight: THREE.SpotLight
   spotTarget: THREE.Object3D
@@ -39,6 +41,16 @@ const coneMaterial = () =>
   })
 
 const lensMaterial = () =>
+  new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0.5, 0.5, 0.65),
+    transparent: true,
+    opacity: 0.5,   // standby glow visible immediately (was 0.0)
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
+
+const hazeMaterial = () =>
   new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
@@ -64,6 +76,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
   let yokeGroup: THREE.Group | null = null
   let headGroup: THREE.Group | null = null
   let coneMesh: THREE.Mesh
+  let hazeMesh: THREE.Mesh | null = null
   let lensMesh: THREE.Mesh
 
   if (shape === 'moving-head') {
@@ -111,7 +124,16 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
     coneGeo.rotateX(-Math.PI / 2)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.z = -0.09
+    coneMesh.renderOrder = 100
     headGroup.add(coneMesh)
+
+    // Haze discs along beam for volumetric feel
+    const hazeGeo = new THREE.PlaneGeometry(coneRadius * 1.2, coneRadius * 1.2)
+    hazeMesh = new THREE.Mesh(hazeGeo, hazeMaterial())
+    hazeMesh.position.z = -coneHeight * 0.4
+    hazeMesh.rotation.y = Math.PI
+    hazeMesh.renderOrder = 101
+    headGroup.add(hazeMesh)
   } else if (shape === 'strip') {
     // --- LED Strip / Batten ---
     const stripGeo = new THREE.BoxGeometry(1.0, 0.06, 0.08)
@@ -123,6 +145,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.04
+    coneMesh.renderOrder = 100
     group.add(coneMesh)
 
     const lensGeo = new THREE.PlaneGeometry(0.9, 0.04)
@@ -141,7 +164,16 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.11
+    coneMesh.renderOrder = 100
     group.add(coneMesh)
+
+    // Haze disc
+    const hazeGeo = new THREE.PlaneGeometry(coneRadius * 1.0, coneRadius * 1.0)
+    hazeMesh = new THREE.Mesh(hazeGeo, hazeMaterial())
+    hazeMesh.position.y = -coneHeight * 0.35
+    hazeMesh.rotation.x = -Math.PI / 2
+    hazeMesh.renderOrder = 101
+    group.add(hazeMesh)
 
     const lensGeo = new THREE.CircleGeometry(0.14, 16)
     lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
@@ -154,6 +186,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
   // SpotLight — child of group, aimed downward
   const spotLight = new THREE.SpotLight(0xffffff, 0, 14, beamAngleRad * 1.1, 0.25, 1.5)
   spotLight.castShadow = false
+  spotLight.userData.baseAngle = beamAngleRad * 1.1  // preserve for per-frame reset
   const spotTarget = new THREE.Object3D()
   spotTarget.position.set(0, -6, 0)
   group.add(spotLight)
@@ -166,6 +199,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
     yokeGroup,
     headGroup,
     coneMesh,
+    hazeMesh,
     spotLight,
     spotTarget,
     lensMesh,
