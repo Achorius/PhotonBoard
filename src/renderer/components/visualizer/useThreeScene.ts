@@ -45,8 +45,8 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     const rect = container.getBoundingClientRect()
     const aspect = rect.width / (rect.height || 1)
     const camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 200)
-    camera.position.set(0, 7, 14)
-    camera.lookAt(0, 3, 0)
+    camera.position.set(0, 2, 12)
+    camera.lookAt(0, 4, 0)
 
     // ---- Lights ----
     const ambient = new THREE.AmbientLight(0x404060, 0.2)
@@ -60,7 +60,7 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.08
-    controls.target.set(0, 3, 0)
+    controls.target.set(0, 4, 0)
     controls.maxPolarAngle = Math.PI * 0.88
     controls.minDistance = 1
     controls.maxDistance = 80

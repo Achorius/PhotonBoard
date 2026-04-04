@@ -156,11 +156,12 @@ export function PatchView() {
 }
 
 function AddFixtureModal({ onClose }: { onClose: () => void }) {
-  const { fixtures, addFixture } = usePatchStore()
+  const { fixtures, patch, addFixture } = usePatchStore()
   const [selectedDef, setSelectedDef] = useState<string>('')
   const [selectedMode, setSelectedMode] = useState<string>('')
   const [universe, setUniverse] = useState(0)
   const [address, setAddress] = useState(1)
+  const [addressManuallySet, setAddressManuallySet] = useState(false)
   const [name, setName] = useState('')
   const [count, setCount] = useState(1)
   const [search, setSearch] = useState('')
@@ -186,6 +187,33 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
   }, [fixtures, search])
 
   const currentDef = fixtures.find(f => f.id === selectedDef)
+
+  // Auto-compute first free address when fixture/universe/mode changes
+  const firstFreeAddress = useMemo(() => {
+    const mode = currentDef?.modes.find(m => m.name === selectedMode)
+    const channelCount = mode?.channelCount || 1
+    const occupied = new Set<number>()
+    for (const entry of patch) {
+      if (entry.universe !== universe) continue
+      const def = fixtures.find(f => f.id === entry.fixtureDefId)
+      const m = def?.modes.find(m => m.name === entry.modeName)
+      const cnt = m?.channelCount || 1
+      for (let i = 0; i < cnt; i++) occupied.add(entry.address - 1 + i)
+    }
+    for (let addr = 1; addr <= 512 - channelCount + 1; addr++) {
+      let fits = true
+      for (let i = 0; i < channelCount; i++) {
+        if (occupied.has(addr - 1 + i)) { fits = false; break }
+      }
+      if (fits) return addr
+    }
+    return 1
+  }, [currentDef, selectedMode, universe, patch, fixtures])
+
+  // Apply auto-address unless user manually typed an address
+  React.useEffect(() => {
+    if (!addressManuallySet) setAddress(firstFreeAddress)
+  }, [firstFreeAddress, addressManuallySet])
 
   const handleAdd = () => {
     if (!selectedDef || !selectedMode || !name) return
@@ -271,7 +299,7 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="flex-1">
                     <label className="text-[10px] text-gray-500 uppercase">Address</label>
-                    <input className="input w-full mt-0.5" type="number" min={1} max={512} value={address} onChange={e => setAddress(parseInt(e.target.value) || 1)} />
+                    <input className="input w-full mt-0.5" type="number" min={1} max={512} value={address} onChange={e => { setAddressManuallySet(true); setAddress(parseInt(e.target.value) || 1) }} />
                   </div>
                   <div className="w-16">
                     <label className="text-[10px] text-gray-500 uppercase">Count</label>

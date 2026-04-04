@@ -41,7 +41,7 @@ export function updateFixtureObjects(
     lensMat.opacity = Math.min(0.95, effectiveDim * 1.4)
   } else {
     // Standby: small always-on glow to show fixture position
-    lensMat.color.set(0.18, 0.18, 0.24)
+    lensMat.color.setRGB(0.18, 0.18, 0.24)
     lensMat.opacity = 0.15
   }
 
