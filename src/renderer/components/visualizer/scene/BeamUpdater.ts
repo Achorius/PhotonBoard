@@ -35,10 +35,15 @@ export function updateFixtureObjects(
     objects.coneMesh.visible = false
   }
 
-  // Lens glow — minimum standby glow so the fixture is always visible in the 3D scene
-  const minGlow = 0.04
-  lensMat.color.copy(hasBeam ? col : new THREE.Color(0.15, 0.15, 0.18))
-  lensMat.opacity = Math.max(minGlow, Math.min(0.95, effectiveDim * 1.2))
+  // Lens glow
+  if (hasBeam) {
+    lensMat.color.copy(col)
+    lensMat.opacity = Math.min(0.95, effectiveDim * 1.4)
+  } else {
+    // Standby: small always-on glow to show fixture position
+    lensMat.color.set(0.18, 0.18, 0.24)
+    lensMat.opacity = 0.15
+  }
 
   // SpotLight
   objects.spotLight.color.copy(col)

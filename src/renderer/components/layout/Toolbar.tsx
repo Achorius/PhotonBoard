@@ -1,66 +1,36 @@
 import React from 'react'
-import { useUiStore, type ViewTab } from '../../stores/ui-store'
+import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 
-const TABS: { id: ViewTab; label: string; shortcut: string }[] = [
-  { id: 'faders',     label: 'Faders',     shortcut: '1' },
-  { id: 'patch',      label: 'Patch',      shortcut: '2' },
-  { id: 'fixtures',   label: 'Fixtures',   shortcut: '3' },
-  { id: 'playback',   label: 'Playback',   shortcut: '4' },
-  { id: 'effects',    label: 'Effects',    shortcut: '5' },
-  { id: 'midi',       label: 'MIDI',       shortcut: '6' },
-  { id: 'stage',      label: 'Stage 2D',   shortcut: '7' },
-  { id: 'visualizer', label: '3D View',    shortcut: '8' },
-  { id: 'settings',   label: 'Settings',   shortcut: '9' }
-]
-
 export function Toolbar() {
-  const { activeTab, setActiveTab, showName } = useUiStore()
+  const { showName } = useUiStore()
   const { grandMaster, setGrandMaster, blackout, toggleBlackout } = useDmxStore()
 
   return (
-    <div className="h-10 bg-surface-1 border-b border-surface-3 flex items-center px-2 gap-1 titlebar-drag">
-      {/* Spacer for traffic lights */}
+    <div className="h-9 bg-surface-1 border-b border-surface-3 flex items-center px-3 gap-3 shrink-0 titlebar-drag">
+      {/* macOS traffic lights space */}
       <div className="w-16 shrink-0" />
 
       {/* Show name */}
-      <span className="text-xs text-gray-400 mr-3 titlebar-no-drag truncate max-w-32">
+      <span className="text-xs text-gray-400 titlebar-no-drag truncate max-w-40 font-medium">
         {showName}
       </span>
-
-      {/* Tab buttons */}
-      <div className="flex items-center gap-0.5 titlebar-no-drag">
-        {TABS.map(({ id, label, shortcut }) => (
-          <button
-            key={id}
-            className={`px-2.5 py-1 text-xs rounded transition-colors ${
-              activeTab === id
-                ? 'bg-accent text-white'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-surface-3'
-            }`}
-            onClick={() => setActiveTab(id)}
-            title={`${label} (${shortcut})`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       <div className="flex-1" />
 
       {/* Grand Master */}
-      <div className="flex items-center gap-2 titlebar-no-drag mr-2">
-        <span className="text-[10px] text-gray-500 uppercase">GM</span>
+      <div className="flex items-center gap-2 titlebar-no-drag">
+        <span className="text-[10px] text-gray-500 uppercase font-medium">GM</span>
         <input
           type="range"
           min={0}
           max={255}
           value={grandMaster}
           onChange={(e) => setGrandMaster(parseInt(e.target.value))}
-          className="w-20 h-1.5"
+          className="w-24 h-1.5"
           style={{ accentColor: '#e85d04' }}
         />
-        <span className="text-[10px] font-mono text-gray-400 w-8">
+        <span className="text-[10px] font-mono text-gray-400 w-8 text-right">
           {Math.round((grandMaster / 255) * 100)}%
         </span>
       </div>

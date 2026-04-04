@@ -43,6 +43,7 @@ const lensMaterial = () =>
     color: 0xffffff,
     transparent: true,
     opacity: 0.0,
+    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   })
@@ -98,7 +99,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
     headGroup.add(headDrum)
 
     // Lens
-    const lensGeo = new THREE.CircleGeometry(0.07, 16)
+    const lensGeo = new THREE.CircleGeometry(0.10, 16)
     lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
     lensMesh.position.z = -0.09 // front of head drum
     lensMesh.rotation.y = Math.PI
@@ -142,7 +143,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
     coneMesh.position.y = -0.11
     group.add(coneMesh)
 
-    const lensGeo = new THREE.CircleGeometry(0.09, 16)
+    const lensGeo = new THREE.CircleGeometry(0.14, 16)
     lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
     lensMesh.position.y = -0.12
     lensMesh.rotation.x = Math.PI / 2

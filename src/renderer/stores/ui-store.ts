@@ -26,7 +26,7 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  activeTab: 'faders',
+  activeTab: 'visualizer',
   showName: 'New Show',
   isDirty: false,
   selectedUniverse: 0,
