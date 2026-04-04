@@ -7,16 +7,26 @@ import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-lib
 
 export function FadersView() {
   const { values, setChannel } = useDmxStore()
-  const { patch, fixtures, selectedFixtureIds, selectFixture, getFixtureChannels } = usePatchStore()
+  const { patch, fixtures, groups, selectedFixtureIds, selectFixture, clearSelection, addToGroup, getFixtureChannels } = usePatchStore()
   const { selectedUniverse, setSelectedUniverse } = useUiStore()
 
   const hasPatch = patch.length > 0
 
+  const selectGroup = (groupId: string) => {
+    const group = groups.find(g => g.id === groupId)
+    if (!group) return
+    // Select all fixtures in the group (first fixture sets selection, rest are multi)
+    clearSelection()
+    for (const fid of group.fixtureIds) {
+      selectFixture(fid, true)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
-      {/* Universe selector */}
-      <div className="flex items-center gap-2 p-2 border-b border-surface-3">
-        <span className="text-xs text-gray-500">Universe:</span>
+      {/* Universe selector top bar */}
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-surface-3">
+        <span className="text-[10px] text-gray-500 uppercase">Univ</span>
         {[0, 1, 2].map(u => (
           <button
             key={u}
@@ -28,27 +38,71 @@ export function FadersView() {
             {u + 1}
           </button>
         ))}
+        <div className="w-px h-4 bg-surface-3 mx-1" />
+        {selectedFixtureIds.length > 0 && (
+          <span className="text-[10px] text-accent">{selectedFixtureIds.length} selected</span>
+        )}
         <div className="flex-1" />
         <span className="text-[10px] text-gray-600">
-          {hasPatch ? 'Fixture Faders' : 'Raw DMX Channels'}
+          {hasPatch ? 'Fixture Faders' : 'Raw DMX — 64ch shown'}
         </span>
       </div>
 
-      {/* Faders area */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-2">
-        {hasPatch ? (
-          <FixtureFaders
-            universe={selectedUniverse}
-            values={values}
-            setChannel={setChannel}
-          />
-        ) : (
-          <RawChannelFaders
-            universe={selectedUniverse}
-            values={values[selectedUniverse]}
-            setChannel={(ch, val) => setChannel(selectedUniverse, ch, val)}
-          />
-        )}
+      <div className="flex-1 overflow-hidden flex">
+        {/* ---- Left: Groups panel ---- */}
+        <div className="w-28 shrink-0 border-r border-surface-3 flex flex-col bg-surface-1">
+          <div className="px-2 py-1 text-[9px] text-gray-500 uppercase border-b border-surface-3">Groups</div>
+          <div className="flex-1 overflow-y-auto p-1 space-y-px">
+            <button
+              className={`w-full text-left px-2 py-1 rounded text-[10px] transition-colors ${
+                selectedFixtureIds.length === 0
+                  ? 'bg-accent/20 text-accent'
+                  : 'text-gray-400 hover:bg-surface-3'
+              }`}
+              onClick={() => clearSelection()}
+            >
+              All ({patch.length})
+            </button>
+            {groups.map(g => {
+              const count = g.fixtureIds.filter(id => patch.some(p => p.id === id)).length
+              const isSelected = g.fixtureIds.length > 0 &&
+                g.fixtureIds.every(id => selectedFixtureIds.includes(id))
+              return (
+                <button
+                  key={g.id}
+                  className={`w-full text-left px-2 py-1 rounded text-[10px] transition-colors flex items-center gap-1 ${
+                    isSelected ? 'bg-surface-3 text-gray-200' : 'text-gray-400 hover:bg-surface-3'
+                  }`}
+                  onClick={() => selectGroup(g.id)}
+                >
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                  <span className="truncate flex-1">{g.name}</span>
+                  <span className="text-gray-600 shrink-0">{count}</span>
+                </button>
+              )
+            })}
+            {groups.length === 0 && (
+              <p className="text-[9px] text-gray-700 text-center pt-2 px-1">No groups.<br/>Create them in Patch.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ---- Right: Faders ---- */}
+        <div className="flex-1 overflow-x-auto overflow-y-hidden p-2">
+          {hasPatch ? (
+            <FixtureFaders
+              universe={selectedUniverse}
+              values={values}
+              setChannel={setChannel}
+            />
+          ) : (
+            <RawChannelFaders
+              universe={selectedUniverse}
+              values={values[selectedUniverse]}
+              setChannel={(ch, val) => setChannel(selectedUniverse, ch, val)}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

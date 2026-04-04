@@ -39,7 +39,7 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
 
     // ---- Scene ----
     const scene = new THREE.Scene()
-    scene.fog = new THREE.FogExp2(0x07070d, 0.016)
+    scene.fog = new THREE.FogExp2(0x07070d, 0.008)
 
     // ---- Camera ----
     const rect = container.getBoundingClientRect()
@@ -79,8 +79,21 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     controlsRef.current = controls
     roomGroupRef.current= roomGroup
 
-    // Initial size
-    renderer.setSize(rect.width, rect.height, false)
+    // Initial size — getBoundingClientRect may return 0 on first paint, defer
+    const initW = rect.width || container.offsetWidth || 800
+    const initH = rect.height || container.offsetHeight || 600
+    renderer.setSize(initW, initH, false)
+    camera.aspect = initW / (initH || 1)
+    camera.updateProjectionMatrix()
+    // Also sync after layout settles
+    requestAnimationFrame(() => {
+      const r2 = container.getBoundingClientRect()
+      if (r2.width > 0 && r2.height > 0) {
+        renderer.setSize(r2.width, r2.height, false)
+        camera.aspect = r2.width / r2.height
+        camera.updateProjectionMatrix()
+      }
+    })
 
     // ---- Resize ----
     const ro = new ResizeObserver(() => {

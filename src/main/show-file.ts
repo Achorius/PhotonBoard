@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join, basename } from 'path'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
 import { DEFAULT_ROOM_CONFIG } from '../shared/types'
+import { BUILTIN_FIXTURES } from './fixture-library'
 
 export class ShowFileManager {
   private userDataPath: string
@@ -51,7 +52,13 @@ export class ShowFileManager {
   }
 
   private loadBuiltinFixtures(): void {
-    // Load some common generic fixtures
+    for (const fixture of BUILTIN_FIXTURES) {
+      this.fixtureCache.set(fixture.id, fixture)
+    }
+  }
+
+  private _legacyLoadBuiltinFixtures_UNUSED(): void {
+    // REPLACED BY fixture-library.ts
     const generics: FixtureDefinition[] = [
       {
         id: 'generic/dimmer',

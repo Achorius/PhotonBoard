@@ -33,7 +33,7 @@ const coneMaterial = () =>
     color: 0xffffff,
     transparent: true,
     opacity: 0.0,
-    side: THREE.FrontSide,
+    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   })

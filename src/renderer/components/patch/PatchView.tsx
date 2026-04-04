@@ -56,12 +56,44 @@ export function PatchView() {
                             onChange={(e) => updateFixture(entry.id, { name: e.target.value })}
                           />
                         </td>
-                        <td className="px-2 py-1 text-gray-400">{def?.name || '?'}</td>
-                        <td className="px-2 py-1 text-gray-400">{entry.modeName}</td>
-                        <td className="px-2 py-1 font-mono text-accent">
-                          {formatDmxAddress(entry.universe, entry.address)}
+                        <td className="px-2 py-1 text-gray-400 text-xs">{def?.name || '?'}</td>
+                        <td className="px-2 py-1">
+                          <select
+                            className="bg-transparent border-none outline-none text-gray-400 text-xs cursor-pointer hover:text-gray-200"
+                            value={entry.modeName}
+                            onChange={e => updateFixture(entry.id, { modeName: e.target.value })}
+                          >
+                            {def?.modes.map(m => (
+                              <option key={m.name} value={m.name} className="bg-surface-2">{m.name}</option>
+                            ))}
+                          </select>
                         </td>
-                        <td className="px-2 py-1 text-gray-500">{mode?.channelCount || '?'}</td>
+                        <td className="px-1 py-1 font-mono">
+                          <div className="flex items-center gap-0.5">
+                            <select
+                              className="bg-transparent border-none outline-none text-accent text-xs cursor-pointer w-8"
+                              value={entry.universe}
+                              onChange={e => updateFixture(entry.id, { universe: parseInt(e.target.value) })}
+                            >
+                              <option value={0} className="bg-surface-2">U1</option>
+                              <option value={1} className="bg-surface-2">U2</option>
+                              <option value={2} className="bg-surface-2">U3</option>
+                            </select>
+                            <span className="text-gray-600 text-xs">.</span>
+                            <input
+                              className="bg-transparent border-none outline-none text-accent font-mono text-xs w-10 hover:bg-surface-3 rounded px-0.5"
+                              type="number"
+                              min={1}
+                              max={512}
+                              value={entry.address}
+                              onChange={e => {
+                                const v = parseInt(e.target.value)
+                                if (v >= 1 && v <= 512) updateFixture(entry.id, { address: v })
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-2 py-1 text-gray-500 text-xs">{mode?.channelCount || '?'}</td>
                         <td className="px-2 py-1">
                           <div className="flex gap-0.5">
                             {entryGroups.map(g => (

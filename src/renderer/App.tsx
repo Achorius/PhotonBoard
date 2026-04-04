@@ -14,6 +14,7 @@ import { MidiView } from './components/midi/MidiView'
 import { StageView } from './components/stage/StageView'
 import { VisualizerView } from './components/visualizer/VisualizerView'
 import { SettingsView } from './components/settings/SettingsView'
+import { ExecutorBar } from './components/layout/ExecutorBar'
 
 export default function App() {
   const { activeTab, setActiveTab } = useUiStore()
@@ -89,6 +90,7 @@ export default function App() {
       <main className="flex-1 overflow-hidden">
         {renderView()}
       </main>
+      <ExecutorBar />
       <StatusBar />
     </div>
   )

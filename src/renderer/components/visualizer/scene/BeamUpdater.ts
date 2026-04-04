@@ -14,37 +14,33 @@ export function updateFixtureObjects(
   blackout: boolean,
   showBeams: boolean
 ): void {
-  const { r, g, b } = getEffectiveColor(channels)
+  // dimmer is guaranteed >= 255 for fixtures without a dedicated dimmer channel
+  // (see resolveChannels fix), so effectiveDim correctly scales color fixtures too
   const gm = grandMaster / 255
-  const dimNorm = blackout ? 0 : Math.min(1, (channels.dimmer / 255) * gm || gm)
+  const effectiveDim = blackout ? 0 : (channels.dimmer / 255) * gm
 
-  // If no dedicated dimmer channel, use color brightness
-  const hasRGB = channels.red > 0 || channels.green > 0 || channels.blue > 0 ||
-                 channels.white > 0 || channels.amber > 0
-  const effectiveDim = channels.dimmer > 0 ? dimNorm : (hasRGB ? gm : 0)
-
-  // --- Beam color ---
+  // --- Beam color (resolved in 0-1 range) ---
+  const { r, g, b } = getEffectiveColor(channels)
   const col = new THREE.Color(r, g, b)
-  if (!col.r && !col.g && !col.b) col.setRGB(effectiveDim, effectiveDim, effectiveDim)
 
   const coneMat = objects.coneMesh.material as THREE.MeshBasicMaterial
   const lensMat = objects.lensMesh.material as THREE.MeshBasicMaterial
 
   if (showBeams) {
     coneMat.color.copy(col)
-    coneMat.opacity = effectiveDim * 0.10
-    objects.coneMesh.visible = effectiveDim > 0.01
+    coneMat.opacity = effectiveDim * 0.22
+    objects.coneMesh.visible = effectiveDim > 0.005
   } else {
     objects.coneMesh.visible = false
   }
 
-  // Lens glow
+  // Lens glow — brighter than the cone so the source is always clear
   lensMat.color.copy(col)
-  lensMat.opacity = effectiveDim * 0.9
+  lensMat.opacity = Math.min(0.95, effectiveDim * 1.2)
 
   // SpotLight
   objects.spotLight.color.copy(col)
-  objects.spotLight.intensity = effectiveDim * 3.5
+  objects.spotLight.intensity = effectiveDim * 4.0
 
   // --- Moving head pan/tilt ---
   if (objects.shape === 'moving-head' && objects.yokeGroup && objects.headGroup) {

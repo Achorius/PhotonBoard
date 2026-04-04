@@ -33,7 +33,7 @@ const EMPTY: ResolvedChannels = {
 const CHANNEL_ALIASES: Record<keyof ResolvedChannels, string[]> = {
   dimmer:    ['dimmer', 'intensity', 'master dimmer', 'master', 'brightness'],
   red:       ['red', 'r'],
-  green:     ['green', 'g'],
+  green:     ['green', 'g', 'lime', 'lime green'],
   blue:      ['blue', 'b'],
   white:     ['white', 'w', 'warm white', 'cool white'],
   amber:     ['amber', 'a'],
@@ -82,13 +82,21 @@ export function resolveChannels(
   }
 
   // Match aliases
+  let dimmerFound = false
   for (const [key, aliases] of Object.entries(CHANNEL_ALIASES) as [keyof ResolvedChannels, string[]][]) {
     for (const alias of aliases) {
       if (alias in channelValueMap) {
         result[key] = channelValueMap[alias]
+        if (key === 'dimmer') dimmerFound = true
         break
       }
     }
+  }
+
+  // Fixtures without a dedicated dimmer channel (e.g. Generic RGB) run at full intensity —
+  // their color channels are not attenuated by a master dimmer.
+  if (!dimmerFound) {
+    result.dimmer = 255
   }
 
   return result
