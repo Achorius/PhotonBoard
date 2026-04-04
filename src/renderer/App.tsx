@@ -12,6 +12,7 @@ import { PlaybackView } from './components/playback/PlaybackView'
 import { EffectsView } from './components/effects/EffectsView'
 import { MidiView } from './components/midi/MidiView'
 import { StageView } from './components/stage/StageView'
+import { VisualizerView } from './components/visualizer/VisualizerView'
 import { SettingsView } from './components/settings/SettingsView'
 
 export default function App() {
@@ -39,9 +40,9 @@ export default function App() {
       // Tab switching with number keys (not in input fields)
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
 
-      const tabs = ['faders', 'patch', 'fixtures', 'playback', 'effects', 'midi', 'stage', 'settings'] as const
+      const tabs = ['faders', 'patch', 'fixtures', 'playback', 'effects', 'midi', 'stage', 'visualizer', 'settings'] as const
       const num = parseInt(e.key)
-      if (num >= 1 && num <= 8) {
+      if (num >= 1 && num <= 9) {
         setActiveTab(tabs[num - 1])
         e.preventDefault()
       }
@@ -76,6 +77,7 @@ export default function App() {
       case 'effects': return <EffectsView />
       case 'midi': return <MidiView />
       case 'stage': return <StageView />
+      case 'visualizer': return <VisualizerView />
       case 'settings': return <SettingsView />
       default: return <FadersView />
     }

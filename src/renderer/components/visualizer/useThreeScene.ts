@@ -1,0 +1,131 @@
+import { useEffect, useRef } from 'react'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { buildRoom, setGridVisible } from './scene/RoomGeometry'
+import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+
+export interface ThreeRefs {
+  sceneRef: React.MutableRefObject<THREE.Scene | null>
+  cameraRef: React.MutableRefObject<THREE.PerspectiveCamera | null>
+  rendererRef: React.MutableRefObject<THREE.WebGLRenderer | null>
+  controlsRef: React.MutableRefObject<OrbitControls | null>
+  roomGroupRef: React.MutableRefObject<THREE.Group | null>
+  ambientRef: React.MutableRefObject<THREE.AmbientLight | null>
+}
+
+export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): ThreeRefs {
+  const sceneRef    = useRef<THREE.Scene | null>(null)
+  const cameraRef   = useRef<THREE.PerspectiveCamera | null>(null)
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+  const controlsRef = useRef<OrbitControls | null>(null)
+  const roomGroupRef= useRef<THREE.Group | null>(null)
+  const ambientRef  = useRef<THREE.AmbientLight | null>(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    // ---- Renderer ----
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.shadowMap.enabled = false
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.2
+    renderer.setClearColor(0x07070d, 1)
+    container.appendChild(renderer.domElement)
+    renderer.domElement.style.display = 'block'
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
+
+    // ---- Scene ----
+    const scene = new THREE.Scene()
+    scene.fog = new THREE.FogExp2(0x07070d, 0.016)
+
+    // ---- Camera ----
+    const rect = container.getBoundingClientRect()
+    const aspect = rect.width / (rect.height || 1)
+    const camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 200)
+    camera.position.set(0, 7, 14)
+    camera.lookAt(0, 3, 0)
+
+    // ---- Lights ----
+    const ambient = new THREE.AmbientLight(0x404060, 0.2)
+    scene.add(ambient)
+    ambientRef.current = ambient
+    const dir = new THREE.DirectionalLight(0x6060a0, 0.12)
+    dir.position.set(0, 10, 5)
+    scene.add(dir)
+
+    // ---- Orbit Controls ----
+    const controls = new OrbitControls(camera, renderer.domElement)
+    controls.enableDamping = true
+    controls.dampingFactor = 0.08
+    controls.target.set(0, 3, 0)
+    controls.maxPolarAngle = Math.PI * 0.88
+    controls.minDistance = 1
+    controls.maxDistance = 80
+    controls.update()
+
+    // ---- Room ----
+    const { roomConfig, showGrid } = useVisualizerStore.getState()
+    const roomGroup = buildRoom(roomConfig)
+    scene.add(roomGroup)
+    setGridVisible(roomGroup, showGrid)
+
+    // Assign to refs
+    sceneRef.current    = scene
+    cameraRef.current   = camera
+    rendererRef.current = renderer
+    controlsRef.current = controls
+    roomGroupRef.current= roomGroup
+
+    // Initial size
+    renderer.setSize(rect.width, rect.height, false)
+
+    // ---- Resize ----
+    const ro = new ResizeObserver(() => {
+      const { width: w, height: h } = container.getBoundingClientRect()
+      renderer.setSize(w, h, false)
+      camera.aspect = w / (h || 1)
+      camera.updateProjectionMatrix()
+    })
+    ro.observe(container)
+
+    // ---- React to store changes that need scene rebuild ----
+    const unsub = useVisualizerStore.subscribe(
+      (s) => ({ roomConfig: s.roomConfig, showGrid: s.showGrid, showRoom: s.showRoom }),
+      ({ roomConfig: rc, showGrid: sg, showRoom: sr }) => {
+        // Rebuild room
+        if (roomGroupRef.current) scene.remove(roomGroupRef.current)
+        const newRoom = buildRoom(rc)
+        setGridVisible(newRoom, sg)
+        newRoom.visible = sr
+        scene.add(newRoom)
+        roomGroupRef.current = newRoom
+      },
+      { equalityFn: shallowEq }
+    )
+
+    return () => {
+      unsub()
+      ro.disconnect()
+      renderer.dispose()
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
+      sceneRef.current    = null
+      cameraRef.current   = null
+      rendererRef.current = null
+      controlsRef.current = null
+      roomGroupRef.current= null
+    }
+  }, [])
+
+  return { sceneRef, cameraRef, rendererRef, controlsRef, roomGroupRef, ambientRef }
+}
+
+function shallowEq(a: any, b: any): boolean {
+  if (a === b) return true
+  for (const k in a) { if (a[k] !== b[k]) return false }
+  return true
+}

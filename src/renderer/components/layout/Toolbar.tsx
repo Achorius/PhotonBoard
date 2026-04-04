@@ -3,14 +3,15 @@ import { useUiStore, type ViewTab } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 
 const TABS: { id: ViewTab; label: string; shortcut: string }[] = [
-  { id: 'faders', label: 'Faders', shortcut: '1' },
-  { id: 'patch', label: 'Patch', shortcut: '2' },
-  { id: 'fixtures', label: 'Fixtures', shortcut: '3' },
-  { id: 'playback', label: 'Playback', shortcut: '4' },
-  { id: 'effects', label: 'Effects', shortcut: '5' },
-  { id: 'midi', label: 'MIDI', shortcut: '6' },
-  { id: 'stage', label: 'Stage', shortcut: '7' },
-  { id: 'settings', label: 'Settings', shortcut: '8' }
+  { id: 'faders',     label: 'Faders',     shortcut: '1' },
+  { id: 'patch',      label: 'Patch',      shortcut: '2' },
+  { id: 'fixtures',   label: 'Fixtures',   shortcut: '3' },
+  { id: 'playback',   label: 'Playback',   shortcut: '4' },
+  { id: 'effects',    label: 'Effects',    shortcut: '5' },
+  { id: 'midi',       label: 'MIDI',       shortcut: '6' },
+  { id: 'stage',      label: 'Stage 2D',   shortcut: '7' },
+  { id: 'visualizer', label: '3D View',    shortcut: '8' },
+  { id: 'settings',   label: 'Settings',   shortcut: '9' }
 ]
 
 export function Toolbar() {

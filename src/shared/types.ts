@@ -75,6 +75,38 @@ export interface FixtureDefinition {
   physical?: FixturePhysical
 }
 
+// --- 3D Visualizer ---
+
+export type FixtureShape = 'par' | 'moving-head' | 'strip' | 'generic'
+
+export interface Position3D {
+  x: number // metres, origin = stage centre floor
+  y: number // height from floor
+  z: number // depth (positive = upstage)
+}
+
+export interface Rotation3D {
+  rx: number // radians
+  ry: number // radians
+  rz: number // radians
+}
+
+export interface RoomConfig {
+  width: number  // metres
+  depth: number  // metres
+  height: number // metres
+}
+
+export const DEFAULT_ROOM_CONFIG: RoomConfig = { width: 20, depth: 15, height: 6 }
+
+/** Map OFL categories to a simplified shape for 3D rendering */
+export function getFixtureShape(categories: string[]): FixtureShape {
+  if (categories.some(c => c === 'Moving Head')) return 'moving-head'
+  if (categories.some(c => c === 'Pixel Bar' || c === 'Batten' || c === 'Strip')) return 'strip'
+  if (categories.some(c => c === 'Dimmer' || c === 'Color Changer' || c === 'PAR')) return 'par'
+  return 'par'
+}
+
 // --- Patch ---
 
 export interface PatchEntry {
@@ -85,7 +117,13 @@ export interface PatchEntry {
   address: number // 1-512
   name: string
   groupIds: string[]
+  // Legacy 2D
   stagePosition?: { x: number; y: number; rotation: number }
+  // 3D Visualizer
+  position3D?: Position3D
+  rotation3D?: Rotation3D
+  mountingAngle?: number // degrees, 0 = straight down (for static fixtures)
+  beamAngle?: number    // degrees, cone spread — defaults from fixture physical
 }
 
 // --- Groups ---
@@ -245,6 +283,7 @@ export interface ShowFile {
   effects: Effect[]
   midiMappings: MidiMapping[]
   stageLayout: StageLayout
+  roomConfig?: RoomConfig
 }
 
 // --- IPC Channel Names ---

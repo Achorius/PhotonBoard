@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
 import { join, basename } from 'path'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
+import { DEFAULT_ROOM_CONFIG } from '../shared/types'
 
 export class ShowFileManager {
   private userDataPath: string
@@ -157,7 +158,8 @@ export class ShowFileManager {
       chases: [],
       effects: [],
       midiMappings: [],
-      stageLayout: { width: 1200, height: 600, fixtures: [] }
+      stageLayout: { width: 1200, height: 600, fixtures: [] },
+      roomConfig: { ...DEFAULT_ROOM_CONFIG }
     }
   }
 

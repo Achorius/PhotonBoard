@@ -11,12 +11,14 @@
     "package": "electron-vite build && electron-builder"
   },
   "dependencies": {
+    "@types/three": "^0.183.1",
     "dmxnet": "^0.9.0",
-    "zustand": "^5.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.4.0",
-    "uuid": "^11.1.0"
+    "three": "^0.183.2",
+    "uuid": "^11.1.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
@@ -37,10 +39,15 @@
     "productName": "PhotonBoard",
     "mac": {
       "category": "public.app-category.entertainment",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "AudioVideo"
     }
   }
