@@ -102,6 +102,11 @@ export function LiveView() {
 
   // ----------- Quick actions -----------
 
+  // Helper: find a channel by name (case-insensitive) with aliases
+  const findChannel = useCallback((channels: { name: string; absoluteChannel: number; type: string }[], ...names: string[]) => {
+    return channels.find((c) => names.some((n) => c.name.toLowerCase() === n))
+  }, [])
+
   const setDimmerForAll = useCallback((value: number) => {
     const targets = selectedIds.size > 0
       ? patch.filter((p) => selectedIds.has(p.id))
@@ -111,10 +116,10 @@ export function LiveView() {
       const def = fixtures.find((f) => f.id === entry.fixtureDefId)
       if (!def) continue
       const channels = getFixtureChannels(entry)
-      const dimCh = channels.find((c) => c.type === 'dimmer' || c.type === 'intensity')
+      const dimCh = findChannel(channels, 'dimmer', 'intensity', 'master dimmer', 'master', 'brightness')
       if (dimCh) setChannel(entry.universe, dimCh.absoluteChannel, value)
     }
-  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel])
+  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel, findChannel])
 
   const applyColorPreset = useCallback((preset: typeof COLOR_PRESETS[number]) => {
     const targets = patch.filter((p) => selectedIds.has(p.id))
@@ -122,10 +127,10 @@ export function LiveView() {
       const def = fixtures.find((f) => f.id === entry.fixtureDefId)
       if (!def) continue
       const channels = getFixtureChannels(entry)
-      const rCh = channels.find((c) => c.type === 'red')
-      const gCh = channels.find((c) => c.type === 'green')
-      const bCh = channels.find((c) => c.type === 'blue')
-      const dimCh = channels.find((c) => c.type === 'dimmer' || c.type === 'intensity')
+      const rCh = findChannel(channels, 'red', 'r')
+      const gCh = findChannel(channels, 'green', 'g')
+      const bCh = findChannel(channels, 'blue', 'b')
+      const dimCh = findChannel(channels, 'dimmer', 'intensity', 'master dimmer', 'master', 'brightness')
       if (rCh) setChannel(entry.universe, rCh.absoluteChannel, preset.r)
       if (gCh) setChannel(entry.universe, gCh.absoluteChannel, preset.g)
       if (bCh) setChannel(entry.universe, bCh.absoluteChannel, preset.b)
@@ -135,19 +140,25 @@ export function LiveView() {
         if (currentDim === 0) setChannel(entry.universe, dimCh.absoluteChannel, 255)
       }
     }
-  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel, dmxValues])
+  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel, dmxValues, findChannel])
 
-  // Apply a single channel value to selected fixtures
-  const setChannelForSelected = useCallback((channelType: string, value: number) => {
+  // Apply a single channel value to selected fixtures (match by name)
+  const setChannelForSelected = useCallback((channelName: string, value: number) => {
     const targets = patch.filter((p) => selectedIds.has(p.id))
+    const aliases: Record<string, string[]> = {
+      pan: ['pan'], tilt: ['tilt'], zoom: ['zoom'], focus: ['focus'],
+      strobe: ['strobe'], shutter: ['shutter', 'shutter/strobe'],
+      gobo: ['gobo', 'gobo wheel', 'gobo 1'], prism: ['prism'],
+    }
+    const names = aliases[channelName] || [channelName]
     for (const entry of targets) {
       const def = fixtures.find((f) => f.id === entry.fixtureDefId)
       if (!def) continue
       const channels = getFixtureChannels(entry)
-      const ch = channels.find((c) => c.type === channelType)
+      const ch = findChannel(channels, ...names)
       if (ch) setChannel(entry.universe, ch.absoluteChannel, value)
     }
-  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel])
+  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel, findChannel])
 
   const setDimmerForSelected = useCallback((value: number) => {
     const targets = patch.filter((p) => selectedIds.has(p.id))
@@ -155,10 +166,10 @@ export function LiveView() {
       const def = fixtures.find((f) => f.id === entry.fixtureDefId)
       if (!def) continue
       const channels = getFixtureChannels(entry)
-      const dimCh = channels.find((c) => c.type === 'dimmer' || c.type === 'intensity')
+      const dimCh = findChannel(channels, 'dimmer', 'intensity', 'master dimmer', 'master', 'brightness')
       if (dimCh) setChannel(entry.universe, dimCh.absoluteChannel, value)
     }
-  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel])
+  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel, findChannel])
 
   const [dimmerSlider, setDimmerSlider] = useState(255)
   const [panSlider, setPanSlider] = useState(128)

@@ -68,8 +68,8 @@ const hazeMaterial = () =>
 export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtureY?: number): FixtureObjects {
   const group = new THREE.Group()
   const beamAngleRad = THREE.MathUtils.degToRad(Math.min(beamAngle, 60))
-  // Cone height = fixture Y position so beams reach the floor
-  const coneHeight = Math.max(2, fixtureY ?? 8)
+  // Cone height = 1.5x fixture Y so beams reach past the floor even when angled
+  const coneHeight = Math.max(4, (fixtureY ?? 8) * 1.5)
   const coneRadius = Math.tan(beamAngleRad / 2) * coneHeight
 
   let bodyMesh: THREE.Mesh
