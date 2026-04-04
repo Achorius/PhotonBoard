@@ -258,7 +258,7 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     manufacturer: 'Martin',
     categories: ['Moving Head'],
     channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), genericCh('Dimmer Fine'), shutterCh(), cyanCh(), magentaCh(), yellowCh(), ctoCh(), colorWheelCh(), goboCh(), genericCh('Gobo 2'), prismCh(), genericCh('Prism Rotation'), frostCh(), zoomCh(), focusCh(), irisCh(), resetCh(), genericCh('Control')),
-    modes: [{ name: '24ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Dimmer Fine', 'Shutter', 'Cyan', 'Magenta', 'Yellow', 'CTO', 'Color Wheel', 'Gobo', 'Gobo 2', 'Prism', 'Prism Rotation', 'Frost', 'Zoom', 'Focus', 'Iris', 'Reset', 'Control', 'Control'], channelCount: 24 }],
+    modes: [{ name: '24ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Dimmer Fine', 'Shutter', 'Cyan', 'Magenta', 'Yellow', 'CTO', 'Color Wheel', 'Gobo', 'Gobo 2', 'Prism', 'Prism Rotation', 'Frost', 'Zoom', 'Focus', 'Iris', 'Reset', 'Control', 'Reserved'], channelCount: 24 }],
     physical: { lens: { degreesMinMax: [7, 50] }, power: 1000 }
   },
 
@@ -350,7 +350,7 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     physical: { lens: { degreesMinMax: [0, 0] }, power: 470 }
   },
   {
-    id: 'clay-paky/aleда-b-eye-k20',
+    id: 'clay-paky/aleda-b-eye-k20',
     name: 'A.leda B-EYE K20',
     manufacturer: 'Clay Paky',
     categories: ['Moving Head'],

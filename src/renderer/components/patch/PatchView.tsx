@@ -165,14 +165,24 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
   const [count, setCount] = useState(1)
   const [search, setSearch] = useState('')
 
-  const filtered = useMemo(() => {
-    if (!search) return fixtures
-    const s = search.toLowerCase()
-    return fixtures.filter(f =>
-      f.name.toLowerCase().includes(s) ||
-      f.manufacturer.toLowerCase().includes(s) ||
-      f.categories.some(c => c.toLowerCase().includes(s))
-    )
+  const grouped = useMemo(() => {
+    const source = search
+      ? (() => {
+          const s = search.toLowerCase()
+          return fixtures.filter(f =>
+            f.name.toLowerCase().includes(s) ||
+            f.manufacturer.toLowerCase().includes(s) ||
+            f.categories.some(c => c.toLowerCase().includes(s))
+          )
+        })()
+      : fixtures
+    const map = new Map<string, typeof fixtures>()
+    for (const f of source) {
+      const mfr = f.manufacturer || 'Other'
+      if (!map.has(mfr)) map.set(mfr, [])
+      map.get(mfr)!.push(f)
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
   }, [fixtures, search])
 
   const currentDef = fixtures.find(f => f.id === selectedDef)
@@ -204,21 +214,28 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
               />
             </div>
             <div className="flex-1 overflow-auto">
-              {filtered.map(f => (
-                <button
-                  key={f.id}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-2 ${
-                    selectedDef === f.id ? 'bg-surface-2 text-accent' : 'text-gray-300'
-                  }`}
-                  onClick={() => {
-                    setSelectedDef(f.id)
-                    setSelectedMode(f.modes[0]?.name || '')
-                    if (!name) setName(f.name)
-                  }}
-                >
-                  <div className="font-medium">{f.name}</div>
-                  <div className="text-[10px] text-gray-500">{f.manufacturer} — {f.categories.join(', ')}</div>
-                </button>
+              {grouped.map(([mfr, mFixtures]) => (
+                <div key={mfr}>
+                  <div className="px-3 py-1 text-[9px] text-gray-500 uppercase tracking-wide bg-surface-0 sticky top-0">
+                    {mfr}
+                  </div>
+                  {mFixtures.map(f => (
+                    <button
+                      key={f.id}
+                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-2 ${
+                        selectedDef === f.id ? 'bg-surface-2 text-accent' : 'text-gray-300'
+                      }`}
+                      onClick={() => {
+                        setSelectedDef(f.id)
+                        setSelectedMode(f.modes[0]?.name || '')
+                        if (!name) setName(f.name)
+                      }}
+                    >
+                      <div className="font-medium">{f.name}</div>
+                      <div className="text-[10px] text-gray-500">{f.categories.join(', ')}</div>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </div>

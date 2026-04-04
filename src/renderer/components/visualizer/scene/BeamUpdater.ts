@@ -26,17 +26,19 @@ export function updateFixtureObjects(
   const coneMat = objects.coneMesh.material as THREE.MeshBasicMaterial
   const lensMat = objects.lensMesh.material as THREE.MeshBasicMaterial
 
+  const hasBeam = r > 0 || g > 0 || b > 0
   if (showBeams) {
     coneMat.color.copy(col)
     coneMat.opacity = effectiveDim * 0.22
-    objects.coneMesh.visible = effectiveDim > 0.005
+    objects.coneMesh.visible = effectiveDim > 0.005 && hasBeam
   } else {
     objects.coneMesh.visible = false
   }
 
-  // Lens glow — brighter than the cone so the source is always clear
-  lensMat.color.copy(col)
-  lensMat.opacity = Math.min(0.95, effectiveDim * 1.2)
+  // Lens glow — minimum standby glow so the fixture is always visible in the 3D scene
+  const minGlow = 0.04
+  lensMat.color.copy(hasBeam ? col : new THREE.Color(0.15, 0.15, 0.18))
+  lensMat.opacity = Math.max(minGlow, Math.min(0.95, effectiveDim * 1.2))
 
   // SpotLight
   objects.spotLight.color.copy(col)

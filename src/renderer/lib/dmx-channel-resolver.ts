@@ -1,7 +1,8 @@
 import type { PatchEntry, FixtureDefinition } from '@shared/types'
 
 export interface ResolvedChannels {
-  dimmer: number   // 0-255
+  dimmer: number   // 0-255 (defaults to 255 for fixtures without a dedicated dimmer channel)
+  hasDimmerChannel: boolean  // true only when the fixture definition has an actual dimmer channel
   red: number
   green: number
   blue: number
@@ -23,7 +24,8 @@ export interface ResolvedChannels {
 }
 
 const EMPTY: ResolvedChannels = {
-  dimmer: 0, red: 0, green: 0, blue: 0, white: 0,
+  dimmer: 0, hasDimmerChannel: false,
+  red: 0, green: 0, blue: 0, white: 0,
   amber: 0, uv: 0, cyan: 0, magenta: 0, yellow: 0,
   pan: 128, panFine: 0, tilt: 128, tiltFine: 0,
   shutter: 255, zoom: 128, focus: 128, gobo: 0, strobe: 0
@@ -93,9 +95,10 @@ export function resolveChannels(
     }
   }
 
-  // Fixtures without a dedicated dimmer channel (e.g. Generic RGB) run at full intensity —
-  // their color channels are not attenuated by a master dimmer.
-  if (!dimmerFound) {
+  if (dimmerFound) {
+    result.hasDimmerChannel = true
+  } else {
+    // Fixtures without a dedicated dimmer channel run at full intensity
     result.dimmer = 255
   }
 
@@ -106,17 +109,21 @@ export function resolveChannels(
  * Compute the effective RGB color a fixture is currently outputting (0-1 range for Three.js).
  */
 export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number; b: number } {
-  const dim = ch.dimmer / 255
-  // Mix RGB + White contribution
-  const r = Math.min(1, (ch.red / 255 + ch.white / 510 + ch.amber / 510)) * dim
-  const g = Math.min(1, (ch.green / 255 + ch.white / 510)) * dim
-  const b = Math.min(1, (ch.blue / 255 + ch.uv / 510)) * dim
-  // If no RGB channels, treat dimmer as white
-  const hasColor = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
-                   ch.white > 0 || ch.amber > 0 || ch.uv > 0
-  if (!hasColor && ch.dimmer > 0) {
-    return { r: dim, g: dim, b: dim }
+  const hasColorChannels = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
+                           ch.white > 0 || ch.amber > 0 || ch.uv > 0
+
+  if (!hasColorChannels) {
+    // No color channels active — only a dimmer (or nothing)
+    if (!ch.hasDimmerChannel) return { r: 0, g: 0, b: 0 }
+    const d = ch.dimmer / 255
+    return { r: d, g: d, b: d }
   }
+
+  // Apply master dimmer only if fixture actually has a dimmer channel
+  const masterDim = ch.hasDimmerChannel ? ch.dimmer / 255 : 1.0
+  const r = Math.min(1, (ch.red / 255 + ch.white / 510 + ch.amber / 510)) * masterDim
+  const g = Math.min(1, (ch.green / 255 + ch.white / 510)) * masterDim
+  const b = Math.min(1, (ch.blue / 255 + ch.uv / 510)) * masterDim
   return { r, g, b }
 }
 

@@ -24,8 +24,8 @@ export function LayoutEditor2D() {
   }, [])
 
   const canvasToWorld = useCallback((cx: number, cy: number, canvas: HTMLCanvasElement) => {
-    let wx = (cx - canvas.width  / 2) / METRE_TO_PX
-    let wz = (cy - canvas.height / 2) / METRE_TO_PX
+    let wx = (cx - canvas.clientWidth  / 2) / METRE_TO_PX
+    let wz = (cy - canvas.clientHeight / 2) / METRE_TO_PX
     if (snapToGrid) {
       wx = Math.round(wx / gridSize) * gridSize
       wz = Math.round(wz / gridSize) * gridSize
@@ -98,7 +98,7 @@ export function LayoutEditor2D() {
       const ch = resolveChannels(entry, def, values)
       const col = getEffectiveColor(ch)
       const dim = (col.r + col.g + col.b) / 3
-      if (dim > 0.02) {
+      if (dim > 0.02 && isFinite(cxs) && isFinite(cys)) {
         const grad = ctx.createRadialGradient(cxs, cys, 0, cxs, cys, 20)
         const hex = `rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)}`
         grad.addColorStop(0, `${hex},0.4)`)
@@ -196,7 +196,7 @@ export function LayoutEditor2D() {
     const { wx, wz } = canvasToWorld(
       x + draggingRef.current.offsetX,
       y + draggingRef.current.offsetZ,
-      { clientWidth: canvas.clientWidth, clientHeight: canvas.clientHeight } as any
+      canvas
     )
     const entry = patch.find(p => p.id === draggingRef.current!.id)
     const curY = entry?.position3D?.y ?? (roomConfig.height - 0.05)
