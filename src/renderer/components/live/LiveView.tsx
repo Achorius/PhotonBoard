@@ -61,21 +61,26 @@ const FixtureTile = memo(function FixtureTile({ id, name, color, dimmer, selecte
 // LiveView
 // ---------------------------------------------------------------------------
 export function LiveView() {
-  const { patch, groups, fixtures, getFixtureChannels } = usePatchStore()
+  const { patch, groups, fixtures, getFixtureChannels, selectedFixtureIds, selectFixture, selectGroup, clearSelection } = usePatchStore()
   const { values: dmxValues, setChannel, toggleBlackout, blackout } = useDmxStore()
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectedIds = useMemo(() => new Set(selectedFixtureIds), [selectedFixtureIds])
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null) // null = all
 
   // Toggle fixture selection (multi-select always on)
   const handleToggle = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+    selectFixture(id, true)
+  }, [selectFixture])
+
+  // Select group = auto-select all its fixtures
+  const handleGroupClick = useCallback((groupId: string | null) => {
+    setActiveGroupId(groupId)
+    if (groupId) {
+      selectGroup(groupId)
+    } else {
+      clearSelection()
+    }
+  }, [selectGroup, clearSelection])
 
   // Filtered fixtures based on active group
   const visibleFixtures = useMemo(() => {
@@ -177,7 +182,7 @@ export function LiveView() {
             className={`w-full text-left text-xs px-2 py-1 rounded mb-0.5 transition-colors ${
               activeGroupId === null ? 'bg-accent text-white' : 'text-gray-400 hover:bg-surface-3'
             }`}
-            onClick={() => setActiveGroupId(null)}
+            onClick={() => handleGroupClick(null)}
           >
             All Fixtures ({patch.length})
           </button>
@@ -187,7 +192,7 @@ export function LiveView() {
               className={`w-full text-left text-xs px-2 py-1 rounded mb-0.5 flex items-center gap-1.5 transition-colors ${
                 activeGroupId === g.id ? 'bg-accent text-white' : 'text-gray-400 hover:bg-surface-3'
               }`}
-              onClick={() => setActiveGroupId(g.id)}
+              onClick={() => handleGroupClick(g.id)}
             >
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
               <span className="truncate">{g.name}</span>

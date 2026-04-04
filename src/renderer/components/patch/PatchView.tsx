@@ -3,10 +3,19 @@ import { usePatchStore } from '../../stores/patch-store'
 import { formatDmxAddress } from '../../lib/dmx-utils'
 
 export function PatchView() {
-  const { patch, fixtures, groups, addFixture, removeFixture, updateFixture, addGroup, removeGroup, addToGroup, selectedFixtureIds } = usePatchStore()
+  const { patch, fixtures, groups, addFixture, removeFixture, updateFixture, addGroup, removeGroup, addToGroup, removeFromGroup, moveToGroup, moveSubgroup, selectedFixtureIds } = usePatchStore()
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showGroupInput, setShowGroupInput] = useState<string | null>(null) // null = hidden, '' = top-level, 'parentId' = sub-group
+  const [showGroupInput, setShowGroupInput] = useState<string | null>(null)
   const [newGroupName, setNewGroupName] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const toggleExpanded = (id: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="flex h-full">
@@ -174,6 +183,7 @@ export function PatchView() {
               parentId={undefined}
               depth={0}
               selectedFixtureIds={selectedFixtureIds}
+              patch={patch}
               showGroupInput={showGroupInput}
               newGroupName={newGroupName}
               setNewGroupName={setNewGroupName}
@@ -181,6 +191,11 @@ export function PatchView() {
               addGroup={addGroup}
               removeGroup={removeGroup}
               addToGroup={addToGroup}
+              removeFromGroup={removeFromGroup}
+              moveToGroup={moveToGroup}
+              moveSubgroup={moveSubgroup}
+              expandedGroups={expandedGroups}
+              toggleExpanded={toggleExpanded}
             />
           )}
         </div>
@@ -195,85 +210,151 @@ export function PatchView() {
 }
 
 function GroupTree({
-  groups, parentId, depth, selectedFixtureIds,
+  groups, parentId, depth, selectedFixtureIds, patch,
   showGroupInput, newGroupName, setNewGroupName, setShowGroupInput,
-  addGroup, removeGroup, addToGroup
+  addGroup, removeGroup, addToGroup, removeFromGroup, moveToGroup, moveSubgroup,
+  expandedGroups, toggleExpanded
 }: {
   groups: any[]; parentId: string | undefined; depth: number
-  selectedFixtureIds: string[]
+  selectedFixtureIds: string[]; patch: any[]
   showGroupInput: string | null; newGroupName: string
   setNewGroupName: (v: string) => void; setShowGroupInput: (v: string | null) => void
   addGroup: (name: string, color: string, parentGroupId?: string) => void
   removeGroup: (id: string) => void
   addToGroup: (groupId: string, fixtureIds: string[]) => void
+  removeFromGroup: (groupId: string, fixtureIds: string[]) => void
+  moveToGroup: (fixtureIds: string[], fromGroupId: string, toGroupId: string) => void
+  moveSubgroup: (subgroupId: string, newParentId: string | undefined) => void
+  expandedGroups: Set<string>; toggleExpanded: (id: string) => void
 }) {
   const children = groups.filter(g => g.parentGroupId === parentId)
   return (
     <>
-      {children.map(g => (
-        <div key={g.id} style={{ marginLeft: depth * 12 }}>
-          <div
-            className="flex items-center gap-1 px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 group"
-            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('ring-1', 'ring-accent') }}
-            onDragLeave={e => { e.currentTarget.classList.remove('ring-1', 'ring-accent') }}
-            onDrop={e => {
-              e.preventDefault()
-              e.currentTarget.classList.remove('ring-1', 'ring-accent')
-              try {
-                const ids = JSON.parse(e.dataTransfer.getData('fixture-ids'))
-                if (Array.isArray(ids)) addToGroup(g.id, ids)
-              } catch {}
-            }}
-          >
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
-            <span className="text-xs flex-1 truncate">{g.name}</span>
-            <span className="text-[10px] text-gray-500">{g.fixtureIds.length}</span>
-            <button
-              className="text-[10px] text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100"
-              title="Add sub-group"
-              onClick={() => { setShowGroupInput(g.id); setNewGroupName('') }}
-            >+sub</button>
-            <button className="text-[10px] text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100" onClick={() => removeGroup(g.id)}>x</button>
-          </div>
-          {showGroupInput === g.id && (
-            <div className="flex items-center gap-1 mt-1" style={{ marginLeft: 12 }}>
-              <input
-                className="input flex-1 text-xs py-0.5"
-                placeholder="Sub-group name..."
-                value={newGroupName}
-                onChange={e => setNewGroupName(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && newGroupName.trim()) {
+      {children.map(g => {
+        const isExpanded = expandedGroups.has(g.id)
+        const fixturesInGroup = patch.filter((p: any) => g.fixtureIds.includes(p.id))
+        return (
+          <div key={g.id} style={{ marginLeft: depth * 12 }}>
+            <div
+              className="flex items-center gap-1 px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 group/item cursor-pointer"
+              draggable
+              onDragStart={e => {
+                e.dataTransfer.setData('subgroup-id', g.id)
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={e => {
+                e.preventDefault()
+                e.currentTarget.classList.add('ring-1', 'ring-accent')
+              }}
+              onDragLeave={e => { e.currentTarget.classList.remove('ring-1', 'ring-accent') }}
+              onDrop={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                e.currentTarget.classList.remove('ring-1', 'ring-accent')
+                // Handle subgroup drop
+                const subgroupId = e.dataTransfer.getData('subgroup-id')
+                if (subgroupId && subgroupId !== g.id) {
+                  moveSubgroup(subgroupId, g.id)
+                  return
+                }
+                // Handle fixture drop — check if it's a move from another group
+                try {
+                  const fromGroupId = e.dataTransfer.getData('from-group-id')
+                  const ids = JSON.parse(e.dataTransfer.getData('fixture-ids'))
+                  if (Array.isArray(ids)) {
+                    if (fromGroupId && fromGroupId !== g.id) {
+                      moveToGroup(ids, fromGroupId, g.id)
+                    } else {
+                      addToGroup(g.id, ids)
+                    }
+                  }
+                } catch {}
+              }}
+              onClick={() => toggleExpanded(g.id)}
+            >
+              <span className="text-[10px] text-gray-500 w-3">{isExpanded ? '▾' : '▸'}</span>
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+              <span className="text-xs flex-1 truncate">{g.name}</span>
+              <span className="text-[10px] text-gray-500">{g.fixtureIds.length}</span>
+              <button
+                className="text-[10px] text-gray-500 hover:text-gray-300 opacity-0 group-hover/item:opacity-100"
+                title="Add sub-group"
+                onClick={(e) => { e.stopPropagation(); setShowGroupInput(g.id); setNewGroupName('') }}
+              >+sub</button>
+              <button
+                className="text-[10px] text-red-400 hover:text-red-300 opacity-0 group-hover/item:opacity-100"
+                onClick={(e) => { e.stopPropagation(); removeGroup(g.id) }}
+              >x</button>
+            </div>
+
+            {/* Fixtures inside group (when expanded) */}
+            {isExpanded && fixturesInGroup.length > 0 && (
+              <div className="ml-5 mt-0.5 space-y-0.5">
+                {fixturesInGroup.map((f: any) => (
+                  <div
+                    key={f.id}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-gray-400 hover:bg-surface-3 group/fix"
+                    draggable
+                    onDragStart={e => {
+                      const ids = selectedFixtureIds.includes(f.id) ? selectedFixtureIds : [f.id]
+                      e.dataTransfer.setData('fixture-ids', JSON.stringify(ids))
+                      e.dataTransfer.setData('from-group-id', g.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
+                  >
+                    <span className="flex-1 truncate">{f.name}</span>
+                    <button
+                      className="text-red-400 hover:text-red-300 opacity-0 group-hover/fix:opacity-100"
+                      title="Remove from group"
+                      onClick={() => removeFromGroup(g.id, [f.id])}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showGroupInput === g.id && (
+              <div className="flex items-center gap-1 mt-1" style={{ marginLeft: 12 }}>
+                <input
+                  className="input flex-1 text-xs py-0.5"
+                  placeholder="Sub-group name..."
+                  value={newGroupName}
+                  onChange={e => setNewGroupName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newGroupName.trim()) {
+                      addGroup(newGroupName.trim(), g.color, g.id)
+                      setShowGroupInput(null); setNewGroupName('')
+                    }
+                    if (e.key === 'Escape') setShowGroupInput(null)
+                  }}
+                  autoFocus
+                />
+                <button className="text-[10px] text-green-400" onClick={() => {
+                  if (newGroupName.trim()) {
                     addGroup(newGroupName.trim(), g.color, g.id)
                     setShowGroupInput(null); setNewGroupName('')
                   }
-                  if (e.key === 'Escape') setShowGroupInput(null)
-                }}
-                autoFocus
-              />
-              <button className="text-[10px] text-green-400" onClick={() => {
-                if (newGroupName.trim()) {
-                  addGroup(newGroupName.trim(), g.color, g.id)
-                  setShowGroupInput(null); setNewGroupName('')
-                }
-              }}>OK</button>
-            </div>
-          )}
-          <GroupTree
-            groups={groups} parentId={g.id} depth={depth + 1}
-            selectedFixtureIds={selectedFixtureIds}
-            showGroupInput={showGroupInput} newGroupName={newGroupName}
-            setNewGroupName={setNewGroupName} setShowGroupInput={setShowGroupInput}
-            addGroup={addGroup} removeGroup={removeGroup} addToGroup={addToGroup}
-          />
-        </div>
-      ))}
+                }}>OK</button>
+              </div>
+            )}
+            <GroupTree
+              groups={groups} parentId={g.id} depth={depth + 1}
+              selectedFixtureIds={selectedFixtureIds} patch={patch}
+              showGroupInput={showGroupInput} newGroupName={newGroupName}
+              setNewGroupName={setNewGroupName} setShowGroupInput={setShowGroupInput}
+              addGroup={addGroup} removeGroup={removeGroup} addToGroup={addToGroup}
+              removeFromGroup={removeFromGroup} moveToGroup={moveToGroup} moveSubgroup={moveSubgroup}
+              expandedGroups={expandedGroups} toggleExpanded={toggleExpanded}
+            />
+          </div>
+        )
+      })}
     </>
   )
 }
 
 function AddFixtureModal({ onClose }: { onClose: () => void }) {
-  const { fixtures, patch, addFixture } = usePatchStore()
+  const { fixtures, patch, groups, addFixture } = usePatchStore()
   const [selectedDef, setSelectedDef] = useState<string>('')
   const [selectedMode, setSelectedMode] = useState<string>('')
   const [universe, setUniverse] = useState(0)
@@ -282,6 +363,7 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [count, setCount] = useState(1)
   const [search, setSearch] = useState('')
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('')
 
   const grouped = useMemo(() => {
     const source = search
@@ -332,9 +414,23 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
     if (!addressManuallySet) setAddress(firstFreeAddress)
   }, [firstFreeAddress, addressManuallySet])
 
+  // Build flat list of groups with hierarchy labels for the dropdown
+  const groupOptions = useMemo(() => {
+    const result: { id: string; label: string }[] = []
+    const buildTree = (parentId: string | undefined, prefix: string) => {
+      const children = groups.filter(g => g.parentGroupId === parentId)
+      for (const g of children) {
+        result.push({ id: g.id, label: prefix + g.name })
+        buildTree(g.id, prefix + '  ')
+      }
+    }
+    buildTree(undefined, '')
+    return result
+  }, [groups])
+
   const handleAdd = () => {
     if (!selectedDef || !selectedMode || !name) return
-    addFixture(selectedDef, selectedMode, universe, address, name, count)
+    addFixture(selectedDef, selectedMode, universe, address, name, count, selectedGroupId || undefined)
     onClose()
   }
 
@@ -423,6 +519,21 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
                     <input className="input w-full mt-0.5" type="number" min={1} max={64} value={count} onChange={e => setCount(parseInt(e.target.value) || 1)} />
                   </div>
                 </div>
+                {groupOptions.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase">Group</label>
+                    <select
+                      className="input w-full mt-0.5"
+                      value={selectedGroupId}
+                      onChange={e => setSelectedGroupId(e.target.value)}
+                    >
+                      <option value="">— No group —</option>
+                      {groupOptions.map(g => (
+                        <option key={g.id} value={g.id}>{g.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="text-[10px] text-gray-500">
                   Channels: {currentDef.modes.find(m => m.name === selectedMode)?.channels.join(', ')}
                 </div>

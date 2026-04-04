@@ -10,7 +10,7 @@ interface PatchState {
 
   // Actions
   loadFixtures: () => Promise<void>
-  addFixture: (fixtureDefId: string, modeName: string, universe: number, address: number, name: string, count?: number) => void
+  addFixture: (fixtureDefId: string, modeName: string, universe: number, address: number, name: string, count?: number, groupId?: string) => void
   removeFixture: (id: string) => void
   updateFixture: (id: string, updates: Partial<PatchEntry>) => void
   selectFixture: (id: string, multi?: boolean) => void
@@ -24,6 +24,9 @@ interface PatchState {
   removeGroup: (id: string) => void
   addToGroup: (groupId: string, fixtureIds: string[]) => void
   removeFromGroup: (groupId: string, fixtureIds: string[]) => void
+  moveToGroup: (fixtureIds: string[], fromGroupId: string, toGroupId: string) => void
+  moveSubgroup: (subgroupId: string, newParentId: string | undefined) => void
+  selectGroup: (groupId: string) => void
 
   // Import
   setPatch: (patch: PatchEntry[]) => void
@@ -42,7 +45,7 @@ export const usePatchStore = create<PatchState>((set, get) => ({
     set({ fixtures })
   },
 
-  addFixture: (fixtureDefId, modeName, universe, address, name, count = 1) => {
+  addFixture: (fixtureDefId, modeName, universe, address, name, count = 1, groupId?) => {
     const def = get().fixtures.find((f) => f.id === fixtureDefId)
     if (!def) return
     const mode = def.modes.find((m) => m.name === modeName)
@@ -59,11 +62,22 @@ export const usePatchStore = create<PatchState>((set, get) => ({
         universe,
         address: addr,
         name: count > 1 ? `${name} ${i + 1}` : name,
-        groupIds: []
+        groupIds: groupId ? [groupId] : []
       })
     }
 
-    set((state) => ({ patch: [...state.patch, ...newEntries] }))
+    set((state) => {
+      const newPatch = [...state.patch, ...newEntries]
+      // Also update the group's fixtureIds if a group was specified
+      const newGroups = groupId
+        ? state.groups.map((g) =>
+            g.id === groupId
+              ? { ...g, fixtureIds: [...g.fixtureIds, ...newEntries.map((e) => e.id)] }
+              : g
+          )
+        : state.groups
+      return { patch: newPatch, groups: newGroups }
+    })
   },
 
   removeFixture: (id) => {
@@ -162,6 +176,42 @@ export const usePatchStore = create<PatchState>((set, get) => ({
           : p
       )
     }))
+  },
+
+  moveToGroup: (fixtureIds, fromGroupId, toGroupId) => {
+    // Remove from old group and add to new group in one operation
+    set((state) => ({
+      groups: state.groups.map((g) => {
+        if (g.id === fromGroupId) {
+          return { ...g, fixtureIds: g.fixtureIds.filter((fid) => !fixtureIds.includes(fid)) }
+        }
+        if (g.id === toGroupId) {
+          return { ...g, fixtureIds: [...new Set([...g.fixtureIds, ...fixtureIds])] }
+        }
+        return g
+      }),
+      patch: state.patch.map((p) => {
+        if (!fixtureIds.includes(p.id)) return p
+        const gids = p.groupIds.filter((gid) => gid !== fromGroupId)
+        if (!gids.includes(toGroupId)) gids.push(toGroupId)
+        return { ...p, groupIds: gids }
+      })
+    }))
+  },
+
+  moveSubgroup: (subgroupId, newParentId) => {
+    set((state) => ({
+      groups: state.groups.map((g) =>
+        g.id === subgroupId ? { ...g, parentGroupId: newParentId } : g
+      )
+    }))
+  },
+
+  selectGroup: (groupId) => {
+    const group = get().groups.find((g) => g.id === groupId)
+    if (group) {
+      set({ selectedFixtureIds: [...group.fixtureIds] })
+    }
   },
 
   setPatch: (patch) => set({ patch }),
