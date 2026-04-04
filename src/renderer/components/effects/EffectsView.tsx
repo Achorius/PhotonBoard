@@ -1,8 +1,7 @@
-import React, { useState } from 'react'
-import { v4 as uuidv4 } from 'uuid'
+import React from 'react'
 import { usePatchStore } from '../../stores/patch-store'
-import type { Effect, WaveformType } from '@shared/types'
-import { startEffect, stopEffect } from '../../lib/effect-engine'
+import type { WaveformType } from '@shared/types'
+import { useEffectsStore } from '../../stores/effects-store'
 
 const WAVEFORMS: WaveformType[] = ['sine', 'square', 'sawtooth', 'triangle', 'random']
 const WAVEFORM_ICONS: Record<WaveformType, string> = {
@@ -15,48 +14,11 @@ const WAVEFORM_ICONS: Record<WaveformType, string> = {
 
 export function EffectsView() {
   const { patch, selectedFixtureIds } = usePatchStore()
-  const [effects, setEffects] = useState<Effect[]>([])
+  const { effects, addEffect, updateEffect, toggleEffect, removeEffect } = useEffectsStore()
 
   const addNewEffect = () => {
     const targetIds = selectedFixtureIds.length > 0 ? selectedFixtureIds : patch.map(p => p.id)
-    const effect: Effect = {
-      id: uuidv4(),
-      name: `Effect ${effects.length + 1}`,
-      waveform: 'sine',
-      speed: 1,
-      depth: 255,
-      offset: 0,
-      channelType: 'Dimmer',
-      fixtureIds: targetIds,
-      fan: 0,
-      isRunning: false
-    }
-    setEffects([...effects, effect])
-  }
-
-  const updateEffect = (id: string, updates: Partial<Effect>) => {
-    setEffects(effects.map(e => {
-      if (e.id !== id) return e
-      const updated = { ...e, ...updates }
-      if (updated.isRunning) startEffect(updated)
-      return updated
-    }))
-  }
-
-  const toggleEffect = (id: string) => {
-    setEffects(effects.map(e => {
-      if (e.id !== id) return e
-      const running = !e.isRunning
-      const updated = { ...e, isRunning: running }
-      if (running) startEffect(updated)
-      else stopEffect(id)
-      return updated
-    }))
-  }
-
-  const removeEffect = (id: string) => {
-    stopEffect(id)
-    setEffects(effects.filter(e => e.id !== id))
+    addEffect(targetIds)
   }
 
   return (

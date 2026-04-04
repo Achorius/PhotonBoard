@@ -61,7 +61,7 @@ export function Toolbar() {
         }`}
         onClick={toggleBlackout}
       >
-        BO
+        Blackout
       </button>
     </div>
   )

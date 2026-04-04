@@ -231,7 +231,7 @@ function FixtureFaders({
             className={`flex flex-col bg-surface-2 rounded border p-1.5 min-w-fit cursor-pointer transition-colors ${
               isSelected ? 'border-accent' : 'border-surface-3 hover:border-surface-4'
             }`}
-            onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey)}
+            onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
           >
             {/* Fixture name */}
             <div className="text-[9px] text-center text-gray-400 truncate max-w-24 mb-1" title={entry.name}>

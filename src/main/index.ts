@@ -92,6 +92,12 @@ function createMenu(): void {
 }
 
 function createWindow(): void {
+  // Grant MIDI permissions BEFORE creating the window (required for Web MIDI in Electron 33+)
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(true) // Grant all permissions (midi, midiSysex, etc.)
+  })
+  session.defaultSession.setPermissionCheckHandler(() => true)
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -106,23 +112,6 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
-  })
-
-  // Grant MIDI permissions automatically
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    if (permission === 'midi' || permission === 'midiSysex') {
-      callback(true)
-    } else {
-      callback(true)
-    }
-  })
-
-  // Chromium also checks permissions via this handler (required for Web MIDI in Electron 33+)
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    if (permission === 'midi' || permission === 'midiSysex') {
-      return true
-    }
-    return true
   })
 
   // Dev or production

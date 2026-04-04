@@ -17,8 +17,8 @@ export function exportStagePDF(
 ): void {
   const { width: roomW, depth: roomD, height: roomH } = roomConfig
 
-  // A3 landscape
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
+  // A4 portrait
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
 

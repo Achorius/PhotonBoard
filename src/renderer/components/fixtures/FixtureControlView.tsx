@@ -63,7 +63,7 @@ export function FixtureControlView() {
                 className={`w-full text-left px-3 py-1.5 text-xs border-b border-surface-3 ${
                   isSelected ? 'bg-accent/10 text-accent' : 'text-gray-300 hover:bg-surface-2'
                 }`}
-                onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey)}
+                onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
               >
                 <div className="font-medium">{entry.name}</div>
                 <div className="text-[10px] text-gray-500">

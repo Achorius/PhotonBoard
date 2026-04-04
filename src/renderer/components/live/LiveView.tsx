@@ -120,9 +120,27 @@ export function LiveView() {
       const rCh = channels.find((c) => c.type === 'red')
       const gCh = channels.find((c) => c.type === 'green')
       const bCh = channels.find((c) => c.type === 'blue')
+      const dimCh = channels.find((c) => c.type === 'dimmer' || c.type === 'intensity')
       if (rCh) setChannel(entry.universe, rCh.absoluteChannel, preset.r)
       if (gCh) setChannel(entry.universe, gCh.absoluteChannel, preset.g)
       if (bCh) setChannel(entry.universe, bCh.absoluteChannel, preset.b)
+      // Auto-set dimmer to full if applying a non-off color and dimmer is at 0
+      if (dimCh && (preset.r > 0 || preset.g > 0 || preset.b > 0)) {
+        const currentDim = dmxValues[entry.universe]?.[dimCh.absoluteChannel] ?? 0
+        if (currentDim === 0) setChannel(entry.universe, dimCh.absoluteChannel, 255)
+      }
+    }
+  }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel, dmxValues])
+
+  // Apply a single channel value to selected fixtures
+  const setChannelForSelected = useCallback((channelType: string, value: number) => {
+    const targets = patch.filter((p) => selectedIds.has(p.id))
+    for (const entry of targets) {
+      const def = fixtures.find((f) => f.id === entry.fixtureDefId)
+      if (!def) continue
+      const channels = getFixtureChannels(entry)
+      const ch = channels.find((c) => c.type === channelType)
+      if (ch) setChannel(entry.universe, ch.absoluteChannel, value)
     }
   }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel])
 
@@ -138,6 +156,10 @@ export function LiveView() {
   }, [patch, fixtures, selectedIds, getFixtureChannels, setChannel])
 
   const [dimmerSlider, setDimmerSlider] = useState(255)
+  const [panSlider, setPanSlider] = useState(128)
+  const [tiltSlider, setTiltSlider] = useState(128)
+  const [zoomSlider, setZoomSlider] = useState(128)
+  const [strobeSlider, setStrobeSlider] = useState(0)
 
   const handleDimmerSlider = useCallback((val: number) => {
     setDimmerSlider(val)
@@ -232,67 +254,114 @@ export function LiveView() {
 
         {/* ============ BOTTOM CONTROL BAR (when selection active) ============ */}
         {selectedIds.size > 0 && (
-          <div className="shrink-0 border-t border-surface-3 bg-surface-1 p-2 flex items-center gap-3">
-            {/* Color presets */}
-            <div className="flex items-center gap-1">
-              {COLOR_PRESETS.map((preset) => {
-                const bg = `rgb(${preset.r}, ${preset.g}, ${preset.b})`
-                return (
-                  <button
-                    key={preset.label}
-                    className="w-6 h-6 rounded border border-white/10 hover:scale-110 transition-transform"
-                    style={{ backgroundColor: bg }}
-                    title={preset.label}
-                    onClick={() => applyColorPreset(preset)}
-                  />
-                )
-              })}
+          <div className="shrink-0 border-t border-surface-3 bg-surface-1 p-2 space-y-2">
+            {/* Row 1: Color presets + dimmer + quick buttons */}
+            <div className="flex items-center gap-3">
+              {/* Color presets */}
+              <div className="flex items-center gap-1">
+                {COLOR_PRESETS.map((preset) => {
+                  const bg = `rgb(${preset.r}, ${preset.g}, ${preset.b})`
+                  return (
+                    <button
+                      key={preset.label}
+                      className="w-6 h-6 rounded border border-white/10 hover:scale-110 transition-transform"
+                      style={{ backgroundColor: bg }}
+                      title={preset.label}
+                      onClick={() => applyColorPreset(preset)}
+                    />
+                  )
+                })}
+              </div>
+
+              <div className="w-px h-6 bg-surface-3" />
+
+              {/* Dimmer slider */}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0">Dim</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  value={dimmerSlider}
+                  onChange={(e) => handleDimmerSlider(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 min-w-0"
+                  style={{ accentColor: '#e85d04' }}
+                />
+                <span className="text-[10px] font-mono text-gray-400 w-8 text-right shrink-0">
+                  {Math.round((dimmerSlider / 255) * 100)}%
+                </span>
+              </div>
+
+              <div className="w-px h-6 bg-surface-3" />
+
+              {/* Quick intensity buttons */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  className="px-2 py-0.5 text-[10px] rounded bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200 transition-colors"
+                  onClick={() => { setDimmerSlider(255); setDimmerForSelected(255) }}
+                >
+                  Full
+                </button>
+                <button
+                  className="px-2 py-0.5 text-[10px] rounded bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200 transition-colors"
+                  onClick={() => { setDimmerSlider(128); setDimmerForSelected(128) }}
+                >
+                  Half
+                </button>
+                <button
+                  className="px-2 py-0.5 text-[10px] rounded bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200 transition-colors"
+                  onClick={() => { setDimmerSlider(0); setDimmerForSelected(0) }}
+                >
+                  Off
+                </button>
+              </div>
+
+              <span className="text-[10px] text-gray-500 shrink-0">{selectedIds.size} sel.</span>
             </div>
 
-            <div className="w-px h-6 bg-surface-3" />
-
-            {/* Dimmer slider */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0">Dim</span>
-              <input
-                type="range"
-                min={0}
-                max={255}
-                value={dimmerSlider}
-                onChange={(e) => handleDimmerSlider(parseInt(e.target.value))}
-                className="flex-1 h-1.5 min-w-0"
-                style={{ accentColor: '#e85d04' }}
-              />
-              <span className="text-[10px] font-mono text-gray-400 w-8 text-right shrink-0">
-                {Math.round((dimmerSlider / 255) * 100)}%
-              </span>
+            {/* Row 2: Pan / Tilt / Zoom / Strobe */}
+            <div className="flex items-center gap-3">
+              {/* Pan */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Pan</span>
+                <input
+                  type="range" min={0} max={255} value={panSlider}
+                  onChange={(e) => { const v = parseInt(e.target.value); setPanSlider(v); setChannelForSelected('pan', v) }}
+                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#6366f1' }}
+                />
+                <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{panSlider}</span>
+              </div>
+              {/* Tilt */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Tilt</span>
+                <input
+                  type="range" min={0} max={255} value={tiltSlider}
+                  onChange={(e) => { const v = parseInt(e.target.value); setTiltSlider(v); setChannelForSelected('tilt', v) }}
+                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#6366f1' }}
+                />
+                <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{tiltSlider}</span>
+              </div>
+              {/* Zoom */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Zoom</span>
+                <input
+                  type="range" min={0} max={255} value={zoomSlider}
+                  onChange={(e) => { const v = parseInt(e.target.value); setZoomSlider(v); setChannelForSelected('zoom', v) }}
+                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#22c55e' }}
+                />
+                <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{zoomSlider}</span>
+              </div>
+              {/* Strobe */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Strobe</span>
+                <input
+                  type="range" min={0} max={255} value={strobeSlider}
+                  onChange={(e) => { const v = parseInt(e.target.value); setStrobeSlider(v); setChannelForSelected('strobe', v); setChannelForSelected('shutter', v) }}
+                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#ef4444' }}
+                />
+                <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{strobeSlider}</span>
+              </div>
             </div>
-
-            <div className="w-px h-6 bg-surface-3" />
-
-            {/* Quick intensity buttons */}
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                className="px-2 py-0.5 text-[10px] rounded bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200 transition-colors"
-                onClick={() => { setDimmerSlider(255); setDimmerForSelected(255) }}
-              >
-                Full
-              </button>
-              <button
-                className="px-2 py-0.5 text-[10px] rounded bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200 transition-colors"
-                onClick={() => { setDimmerSlider(128); setDimmerForSelected(128) }}
-              >
-                Half
-              </button>
-              <button
-                className="px-2 py-0.5 text-[10px] rounded bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200 transition-colors"
-                onClick={() => { setDimmerSlider(0); setDimmerForSelected(0) }}
-              >
-                Off
-              </button>
-            </div>
-
-            <span className="text-[10px] text-gray-500 shrink-0">{selectedIds.size} sel.</span>
           </div>
         )}
       </div>

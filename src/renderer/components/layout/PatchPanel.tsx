@@ -86,7 +86,7 @@ export function PatchPanel() {
                     ? 'bg-accent/15 border-l-2 border-l-accent'
                     : 'hover:bg-surface-2 border-l-2 border-l-transparent'
                 }`}
-                onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey)}
+                onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
               >
                 <div className={`text-[11px] font-medium truncate ${isSelected ? 'text-accent' : 'text-gray-200'}`}>
                   {entry.name}

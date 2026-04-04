@@ -178,7 +178,7 @@ export function StageView() {
       const cy = margin + cellH * (row + 1)
 
       if (Math.abs(x - cx) < 15 && Math.abs(y - cy) < 15) {
-        selectFixture(patch[i].id, e.metaKey || e.ctrlKey)
+        selectFixture(patch[i].id, e.metaKey || e.ctrlKey || e.shiftKey)
         return
       }
     }
