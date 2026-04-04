@@ -8,11 +8,14 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder"
+    "package": "electron-vite build && electron-builder",
+    "package:mac": "electron-vite build && electron-builder --mac",
+    "package:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@types/three": "^0.183.1",
     "dmxnet": "^0.9.0",
+    "jspdf": "^4.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.4.0",
@@ -37,18 +40,40 @@
   "build": {
     "appId": "com.photonboard.app",
     "productName": "PhotonBoard",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
     "mac": {
       "category": "public.app-category.entertainment",
       "target": [
-        "dmg"
-      ]
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "darkModeSupport": true
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
-      "category": "AudioVideo"
+      "category": "AudioVideo",
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "title": "PhotonBoard",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "deb": {
+      "depends": ["libusb-1.0-0"]
     }
   }
 }

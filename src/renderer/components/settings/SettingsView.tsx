@@ -133,16 +133,6 @@ export function SettingsView() {
         {saved && <span className="text-xs text-green-400 ml-2">Saved!</span>}
       </section>
 
-      {/* About */}
-      <section className="panel p-4 space-y-2">
-        <h2 className="text-sm font-medium text-gray-300">About</h2>
-        <p className="text-xs text-gray-500">
-          PhotonBoard v0.1.0 — Professional DMX Lighting Control
-        </p>
-        <p className="text-xs text-gray-600">
-          ArtNet output | 3 DMX universes | MIDI controller support | Open Fixture Library
-        </p>
-      </section>
     </div>
   )
 }

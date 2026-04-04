@@ -1,0 +1,168 @@
+import { jsPDF } from 'jspdf'
+import type { PatchEntry, FixtureDefinition, RoomConfig } from '@shared/types'
+import { getFixtureShape } from '@shared/types'
+
+const MARGIN = 20
+const TITLE_HEIGHT = 30
+
+/**
+ * Export the stage layout as a PDF lighting plot.
+ * Uses jsPDF to draw vector shapes for each fixture type.
+ */
+export function exportStagePDF(
+  patch: PatchEntry[],
+  fixtures: FixtureDefinition[],
+  roomConfig: RoomConfig,
+  showName: string
+): void {
+  const { width: roomW, depth: roomD, height: roomH } = roomConfig
+
+  // A3 landscape
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+
+  // Scale: fit room into available area
+  const drawW = pageW - MARGIN * 2
+  const drawH = pageH - MARGIN * 2 - TITLE_HEIGHT - 30 // leave room for legend
+  const scale = Math.min(drawW / roomW, drawH / roomD)
+  const offsetX = MARGIN + (drawW - roomW * scale) / 2
+  const offsetY = MARGIN + TITLE_HEIGHT + (drawH - roomD * scale) / 2
+
+  // --- Title ---
+  doc.setFontSize(16)
+  doc.setTextColor(0)
+  doc.text(showName || 'Lighting Plot', pageW / 2, MARGIN + 8, { align: 'center' })
+  doc.setFontSize(8)
+  doc.setTextColor(100)
+  doc.text(
+    `Room: ${roomW}m x ${roomD}m x ${roomH}m  |  ${patch.length} fixtures  |  ${new Date().toLocaleDateString()}`,
+    pageW / 2, MARGIN + 15, { align: 'center' }
+  )
+
+  // --- Room outline ---
+  doc.setDrawColor(100)
+  doc.setLineWidth(0.5)
+  doc.rect(offsetX, offsetY, roomW * scale, roomD * scale)
+
+  // Stage edge (center horizontal line)
+  doc.setDrawColor(200, 100, 0)
+  doc.setLineWidth(0.3)
+  doc.setLineDashPattern([3, 2], 0)
+  const stageY = offsetY + roomD * scale / 2
+  doc.line(offsetX, stageY, offsetX + roomW * scale, stageY)
+  doc.setLineDashPattern([], 0)
+
+  // Labels
+  doc.setFontSize(6)
+  doc.setTextColor(150)
+  doc.text('AUDIENCE', offsetX + roomW * scale / 2, stageY - 2, { align: 'center' })
+  doc.text('UPSTAGE', offsetX + roomW * scale / 2, stageY + 5, { align: 'center' })
+
+  // Truss lines
+  doc.setDrawColor(160, 160, 180)
+  doc.setLineWidth(0.3)
+  const trussPositions = [-0.3, 0, 0.3]
+  for (const tz of trussPositions) {
+    const ty = offsetY + (roomD / 2 + tz * roomD) * scale
+    doc.line(offsetX + 5, ty, offsetX + roomW * scale - 5, ty)
+  }
+
+  // --- Fixtures ---
+  const autoPositions = computeAutoPositions(patch, roomConfig)
+
+  for (let i = 0; i < patch.length; i++) {
+    const entry = patch[i]
+    const def = fixtures.find(f => f.id === entry.fixtureDefId)
+    const shape = getFixtureShape(def?.categories || [])
+    const pos = entry.position3D
+    const wx = pos?.x ?? autoPositions[i].x
+    const wz = pos?.z ?? autoPositions[i].z
+
+    // Convert world coords to PDF coords
+    const px = offsetX + (roomW / 2 + wx) * scale
+    const py = offsetY + (roomD / 2 + wz) * scale
+    const iconSize = 4 // mm
+
+    // Draw fixture icon based on type
+    doc.setLineWidth(0.4)
+    doc.setDrawColor(40)
+
+    if (shape === 'moving-head') {
+      // Diamond
+      doc.setFillColor(220, 220, 240)
+      const half = iconSize / 2
+      doc.lines(
+        [[half, half], [half, -half], [-half, -half], [-half, half]],
+        px - half, py, [1, 1], 'FD', true
+      )
+    } else if (shape === 'strip') {
+      // Wide rectangle
+      doc.setFillColor(200, 200, 220)
+      doc.rect(px - iconSize, py - iconSize / 4, iconSize * 2, iconSize / 2, 'FD')
+    } else {
+      // Circle (PAR / wash)
+      doc.setFillColor(210, 210, 230)
+      doc.circle(px, py, iconSize / 2, 'FD')
+    }
+
+    // Labels
+    doc.setFontSize(5)
+    doc.setTextColor(0)
+    doc.text(entry.name, px, py + iconSize / 2 + 3, { align: 'center' })
+    doc.setFontSize(4)
+    doc.setTextColor(100)
+    doc.text(`U${entry.universe + 1}.${entry.address}`, px, py + iconSize / 2 + 6, { align: 'center' })
+  }
+
+  // --- Legend ---
+  const legendY = pageH - 20
+  doc.setFontSize(7)
+  doc.setTextColor(0)
+  doc.text('Legend:', MARGIN, legendY)
+
+  const legendItems = [
+    { label: 'PAR / Wash', draw: (x: number, y: number) => { doc.setFillColor(210, 210, 230); doc.circle(x, y, 2, 'FD') } },
+    { label: 'Moving Head', draw: (x: number, y: number) => { doc.setFillColor(220, 220, 240); doc.lines([[2,2],[2,-2],[-2,-2],[-2,2]], x-2, y, [1,1], 'FD', true) } },
+    { label: 'Strip / Batten', draw: (x: number, y: number) => { doc.setFillColor(200, 200, 220); doc.rect(x - 4, y - 1, 8, 2, 'FD') } }
+  ]
+
+  let lx = MARGIN + 20
+  for (const item of legendItems) {
+    item.draw(lx, legendY)
+    doc.setFontSize(6)
+    doc.setTextColor(60)
+    doc.text(item.label, lx + 6, legendY + 1.5)
+    lx += 35
+  }
+
+  // Scale indicator
+  doc.setFontSize(6)
+  doc.setTextColor(100)
+  doc.text(`Scale: 1m = ${scale.toFixed(1)}mm`, pageW - MARGIN, legendY, { align: 'right' })
+
+  // Footer
+  doc.setFontSize(5)
+  doc.setTextColor(150)
+  doc.text('Generated by PhotonBoard', pageW / 2, pageH - 8, { align: 'center' })
+
+  // Save
+  doc.save(`${showName || 'LightingPlot'}_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+function computeAutoPositions(
+  patch: PatchEntry[],
+  room: RoomConfig
+): { x: number; z: number }[] {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(patch.length * 1.5)))
+  const rows = Math.max(1, Math.ceil(patch.length / cols))
+  return patch.map((_, i) => {
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const colCount = Math.min(cols, patch.length)
+    return {
+      x: colCount > 1 ? (col / (colCount - 1) - 0.5) * room.width * 0.8 : 0,
+      z: rows > 1 ? (row / (rows - 1) - 0.5) * room.depth * 0.6 : 0
+    }
+  })
+}

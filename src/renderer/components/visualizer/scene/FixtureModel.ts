@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { FixtureShape } from '@shared/types'
 
-const BODY_COLOR = 0x1a1a2a
+const BODY_COLOR = 0x3a3a55
 const SELECTED_COLOR = 0xe85d04
 const LENS_COLOR = 0x222244
 
@@ -26,7 +26,7 @@ export interface FixtureObjects {
 }
 
 const bodyMaterial = () =>
-  new THREE.MeshLambertMaterial({ color: BODY_COLOR })
+  new THREE.MeshBasicMaterial({ color: BODY_COLOR })
 
 const coneMaterial = () =>
   new THREE.MeshBasicMaterial({
@@ -175,5 +175,5 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25): Fixtu
 
 export function setFixtureSelected(objects: FixtureObjects, selected: boolean): void {
   const color = selected ? SELECTED_COLOR : BODY_COLOR
-  ;(objects.bodyMesh.material as THREE.MeshLambertMaterial).color.setHex(color)
+  ;(objects.bodyMesh.material as THREE.MeshBasicMaterial).color.setHex(color)
 }

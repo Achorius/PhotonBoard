@@ -49,10 +49,10 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     camera.lookAt(0, 4, 0)
 
     // ---- Lights ----
-    const ambient = new THREE.AmbientLight(0x404060, 0.2)
+    const ambient = new THREE.AmbientLight(0x8080a0, 0.6)
     scene.add(ambient)
     ambientRef.current = ambient
-    const dir = new THREE.DirectionalLight(0x6060a0, 0.12)
+    const dir = new THREE.DirectionalLight(0x8888c0, 0.35)
     dir.position.set(0, 10, 5)
     scene.add(dir)
 

@@ -4,6 +4,9 @@ import { ThreeCanvas } from './ThreeCanvas'
 import { LayoutEditor2D } from './editor/LayoutEditor2D'
 import { SideView } from './editor/SideView'
 import { FixturePropertiesPanel } from './editor/FixturePropertiesPanel'
+import { exportStagePDF } from '@renderer/lib/pdf-export'
+import { usePatchStore } from '@renderer/stores/patch-store'
+import { useUiStore } from '@renderer/stores/ui-store'
 
 export function VisualizerView() {
   const {
@@ -15,6 +18,9 @@ export function VisualizerView() {
     shadowsEnabled, setShadowsEnabled,
     snapToGrid, setSnapToGrid
   } = useVisualizerStore()
+
+  const { patch, fixtures } = usePatchStore()
+  const { showName } = useUiStore()
 
   return (
     <div className="flex flex-col h-full">
@@ -94,6 +100,14 @@ export function VisualizerView() {
           <span className="text-[10px] text-gray-600">
             Orbit: drag · Zoom: scroll · Pan: right-drag
           </span>
+        )}
+        {subTab === 'layout' && (
+          <button
+            className="px-2 py-0.5 rounded text-[10px] bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
+            onClick={() => exportStagePDF(patch, fixtures, roomConfig, showName)}
+          >
+            Export PDF
+          </button>
         )}
       </div>
 
