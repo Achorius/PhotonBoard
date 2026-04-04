@@ -91,13 +91,34 @@ export interface Rotation3D {
   rz: number // radians
 }
 
+export interface TrussBar {
+  id: string
+  name: string        // e.g. "Bar 1", "FOH Truss"
+  z: number           // position along depth axis (metres from center, + = upstage)
+  y: number           // height (metres from floor), default = room height - 0.05
+  width: number       // bar length in metres (default = room width)
+  color?: string      // optional hex color for the bar
+}
+
 export interface RoomConfig {
   width: number  // metres
   depth: number  // metres
   height: number // metres
+  trussBars: TrussBar[]
 }
 
-export const DEFAULT_ROOM_CONFIG: RoomConfig = { width: 20, depth: 15, height: 6 }
+export function defaultTrussBars(roomWidth: number, roomDepth: number, roomHeight: number): TrussBar[] {
+  return [
+    { id: 'truss-0', name: 'Bar 1', z: -roomDepth * 0.3, y: roomHeight - 0.05, width: roomWidth },
+    { id: 'truss-1', name: 'Bar 2', z: 0, y: roomHeight - 0.05, width: roomWidth },
+    { id: 'truss-2', name: 'Bar 3', z: roomDepth * 0.3, y: roomHeight - 0.05, width: roomWidth },
+  ]
+}
+
+export const DEFAULT_ROOM_CONFIG: RoomConfig = {
+  width: 20, depth: 15, height: 6,
+  trussBars: defaultTrussBars(20, 15, 6)
+}
 
 /** Map OFL categories to a simplified shape for 3D rendering */
 export function getFixtureShape(categories: string[]): FixtureShape {

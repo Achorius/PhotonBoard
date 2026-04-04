@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
@@ -7,15 +7,29 @@ import { resolveChannels, getEffectiveColor } from '@renderer/lib/dmx-channel-re
 import type { PatchEntry } from '@shared/types'
 
 const METRE_TO_PX = 40  // 40px per metre at default zoom
+const TRUSS_HIT_TOLERANCE = 8  // px tolerance for clicking on a truss line
 
 export function LayoutEditor2D() {
   const canvasRef   = useRef<HTMLCanvasElement>(null)
   const containerRef= useRef<HTMLDivElement>(null)
-  const draggingRef = useRef<{ id: string; offsetX: number; offsetZ: number } | null>(null)
+  const draggingRef = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' } | null>(null)
 
   const { patch, fixtures, updateFixture } = usePatchStore()
-  const { roomConfig, selectedFixtureId, selectFixture, gridSize, snapToGrid } = useVisualizerStore()
+  const {
+    roomConfig, selectedFixtureId, selectFixture,
+    selectedTrussId, selectTruss,
+    addTrussBar, removeTrussBar, updateTrussBar,
+    gridSize, snapToGrid
+  } = useVisualizerStore()
   const { values } = useDmxStore()
+
+  const [trussNameInput, setTrussNameInput] = useState('')
+  const selectedTruss = roomConfig.trussBars.find(t => t.id === selectedTrussId)
+
+  // Sync name input when selection changes
+  useEffect(() => {
+    if (selectedTruss) setTrussNameInput(selectedTruss.name)
+  }, [selectedTrussId])
 
   const worldToCanvas = useCallback((wx: number, wz: number, W: number, H: number) => {
     const cx = W / 2 + wx * METRE_TO_PX
@@ -85,6 +99,29 @@ export function LayoutEditor2D() {
     ctx.fillText('UPSTAGE', W / 2, H / 2 - 8)
     ctx.fillText('AUDIENCE', W / 2, H / 2 + 16)
 
+    // Truss bars (drawn before fixtures so fixtures appear on top)
+    for (const bar of roomConfig.trussBars) {
+      const barHalfW = (bar.width ?? rw) / 2
+      const leftPt = worldToCanvas(-barHalfW, bar.z, W, H)
+      const rightPt = worldToCanvas(barHalfW, bar.z, W, H)
+      const isSelectedTruss = bar.id === selectedTrussId
+
+      ctx.strokeStyle = isSelectedTruss ? '#e85d04' : (bar.color ?? '#555577')
+      ctx.lineWidth = isSelectedTruss ? 2.5 : 1.5
+      ctx.setLineDash([6, 4])
+      ctx.beginPath()
+      ctx.moveTo(leftPt.cx, leftPt.cy)
+      ctx.lineTo(rightPt.cx, rightPt.cy)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Bar name label
+      ctx.fillStyle = isSelectedTruss ? '#e85d04' : '#888'
+      ctx.font = '9px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillText(bar.name, leftPt.cx + 4, leftPt.cy - 5)
+    }
+
     // Fixtures (top-down, X=left-right, Z=front-back)
     for (const entry of patch) {
       const def = fixtures.find(f => f.id === entry.fixtureDefId)
@@ -142,7 +179,7 @@ export function LayoutEditor2D() {
       ctx.font = '8px sans-serif'
       ctx.fillText(entry.name.length > 10 ? entry.name.slice(0, 9) + '…' : entry.name, cxs, cys - 11)
     }
-  }, [patch, fixtures, roomConfig, selectedFixtureId, values, worldToCanvas, gridSize, snapToGrid])
+  }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, values, worldToCanvas, gridSize, snapToGrid])
 
   // Redraw on changes
   useEffect(() => { draw() }, [draw])
@@ -157,7 +194,7 @@ export function LayoutEditor2D() {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }
 
-  const hitTest = (mx: number, my: number): PatchEntry | null => {
+  const hitTestFixture = (mx: number, my: number): PatchEntry | null => {
     const canvas = canvasRef.current!
     const W = canvas.clientWidth, H = canvas.clientHeight
     for (const entry of patch) {
@@ -171,28 +208,70 @@ export function LayoutEditor2D() {
     return null
   }
 
+  const hitTestTruss = (mx: number, my: number): string | null => {
+    const canvas = canvasRef.current!
+    const W = canvas.clientWidth, H = canvas.clientHeight
+    const { width: rw } = roomConfig
+    for (const bar of roomConfig.trussBars) {
+      const barHalfW = (bar.width ?? rw) / 2
+      const leftPt = worldToCanvas(-barHalfW, bar.z, W, H)
+      const rightPt = worldToCanvas(barHalfW, bar.z, W, H)
+      // Check if click is near the horizontal truss line (within tolerance in Y, within X span)
+      if (mx >= leftPt.cx - 4 && mx <= rightPt.cx + 4 &&
+          Math.abs(my - leftPt.cy) < TRUSS_HIT_TOLERANCE) {
+        return bar.id
+      }
+    }
+    return null
+  }
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const { x, y } = getCanvasPos(e as any)
-    const hit = hitTest(x, y)
-    if (hit) {
-      selectFixture(hit.id)
-      const pos = hit.position3D
+
+    // Fixtures take priority over trusses
+    const hitFixture = hitTestFixture(x, y)
+    if (hitFixture) {
+      selectFixture(hitFixture.id)
+      const pos = hitFixture.position3D
       const canvas = canvasRef.current!
       const W = canvas.clientWidth, H = canvas.clientHeight
-      const wx = pos?.x ?? getAutoX(hit, patch, roomConfig)
-      const wz = pos?.z ?? getAutoZ(hit, patch, roomConfig)
+      const wx = pos?.x ?? getAutoX(hitFixture, patch, roomConfig)
+      const wz = pos?.z ?? getAutoZ(hitFixture, patch, roomConfig)
       const cx = W / 2 + wx * METRE_TO_PX
       const cy = H / 2 - wz * METRE_TO_PX  // flipped Z
-      draggingRef.current = { id: hit.id, offsetX: cx - x, offsetZ: cy - y }
+      draggingRef.current = { id: hitFixture.id, offsetX: cx - x, offsetZ: cy - y, type: 'fixture' }
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    } else {
-      selectFixture(null)
+      return
     }
-  }, [patch, roomConfig, selectFixture])
+
+    // Check truss hit
+    const hitTrussId = hitTestTruss(x, y)
+    if (hitTrussId) {
+      selectTruss(hitTrussId)
+      const bar = roomConfig.trussBars.find(t => t.id === hitTrussId)!
+      const canvas = canvasRef.current!
+      const W = canvas.clientWidth, H = canvas.clientHeight
+      const { cy: trussCy } = worldToCanvas(0, bar.z, W, H)
+      draggingRef.current = { id: hitTrussId, offsetX: 0, offsetZ: trussCy - y, type: 'truss' }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
+
+    selectFixture(null)
+    selectTruss(null)
+  }, [patch, roomConfig, selectFixture, selectTruss, worldToCanvas])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!draggingRef.current) return
     const { x, y } = getCanvasPos(e as any)
+
+    if (draggingRef.current.type === 'truss') {
+      // Only move along Z axis
+      const { wz } = canvasToWorld(0, y + draggingRef.current.offsetZ)
+      updateTrussBar(draggingRef.current.id, { z: wz })
+      return
+    }
+
     const { wx, wz } = canvasToWorld(
       x + draggingRef.current.offsetX,
       y + draggingRef.current.offsetZ
@@ -200,22 +279,55 @@ export function LayoutEditor2D() {
     const entry = patch.find(p => p.id === draggingRef.current!.id)
     const curY = entry?.position3D?.y ?? (roomConfig.height - 0.05)
     updateFixture(draggingRef.current.id, { position3D: { x: wx, y: curY, z: wz } })
-  }, [patch, roomConfig, canvasToWorld, updateFixture])
+  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar])
 
   const handlePointerUp = useCallback(() => {
     draggingRef.current = null
   }, [])
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0"
-        style={{ cursor: 'crosshair' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      />
+    <div className="w-full h-full flex flex-col overflow-hidden">
+      {/* Truss toolbar */}
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#0d0d15] border-b border-[#1a1a2e] shrink-0 text-xs">
+        <button
+          onClick={addTrussBar}
+          className="px-2 py-1 rounded bg-[#1a1a2e] hover:bg-[#252540] text-[#aaa] hover:text-white transition-colors"
+        >
+          + Add Bar
+        </button>
+        {selectedTruss && (
+          <>
+            <input
+              type="text"
+              value={trussNameInput}
+              onChange={(e) => {
+                setTrussNameInput(e.target.value)
+                updateTrussBar(selectedTruss.id, { name: e.target.value })
+              }}
+              className="px-2 py-1 rounded bg-[#111118] border border-[#333355] text-[#ccc] w-28 text-xs"
+              placeholder="Bar name"
+            />
+            <span className="text-[#666]">Z: {selectedTruss.z.toFixed(2)}m</span>
+            <button
+              onClick={() => removeTrussBar(selectedTruss.id)}
+              className="px-2 py-1 rounded bg-[#2a1515] hover:bg-[#3a2020] text-[#e85d04] hover:text-[#ff7733] transition-colors ml-auto"
+            >
+              Delete Bar
+            </button>
+          </>
+        )}
+      </div>
+      {/* Canvas */}
+      <div ref={containerRef} className="flex-1 relative overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0"
+          style={{ cursor: 'crosshair' }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        />
+      </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { RoomConfig } from '@shared/types'
+import type { RoomConfig, TrussBar } from '@shared/types'
 
 /**
  * Build the room geometry: floor, ceiling, 3 walls, grid helper.
@@ -81,26 +81,22 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   group.add(edgeLine)
 
   // ---- Truss pipe outlines along ceiling ----
-  addTruss(group, width, depth, height)
+  addTruss(group, config.trussBars, width)
 
   return group
 }
 
-function addTruss(group: THREE.Group, width: number, depth: number, height: number): void {
+function addTruss(group: THREE.Group, trussBars: TrussBar[], roomWidth: number): void {
   const trussMat = new THREE.MeshBasicMaterial({ color: 0x555577 })
   const pipeR = 0.03
-  // Trusses numbered 0..N starting from audience side (downstage, -Z)
-  const trussPositions = [
-    { z: -depth * 0.3, num: 0 },  // closest to audience (downstage)
-    { z: 0,            num: 1 },  // mid
-    { z: depth * 0.3,  num: 2 },  // most upstage
-  ]
-  for (const { z, num } of trussPositions) {
-    const pipeGeo = new THREE.CylinderGeometry(pipeR, pipeR, width, 6)
+  for (const bar of trussBars) {
+    const barWidth = bar.width ?? roomWidth
+    const pipeGeo = new THREE.CylinderGeometry(pipeR, pipeR, barWidth, 6)
     pipeGeo.rotateZ(Math.PI / 2)
-    const pipe = new THREE.Mesh(pipeGeo, trussMat)
-    pipe.position.set(0, height - 0.05, z)
-    pipe.name = `truss-${num}`
+    const pipe = new THREE.Mesh(pipeGeo, trussMat.clone())
+    if (bar.color) (pipe.material as THREE.MeshBasicMaterial).color.setStyle(bar.color)
+    pipe.position.set(0, bar.y, bar.z)
+    pipe.name = `truss-${bar.id}`
     group.add(pipe)
   }
 }

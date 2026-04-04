@@ -59,20 +59,19 @@ export function exportStagePDF(
   doc.text('UPSTAGE', offsetX + roomW * scale / 2, stageY - 2, { align: 'center' })
   doc.text('AUDIENCE', offsetX + roomW * scale / 2, stageY + 5, { align: 'center' })
 
-  // Truss lines — numbered 0..N from audience side (downstage)
+  // Truss lines from roomConfig
   doc.setDrawColor(160, 160, 180)
   doc.setLineWidth(0.3)
-  const trussPositions = [
-    { tz: -0.3, num: 0 },  // closest to audience (downstage)
-    { tz: 0, num: 1 },     // mid
-    { tz: 0.3, num: 2 },   // most upstage
-  ]
-  for (const { tz, num } of trussPositions) {
-    const ty = offsetY + (roomD / 2 - tz * roomD) * scale  // flipped Z
-    doc.line(offsetX + 5, ty, offsetX + roomW * scale - 5, ty)
+  const trussBars = roomConfig.trussBars ?? []
+  for (const bar of trussBars) {
+    const barHalfW = (bar.width ?? roomW) / 2
+    const ty = offsetY + (roomD / 2 - bar.z) * scale  // flipped Z
+    const leftX = offsetX + (roomW / 2 - barHalfW) * scale
+    const rightX = offsetX + (roomW / 2 + barHalfW) * scale
+    doc.line(leftX + 2, ty, rightX - 2, ty)
     doc.setFontSize(5)
     doc.setTextColor(120)
-    doc.text(`Bar ${num}`, offsetX + 1, ty - 1)
+    doc.text(bar.name, leftX, ty - 1)
   }
 
   // --- Fixtures ---

@@ -1,7 +1,10 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import { useUiStore, type ViewTab } from './stores/ui-store'
 import { usePatchStore } from './stores/patch-store'
 import { useMidiStore } from './stores/midi-store'
+import { usePlaybackStore } from './stores/playback-store'
+import { useVisualizerStore } from './stores/visualizer-store'
+import type { ShowFile } from '@shared/types'
 import { initMidiRouting } from './lib/midi-manager'
 import { Toolbar } from './components/layout/Toolbar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -14,6 +17,7 @@ import { EffectsView } from './components/effects/EffectsView'
 import { MidiView } from './components/midi/MidiView'
 import { VisualizerView } from './components/visualizer/VisualizerView'
 import { SettingsView } from './components/settings/SettingsView'
+import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
 import { usePlaybackController } from './hooks/usePlaybackController'
 
@@ -27,7 +31,8 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'effects',    label: 'Effects',  shortcut: '5' },
   { id: 'patch',      label: 'Patch',    shortcut: '6' },
   { id: 'midi',       label: 'MIDI',     shortcut: '7' },
-  { id: 'settings',   label: 'Settings', shortcut: '8' },
+  { id: 'live',       label: 'Live',     shortcut: '8' },
+  { id: 'settings',   label: 'Settings', shortcut: '9' },
 ]
 
 export default function App() {
@@ -36,6 +41,60 @@ export default function App() {
   const { initMidi } = useMidiStore()
 
   usePlaybackController()
+
+  // ---- Save / Load helpers ----
+  const collectShowData = useCallback((): ShowFile => {
+    const { patch, groups } = usePatchStore.getState()
+    const { cuelists, chases } = usePlaybackStore.getState()
+    const { showName } = useUiStore.getState()
+    const { roomConfig } = useVisualizerStore.getState()
+    return {
+      version: '1.0.0',
+      name: showName,
+      createdAt: new Date().toISOString(),
+      modifiedAt: new Date().toISOString(),
+      artnetConfig: [
+        { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
+        { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
+        { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
+      ],
+      patch,
+      groups,
+      presets: [],
+      cuelists,
+      chases,
+      effects: [],
+      midiMappings: [],
+      stageLayout: { width: 1200, height: 600, fixtures: [] },
+      roomConfig
+    }
+  }, [])
+
+  const applyShowData = useCallback((show: ShowFile) => {
+    usePatchStore.getState().setPatch(show.patch || [])
+    usePatchStore.getState().setGroups(show.groups || [])
+    usePlaybackStore.getState().setCuelists(show.cuelists || [])
+    usePlaybackStore.getState().setChases(show.chases || [])
+    useUiStore.getState().setShowName(show.name || 'New Show')
+    if (show.roomConfig) useVisualizerStore.getState().setRoomConfig(show.roomConfig)
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    const show = collectShowData()
+    const result = await window.photonboard.show.save(show)
+    if (result?.path) useUiStore.getState().setShowName(show.name)
+  }, [collectShowData])
+
+  const handleSaveAs = useCallback(async () => {
+    const show = collectShowData()
+    const result = await window.photonboard.show.saveAs(show)
+    if (result?.path) useUiStore.getState().setShowName(show.name)
+  }, [collectShowData])
+
+  const handleLoad = useCallback(async () => {
+    const result = await window.photonboard.show.load()
+    if (result?.show) applyShowData(result.show)
+  }, [applyShowData])
 
   useEffect(() => {
     loadFixtures()
@@ -50,6 +109,19 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+S / Cmd+Shift+S / Cmd+O — always active, even in inputs
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        if (e.shiftKey) handleSaveAs()
+        else handleSave()
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+        e.preventDefault()
+        handleLoad()
+        return
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
 
       const num = parseInt(e.key)
@@ -64,17 +136,17 @@ export default function App() {
       }
 
       if (e.key === ' ' && activeTab === 'playback') {
-        const { usePlaybackStore } = require('./stores/playback-store')
-        const cuelists = usePlaybackStore.getState().cuelists
+        const { usePlaybackStore: PBStore } = require('./stores/playback-store')
+        const cuelists = PBStore.getState().cuelists
         if (cuelists.length > 0) {
-          usePlaybackStore.getState().goCuelist(cuelists[0].id)
+          PBStore.getState().goCuelist(cuelists[0].id)
           e.preventDefault()
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTab])
+  }, [activeTab, handleSave, handleSaveAs, handleLoad])
 
   const renderView = () => {
     switch (activeTab) {
@@ -85,6 +157,7 @@ export default function App() {
       case 'effects':    return <EffectsView />
       case 'midi':       return <MidiView />
       case 'visualizer': return <VisualizerView />
+      case 'live':       return <LiveView />
       case 'settings':   return <SettingsView />
       default:           return <VisualizerView />
     }

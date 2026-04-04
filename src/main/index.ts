@@ -117,6 +117,14 @@ function createWindow(): void {
     }
   })
 
+  // Chromium also checks permissions via this handler (required for Web MIDI in Electron 33+)
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    if (permission === 'midi' || permission === 'midiSysex') {
+      return true
+    }
+    return true
+  })
+
   // Dev or production
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)

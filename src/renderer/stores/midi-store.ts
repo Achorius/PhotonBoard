@@ -9,12 +9,16 @@ interface MidiLearnTarget {
   label: string
 }
 
+type MidiApiStatus = 'pending' | 'available' | 'unavailable' | 'error'
+
 interface MidiState {
   devices: MidiDevice[]
   mappings: MidiMapping[]
   isLearning: boolean
   learnTarget: MidiLearnTarget | null
   lastMessage: { type: string; channel: number; number: number; value: number } | null
+  apiStatus: MidiApiStatus
+  apiError: string | null
 
   // Actions
   initMidi: () => Promise<void>
@@ -36,13 +40,25 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   isLearning: false,
   learnTarget: null,
   lastMessage: null,
+  apiStatus: 'pending',
+  apiError: null,
 
   initMidi: async () => {
+    if (!navigator.requestMIDIAccess) {
+      const msg = 'Web MIDI API is not available in this browser/environment'
+      console.error('[MIDI]', msg)
+      set({ apiStatus: 'unavailable', apiError: msg, devices: [] })
+      return
+    }
+
     try {
-      const access = await navigator.requestMIDIAccess({ sysex: false })
+      console.log('[MIDI] Requesting MIDI access...')
+      const access = await navigator.requestMIDIAccess({ sysex: true })
+      console.log('[MIDI] Access granted. Scanning devices...')
       const devices: MidiDevice[] = []
 
       access.inputs.forEach((input) => {
+        console.log('[MIDI] Input found:', input.name, '| manufacturer:', input.manufacturer, '| state:', input.state)
         devices.push({
           id: input.id,
           name: input.name || 'Unknown',
@@ -87,6 +103,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       })
 
       access.outputs.forEach((output) => {
+        console.log('[MIDI] Output found:', output.name, '| manufacturer:', output.manufacturer, '| state:', output.state)
         devices.push({
           id: output.id,
           name: output.name || 'Unknown',
@@ -96,14 +113,19 @@ export const useMidiStore = create<MidiState>((set, get) => ({
         })
       })
 
+      console.log('[MIDI] Total devices:', devices.length, '(inputs:', devices.filter(d => d.type === 'input').length, ', outputs:', devices.filter(d => d.type === 'output').length, ')')
+
       // Listen for device changes
-      access.onstatechange = () => {
+      access.onstatechange = (event) => {
+        console.log('[MIDI] Device state changed:', (event as any).port?.name, (event as any).port?.state)
         get().initMidi()
       }
 
-      set({ devices })
+      set({ devices, apiStatus: 'available', apiError: null })
     } catch (e) {
-      console.warn('WebMIDI not available:', e)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[MIDI] Failed to access Web MIDI API:', msg, e)
+      set({ apiStatus: 'error', apiError: msg, devices: [] })
     }
   },
 

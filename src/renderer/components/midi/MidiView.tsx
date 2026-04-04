@@ -2,7 +2,7 @@ import React from 'react'
 import { useMidiStore } from '../../stores/midi-store'
 
 export function MidiView() {
-  const { devices, mappings, isLearning, learnTarget, lastMessage, startLearn, cancelLearn, removeMapping } = useMidiStore()
+  const { devices, mappings, isLearning, learnTarget, lastMessage, apiStatus, apiError, startLearn, cancelLearn, removeMapping, initMidi } = useMidiStore()
 
   const inputs = devices.filter(d => d.type === 'input')
   const outputs = devices.filter(d => d.type === 'output')
@@ -11,7 +11,21 @@ export function MidiView() {
     <div className="flex h-full">
       {/* Devices & Monitor */}
       <div className="w-64 border-r border-surface-3 flex flex-col">
-        <div className="panel-header">MIDI Devices</div>
+        <div className="panel-header flex items-center justify-between">
+          <span>MIDI Devices</span>
+          <button className="text-[10px] text-gray-500 hover:text-gray-300" onClick={() => initMidi()}>Rescan</button>
+        </div>
+        {/* API Status */}
+        {apiStatus !== 'available' && (
+          <div className={`px-2 py-1.5 text-[10px] border-b ${
+            apiStatus === 'pending' ? 'bg-yellow-900/20 border-yellow-800/30 text-yellow-400' :
+            'bg-red-900/20 border-red-800/30 text-red-400'
+          }`}>
+            {apiStatus === 'pending' && 'Initializing MIDI...'}
+            {apiStatus === 'unavailable' && 'Web MIDI API not available'}
+            {apiStatus === 'error' && `MIDI Error: ${apiError}`}
+          </div>
+        )}
         <div className="p-2 space-y-2 border-b border-surface-3">
           <div>
             <h4 className="text-[10px] text-gray-500 uppercase mb-1">Inputs</h4>
