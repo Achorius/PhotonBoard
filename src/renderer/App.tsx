@@ -73,7 +73,7 @@ export default function App() {
       cuelists: [...cuelists],
       chases: [...chases],
       effects: [],
-      midiMappings: [],
+      midiMappings: [...useMidiStore.getState().mappings],
       stageLayout: { width: 1200, height: 600, fixtures: [] },
       roomConfig: { ...roomConfig }
     }
@@ -86,6 +86,7 @@ export default function App() {
     usePlaybackStore.getState().setCuelists(show.cuelists || [])
     usePlaybackStore.getState().setChases(show.chases || [])
     useUiStore.getState().setShowName(show.name || 'New Show')
+    if (show.midiMappings && show.midiMappings.length > 0) useMidiStore.getState().setMappings(show.midiMappings)
     if (show.roomConfig) useVisualizerStore.getState().setRoomConfig(show.roomConfig)
     // Clear selections
     usePatchStore.getState().clearSelection()

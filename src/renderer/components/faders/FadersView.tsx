@@ -1,9 +1,45 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useDmxStore } from '../../stores/dmx-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { useUiStore } from '../../stores/ui-store'
+import { useMidiStore } from '../../stores/midi-store'
 import { Fader } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
+import type { MidiTargetType } from '@shared/types'
+
+// Context menu for MIDI Learn
+function MidiContextMenu({ x, y, items, onClose }: {
+  x: number; y: number
+  items: { label: string; onClick: () => void }[]
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[180px]"
+      style={{ left: x, top: y }}
+    >
+      {items.map((item, i) => (
+        <button
+          key={i}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent"
+          onClick={() => { item.onClick(); onClose() }}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function FadersView() {
   const { values, setChannel } = useDmxStore()
@@ -118,6 +154,8 @@ function FixtureFaders({
   setChannel: (u: number, ch: number, val: number) => void
 }) {
   const { patch, fixtures, selectedFixtureIds, selectFixture, getFixtureChannels } = usePatchStore()
+  const { startLearn } = useMidiStore()
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null)
 
   const fixturesInUniverse = useMemo(() =>
     patch.filter(p => p.universe === universe),
@@ -193,22 +231,47 @@ function FixtureFaders({
               const displayValue = refCh ? (values[firstEntry.universe]?.[refCh.absoluteChannel] || 0) : 0
 
               return (
-                <Fader
+                <div
                   key={uch.name}
-                  value={displayValue}
-                  onChange={(val) => {
-                    // Apply to ALL selected fixtures
-                    for (const entry of selectedEntries) {
-                      const chs = getFixtureChannels(entry)
-                      const match = chs.find(c => c.name.toLowerCase() === uch.name.toLowerCase())
-                      if (match) setChannel(entry.universe, match.absoluteChannel, val)
-                    }
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    // For group faders, learn the first fixture's channel
+                    setContextMenu({
+                      x: e.clientX, y: e.clientY,
+                      items: [
+                        {
+                          label: `MIDI Learn: ${firstEntry.name} → ${uch.name}`,
+                          onClick: () => startLearn({
+                            type: 'channel' as MidiTargetType,
+                            id: firstEntry.id,
+                            parameter: uch.name,
+                            label: `${firstEntry.name} → ${uch.name}`
+                          })
+                        },
+                        {
+                          label: 'MIDI Learn: Grand Master',
+                          onClick: () => startLearn({ type: 'master' as MidiTargetType, label: 'Grand Master' })
+                        }
+                      ]
+                    })
                   }}
-                  label={getChannelShortLabel(uch.name)}
-                  color={color}
-                  size="sm"
-                  showValue={false}
-                />
+                >
+                  <Fader
+                    value={displayValue}
+                    onChange={(val) => {
+                      // Apply to ALL selected fixtures
+                      for (const entry of selectedEntries) {
+                        const chs = getFixtureChannels(entry)
+                        const match = chs.find(c => c.name.toLowerCase() === uch.name.toLowerCase())
+                        if (match) setChannel(entry.universe, match.absoluteChannel, val)
+                      }
+                    }}
+                    label={getChannelShortLabel(uch.name)}
+                    color={color}
+                    size="sm"
+                    showValue={false}
+                  />
+                </div>
               )
             })}
           </div>
@@ -247,23 +310,58 @@ function FixtureFaders({
                 const chDef = def?.channels[ch.name]
                 const color = getChannelTypeColor(chDef?.type || 'generic')
                 return (
-                  <Fader
+                  <div
                     key={ch.absoluteChannel}
-                    value={values[universe][ch.absoluteChannel] || 0}
-                    onChange={(val) => {
-                      setChannel(universe, ch.absoluteChannel, val)
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      setContextMenu({
+                        x: e.clientX, y: e.clientY,
+                        items: [
+                          {
+                            label: `MIDI Learn: ${entry.name} → ${ch.name}`,
+                            onClick: () => startLearn({
+                              type: 'channel' as MidiTargetType,
+                              id: entry.id,
+                              parameter: ch.name,
+                              label: `${entry.name} → ${ch.name}`
+                            })
+                          },
+                          {
+                            label: 'MIDI Learn: Grand Master',
+                            onClick: () => startLearn({ type: 'master' as MidiTargetType, label: 'Grand Master' })
+                          },
+                          {
+                            label: 'MIDI Learn: Blackout',
+                            onClick: () => startLearn({ type: 'blackout' as MidiTargetType, label: 'Blackout' })
+                          }
+                        ]
+                      })
                     }}
-                    label={getChannelShortLabel(ch.name)}
-                    color={color}
-                    size="sm"
-                    showValue={false}
-                  />
+                  >
+                    <Fader
+                      value={values[universe][ch.absoluteChannel] || 0}
+                      onChange={(val) => {
+                        setChannel(universe, ch.absoluteChannel, val)
+                      }}
+                      label={getChannelShortLabel(ch.name)}
+                      color={color}
+                      size="sm"
+                      showValue={false}
+                    />
+                  </div>
                 )
               })}
             </div>
           </div>
         )
       })}
+      {contextMenu && (
+        <MidiContextMenu
+          x={contextMenu.x} y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   )
 }

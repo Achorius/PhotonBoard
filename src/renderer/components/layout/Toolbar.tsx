@@ -1,10 +1,12 @@
 import React from 'react'
 import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
+import { useMidiStore } from '../../stores/midi-store'
 
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()
   const { grandMaster, setGrandMaster, blackout, toggleBlackout } = useDmxStore()
+  const { isLearning, learnTarget, cancelLearn, startLearn } = useMidiStore()
 
   const isLive = activeTab === 'live'
 
@@ -38,6 +40,22 @@ export function Toolbar() {
           {Math.round((grandMaster / 255) * 100)}%
         </span>
       </div>
+
+      {/* MIDI Learn button */}
+      <button
+        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${
+          isLearning
+            ? 'bg-purple-600 text-white animate-pulse'
+            : 'bg-purple-700/30 text-purple-400 border border-purple-600/40 hover:bg-purple-700/50'
+        }`}
+        onClick={() => {
+          if (isLearning) cancelLearn()
+          else startLearn({ type: 'master', label: 'Grand Master' })
+        }}
+        title={isLearning ? `Learning: ${learnTarget?.label} — Click to cancel` : 'MIDI Learn (maps to Grand Master)'}
+      >
+        {isLearning ? `MIDI ● ${learnTarget?.label || '...'}` : 'MIDI Learn'}
+      </button>
 
       {/* Live button */}
       <button
