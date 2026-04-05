@@ -183,16 +183,20 @@ export function VisualizerView() {
               {/* Group quick-select */}
               {groups.length > 0 && (
                 <div className="flex gap-1 ml-2">
-                  {groups.filter(g => !g.parentGroupId).map(g => (
-                    <button
-                      key={g.id}
-                      className="px-1.5 py-0.5 rounded text-[9px] hover:opacity-80"
-                      style={{ backgroundColor: g.color + '33', color: g.color }}
-                      onClick={() => selectGroup(g.id)}
-                    >
-                      {g.name}
-                    </button>
-                  ))}
+                  {groups.filter(g => !g.parentGroupId).map(g => {
+                    const isEmpty = g.fixtureIds.length === 0
+                    return (
+                      <button
+                        key={g.id}
+                        className={`px-1.5 py-0.5 rounded text-[9px] ${isEmpty ? 'opacity-40 cursor-default' : 'hover:opacity-80'}`}
+                        style={{ backgroundColor: g.color + '33', color: g.color }}
+                        onClick={() => !isEmpty && selectGroup(g.id)}
+                        title={isEmpty ? `${g.name} (empty — add fixtures to this group)` : `Select ${g.name} (${g.fixtureIds.length})`}
+                      >
+                        {g.name} {!isEmpty && <span className="opacity-60">({g.fixtureIds.length})</span>}
+                      </button>
+                    )
+                  })}
                   <button className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-gray-300 bg-surface-3" onClick={selectAll}>All</button>
                   <button className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-gray-300 bg-surface-3" onClick={clearSelection}>None</button>
                 </div>

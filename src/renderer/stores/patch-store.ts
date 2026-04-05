@@ -209,7 +209,7 @@ export const usePatchStore = create<PatchState>((set, get) => ({
 
   selectGroup: (groupId) => {
     const group = get().groups.find((g) => g.id === groupId)
-    if (group) {
+    if (group && group.fixtureIds.length > 0) {
       set({ selectedFixtureIds: [...group.fixtureIds] })
     }
   },
