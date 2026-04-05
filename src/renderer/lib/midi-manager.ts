@@ -1,8 +1,9 @@
-import { useMidiStore, setMidiRouter } from '../stores/midi-store'
+import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn } from '../stores/midi-store'
 import { useDmxStore } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
 import { midiToDmx } from './dmx-utils'
+import type { MidiMapping } from '@shared/types'
 
 let tapTempoTimes: number[] = []
 let tapTempoCallback: ((bpm: number) => void) | null = null
@@ -24,6 +25,35 @@ export function initMidiRouting(): void {
 
       routeMidiToTarget(mapping, value)
     }
+  })
+
+  // Register cleanup: reset target value to 0 when a mapping is removed
+  setMappingResetFn((mapping: MidiMapping) => {
+    const { target } = mapping
+    switch (target.type) {
+      case 'channel': {
+        if (!target.id || !target.parameter) break
+        const patchStore = usePatchStore.getState()
+        const entry = patchStore.patch.find(p => p.id === target.id)
+        if (!entry) break
+        const channels = patchStore.getFixtureChannels(entry)
+        const ch = channels.find(c => c.name === target.parameter)
+        if (ch) useDmxStore.getState().setChannel(entry.universe, ch.absoluteChannel, 0)
+        break
+      }
+      case 'master':
+        useDmxStore.getState().setGrandMaster(255)
+        break
+      case 'cuelist_fader':
+        if (target.id) usePlaybackStore.getState().setCuelistFader(target.id, 0)
+        break
+    }
+  })
+
+  // Clean up internal state maps
+  setMappingCleanupFn((mappingId: string) => {
+    delete toggleStates[mappingId]
+    delete relativeValues[mappingId]
   })
 }
 

@@ -211,6 +211,13 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   },
 
   removeMapping: (id) => {
+    const mapping = get().mappings.find(m => m.id === id)
+    if (mapping) {
+      // Reset the target value to 0 when removing a mapping
+      resetMappingTarget(mapping)
+      // Clean up module-level state
+      cleanupMappingState(mapping.id)
+    }
     set((state) => ({ mappings: state.mappings.filter((m) => m.id !== id) }))
   },
 
@@ -235,12 +242,33 @@ let currentMidiAccess: MIDIAccess | null = null
 // External MIDI routing function — will be connected to the cue/chase/dmx engines
 let midiRouter: ((type: string, channel: number, number: number, value: number) => void) | null = null
 
+// Callback to reset a mapping's target when it's removed
+let mappingResetFn: ((mapping: MidiMapping) => void) | null = null
+// Callback to clean up module-level state (toggleStates, relativeValues) when mapping removed
+let mappingCleanupFn: ((mappingId: string) => void) | null = null
+
 export function setMidiRouter(fn: (type: string, channel: number, number: number, value: number) => void): void {
   midiRouter = fn
+}
+
+export function setMappingResetFn(fn: (mapping: MidiMapping) => void): void {
+  mappingResetFn = fn
+}
+
+export function setMappingCleanupFn(fn: (mappingId: string) => void): void {
+  mappingCleanupFn = fn
 }
 
 function handleMidiInput(type: string, channel: number, number: number, value: number): void {
   if (midiRouter) {
     midiRouter(type, channel, number, value)
   }
+}
+
+function resetMappingTarget(mapping: MidiMapping): void {
+  if (mappingResetFn) mappingResetFn(mapping)
+}
+
+function cleanupMappingState(mappingId: string): void {
+  if (mappingCleanupFn) mappingCleanupFn(mappingId)
 }
