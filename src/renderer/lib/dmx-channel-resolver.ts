@@ -71,7 +71,7 @@ export function resolveChannels(
 ): ResolvedChannels {
   if (!def) return { ...EMPTY }
 
-  const mode = def.modes.find((m) => m.name === entry.modeName)
+  const mode = def.modes.find((m) => m.name === entry.modeName) ?? def.modes[0]
   if (!mode) return { ...EMPTY }
 
   const result: ResolvedChannels = { ...EMPTY }
