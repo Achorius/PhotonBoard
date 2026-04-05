@@ -5,6 +5,14 @@ import { ArtNetOutput } from './artnet-output'
 import { ShowFileManager } from './show-file'
 import { IPC, type ArtNetConfig, type ShowFile } from '../shared/types'
 
+// Prevent EPIPE crashes when stdout pipe is closed (e.g. terminal closed during dev)
+process.on('uncaughtException', (err) => {
+  if (err.message === 'write EPIPE') return // silently ignore
+  console.error('[Main] Uncaught exception:', err)
+})
+process.stdout?.on('error', () => { /* ignore EPIPE */ })
+process.stderr?.on('error', () => { /* ignore EPIPE */ })
+
 let mainWindow: BrowserWindow | null = null
 let dmxEngine: DmxEngine
 let artnetOutput: ArtNetOutput
@@ -128,12 +136,15 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Forward ALL renderer console to main stdout for debugging
+  // Forward renderer console to main stdout for debugging (safe against EPIPE)
+  const safelog = (...args: any[]) => {
+    try { console.log(...args) } catch (_) { /* pipe closed */ }
+  }
   mainWindow.webContents.on('console-message', (_event, level, message) => {
-    if (level >= 2) { // warnings and errors
-      console.log('[Renderer:ERR]', message)
-    } else if (message.includes('[PhotonBoard]') || message.includes('patch') || message.includes('Patch')) {
-      console.log('[Renderer]', message)
+    if (level >= 2) {
+      safelog('[Renderer:ERR]', message)
+    } else if (message.includes('[PhotonBoard]') || message.includes('[MIDI]') || message.includes('patch') || message.includes('Patch')) {
+      safelog('[Renderer]', message)
     }
   })
 
