@@ -141,7 +141,7 @@ export function VisualizerView() {
         {subTab === 'layout' && (
           <button
             className="px-2 py-0.5 rounded text-[10px] bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
-            onClick={() => exportStagePDF(patch, fixtures, roomConfig, showName)}
+            onClick={() => exportStagePDF(patch, fixtures, roomConfig, showName, groups)}
           >
             Export PDF
           </button>

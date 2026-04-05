@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf'
-import type { PatchEntry, FixtureDefinition, RoomConfig } from '@shared/types'
+import type { PatchEntry, FixtureDefinition, RoomConfig, Group } from '@shared/types'
 import { getFixtureShape } from '@shared/types'
 
 const MARGIN = 20
@@ -13,7 +13,8 @@ export function exportStagePDF(
   patch: PatchEntry[],
   fixtures: FixtureDefinition[],
   roomConfig: RoomConfig,
-  showName: string
+  showName: string,
+  groups: Group[] = []
 ): void {
   const { width: roomW, depth: roomD, height: roomH } = roomConfig
 
@@ -22,9 +23,16 @@ export function exportStagePDF(
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
 
-  // Scale: fit room into available area
+  // Reserve space: title + plan + legend + patch table
+  // Estimate table height: header + rows (3.5mm per row), capped to leave room for the plan
+  const tableRowH = 3.5
+  const tableHeaderH = 5
+  const tableEstH = Math.min(tableHeaderH + patch.length * tableRowH + 8, pageH * 0.35)
+  const legendH = 14
+
+  // Scale: fit room into available area above the table
   const drawW = pageW - MARGIN * 2
-  const drawH = pageH - MARGIN * 2 - TITLE_HEIGHT - 30 // leave room for legend
+  const drawH = pageH - MARGIN * 2 - TITLE_HEIGHT - legendH - tableEstH
   const scale = Math.min(drawW / roomW, drawH / roomD)
   const offsetX = MARGIN + (drawW - roomW * scale) / 2
   const offsetY = MARGIN + TITLE_HEIGHT + (drawH - roomD * scale) / 2
@@ -104,38 +112,152 @@ export function exportStagePDF(
     doc.text(`U${entry.universe + 1}.${entry.address}`, px, py + iconSize / 2 + 6, { align: 'center' })
   }
 
-  // --- Legend ---
-  const legendY = pageH - 20
-  doc.setFontSize(7)
-  doc.setTextColor(0)
-  doc.text('Legend:', MARGIN, legendY)
+  // --- Legend + Scale (compact row below the plan) ---
+  const planBottom = offsetY + roomD * scale + 4
+  doc.setFontSize(6)
+  doc.setTextColor(80)
 
   const legendItems = [
-    { label: 'PAR / Wash', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'par', ['PAR']) },
-    { label: 'Moving Head Spot', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'moving-head', ['Moving Head']) },
-    { label: 'Fresnel', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'par', ['Fresnel']) },
-    { label: 'Strip / Batten', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'strip', ['Pixel Bar']) },
-    { label: 'Profile / Ellipsoidal', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3.5, 'par', ['Profile']) },
+    { label: 'PAR / Wash', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['PAR']) },
+    { label: 'Moving Head', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'moving-head', ['Moving Head']) },
+    { label: 'Fresnel', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['Fresnel']) },
+    { label: 'Strip / Batten', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'strip', ['Pixel Bar']) },
+    { label: 'Profile', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['Profile']) },
   ]
 
-  let lx = MARGIN + 20
+  let lx = MARGIN
   for (const item of legendItems) {
-    item.draw(lx, legendY)
-    doc.setFontSize(6)
+    item.draw(lx + 3, planBottom + 1)
+    doc.setFontSize(5)
     doc.setTextColor(60)
-    doc.text(item.label, lx + 6, legendY + 1.5)
-    lx += 35
+    doc.text(item.label, lx + 7, planBottom + 2.5)
+    lx += 30
+  }
+  doc.setFontSize(5)
+  doc.setTextColor(100)
+  doc.text(`Scale: 1m = ${scale.toFixed(1)}mm`, pageW - MARGIN, planBottom + 2.5, { align: 'right' })
+
+  // --- Patch Table (below legend) ---
+  const tableTop = planBottom + 8
+  const colWidths = { num: 8, name: 40, type: 42, mode: 25, addr: 18, chCount: 10, group: 27 }
+  const totalW = pageW - MARGIN * 2
+  // Adjust name column to fill remaining width
+  const usedW = colWidths.num + colWidths.type + colWidths.mode + colWidths.addr + colWidths.chCount + colWidths.group
+  colWidths.name = totalW - usedW
+
+  const colX = {
+    num: MARGIN,
+    name: MARGIN + colWidths.num,
+    type: MARGIN + colWidths.num + colWidths.name,
+    mode: MARGIN + colWidths.num + colWidths.name + colWidths.type,
+    addr: MARGIN + colWidths.num + colWidths.name + colWidths.type + colWidths.mode,
+    chCount: MARGIN + colWidths.num + colWidths.name + colWidths.type + colWidths.mode + colWidths.addr,
+    group: MARGIN + colWidths.num + colWidths.name + colWidths.type + colWidths.mode + colWidths.addr + colWidths.chCount,
   }
 
-  // Scale indicator
-  doc.setFontSize(6)
-  doc.setTextColor(100)
-  doc.text(`Scale: 1m = ${scale.toFixed(1)}mm`, pageW - MARGIN, legendY, { align: 'right' })
+  const rowH = 3.5
+  let ty = tableTop
+
+  // Table title
+  doc.setFontSize(7)
+  doc.setTextColor(0)
+  doc.text('Patch List', MARGIN, ty)
+  ty += 4
+
+  // Header row
+  doc.setFillColor(230, 230, 240)
+  doc.rect(MARGIN, ty - 2.5, totalW, 4, 'F')
+  doc.setFontSize(5.5)
+  doc.setTextColor(40)
+  doc.text('#', colX.num + 1, ty)
+  doc.text('Name', colX.name + 1, ty)
+  doc.text('Type', colX.type + 1, ty)
+  doc.text('Mode', colX.mode + 1, ty)
+  doc.text('Addr', colX.addr + 1, ty)
+  doc.text('Ch', colX.chCount + 1, ty)
+  doc.text('Group', colX.group + 1, ty)
+  ty += rowH + 1
+
+  // Header line
+  doc.setDrawColor(180)
+  doc.setLineWidth(0.2)
+  doc.line(MARGIN, ty - rowH + 0.5, MARGIN + totalW, ty - rowH + 0.5)
+
+  // Sort fixtures by universe then address
+  const sorted = [...patch].sort((a, b) => a.universe - b.universe || a.address - b.address)
+
+  for (let i = 0; i < sorted.length; i++) {
+    // Check page overflow — add new page if needed
+    if (ty > pageH - 12) {
+      doc.addPage()
+      ty = MARGIN + 5
+      // Re-draw header on new page
+      doc.setFillColor(230, 230, 240)
+      doc.rect(MARGIN, ty - 2.5, totalW, 4, 'F')
+      doc.setFontSize(5.5)
+      doc.setTextColor(40)
+      doc.text('#', colX.num + 1, ty)
+      doc.text('Name', colX.name + 1, ty)
+      doc.text('Type', colX.type + 1, ty)
+      doc.text('Mode', colX.mode + 1, ty)
+      doc.text('Addr', colX.addr + 1, ty)
+      doc.text('Ch', colX.chCount + 1, ty)
+      doc.text('Group', colX.group + 1, ty)
+      ty += rowH + 1
+      doc.setDrawColor(180)
+      doc.setLineWidth(0.2)
+      doc.line(MARGIN, ty - rowH + 0.5, MARGIN + totalW, ty - rowH + 0.5)
+    }
+
+    const entry = sorted[i]
+    const def = fixtures.find(f => f.id === entry.fixtureDefId)
+    const mode = def?.modes.find(m => m.name === entry.modeName)
+    const entryGroups = groups
+      .filter(g => entry.groupIds?.includes(g.id))
+      .map(g => g.name)
+
+    // Alternating row background
+    if (i % 2 === 0) {
+      doc.setFillColor(248, 248, 252)
+      doc.rect(MARGIN, ty - 2.5, totalW, rowH, 'F')
+    }
+
+    doc.setFontSize(5)
+    doc.setTextColor(80)
+    doc.text(`${i + 1}`, colX.num + 1, ty)
+
+    doc.setTextColor(20)
+    doc.text(entry.name.substring(0, 28), colX.name + 1, ty)
+
+    doc.setTextColor(80)
+    doc.text((def?.name || '?').substring(0, 28), colX.type + 1, ty)
+
+    doc.setTextColor(100)
+    doc.text((entry.modeName || '').substring(0, 14), colX.mode + 1, ty)
+
+    doc.setTextColor(0)
+    doc.setFontSize(5.5)
+    doc.text(`U${entry.universe + 1}.${String(entry.address).padStart(3, '0')}`, colX.addr + 1, ty)
+
+    doc.setFontSize(5)
+    doc.setTextColor(100)
+    doc.text(`${mode?.channelCount || '?'}`, colX.chCount + 1, ty)
+
+    doc.setTextColor(80)
+    doc.text(entryGroups.join(', ').substring(0, 16), colX.group + 1, ty)
+
+    ty += rowH
+  }
+
+  // Table bottom border
+  doc.setDrawColor(180)
+  doc.setLineWidth(0.15)
+  doc.line(MARGIN, ty - rowH + 3, MARGIN + totalW, ty - rowH + 3)
 
   // Footer
   doc.setFontSize(5)
   doc.setTextColor(150)
-  doc.text('Generated by PhotonBoard', pageW / 2, pageH - 8, { align: 'center' })
+  doc.text('Generated by PhotonBoard', pageW / 2, pageH - 5, { align: 'center' })
 
   // Save
   doc.save(`${showName || 'LightingPlot'}_${new Date().toISOString().slice(0, 10)}.pdf`)
