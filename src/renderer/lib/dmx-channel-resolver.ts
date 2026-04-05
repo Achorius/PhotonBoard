@@ -12,6 +12,7 @@ export interface ResolvedChannels {
   cyan: number
   magenta: number
   yellow: number
+  colorWheel: number  // 0-255, color wheel position for dichroic filter fixtures
   pan: number      // 0-255 coarse
   panFine: number
   tilt: number     // 0-255 coarse
@@ -27,6 +28,7 @@ const EMPTY: ResolvedChannels = {
   dimmer: 0, hasDimmerChannel: false,
   red: 0, green: 0, blue: 0, white: 0,
   amber: 0, uv: 0, cyan: 0, magenta: 0, yellow: 0,
+  colorWheel: -1,
   pan: 128, panFine: 0, tilt: 128, tiltFine: 0,
   shutter: 255, zoom: 128, focus: 128, gobo: 0, strobe: 0
 }
@@ -46,6 +48,7 @@ const CHANNEL_ALIASES: Record<NumericChannelKey, string[]> = {
   cyan:      ['cyan', 'c'],
   magenta:   ['magenta', 'm'],
   yellow:    ['yellow', 'y'],
+  colorWheel: ['color wheel', 'color', 'colour wheel', 'color wheel effect'],
   pan:       ['pan'],
   panFine:   ['pan fine', 'pan 16-bit', 'pan (fine)', 'pan fine control'],
   tilt:      ['tilt'],
@@ -111,10 +114,48 @@ export function resolveChannels(
 /**
  * Compute the effective RGB color a fixture is currently outputting (0-1 range for Three.js).
  */
+/**
+ * Color wheel lookup for 3D rendering — maps DMX value to normalized RGB (0-1).
+ * Standard 7+open dichroic wheel found on most Chauvet/Martin/Robe spots.
+ */
+const COLOR_WHEEL_3D: [number, number, number, number][] = [
+  //[maxDmx,  r,    g,    b   ]
+  [  7,       1.0,  1.0,  1.0 ],  // Open / White
+  [ 15,       1.0,  0.2,  0.2 ],  // Red
+  [ 23,       1.0,  0.65, 0.0 ],  // Orange
+  [ 31,       1.0,  1.0,  0.0 ],  // Yellow
+  [ 39,       0.0,  0.8,  0.0 ],  // Green
+  [ 47,       0.0,  0.7,  1.0 ],  // Light Blue
+  [ 55,       0.0,  0.0,  1.0 ],  // Blue
+  [ 63,       0.8,  0.0,  1.0 ],  // Magenta
+  [127,       1.0,  1.0,  1.0 ],  // Split colors → white
+  [255,       1.0,  1.0,  1.0 ],  // Continuous scroll → white
+]
+
+function colorWheelToRgb3D(dmxValue: number): { r: number; g: number; b: number } {
+  for (const [max, r, g, b] of COLOR_WHEEL_3D) {
+    if (dmxValue <= max) return { r, g, b }
+  }
+  return { r: 1, g: 1, b: 1 }
+}
+
 export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number; b: number } {
   const hasColorChannels = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
                            ch.white > 0 || ch.amber > 0 || ch.uv > 0 ||
                            ch.cyan > 0 || ch.magenta > 0 || ch.yellow > 0
+
+  // Apply master dimmer only if fixture actually has a dimmer channel
+  const masterDim = ch.hasDimmerChannel ? ch.dimmer / 255 : 1.0
+
+  // Color wheel fixture (no RGB channels, but has a color wheel)
+  if (!hasColorChannels && ch.colorWheel >= 0) {
+    const cwColor = colorWheelToRgb3D(ch.colorWheel)
+    return {
+      r: cwColor.r * masterDim,
+      g: cwColor.g * masterDim,
+      b: cwColor.b * masterDim
+    }
+  }
 
   if (!hasColorChannels) {
     // No color channels active — only a dimmer (or nothing)
@@ -123,8 +164,6 @@ export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number;
     return { r: d, g: d, b: d }
   }
 
-  // Apply master dimmer only if fixture actually has a dimmer channel
-  const masterDim = ch.hasDimmerChannel ? ch.dimmer / 255 : 1.0
   // CMY subtractive → additive RGB: cyan removes red, magenta removes green, yellow removes blue
   const cyanSub = ch.cyan / 255
   const magentaSub = ch.magenta / 255

@@ -73,20 +73,67 @@ export function hsvToRgb(h: number, s: number, v: number): { r: number; g: numbe
 }
 
 /**
+ * Color wheel lookup — maps DMX value ranges to approximate RGB colors.
+ * Covers the typical 7+open color wheel found on Chauvet, Martin, Robe spots etc.
+ * Each entry: [maxDmxValue, r, g, b, label]
+ */
+const COLOR_WHEEL_MAP: [number, number, number, number, string][] = [
+  [  7, 255, 255, 255, 'Open/White'],
+  [ 15, 255,  50,  50, 'Red'],
+  [ 23, 255, 165,   0, 'Orange'],
+  [ 31, 255, 255,   0, 'Yellow'],
+  [ 39,   0, 200,   0, 'Green'],
+  [ 47,   0, 180, 255, 'Light Blue'],
+  [ 55,   0,   0, 255, 'Blue'],
+  [ 63, 200,   0, 255, 'Magenta'],
+  [127, 255, 255, 255, 'Split/Scroll'],   // split colors → white fallback
+  [255, 255, 255, 255, 'Continuous Scroll']
+]
+
+function colorWheelToRgb(dmxValue: number): { r: number; g: number; b: number } {
+  for (const [max, r, g, b] of COLOR_WHEEL_MAP) {
+    if (dmxValue <= max) return { r, g, b }
+  }
+  return { r: 255, g: 255, b: 255 }
+}
+
+/**
  * Calculate the display color for a fixture based on its RGB(W) values
+ * or Color Wheel position for fixtures with dichroic color wheels.
  */
 export function getFixtureDisplayColor(channels: Record<string, number>): string {
-  const r = channels['Red'] ?? channels['red'] ?? 0
-  const g = channels['Green'] ?? channels['green'] ?? 0
-  const b = channels['Blue'] ?? channels['blue'] ?? 0
-  const w = channels['White'] ?? channels['white'] ?? 0
+  const hasRgb = ('Red' in channels || 'red' in channels) &&
+                 ('Green' in channels || 'green' in channels) &&
+                 ('Blue' in channels || 'blue' in channels)
   const dim = (channels['Dimmer'] ?? channels['Intensity'] ?? channels['dimmer'] ?? 255) / 255
 
-  const finalR = Math.min(255, Math.round((r + w * 0.5) * dim))
-  const finalG = Math.min(255, Math.round((g + w * 0.5) * dim))
-  const finalB = Math.min(255, Math.round((b + w * 0.5) * dim))
+  if (hasRgb) {
+    // RGBW fixture
+    const r = channels['Red'] ?? channels['red'] ?? 0
+    const g = channels['Green'] ?? channels['green'] ?? 0
+    const b = channels['Blue'] ?? channels['blue'] ?? 0
+    const w = channels['White'] ?? channels['white'] ?? 0
 
-  return rgbToHex(finalR, finalG, finalB)
+    const finalR = Math.min(255, Math.round((r + w * 0.5) * dim))
+    const finalG = Math.min(255, Math.round((g + w * 0.5) * dim))
+    const finalB = Math.min(255, Math.round((b + w * 0.5) * dim))
+
+    return rgbToHex(finalR, finalG, finalB)
+  }
+
+  // Color Wheel fixture (dichroic filter wheel)
+  const wheelValue = channels['Color Wheel'] ?? channels['Color'] ?? channels['color wheel'] ?? -1
+  if (wheelValue >= 0) {
+    const { r, g, b } = colorWheelToRgb(wheelValue)
+    const finalR = Math.round(r * dim)
+    const finalG = Math.round(g * dim)
+    const finalB = Math.round(b * dim)
+    return rgbToHex(finalR, finalG, finalB)
+  }
+
+  // Dimmer-only fixture → white
+  const finalW = Math.round(255 * dim)
+  return rgbToHex(finalW, finalW, finalW)
 }
 
 /**

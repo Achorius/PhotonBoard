@@ -1381,4 +1381,27 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     ],
     physical: { lens: { degreesMinMax: [10, 60] }, power: 150 }
   },
+  {
+    id: 'martin/rush-mh-2-wash',
+    name: 'RUSH MH 2 Wash',
+    manufacturer: 'Martin',
+    categories: ['Moving Head'],
+    channels: chs(shutterCh(), dimmerCh(), panCh(), panFineCh(), tiltCh(), tiltFineCh(), genericCh('Control'), colorWheelCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff')),
+    modes: [
+      { name: '12ch', channels: ['Shutter', 'Dimmer', 'Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Control', 'Color Wheel', 'Red', 'Green', 'Blue', 'White'], channelCount: 12 }
+    ],
+    physical: { lens: { degreesMinMax: [10, 60] }, power: 100 }
+  },
+  {
+    id: 'martin/rush-par-1-rgbw',
+    name: 'RUSH PAR 1 RGBW',
+    manufacturer: 'Martin',
+    categories: ['Color Changer', 'PAR'],
+    channels: chs(dimmerCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff'), shutterCh(), genericCh('Color Macro')),
+    modes: [
+      { name: '5ch', channels: ['Dimmer', 'Red', 'Green', 'Blue', 'White'], channelCount: 5 },
+      { name: '7ch', channels: ['Dimmer', 'Red', 'Green', 'Blue', 'White', 'Shutter', 'Color Macro'], channelCount: 7 }
+    ],
+    physical: { lens: { degreesMinMax: [17, 17] }, power: 78 }
+  },
 ]
