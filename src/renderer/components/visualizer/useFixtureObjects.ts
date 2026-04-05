@@ -110,7 +110,12 @@ function positionAll(
     if (entry.rotation3D) {
       objects.group.rotation.set(entry.rotation3D.rx, entry.rotation3D.ry, entry.rotation3D.rz)
     } else {
-      objects.group.rotation.set(THREE.MathUtils.degToRad(entry.mountingAngle ?? 0), 0, 0)
+      // Apply mounting tilt (X) and pan direction (Y) for static fixtures
+      objects.group.rotation.set(
+        THREE.MathUtils.degToRad(entry.mountingAngle ?? 0),
+        THREE.MathUtils.degToRad(entry.mountingPan ?? 0),
+        0
+      )
     }
   })
 }

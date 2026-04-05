@@ -3,6 +3,11 @@ import type { FixtureObjects } from './FixtureModel'
 import type { ResolvedChannels } from '@renderer/lib/dmx-channel-resolver'
 import { dmxToPanDeg, dmxToTiltDeg } from '@renderer/lib/dmx-channel-resolver'
 
+export interface FixtureUpdateOptions {
+  panInvert?: boolean
+  tiltInvert?: boolean
+}
+
 /**
  * Update a fixture's Three.js objects every frame based on current DMX values.
  * Called inside the rAF loop — no allocations, no React.
@@ -12,7 +17,8 @@ export function updateFixtureObjects(
   channels: ResolvedChannels,
   grandMaster: number,
   blackout: boolean,
-  showBeams: boolean
+  showBeams: boolean,
+  options?: FixtureUpdateOptions
 ): void {
   const gm = grandMaster / 255
   const effectiveDim = blackout ? 0 : (channels.dimmer / 255) * gm
@@ -97,8 +103,11 @@ export function updateFixtureObjects(
 
   // --- Moving head pan/tilt ---
   if (objects.shape === 'moving-head' && objects.yokeGroup && objects.headGroup) {
-    const panDeg  = dmxToPanDeg(channels.pan, channels.panFine)
-    const tiltDeg = dmxToTiltDeg(channels.tilt, channels.tiltFine)
+    let panDeg  = dmxToPanDeg(channels.pan, channels.panFine)
+    let tiltDeg = dmxToTiltDeg(channels.tilt, channels.tiltFine)
+    // Apply invert if configured
+    if (options?.panInvert) panDeg = -panDeg
+    if (options?.tiltInvert) tiltDeg = -tiltDeg
     objects.yokeGroup.rotation.y = THREE.MathUtils.degToRad(panDeg)
     // Offset tilt by -90° so center position (tilt=128) points beam straight down
     objects.headGroup.rotation.x = THREE.MathUtils.degToRad(tiltDeg - 90)

@@ -29,7 +29,9 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
   }
 
   const mountingAngle = entry.mountingAngle ?? 0
+  const mountingPan = entry.mountingPan ?? 0
   const beamAngle = entry.beamAngle ?? def?.physical?.lens?.degreesMinMax?.[1] ?? 25
+  const isMovingHead = def?.categories.includes('Moving Head') ?? false
 
   return (
     <div className={`overflow-auto p-3 space-y-4 ${className}`}>
@@ -74,20 +76,63 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
         </div>
       </section>
 
-      {/* Mounting angle (static fixtures only) */}
-      {def && !def.categories.includes('Moving Head') && (
+      {/* Mounting angle & direction (static fixtures only) */}
+      {!isMovingHead && (
         <section>
-          <h3 className="text-[10px] text-gray-500 uppercase mb-2">Mounting Angle</h3>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-gray-500">0° = straight down · 90° = horizontal</span>
-            <span className="text-[10px] font-mono text-accent">{mountingAngle}°</span>
+          <h3 className="text-[10px] text-gray-500 uppercase mb-2">Aim / Tilt</h3>
+          {/* Tilt (mounting angle) */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] text-gray-500">Tilt (0° = down · 90° = horiz)</span>
+              <span className="text-[10px] font-mono text-accent">{mountingAngle}°</span>
+            </div>
+            <input
+              type="range" min={-90} max={90} step={1}
+              value={mountingAngle}
+              onChange={e => updateFixture(entry.id, { mountingAngle: parseInt(e.target.value) })}
+              className="w-full"
+            />
           </div>
-          <input
-            type="range" min={-90} max={90} step={1}
-            value={mountingAngle}
-            onChange={e => updateFixture(entry.id, { mountingAngle: parseInt(e.target.value) })}
-            className="w-full"
-          />
+          {/* Pan (direction) */}
+          <div>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] text-gray-500">Direction (0° = front)</span>
+              <span className="text-[10px] font-mono text-accent">{mountingPan}°</span>
+            </div>
+            <input
+              type="range" min={-180} max={180} step={1}
+              value={mountingPan}
+              onChange={e => updateFixture(entry.id, { mountingPan: parseInt(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Pan/Tilt Invert (moving heads only) */}
+      {isMovingHead && (
+        <section>
+          <h3 className="text-[10px] text-gray-500 uppercase mb-2">Pan / Tilt Invert</h3>
+          <div className="flex gap-3">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={entry.panInvert ?? false}
+                onChange={e => updateFixture(entry.id, { panInvert: e.target.checked })}
+                className="accent-accent"
+              />
+              <span className="text-[10px] text-gray-400">Pan Invert</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={entry.tiltInvert ?? false}
+                onChange={e => updateFixture(entry.id, { tiltInvert: e.target.checked })}
+                className="accent-accent"
+              />
+              <span className="text-[10px] text-gray-400">Tilt Invert</span>
+            </label>
+          </div>
         </section>
       )}
 
@@ -123,7 +168,7 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
         </button>
         <button
           className="btn-ghost text-[10px] w-full text-red-400 hover:text-red-300"
-          onClick={() => updateFixture(entry.id, { position3D: undefined })}
+          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined })}
         >
           Reset to auto-position
         </button>

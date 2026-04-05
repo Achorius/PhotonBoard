@@ -50,7 +50,10 @@ export function useDmxAnimation(
         if (!objects) continue
         const def = fixtures.find((f) => f.id === entry.fixtureDefId)
         const channels = resolveChannels(entry, def, values)
-        updateFixtureObjects(objects, channels, grandMaster, blackout, showBeams)
+        updateFixtureObjects(objects, channels, grandMaster, blackout, showBeams, {
+          panInvert: entry.panInvert,
+          tiltInvert: entry.tiltInvert
+        })
       }
 
       controls?.update()

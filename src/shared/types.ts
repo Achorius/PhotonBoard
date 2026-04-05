@@ -144,7 +144,10 @@ export interface PatchEntry {
   position3D?: Position3D
   rotation3D?: Rotation3D
   mountingAngle?: number // degrees, 0 = straight down (for static fixtures)
+  mountingPan?: number   // degrees, horizontal aim direction for static fixtures
   beamAngle?: number    // degrees, cone spread — defaults from fixture physical
+  panInvert?: boolean   // invert pan direction for moving heads
+  tiltInvert?: boolean  // invert tilt direction for moving heads
 }
 
 // --- Groups ---
@@ -332,6 +335,10 @@ export const IPC = {
   FIXTURES_SCAN: 'fixtures:scan',
   FIXTURES_GET_ALL: 'fixtures:get-all',
   FIXTURES_IMPORT: 'fixtures:import',
+
+  // Show helpers
+  SHOW_GET_PATH: 'show:get-path',
+  SHOW_REVEAL: 'show:reveal',
 
   // App
   APP_GET_VERSION: 'app:get-version',

@@ -23,9 +23,24 @@ export function PatchView() {
       <div className="flex-1 flex flex-col">
         <div className="panel-header flex items-center justify-between">
           <span>DMX Patch</span>
-          <button className="btn-primary text-[10px] py-0.5" onClick={() => setShowAddModal(true)}>
-            + Add Fixture
-          </button>
+          <div className="flex gap-1">
+            <button
+              className="btn-secondary text-[10px] py-0.5"
+              onClick={async () => {
+                const results = await window.photonboard.fixtures.import()
+                if (results) {
+                  const { loadFixtures } = usePatchStore.getState()
+                  loadFixtures()
+                }
+              }}
+              title="Import fixture from OFL JSON file"
+            >
+              Import Fixture
+            </button>
+            <button className="btn-primary text-[10px] py-0.5" onClick={() => setShowAddModal(true)}>
+              + Add Fixture
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto">

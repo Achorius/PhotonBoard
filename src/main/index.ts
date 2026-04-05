@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, session, Menu, shell } from 'electron'
 import { join } from 'path'
 import { DmxEngine } from './dmx-engine'
 import { ArtNetOutput } from './artnet-output'
@@ -206,6 +206,39 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.FIXTURES_GET_ALL, () => {
     return showManager.getAllFixtures()
+  })
+
+  ipcMain.handle(IPC.FIXTURES_IMPORT, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      filters: [
+        { name: 'Fixture Files', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile', 'multiSelections']
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    const results: any[] = []
+    for (const filePath of result.filePaths) {
+      results.push(showManager.importFixtureFile(filePath))
+    }
+    return results
+  })
+
+  // --- Show helpers ---
+  ipcMain.handle(IPC.SHOW_GET_PATH, () => {
+    return showManager.getCurrentPath()
+  })
+
+  ipcMain.handle(IPC.SHOW_REVEAL, () => {
+    const path = showManager.getCurrentPath()
+    if (path) {
+      shell.showItemInFolder(path)
+      return true
+    }
+    // Fallback: open shows directory
+    const showsDir = join(app.getPath('userData'), 'shows')
+    shell.openPath(showsDir)
+    return true
   })
 
   // --- App ---

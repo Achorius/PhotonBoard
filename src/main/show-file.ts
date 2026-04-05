@@ -231,4 +231,131 @@ export class ShowFileManager {
   getAllFixtures(): FixtureDefinition[] {
     return Array.from(this.fixtureCache.values())
   }
+
+  getCurrentPath(): string | null {
+    return this.currentFilePath
+  }
+
+  getFixturesDir(): string {
+    return join(this.userDataPath, 'fixtures')
+  }
+
+  importFixtureFile(sourcePath: string): { success: boolean; fixture?: FixtureDefinition; error?: string } {
+    try {
+      const raw = readFileSync(sourcePath, 'utf-8')
+      const data = JSON.parse(raw)
+
+      // Support OFL format (has $schema or availableChannels) or PhotonBoard native
+      let fixture: FixtureDefinition
+
+      if (data.availableChannels || data.$schema) {
+        // OFL format — convert
+        const manufacturer = data.manufacturer || basename(sourcePath, '.json').split('/')[0] || 'Unknown'
+        fixture = this.convertOFLToNative(data, manufacturer)
+      } else if (data.name && data.channels) {
+        // Native PhotonBoard format
+        fixture = data as FixtureDefinition
+        if (!fixture.id) fixture.id = `imported/${fixture.name.toLowerCase().replace(/\s+/g, '-')}`
+        if (!fixture.manufacturer) fixture.manufacturer = 'Imported'
+        if (!fixture.categories) fixture.categories = ['Other']
+        if (!fixture.modes) {
+          fixture.modes = [{
+            name: 'Default',
+            channels: Object.keys(fixture.channels),
+            channelCount: Object.keys(fixture.channels).length
+          }]
+        }
+      } else {
+        return { success: false, error: 'Invalid fixture file format' }
+      }
+
+      // Save to user fixtures directory
+      const destDir = this.getFixturesDir()
+      const destPath = join(destDir, `${fixture.id.replace(/\//g, '_')}.json`)
+      writeFileSync(destPath, JSON.stringify(fixture, null, 2), 'utf-8')
+
+      // Add to cache
+      this.fixtureCache.set(fixture.id, fixture)
+
+      return { success: true, fixture }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+  }
+
+  private convertOFLToNative(ofl: any, manufacturer: string): FixtureDefinition {
+    const id = `${manufacturer.toLowerCase().replace(/\s+/g, '-')}/${(ofl.name || 'unknown').toLowerCase().replace(/\s+/g, '-')}`
+    const channels: Record<string, any> = {}
+
+    // Parse OFL availableChannels
+    if (ofl.availableChannels) {
+      for (const [name, chDef] of Object.entries(ofl.availableChannels) as any) {
+        const type = this.inferChannelType(name, chDef)
+        channels[name] = {
+          name,
+          type,
+          defaultValue: chDef?.defaultValue ?? (type === 'pan' || type === 'tilt' ? 128 : 0),
+          precedence: type === 'intensity' ? 'HTP' : 'LTP',
+          capabilities: (chDef?.capabilities || []).map((cap: any) => ({
+            dmxRange: cap.dmxRange || [0, 255],
+            type: cap.type || 'Generic',
+            label: cap.comment || cap.type || name
+          }))
+        }
+      }
+    }
+
+    // Parse modes
+    const modes = (ofl.modes || []).map((mode: any) => ({
+      name: mode.name || 'Default',
+      shortName: mode.shortName,
+      channels: mode.channels || [],
+      channelCount: (mode.channels || []).length
+    }))
+
+    if (modes.length === 0) {
+      modes.push({
+        name: 'Default',
+        channels: Object.keys(channels),
+        channelCount: Object.keys(channels).length
+      })
+    }
+
+    const categories: string[] = ofl.categories || ['Other']
+
+    return {
+      id,
+      name: ofl.name || 'Unknown Fixture',
+      manufacturer,
+      categories,
+      channels,
+      modes,
+      physical: ofl.physical ? {
+        dimensions: ofl.physical.dimensions,
+        weight: ofl.physical.weight,
+        power: ofl.physical.power,
+        bulb: ofl.physical.bulb,
+        lens: ofl.physical.lens ? {
+          degreesMinMax: ofl.physical.lens.degreesMinMax
+        } : undefined
+      } : undefined
+    }
+  }
+
+  private inferChannelType(name: string, _chDef: any): string {
+    const n = name.toLowerCase()
+    if (n.includes('dimmer') || n.includes('intensity') || n.includes('brightness')) return 'intensity'
+    if (n.includes('red') || n.includes('green') || n.includes('blue') || n.includes('white') ||
+        n.includes('amber') || n.includes('uv') || n.includes('cyan') || n.includes('magenta') ||
+        n.includes('yellow') || n.includes('color')) return 'color'
+    if (n === 'pan' || n.includes('pan fine')) return 'pan'
+    if (n === 'tilt' || n.includes('tilt fine')) return 'tilt'
+    if (n.includes('gobo')) return 'gobo'
+    if (n.includes('shutter') || n.includes('strobe')) return 'shutter'
+    if (n.includes('prism')) return 'prism'
+    if (n.includes('speed')) return 'speed'
+    if (n.includes('focus')) return 'generic'
+    if (n.includes('zoom')) return 'generic'
+    return 'generic'
+  }
 }

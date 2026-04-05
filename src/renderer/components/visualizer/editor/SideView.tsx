@@ -72,10 +72,15 @@ export function SideView({ className = '' }: { className?: string }) {
       const cy = floorY - ey * METRE_TO_PX
       const isSelected = entry.id === selectedFixtureId
 
-      // Beam line downward
+      // Beam line (tilted if mounting angle set)
+      const tiltAngle = entry.mountingAngle ?? 0
+      const tiltRad = tiltAngle * Math.PI / 180
+      const beamLen = ey * METRE_TO_PX / Math.max(0.01, Math.cos(tiltRad))
+      const beamEndX = cx + Math.sin(tiltRad) * beamLen
+      const beamEndY = floorY
       ctx.strokeStyle = isSelected ? '#e85d0460' : '#33335560'
       ctx.lineWidth = isSelected ? 1.5 : 0.5
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, floorY); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(beamEndX, beamEndY); ctx.stroke()
 
       // Fixture dot
       ctx.beginPath()

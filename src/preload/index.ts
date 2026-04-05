@@ -34,7 +34,11 @@ const api = {
     saveAs: (show: ShowFile): Promise<{ success: boolean; path?: string; error?: string } | null> =>
       ipcRenderer.invoke(IPC.SHOW_SAVE_AS, show),
     getRecent: (): Promise<string[]> =>
-      ipcRenderer.invoke(IPC.SHOW_GET_RECENT)
+      ipcRenderer.invoke(IPC.SHOW_GET_RECENT),
+    getPath: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.SHOW_GET_PATH),
+    reveal: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.SHOW_REVEAL)
   },
 
   // --- Fixtures ---
@@ -42,7 +46,9 @@ const api = {
     scan: (): Promise<any[]> =>
       ipcRenderer.invoke(IPC.FIXTURES_SCAN),
     getAll: (): Promise<any[]> =>
-      ipcRenderer.invoke(IPC.FIXTURES_GET_ALL)
+      ipcRenderer.invoke(IPC.FIXTURES_GET_ALL),
+    import: (): Promise<any[] | null> =>
+      ipcRenderer.invoke(IPC.FIXTURES_IMPORT)
   },
 
   // --- App ---

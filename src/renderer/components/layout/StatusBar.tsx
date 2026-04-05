@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react'
 import { useDmxStore } from '../../stores/dmx-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { useMidiStore } from '../../stores/midi-store'
+import { useUiStore } from '../../stores/ui-store'
 
 export function StatusBar() {
   const { blackout, grandMaster } = useDmxStore()
   const { patch } = usePatchStore()
   const { devices, lastMessage } = useMidiStore()
+  const { showName } = useUiStore()
   const [artnetStatus, setArtnetStatus] = useState<{ connected: boolean; senders: any[] }>({ connected: false, senders: [] })
+  const [savePath, setSavePath] = useState<string | null>(null)
 
   useEffect(() => {
     const check = async () => {
@@ -20,6 +23,19 @@ export function StatusBar() {
     const interval = setInterval(check, 5000)
     return () => clearInterval(interval)
   }, [])
+
+  // Refresh save path periodically
+  useEffect(() => {
+    const checkPath = async () => {
+      try {
+        const path = await window.photonboard.show.getPath()
+        setSavePath(path)
+      } catch { /* not ready */ }
+    }
+    checkPath()
+    const interval = setInterval(checkPath, 3000)
+    return () => clearInterval(interval)
+  }, [showName])
 
   const midiInputs = devices.filter(d => d.type === 'input' && d.connected)
 
@@ -51,6 +67,20 @@ export function StatusBar() {
       )}
 
       <div className="flex-1" />
+
+      {/* Save location */}
+      {savePath && (
+        <button
+          className="text-gray-600 hover:text-gray-400 truncate max-w-[200px] text-left"
+          onClick={() => window.photonboard.show.reveal()}
+          title={`Click to reveal: ${savePath}`}
+        >
+          📁 {savePath.split('/').pop()}
+        </button>
+      )}
+      {!savePath && (
+        <span className="text-gray-600 italic">Not saved yet — ⌘⇧S to Save As</span>
+      )}
 
       {/* GM & BO indicator */}
       {grandMaster < 255 && (
