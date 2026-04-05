@@ -2,11 +2,13 @@ import React, { useState } from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useUiStore } from '../../stores/ui-store'
+import { useVisualizerStore } from '../../stores/visualizer-store'
 import { Fader } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 
 export function PatchPanel() {
   const { patch, fixtures, selectedFixtureIds, selectFixture, clearSelection, getFixtureChannels } = usePatchStore()
+  const vizSelectFixture = useVisualizerStore(s => s.selectFixture)
   const { values, setChannel } = useDmxStore()
   const { setActiveTab } = useUiStore()
   const [universeFilter, setUniverseFilter] = useState<number | null>(null)
@@ -86,7 +88,11 @@ export function PatchPanel() {
                     ? 'bg-accent/15 border-l-2 border-l-accent'
                     : 'hover:bg-surface-2 border-l-2 border-l-transparent'
                 }`}
-                onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
+                onClick={(e) => {
+                  selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)
+                  // Sync selection to visualizer store for 3D properties panel
+                  vizSelectFixture(entry.id)
+                }}
               >
                 <div className={`text-[11px] font-medium truncate ${isSelected ? 'text-accent' : 'text-gray-200'}`}>
                   {entry.name}
@@ -105,7 +111,7 @@ export function PatchPanel() {
       {selectedFixtureIds.length > 0 && !singleSelected && (
         <div className="px-2 py-1 border-t border-surface-3 flex items-center justify-between shrink-0">
           <span className="text-[9px] text-accent">{selectedFixtureIds.length} selected</span>
-          <button className="text-[9px] text-gray-600 hover:text-gray-400" onClick={clearSelection}>
+          <button className="text-[9px] text-gray-600 hover:text-gray-400" onClick={() => { clearSelection(); vizSelectFixture(null) }}>
             Clear
           </button>
         </div>

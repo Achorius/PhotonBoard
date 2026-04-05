@@ -71,43 +71,107 @@ export default function App() {
   }, [])
 
   const applyShowData = useCallback((show: ShowFile) => {
+    console.log('[PhotonBoard] Applying show data:', show.name, 'patch:', show.patch?.length, 'groups:', show.groups?.length)
     usePatchStore.getState().setPatch(show.patch || [])
     usePatchStore.getState().setGroups(show.groups || [])
     usePlaybackStore.getState().setCuelists(show.cuelists || [])
     usePlaybackStore.getState().setChases(show.chases || [])
     useUiStore.getState().setShowName(show.name || 'New Show')
     if (show.roomConfig) useVisualizerStore.getState().setRoomConfig(show.roomConfig)
+    // Clear selections
+    usePatchStore.getState().clearSelection()
+    useVisualizerStore.getState().selectFixture(null)
   }, [])
 
   const handleSave = useCallback(async () => {
-    const show = collectShowData()
-    const result = await window.photonboard.show.save(show)
-    if (result && result.path) {
-      useUiStore.getState().setShowName(show.name)
+    try {
+      const show = collectShowData()
+      console.log('[PhotonBoard] Saving show:', show.name, 'patch:', show.patch.length)
+      const result = await window.photonboard.show.save(show)
+      console.log('[PhotonBoard] Save result:', result)
+      if (result && result.path) {
+        useUiStore.getState().setShowName(show.name)
+      }
+    } catch (e) {
+      console.error('[PhotonBoard] Save error:', e)
     }
   }, [collectShowData])
 
   const handleSaveAs = useCallback(async () => {
-    const show = collectShowData()
-    const result = await window.photonboard.show.saveAs(show)
-    if (result && result.path) {
-      useUiStore.getState().setShowName(show.name)
+    try {
+      const show = collectShowData()
+      const result = await window.photonboard.show.saveAs(show)
+      console.log('[PhotonBoard] SaveAs result:', result)
+      if (result && result.path) {
+        useUiStore.getState().setShowName(show.name)
+      }
+    } catch (e) {
+      console.error('[PhotonBoard] SaveAs error:', e)
     }
   }, [collectShowData])
 
   const handleLoad = useCallback(async () => {
-    const result = await window.photonboard.show.load()
-    if (result && result.success && result.show) {
-      applyShowData(result.show)
-      // Reload fixtures to ensure loaded fixture defs are available
-      await usePatchStore.getState().loadFixtures()
+    try {
+      const result = await window.photonboard.show.load()
+      console.log('[PhotonBoard] Load result:', result)
+      if (!result) {
+        console.log('[PhotonBoard] Load cancelled')
+        return
+      }
+      // Handle both direct show object and wrapped result
+      const show = result.show || (result as any)
+      if (show && show.patch) {
+        console.log('[PhotonBoard] Loading show:', show.name, 'patch entries:', show.patch.length)
+        applyShowData(show as ShowFile)
+        await usePatchStore.getState().loadFixtures()
+      } else {
+        console.error('[PhotonBoard] Load failed - no show data in result:', JSON.stringify(result).slice(0, 200))
+      }
+    } catch (e) {
+      console.error('[PhotonBoard] Load error:', e)
     }
   }, [applyShowData])
 
   const handleNew = useCallback(async () => {
-    const show = await window.photonboard.show.new()
-    if (show) applyShowData(show)
+    try {
+      const show = await window.photonboard.show.new()
+      console.log('[PhotonBoard] New show:', show)
+      if (show) {
+        applyShowData(show as ShowFile)
+      }
+    } catch (e) {
+      console.error('[PhotonBoard] New error:', e)
+    }
   }, [applyShowData])
+
+  // Sync selection between patch-store (multi) and visualizer-store (single)
+  useEffect(() => {
+    // When patch-store selection changes → update visualizer-store
+    const unsubPatch = usePatchStore.subscribe(
+      (s) => s.selectedFixtureIds,
+      (ids) => {
+        const vizId = useVisualizerStore.getState().selectedFixtureId
+        if (ids.length === 1 && ids[0] !== vizId) {
+          useVisualizerStore.getState().selectFixture(ids[0])
+        } else if (ids.length === 0 && vizId !== null) {
+          useVisualizerStore.getState().selectFixture(null)
+        }
+      }
+    )
+    // When visualizer-store selection changes → update patch-store
+    const unsubViz = useVisualizerStore.subscribe(
+      (s) => s.selectedFixtureId,
+      (id) => {
+        const patchIds = usePatchStore.getState().selectedFixtureIds
+        if (id && !patchIds.includes(id)) {
+          usePatchStore.getState().selectFixture(id, false)
+        } else if (!id && patchIds.length > 0) {
+          usePatchStore.getState().clearSelection()
+        }
+      }
+    )
+    return () => { unsubPatch(); unsubViz() }
+  }, [])
 
   useEffect(() => {
     loadFixtures()
@@ -129,7 +193,7 @@ export default function App() {
       window.photonboard.onMenuEvent('menu:load', handleLoad)
     ]
     return () => unsubs.forEach(u => u())
-  }, [handleSave, handleSaveAs, handleLoad])
+  }, [handleNew, handleSave, handleSaveAs, handleLoad])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

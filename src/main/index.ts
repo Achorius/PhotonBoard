@@ -180,29 +180,40 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SHOW_SAVE, async (_event, show: ShowFile) => {
+    console.log('[Main] SHOW_SAVE called, patch entries:', show?.patch?.length)
     const saveResult = showManager.save(show)
     if (saveResult.needsSaveAs) {
-      // First save — open Save As dialog automatically
       const defaultDir = showManager.getDefaultShowsDir()
+      console.log('[Main] First save, opening dialog in:', defaultDir)
       const result = await dialog.showSaveDialog(mainWindow!, {
         filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
         defaultPath: join(defaultDir, `${show.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`)
       })
       if (result.canceled || !result.filePath) return null
-      return showManager.saveAs(show, result.filePath)
+      const saveAsResult = showManager.saveAs(show, result.filePath)
+      console.log('[Main] SaveAs result:', saveAsResult)
+      return saveAsResult
     }
+    console.log('[Main] Save result:', saveResult)
     return saveResult
   })
 
   ipcMain.handle(IPC.SHOW_LOAD, async () => {
     const defaultDir = showManager.getDefaultShowsDir()
+    console.log('[Main] SHOW_LOAD opening dialog in:', defaultDir)
     const result = await dialog.showOpenDialog(mainWindow!, {
       filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
       defaultPath: defaultDir,
       properties: ['openFile']
     })
-    if (result.canceled || !result.filePaths.length) return null
-    return showManager.load(result.filePaths[0])
+    if (result.canceled || !result.filePaths.length) {
+      console.log('[Main] Load cancelled')
+      return null
+    }
+    console.log('[Main] Loading file:', result.filePaths[0])
+    const loadResult = showManager.load(result.filePaths[0])
+    console.log('[Main] Load result - success:', loadResult.success, 'patch:', loadResult.show?.patch?.length, 'error:', loadResult.error)
+    return loadResult
   })
 
   ipcMain.handle(IPC.SHOW_SAVE_AS, async (_event, show: ShowFile) => {
