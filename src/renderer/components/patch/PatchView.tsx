@@ -283,7 +283,7 @@ function GroupTree({
                       addToGroup(g.id, ids)
                     }
                   }
-                } catch {}
+                } catch (err) { console.error('[PhotonBoard] Drop error:', err) }
               }}
               onClick={() => toggleExpanded(g.id)}
             >
@@ -291,6 +291,13 @@ function GroupTree({
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
               <span className="text-xs flex-1 truncate">{g.name}</span>
               <span className="text-[10px] text-gray-500">{g.fixtureIds.length}</span>
+              {selectedFixtureIds.length > 0 && (
+                <button
+                  className="text-[10px] text-accent hover:text-accent-light opacity-0 group-hover/item:opacity-100"
+                  title={`Add ${selectedFixtureIds.length} selected fixture(s) to ${g.name}`}
+                  onClick={(e) => { e.stopPropagation(); addToGroup(g.id, selectedFixtureIds) }}
+                >+sel</button>
+              )}
               <button
                 className="text-[10px] text-gray-500 hover:text-gray-300 opacity-0 group-hover/item:opacity-100"
                 title="Add sub-group"
