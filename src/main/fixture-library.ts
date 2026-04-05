@@ -1282,12 +1282,10 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     name: 'BT-Theatre 200TW',
     manufacturer: 'Briteq',
     categories: ['Fresnel', 'Profile'],
-    channels: chs(dimmerCh(), genericCh('Dimmer Fine'), genericCh('Color Temperature'), genericCh('CT Fine'), strobeCh(), zoomCh(), genericCh('Zoom Fine'), genericCh('Fan')),
+    channels: chs(dimmerCh(), genericCh('Color Temperature'), strobeCh(), zoomCh(), genericCh('Fan')),
     modes: [
       { name: '1ch', channels: ['Dimmer'], channelCount: 1 },
-      { name: '2ch', channels: ['Dimmer', 'Color Temperature'], channelCount: 2 },
-      { name: '4ch', channels: ['Dimmer', 'Color Temperature', 'Strobe', 'Zoom'], channelCount: 4 },
-      { name: '8ch', channels: ['Dimmer', 'Dimmer Fine', 'Color Temperature', 'CT Fine', 'Strobe', 'Zoom', 'Zoom Fine', 'Fan'], channelCount: 8 }
+      { name: '5ch', channels: ['Dimmer', 'Color Temperature', 'Strobe', 'Zoom', 'Fan'], channelCount: 5 }
     ],
     physical: { lens: { degreesMinMax: [12, 56] }, power: 200 }
   },
