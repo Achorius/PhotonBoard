@@ -245,7 +245,7 @@ export function LiveView() {
           className="flex-1 overflow-y-auto p-3"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
             gap: '8px',
             alignContent: 'start',
           }}

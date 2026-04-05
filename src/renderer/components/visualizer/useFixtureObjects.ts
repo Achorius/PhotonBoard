@@ -50,7 +50,8 @@ export function useFixtureObjects(
       const shape = getFixtureShape(def?.categories || [])
       const beamAngle = def?.physical?.lens?.degreesMinMax?.[1] ?? 25
       const fixtureY = entry.position3D?.y ?? (roomConfig.height - 0.05)
-      const objects = createFixtureObjects(shape, beamAngle, fixtureY)
+      const roomDiagonal = Math.sqrt(roomConfig.width ** 2 + roomConfig.depth ** 2 + roomConfig.height ** 2)
+      const objects = createFixtureObjects(shape, beamAngle, fixtureY, roomDiagonal)
       objects.group.name = `fixture-${entry.id}`
       map.set(entry.id, objects)
       scene.add(objects.group)

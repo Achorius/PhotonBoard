@@ -65,11 +65,11 @@ const hazeMaterial = () =>
  * The root group should be positioned and oriented by the caller.
  * By default, the fixture points downward (beam along -Y).
  */
-export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtureY?: number): FixtureObjects {
+export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtureY?: number, roomDiagonal?: number): FixtureObjects {
   const group = new THREE.Group()
   const beamAngleRad = THREE.MathUtils.degToRad(Math.min(beamAngle, 60))
-  // Cone height = 1.5x fixture Y so beams reach past the floor even when angled
-  const coneHeight = Math.max(4, (fixtureY ?? 8) * 1.5)
+  // Cone height = room diagonal so beams can reach any corner even when tilted
+  const coneHeight = Math.max(6, roomDiagonal ?? 30)
   const coneRadius = Math.tan(beamAngleRad / 2) * coneHeight
 
   let bodyMesh: THREE.Mesh

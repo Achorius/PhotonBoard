@@ -21,9 +21,12 @@ export function FixtureControlView() {
   const firstEntry = selectedEntries[0]
   const firstDef = firstEntry ? fixtures.find(f => f.id === firstEntry.fixtureDefId) : null
 
-  // Detect channel types available
-  const hasColor = firstDef && Object.values(firstDef.channels).some(ch => ch.type === 'color')
-  const hasPanTilt = firstDef && Object.values(firstDef.channels).some(ch => ch.type === 'pan' || ch.type === 'tilt')
+  // Detect channel types available — check for individual RGB channels by name, not just type
+  const firstChannels = firstEntry ? getFixtureChannels(firstEntry) : []
+  const channelNames = new Set(firstChannels.map(c => c.name.toLowerCase()))
+  const hasRGB = channelNames.has('red') && channelNames.has('green') && channelNames.has('blue')
+  const hasColor = hasRGB
+  const hasPanTilt = channelNames.has('pan') || channelNames.has('tilt')
 
   return (
     <div className="flex h-full">
