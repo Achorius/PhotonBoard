@@ -52,13 +52,22 @@ export const useMidiStore = create<MidiState>((set, get) => ({
     }
 
     try {
-      console.log('[MIDI] Requesting MIDI access...')
-      const access = await navigator.requestMIDIAccess({ sysex: true })
-      console.log('[MIDI] Access granted. Scanning devices...')
+      // Reuse existing MIDIAccess if available (avoids reinit loop)
+      let access: MIDIAccess
+      if (currentMidiAccess) {
+        console.log('[MIDI] Reusing existing MIDI access, rescanning devices...')
+        access = currentMidiAccess
+      } else {
+        console.log('[MIDI] Requesting MIDI access...')
+        access = await navigator.requestMIDIAccess({ sysex: false })
+        currentMidiAccess = access
+        console.log('[MIDI] Access granted.')
+      }
+
       const devices: MidiDevice[] = []
 
       access.inputs.forEach((input) => {
-        console.log('[MIDI] Input found:', input.name, '| manufacturer:', input.manufacturer, '| state:', input.state)
+        console.log('[MIDI] Input found:', input.name, '| state:', input.state)
         devices.push({
           id: input.id,
           name: input.name || 'Unknown',
@@ -67,7 +76,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
           connected: input.state === 'connected'
         })
 
-        // Listen for MIDI messages
+        // Listen for MIDI messages (reassigning is safe, replaces previous handler)
         input.onmidimessage = (event: MIDIMessageEvent) => {
           if (!event.data || event.data.length < 2) return
           const [status, data1, data2] = event.data
@@ -103,7 +112,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       })
 
       access.outputs.forEach((output) => {
-        console.log('[MIDI] Output found:', output.name, '| manufacturer:', output.manufacturer, '| state:', output.state)
+        console.log('[MIDI] Output found:', output.name, '| state:', output.state)
         devices.push({
           id: output.id,
           name: output.name || 'Unknown',
@@ -115,10 +124,20 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
       console.log('[MIDI] Total devices:', devices.length, '(inputs:', devices.filter(d => d.type === 'input').length, ', outputs:', devices.filter(d => d.type === 'output').length, ')')
 
-      // Listen for device changes
+      // Listen for device changes — use module-level debounce to prevent reinit loop
       access.onstatechange = (event) => {
-        console.log('[MIDI] Device state changed:', (event as any).port?.name, (event as any).port?.state)
-        get().initMidi()
+        const port = (event as any).port
+        console.log('[MIDI] Device state changed:', port?.name, port?.state)
+        // Don't reinit while learning
+        if (get().isLearning) {
+          console.log('[MIDI] Skipping reinit during learn mode')
+          return
+        }
+        if (reinitTimeout) clearTimeout(reinitTimeout)
+        reinitTimeout = setTimeout(() => {
+          console.log('[MIDI] Debounced rescan triggered')
+          get().initMidi()
+        }, 2000)
       }
 
       set({ devices, apiStatus: 'available', apiError: null })
@@ -130,16 +149,22 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   },
 
   startLearn: (target) => {
+    console.log('[MIDI] startLearn:', target.label, target.type)
     set({ isLearning: true, learnTarget: target })
   },
 
   cancelLearn: () => {
+    console.log('[MIDI] cancelLearn')
     set({ isLearning: false, learnTarget: null })
   },
 
   completeLearn: (source) => {
     const { learnTarget } = get()
-    if (!learnTarget) return
+    if (!learnTarget) {
+      console.log('[MIDI] completeLearn called but no learnTarget')
+      return
+    }
+    console.log('[MIDI] completeLearn:', source.type, 'ch', source.channel, '#', source.number, '→', learnTarget.label)
 
     const mapping: MidiMapping = {
       id: uuidv4(),
@@ -191,6 +216,11 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
   setMappings: (mappings) => set({ mappings })
 }))
+
+// Module-level debounce for device state changes (must persist across initMidi calls)
+let reinitTimeout: ReturnType<typeof setTimeout> | null = null
+// Track the current MIDIAccess to avoid re-registering listeners
+let currentMidiAccess: MIDIAccess | null = null
 
 // External MIDI routing function — will be connected to the cue/chase/dmx engines
 let midiRouter: ((type: string, channel: number, number: number, value: number) => void) | null = null
