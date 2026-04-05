@@ -8,7 +8,7 @@ export function StatusBar() {
   const { blackout, grandMaster } = useDmxStore()
   const { patch } = usePatchStore()
   const { devices, lastMessage } = useMidiStore()
-  const { showName } = useUiStore()
+  const { showName, statusMessage, statusType } = useUiStore()
   const [artnetStatus, setArtnetStatus] = useState<{ connected: boolean; senders: any[] }>({ connected: false, senders: [] })
   const [savePath, setSavePath] = useState<string | null>(null)
 
@@ -67,6 +67,17 @@ export function StatusBar() {
       )}
 
       <div className="flex-1" />
+
+      {/* Status toast */}
+      {statusMessage && (
+        <span className={`font-medium animate-pulse ${
+          statusType === 'success' ? 'text-green-400' :
+          statusType === 'error' ? 'text-red-400' :
+          'text-blue-400'
+        }`}>
+          {statusMessage}
+        </span>
+      )}
 
       {/* Save location */}
       {savePath && (

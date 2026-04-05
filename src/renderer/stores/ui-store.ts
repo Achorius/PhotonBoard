@@ -13,6 +13,9 @@ interface UiState {
   // Modals
   activeModal: string | null
   modalData: any
+  // Status toast
+  statusMessage: string | null
+  statusType: 'info' | 'success' | 'error'
 
   // Actions
   setActiveTab: (tab: ViewTab) => void
@@ -23,6 +26,7 @@ interface UiState {
   toggleBottomPanel: () => void
   openModal: (modal: string, data?: any) => void
   closeModal: () => void
+  showStatus: (message: string, type?: 'info' | 'success' | 'error', duration?: number) => void
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -34,6 +38,8 @@ export const useUiStore = create<UiState>((set) => ({
   bottomPanelOpen: true,
   activeModal: null,
   modalData: null,
+  statusMessage: null,
+  statusType: 'info',
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setShowName: (name) => set({ showName: name }),
@@ -42,5 +48,11 @@ export const useUiStore = create<UiState>((set) => ({
   setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
   toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
   openModal: (modal, data = null) => set({ activeModal: modal, modalData: data }),
-  closeModal: () => set({ activeModal: null, modalData: null })
+  closeModal: () => set({ activeModal: null, modalData: null }),
+  showStatus: (message, type = 'info', duration = 3000) => {
+    set({ statusMessage: message, statusType: type })
+    if (duration > 0) {
+      setTimeout(() => set({ statusMessage: null }), duration)
+    }
+  }
 }))

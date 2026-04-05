@@ -102,6 +102,7 @@ export default function App() {
       return
     }
     isSaving.current = true
+    useUiStore.getState().showStatus('Saving…', 'info', 0)
     try {
       const show = collectShowData()
       console.log('[PhotonBoard] Saving show:', show.name, 'patch:', show.patch.length)
@@ -110,9 +111,13 @@ export default function App() {
       if (result && result.path) {
         const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
         useUiStore.getState().setShowName(fileName)
+        useUiStore.getState().showStatus(`Saved ✓ ${fileName}`, 'success', 2500)
+      } else {
+        useUiStore.getState().showStatus('Save cancelled', 'info', 2000)
       }
     } catch (e) {
       console.error('[PhotonBoard] Save error:', e)
+      useUiStore.getState().showStatus('Save failed!', 'error', 3000)
     } finally {
       isSaving.current = false
     }
@@ -124,6 +129,7 @@ export default function App() {
       return
     }
     isSaving.current = true
+    useUiStore.getState().showStatus('Save As…', 'info', 0)
     try {
       const show = collectShowData()
       const result = await window.photonboard.show.saveAs(show)
@@ -131,9 +137,13 @@ export default function App() {
       if (result && result.path) {
         const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
         useUiStore.getState().setShowName(fileName)
+        useUiStore.getState().showStatus(`Saved ✓ ${fileName}`, 'success', 2500)
+      } else {
+        useUiStore.getState().showStatus('Save cancelled', 'info', 2000)
       }
     } catch (e) {
       console.error('[PhotonBoard] SaveAs error:', e)
+      useUiStore.getState().showStatus('Save failed!', 'error', 3000)
     } finally {
       isSaving.current = false
     }
@@ -146,12 +156,14 @@ export default function App() {
       return
     }
     isLoading.current = true
+    useUiStore.getState().showStatus('Opening…', 'info', 0)
     try {
       console.log('[PhotonBoard] Calling show.load() IPC...')
       const result = await window.photonboard.show.load()
       console.log('[PhotonBoard] Load IPC returned:', result ? 'got result' : 'null/undefined')
       if (!result) {
         console.log('[PhotonBoard] Load cancelled (no result)')
+        useUiStore.getState().showStatus('Load cancelled', 'info', 2000)
         return
       }
       console.log('[PhotonBoard] Load result keys:', Object.keys(result).join(','), 'success:', result.success)
@@ -169,11 +181,14 @@ export default function App() {
         console.log('[PhotonBoard] applyShowData done, reloading fixtures...')
         await usePatchStore.getState().loadFixtures()
         console.log('[PhotonBoard] Load complete!')
+        useUiStore.getState().showStatus(`Loaded ✓ ${show.name}`, 'success', 2500)
       } else {
         console.error('[PhotonBoard] Load failed - no show data in result:', JSON.stringify(result).slice(0, 200))
+        useUiStore.getState().showStatus('Load failed — empty file', 'error', 3000)
       }
     } catch (e) {
       console.error('[PhotonBoard] Load error:', e)
+      useUiStore.getState().showStatus('Load failed!', 'error', 3000)
     } finally {
       isLoading.current = false
       console.log('[PhotonBoard] handleLoad EXITED, isLoading reset to false')
