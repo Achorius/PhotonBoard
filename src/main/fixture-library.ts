@@ -1310,10 +1310,10 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     name: 'Intimidator Spot 375ZX',
     manufacturer: 'Chauvet DJ',
     categories: ['Moving Head'],
-    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), genericCh('Dimmer Fine'), shutterCh(), colorWheelCh(), goboCh(), goboRotCh(), prismCh(), genericCh('Prism Rotation'), focusCh(), zoomCh(), resetCh()),
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), shutterCh(), colorWheelCh(), goboCh(), goboRotCh(), prismCh(), genericCh('Prism Rotation'), focusCh(), zoomCh(), resetCh()),
     modes: [
       { name: '9ch', channels: ['Pan', 'Tilt', 'Speed', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Focus', 'Shutter'], channelCount: 9 },
-      { name: '16ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Dimmer Fine', 'Shutter', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Prism Rotation', 'Focus', 'Zoom', 'Reset'], channelCount: 16 }
+      { name: '15ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Shutter', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Prism Rotation', 'Focus', 'Zoom', 'Reset'], channelCount: 15 }
     ],
     physical: { lens: { degreesMinMax: [12, 22] }, power: 200 }
   },
@@ -1332,6 +1332,18 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
       { name: '16ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Shutter', 'Red', 'Green', 'Blue', 'White', 'Amber', 'UV', 'Color Macro', 'Auto', 'Sound'], channelCount: 16 }
     ],
     physical: { lens: { degreesMinMax: [25, 25] }, power: 120 }
+  },
+  {
+    id: 'showtec/shark-wash-zoom-two',
+    name: 'Shark Wash Zoom Two',
+    manufacturer: 'Showtec',
+    categories: ['Moving Head'],
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), strobeCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff'), genericCh('Color Temperature'), genericCh('Color Macro'), zoomCh(), genericCh('Auto/Reset')),
+    modes: [
+      { name: '8ch', channels: ['Pan', 'Tilt', 'Speed', 'Dimmer', 'Strobe', 'Color Macro', 'Zoom', 'Auto/Reset'], channelCount: 8 },
+      { name: '15ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Strobe', 'Red', 'Green', 'Blue', 'White', 'Color Temperature', 'Color Macro', 'Zoom', 'Auto/Reset'], channelCount: 15 }
+    ],
+    physical: { lens: { degreesMinMax: [6, 38] }, power: 220 }
   },
 
   // ================================================================
