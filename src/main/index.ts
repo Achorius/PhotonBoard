@@ -128,6 +128,15 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // Forward ALL renderer console to main stdout for debugging
+  mainWindow.webContents.on('console-message', (_event, level, message) => {
+    if (level >= 2) { // warnings and errors
+      console.log('[Renderer:ERR]', message)
+    } else if (message.includes('[PhotonBoard]') || message.includes('patch') || message.includes('Patch')) {
+      console.log('[Renderer]', message)
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })

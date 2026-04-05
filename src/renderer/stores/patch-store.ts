@@ -214,7 +214,10 @@ export const usePatchStore = create<PatchState>((set, get) => ({
     }
   },
 
-  setPatch: (patch) => set({ patch }),
+  setPatch: (patch) => {
+    console.log('[PhotonBoard] setPatch called with', patch.length, 'entries', new Error().stack?.split('\n')[2]?.trim())
+    set({ patch })
+  },
   setGroups: (groups) => set({ groups }),
   setFixtures: (fixtures) => set({ fixtures })
 }))

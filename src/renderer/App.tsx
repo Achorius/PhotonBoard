@@ -44,15 +44,18 @@ export default function App() {
 
   // ---- Save / Load helpers ----
   const collectShowData = useCallback((): ShowFile => {
-    const patchState = usePatchStore.getState()
-    const patch = patchState.patch
-    const groups = patchState.groups
+    // Access store state directly at call time
+    const fullPatchState = usePatchStore.getState()
+    const patch = [...fullPatchState.patch] // shallow copy to ensure serializable
+    const groups = [...fullPatchState.groups]
     const { cuelists, chases } = usePlaybackStore.getState()
     const { showName } = useUiStore.getState()
     const { roomConfig } = useVisualizerStore.getState()
-    console.log('[PhotonBoard] collectShowData — patch:', patch.length, 'groups:', groups.length, 'showName:', showName)
+    console.log('[PhotonBoard] collectShowData — patch:', patch.length, 'groups:', groups.length, 'showName:', showName, 'storeKeys:', Object.keys(fullPatchState).join(','))
     if (patch.length > 0) {
-      console.log('[PhotonBoard] First fixture:', patch[0].name, patch[0].fixtureDefId)
+      console.log('[PhotonBoard] First fixture:', JSON.stringify(patch[0]).slice(0, 100))
+    } else {
+      console.log('[PhotonBoard] WARNING: patch is EMPTY!')
     }
     return {
       version: '1.0.0',
@@ -67,12 +70,12 @@ export default function App() {
       patch,
       groups,
       presets: [],
-      cuelists,
-      chases,
+      cuelists: [...cuelists],
+      chases: [...chases],
       effects: [],
       midiMappings: [],
       stageLayout: { width: 1200, height: 600, fixtures: [] },
-      roomConfig
+      roomConfig: { ...roomConfig }
     }
   }, [])
 
