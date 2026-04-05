@@ -172,13 +172,26 @@ function registerIpcHandlers(): void {
     return showManager.newShow()
   })
 
-  ipcMain.handle(IPC.SHOW_SAVE, (_event, show: ShowFile) => {
-    return showManager.save(show)
+  ipcMain.handle(IPC.SHOW_SAVE, async (_event, show: ShowFile) => {
+    const saveResult = showManager.save(show)
+    if (saveResult.needsSaveAs) {
+      // First save — open Save As dialog automatically
+      const defaultDir = showManager.getDefaultShowsDir()
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+        defaultPath: join(defaultDir, `${show.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`)
+      })
+      if (result.canceled || !result.filePath) return null
+      return showManager.saveAs(show, result.filePath)
+    }
+    return saveResult
   })
 
   ipcMain.handle(IPC.SHOW_LOAD, async () => {
+    const defaultDir = showManager.getDefaultShowsDir()
     const result = await dialog.showOpenDialog(mainWindow!, {
       filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+      defaultPath: defaultDir,
       properties: ['openFile']
     })
     if (result.canceled || !result.filePaths.length) return null
@@ -186,9 +199,11 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SHOW_SAVE_AS, async (_event, show: ShowFile) => {
+    const defaultDir = showManager.getDefaultShowsDir()
+    const currentPath = showManager.getCurrentPath()
     const result = await dialog.showSaveDialog(mainWindow!, {
       filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
-      defaultPath: `${show.name}.pbshow`
+      defaultPath: currentPath || join(defaultDir, `${show.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`)
     })
     if (result.canceled || !result.filePath) return null
     return showManager.saveAs(show, result.filePath)

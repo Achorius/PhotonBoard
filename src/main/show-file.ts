@@ -1,17 +1,20 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
 import { join, basename } from 'path'
+import { homedir } from 'os'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
 import { DEFAULT_ROOM_CONFIG } from '../shared/types'
 import { BUILTIN_FIXTURES } from './fixture-library'
 
 export class ShowFileManager {
   private userDataPath: string
+  private documentsShowsPath: string
   private currentFilePath: string | null = null
   private recentFiles: string[] = []
   private fixtureCache: Map<string, FixtureDefinition> = new Map()
 
   constructor(userDataPath: string) {
     this.userDataPath = userDataPath
+    this.documentsShowsPath = join(homedir(), 'Documents', 'PhotonBoard')
     this.ensureDirectories()
     this.loadRecentFiles()
     this.loadBuiltinFixtures()
@@ -20,14 +23,18 @@ export class ShowFileManager {
   private ensureDirectories(): void {
     const dirs = [
       join(this.userDataPath, 'fixtures'),
-      join(this.userDataPath, 'shows'),
-      join(this.userDataPath, 'config')
+      join(this.userDataPath, 'config'),
+      this.documentsShowsPath
     ]
     for (const dir of dirs) {
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true })
       }
     }
+  }
+
+  getDefaultShowsDir(): string {
+    return this.documentsShowsPath
   }
 
   private loadRecentFiles(): void {
@@ -170,11 +177,10 @@ export class ShowFileManager {
     }
   }
 
-  save(show: ShowFile): { success: boolean; path?: string; error?: string } {
+  save(show: ShowFile): { success: boolean; path?: string; error?: string; needsSaveAs?: boolean } {
     if (!this.currentFilePath) {
-      // Save to default location
-      const showsDir = join(this.userDataPath, 'shows')
-      this.currentFilePath = join(showsDir, `${show.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`)
+      // No file path yet — tell renderer to open a Save As dialog
+      return { success: false, needsSaveAs: true }
     }
     return this.saveAs(show, this.currentFilePath)
   }
