@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { useVisualizerStore, type VisualizerSubTab } from '@renderer/stores/visualizer-store'
 import { ThreeCanvas } from './ThreeCanvas'
 import { LayoutEditor2D } from './editor/LayoutEditor2D'
@@ -152,7 +152,11 @@ export function VisualizerView() {
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="flex-1 overflow-hidden">
           {subTab === '3d' ? (
-            <ThreeCanvas />
+            <div className="relative w-full h-full flex">
+              <ThreeCanvas />
+              {/* 3D properties overlay */}
+              <FixtureProps3D />
+            </div>
           ) : (
             <div className="flex h-full">
               {/* Left: top-down + side view */}
@@ -259,6 +263,128 @@ export function VisualizerView() {
             Show controls ({selectedEntries.length} fixtures)
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** Compact fixture properties panel overlaid on 3D view */
+function FixtureProps3D() {
+  const { selectedFixtureId, roomConfig } = useVisualizerStore()
+  const { patch, fixtures, updateFixture } = usePatchStore()
+
+  const entry = useMemo(() => patch.find(p => p.id === selectedFixtureId), [patch, selectedFixtureId])
+  const def = useMemo(() => entry ? fixtures.find(f => f.id === entry.fixtureDefId) : null, [entry, fixtures])
+
+  if (!entry) return null
+
+  const isMovingHead = def?.categories.includes('Moving Head') ?? false
+  const pos = entry.position3D ?? { x: 0, y: roomConfig.height - 0.05, z: 0 }
+  const mountingAngle = entry.mountingAngle ?? 0
+  const mountingPan = entry.mountingPan ?? 0
+  const beamAngle = entry.beamAngle ?? def?.physical?.lens?.degreesMinMax?.[1] ?? 25
+
+  const updatePos = (key: 'x' | 'y' | 'z', value: number) => {
+    updateFixture(entry.id, { position3D: { ...pos, [key]: value } })
+  }
+
+  return (
+    <div className="absolute top-2 right-2 w-52 bg-surface-1/95 backdrop-blur border border-surface-3 rounded-lg p-3 space-y-3 z-10 shadow-xl">
+      {/* Header */}
+      <div>
+        <div className="text-xs font-semibold text-gray-200 truncate">{entry.name}</div>
+        <div className="text-[9px] text-gray-500">{def?.name} — U{entry.universe + 1}.{entry.address}</div>
+      </div>
+
+      {/* Position */}
+      <div className="space-y-1">
+        <div className="text-[9px] text-gray-500 uppercase">Position</div>
+        {([
+          { label: 'X', key: 'x' as const, min: -50, max: 50 },
+          { label: 'Y', key: 'y' as const, min: 0, max: 20 },
+          { label: 'Z', key: 'z' as const, min: -50, max: 50 },
+        ]).map(({ label, key, min, max }) => (
+          <div key={key} className="flex items-center gap-1">
+            <span className="text-[9px] text-gray-500 w-3">{label}</span>
+            <input
+              type="range" min={min} max={max} step={0.1}
+              value={pos[key]}
+              onChange={e => updatePos(key, parseFloat(e.target.value))}
+              className="flex-1 h-1"
+            />
+            <span className="text-[9px] font-mono text-accent w-10 text-right">{pos[key].toFixed(1)}m</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Aim / Tilt for static fixtures */}
+      {!isMovingHead && (
+        <div className="space-y-1">
+          <div className="text-[9px] text-gray-500 uppercase">Aim</div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-gray-500 w-8">Tilt</span>
+            <input
+              type="range" min={-90} max={90} step={1}
+              value={mountingAngle}
+              onChange={e => updateFixture(entry.id, { mountingAngle: parseInt(e.target.value) })}
+              className="flex-1 h-1"
+            />
+            <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingAngle}°</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-gray-500 w-8">Dir</span>
+            <input
+              type="range" min={-180} max={180} step={1}
+              value={mountingPan}
+              onChange={e => updateFixture(entry.id, { mountingPan: parseInt(e.target.value) })}
+              className="flex-1 h-1"
+            />
+            <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingPan}°</span>
+          </div>
+        </div>
+      )}
+
+      {/* Pan/Tilt Invert for moving heads */}
+      {isMovingHead && (
+        <div className="space-y-1">
+          <div className="text-[9px] text-gray-500 uppercase">Invert</div>
+          <div className="flex gap-3">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={entry.panInvert ?? false}
+                onChange={e => updateFixture(entry.id, { panInvert: e.target.checked })}
+                className="accent-accent w-3 h-3" />
+              <span className="text-[9px] text-gray-400">Pan</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={entry.tiltInvert ?? false}
+                onChange={e => updateFixture(entry.id, { tiltInvert: e.target.checked })}
+                className="accent-accent w-3 h-3" />
+              <span className="text-[9px] text-gray-400">Tilt</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Beam angle */}
+      <div className="flex items-center gap-1">
+        <span className="text-[9px] text-gray-500 w-8">Beam</span>
+        <input
+          type="range" min={2} max={90} step={1}
+          value={beamAngle}
+          onChange={e => updateFixture(entry.id, { beamAngle: parseInt(e.target.value) })}
+          className="flex-1 h-1"
+        />
+        <span className="text-[9px] font-mono text-accent w-8 text-right">{beamAngle}°</span>
+      </div>
+
+      {/* Quick placement */}
+      <div className="flex gap-1">
+        <button className="btn-secondary text-[8px] flex-1 py-0.5"
+          onClick={() => updatePos('y', roomConfig.height - 0.05)}>Ceiling</button>
+        <button className="btn-secondary text-[8px] flex-1 py-0.5"
+          onClick={() => updatePos('y', 4)}>4m</button>
+        <button className="btn-ghost text-[8px] flex-1 py-0.5 text-red-400"
+          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined })}>Reset</button>
       </div>
     </div>
   )

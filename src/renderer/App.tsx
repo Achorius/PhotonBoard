@@ -82,18 +82,31 @@ export default function App() {
   const handleSave = useCallback(async () => {
     const show = collectShowData()
     const result = await window.photonboard.show.save(show)
-    if (result?.path) useUiStore.getState().setShowName(show.name)
+    if (result && result.path) {
+      useUiStore.getState().setShowName(show.name)
+    }
   }, [collectShowData])
 
   const handleSaveAs = useCallback(async () => {
     const show = collectShowData()
     const result = await window.photonboard.show.saveAs(show)
-    if (result?.path) useUiStore.getState().setShowName(show.name)
+    if (result && result.path) {
+      useUiStore.getState().setShowName(show.name)
+    }
   }, [collectShowData])
 
   const handleLoad = useCallback(async () => {
     const result = await window.photonboard.show.load()
-    if (result?.show) applyShowData(result.show)
+    if (result && result.success && result.show) {
+      applyShowData(result.show)
+      // Reload fixtures to ensure loaded fixture defs are available
+      await usePatchStore.getState().loadFixtures()
+    }
+  }, [applyShowData])
+
+  const handleNew = useCallback(async () => {
+    const show = await window.photonboard.show.new()
+    if (show) applyShowData(show)
   }, [applyShowData])
 
   useEffect(() => {
@@ -107,6 +120,17 @@ export default function App() {
     ])
   }, [])
 
+  // Listen for Electron menu events
+  useEffect(() => {
+    const unsubs = [
+      window.photonboard.onMenuEvent('menu:new', handleNew),
+      window.photonboard.onMenuEvent('menu:save', handleSave),
+      window.photonboard.onMenuEvent('menu:save-as', handleSaveAs),
+      window.photonboard.onMenuEvent('menu:load', handleLoad)
+    ]
+    return () => unsubs.forEach(u => u())
+  }, [handleSave, handleSaveAs, handleLoad])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd+S / Cmd+Shift+S / Cmd+O — always active, even in inputs
@@ -119,6 +143,11 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault()
         handleLoad()
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault()
+        handleNew()
         return
       }
 
@@ -146,7 +175,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTab, handleSave, handleSaveAs, handleLoad])
+  }, [activeTab, handleSave, handleSaveAs, handleLoad, handleNew])
 
   const renderView = () => {
     switch (activeTab) {

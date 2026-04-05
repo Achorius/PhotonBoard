@@ -29,6 +29,18 @@ function createMenu(): void {
       label: 'File',
       submenu: [
         {
+          label: 'New Show',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => mainWindow?.webContents.send('menu:new')
+        },
+        { type: 'separator' },
+        {
+          label: 'Open…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => mainWindow?.webContents.send('menu:load')
+        },
+        { type: 'separator' },
+        {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
           click: () => mainWindow?.webContents.send('menu:save')
@@ -37,11 +49,6 @@ function createMenu(): void {
           label: 'Save As…',
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => mainWindow?.webContents.send('menu:save-as')
-        },
-        {
-          label: 'Open…',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => mainWindow?.webContents.send('menu:load')
         },
         { type: 'separator' },
         isMac ? { role: 'close' as const } : { role: 'quit' as const }

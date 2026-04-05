@@ -51,6 +51,12 @@ const api = {
       ipcRenderer.invoke(IPC.FIXTURES_IMPORT)
   },
 
+  // --- Menu event listeners ---
+  onMenuEvent: (channel: string, callback: () => void) => {
+    ipcRenderer.on(channel, callback)
+    return () => { ipcRenderer.removeListener(channel, callback) }
+  },
+
   // --- App ---
   app: {
     getVersion: (): Promise<string> =>
