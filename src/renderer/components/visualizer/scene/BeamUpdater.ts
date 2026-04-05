@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { FixtureObjects } from './FixtureModel'
 import type { ResolvedChannels } from '@renderer/lib/dmx-channel-resolver'
-import { dmxToPanDeg, dmxToTiltDeg } from '@renderer/lib/dmx-channel-resolver'
+import { dmxToPanDeg, dmxToTiltDeg, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
 
 export interface FixtureUpdateOptions {
   panInvert?: boolean
@@ -23,25 +23,17 @@ export function updateFixtureObjects(
   const gm = grandMaster / 255
   const effectiveDim = blackout ? 0 : (channels.dimmer / 255) * gm
 
-  // --- Beam color (raw RGB, without dimmer applied — dimmer is handled via effectiveDim) ---
-  const hasColorChannels = channels.red > 0 || channels.green > 0 || channels.blue > 0 ||
-                           channels.white > 0 || channels.amber > 0 || channels.uv > 0 ||
-                           channels.cyan > 0 || channels.magenta > 0 || channels.yellow > 0
-
-  let r: number, g: number, b: number
-  if (hasColorChannels) {
-    const cyanSub = channels.cyan / 255
-    const magentaSub = channels.magenta / 255
-    const yellowSub = channels.yellow / 255
-    r = Math.min(1, (channels.red / 255 + channels.white / 510 + channels.amber / 510) * (1 - cyanSub))
-    g = Math.min(1, (channels.green / 255 + channels.white / 510) * (1 - magentaSub))
-    b = Math.min(1, (channels.blue / 255 + channels.uv / 510) * (1 - yellowSub))
-  } else if (channels.hasDimmerChannel) {
-    // Dimmer-only fixture: white beam
-    r = 1; g = 1; b = 1
-  } else {
-    r = 0; g = 0; b = 0
-  }
+  // --- Beam color via centralized resolver (handles RGB, CMY, color wheel, dimmer-only) ---
+  // getEffectiveColor returns dimmer-applied values, but we handle dimmer separately via effectiveDim
+  // So we call it with a copy that has full dimmer, then use the raw color
+  const colorResult = getEffectiveColor({
+    ...channels,
+    dimmer: 255,            // override: we apply dimmer via effectiveDim below
+    hasDimmerChannel: false  // prevent double-dimming
+  })
+  const r = colorResult.r
+  const g = colorResult.g
+  const b = colorResult.b
 
   const col = new THREE.Color(r, g, b)
 
