@@ -119,7 +119,6 @@ function CuelistsPanel() {
                 value={cl.faderLevel}
                 onChange={(v) => setCuelistFader(cl.id, v)}
                 vertical={false}
-                size="sm"
                 showValue={false}
               />
             </div>
@@ -253,7 +252,6 @@ function ChasesPanel() {
                 value={ch.faderLevel}
                 onChange={(v) => setChaseFader(ch.id, v)}
                 vertical={false}
-                size="sm"
                 showValue={false}
               />
             </div>

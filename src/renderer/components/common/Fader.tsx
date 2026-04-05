@@ -1,12 +1,15 @@
 import React, { useCallback, useRef } from 'react'
 
+// Uniform fader width used everywhere — single source of truth
+export const FADER_WIDTH = 28
+export const FADER_GAP = 6
+
 interface FaderProps {
   value: number // 0-255
   onChange: (value: number) => void
   label?: string
   color?: string
   vertical?: boolean
-  size?: 'sm' | 'md' | 'lg'
   showValue?: boolean
   onDoubleClick?: () => void
   className?: string
@@ -18,7 +21,6 @@ export function Fader({
   label,
   color = '#e85d04',
   vertical = true,
-  size = 'md',
   showValue = true,
   onDoubleClick,
   className = ''
@@ -27,9 +29,6 @@ export function Fader({
   const isDragging = useRef(false)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
-
-  const widths = { sm: 28, md: 36, lg: 44 }
-  const width = vertical ? widths[size] : 180
 
   const computeValue = useCallback((e: React.PointerEvent) => {
     const track = trackRef.current
@@ -67,10 +66,11 @@ export function Fader({
   return (
     <div
       className={`flex ${vertical ? 'flex-col items-center gap-1' : 'flex-row items-center gap-2'} ${vertical ? 'h-full' : ''} ${className}`}
+      style={{ width: vertical ? FADER_WIDTH : undefined }}
       onDoubleClick={onDoubleClick}
     >
       {showValue && (
-        <span className="text-[10px] font-mono text-gray-400 w-8 text-center tabular-nums shrink-0">
+        <span className="text-[10px] font-mono text-gray-400 text-center tabular-nums shrink-0" style={{ width: FADER_WIDTH }}>
           {displayValue}%
         </span>
       )}
@@ -78,7 +78,7 @@ export function Fader({
         ref={trackRef}
         className={`relative rounded-full cursor-pointer ${vertical ? 'flex-1 min-h-[60px]' : ''}`}
         style={{
-          width: vertical ? 6 : width,
+          width: vertical ? 6 : 180,
           ...(vertical ? {} : { height: 6 }),
           backgroundColor: '#1a1a25'
         }}
@@ -112,7 +112,7 @@ export function Fader({
             bottom: `calc(${percent}% - 5px)`,
             left: '50%',
             transform: 'translateX(-50%)',
-            width: vertical ? widths[size] - 4 : 10,
+            width: FADER_WIDTH - 4,
             height: 10,
             backgroundColor: color,
             border: '1px solid rgba(255,255,255,0.3)'
@@ -128,7 +128,7 @@ export function Fader({
         />
       </div>
       {label && (
-        <span className="text-[9px] text-gray-500 text-center w-full truncate shrink-0">
+        <span className="text-[9px] text-gray-500 text-center truncate shrink-0" style={{ width: FADER_WIDTH }}>
           {label}
         </span>
       )}

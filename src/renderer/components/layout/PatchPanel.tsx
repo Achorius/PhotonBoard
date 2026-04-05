@@ -136,7 +136,6 @@ export function PatchPanel() {
                   onChange={(v) => setChannel(singleSelected.universe, ch.absoluteChannel, v)}
                   label={getChannelShortLabel(ch.name)}
                   color={color}
-                  size="sm"
                   showValue={false}
                 />
               )

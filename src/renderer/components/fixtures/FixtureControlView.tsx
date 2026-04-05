@@ -124,7 +124,6 @@ export function FixtureControlView() {
                         }}
                         label={ch.name}
                         color={color}
-                        size="lg"
                         onDoubleClick={() => {
                           for (const entry of selectedEntries) {
                             const channels = getFixtureChannels(entry)

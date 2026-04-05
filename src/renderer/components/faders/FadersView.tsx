@@ -3,7 +3,7 @@ import { useDmxStore } from '../../stores/dmx-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { useUiStore } from '../../stores/ui-store'
 import { useMidiStore } from '../../stores/midi-store'
-import { Fader } from '../common/Fader'
+import { Fader, FADER_WIDTH, FADER_GAP } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 import type { MidiTargetType } from '@shared/types'
 
@@ -211,9 +211,10 @@ function FixtureFaders({
     const firstEntry = selectedEntries[0]
     const firstChannels = getFixtureChannels(firstEntry)
 
+    const groupColWidth = unifiedChannels.length * FADER_WIDTH + (unifiedChannels.length - 1) * FADER_GAP + 16 // 8px padding each side
     return (
-      <div className="flex gap-1 h-full">
-        <div className="flex flex-col bg-surface-2 rounded border border-accent p-1.5" style={{ minWidth: Math.max(120, unifiedChannels.length * 32 + 12) }}>
+      <div className="flex gap-2 h-full">
+        <div className="flex flex-col bg-surface-2 rounded border border-accent px-2 py-1.5" style={{ width: groupColWidth }}>
           {/* Group header */}
           <div className="text-[9px] text-center text-accent truncate mb-0.5 shrink-0">
             Group ({selectedEntries.length} fixtures)
@@ -223,7 +224,7 @@ function FixtureFaders({
           </div>
 
           {/* Unified channel faders — fill remaining height */}
-          <div className="flex gap-1 flex-1 min-h-0">
+          <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
             {unifiedChannels.map(uch => {
               const color = getChannelTypeColor(uch.type)
               // Read value from first selected fixture
@@ -268,7 +269,6 @@ function FixtureFaders({
                     }}
                     label={getChannelShortLabel(uch.name)}
                     color={color}
-                    size="sm"
                     showValue={false}
                   />
                 </div>
@@ -282,19 +282,20 @@ function FixtureFaders({
 
   // --- Per-fixture fader view (single or no selection) ---
   return (
-    <div className="flex gap-1.5 h-full">
+    <div className="flex gap-2 h-full">
       {fixturesInUniverse.map(entry => {
         const channels = getFixtureChannels(entry)
         const isSelected = selectedFixtureIds.includes(entry.id)
         const def = fixtures.find(f => f.id === entry.fixtureDefId)
+        const colWidth = channels.length * FADER_WIDTH + (channels.length - 1) * FADER_GAP + 16 // 8px padding each side
 
         return (
           <div
             key={entry.id}
-            className={`flex flex-col bg-surface-2 rounded border p-1.5 cursor-pointer transition-colors ${
+            className={`flex flex-col bg-surface-2 rounded border px-2 py-1.5 cursor-pointer transition-colors ${
               isSelected ? 'border-accent' : 'border-surface-3 hover:border-surface-4'
             }`}
-            style={{ minWidth: Math.max(48, channels.length * 32 + 12) }}
+            style={{ width: colWidth }}
             onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
           >
             {/* Fixture name */}
@@ -306,7 +307,7 @@ function FixtureFaders({
             </div>
 
             {/* Channel faders — fill remaining height */}
-            <div className="flex gap-1 flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
               {channels.map(ch => {
                 const chDef = def?.channels[ch.name]
                 const color = getChannelTypeColor(chDef?.type || 'generic')
@@ -346,8 +347,7 @@ function FixtureFaders({
                       }}
                       label={getChannelShortLabel(ch.name)}
                       color={color}
-                      size="sm"
-                      showValue={false}
+                        showValue={false}
                     />
                   </div>
                 )
@@ -380,7 +380,7 @@ function RawChannelFaders({
   const channelCount = 64
 
   return (
-    <div className="flex gap-1 h-full">
+    <div className="flex h-full" style={{ gap: FADER_GAP }}>
       {Array.from({ length: channelCount }, (_, i) => (
         <Fader
           key={i}
