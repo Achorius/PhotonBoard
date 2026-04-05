@@ -10,6 +10,9 @@ let tapTempoCallback: ((bpm: number) => void) | null = null
 // Track current accumulated values for relative encoders (keyed by mapping id)
 const relativeValues: Record<string, number> = {}
 
+// Track toggle states for toggle behavior (keyed by mapping id)
+const toggleStates: Record<string, boolean> = {}
+
 export function initMidiRouting(): void {
   setMidiRouter((type, channel, number, value) => {
     const mappings = useMidiStore.getState().mappings
@@ -64,8 +67,38 @@ function resolveValue(mapping: any, rawValue: number): number {
   return Math.round(value)
 }
 
+/**
+ * Apply behavior mode (toggle/trigger/flash) to resolve a DMX value from a button press.
+ * Returns the DMX value to apply, or null if the message should be ignored.
+ */
+function applyBehavior(mapping: any, rawValue: number): number | null {
+  const behavior = mapping.options?.behavior || 'direct'
+
+  switch (behavior) {
+    case 'toggle': {
+      // Only react on note-on / CC > 0 (button press)
+      if (rawValue === 0) return null
+      const wasOn = toggleStates[mapping.id] ?? false
+      toggleStates[mapping.id] = !wasOn
+      return wasOn ? mapping.options.min : mapping.options.max
+    }
+    case 'trigger': {
+      // On while held, off on release
+      return rawValue > 0 ? mapping.options.max : mapping.options.min
+    }
+    case 'flash': {
+      // Full value while held, 0 on release
+      return rawValue > 0 ? 255 : 0
+    }
+    case 'direct':
+    default:
+      return null // handled by resolveValue
+  }
+}
+
 function routeMidiToTarget(mapping: any, rawValue: number): void {
   const { target, options } = mapping
+  const behavior = options?.behavior || 'direct'
 
   switch (target.type) {
     case 'channel': {
@@ -76,27 +109,39 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
       const channels = patchStore.getFixtureChannels(entry)
       const ch = channels.find(c => c.name === target.parameter)
       if (ch) {
-        const dmxValue = resolveValue(mapping, rawValue)
+        let dmxValue: number
+        if (behavior !== 'direct') {
+          const bval = applyBehavior(mapping, rawValue)
+          if (bval === null) break // ignore (e.g. note-off in toggle mode)
+          dmxValue = bval
+        } else {
+          dmxValue = resolveValue(mapping, rawValue)
+        }
         useDmxStore.getState().setChannel(entry.universe, ch.absoluteChannel, dmxValue)
       }
       break
     }
 
     case 'cuelist_go': {
-      if (mapping.source.type === 'note' && rawValue > 0) {
+      if (rawValue > 0) {
         usePlaybackStore.getState().goCuelist(target.id!)
       }
       break
     }
 
     case 'cuelist_fader': {
-      const faderVal = resolveValue(mapping, rawValue)
-      usePlaybackStore.getState().setCuelistFader(target.id!, faderVal)
+      if (behavior !== 'direct') {
+        const bval = applyBehavior(mapping, rawValue)
+        if (bval !== null) usePlaybackStore.getState().setCuelistFader(target.id!, bval)
+      } else {
+        const faderVal = resolveValue(mapping, rawValue)
+        usePlaybackStore.getState().setCuelistFader(target.id!, faderVal)
+      }
       break
     }
 
     case 'chase_toggle': {
-      if (mapping.source.type === 'note' && rawValue > 0) {
+      if (rawValue > 0) {
         usePlaybackStore.getState().toggleChase(target.id!)
       }
       break
@@ -105,26 +150,30 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
     case 'chase_bpm': {
       const encoding = options?.encoding || 'absolute'
       if (encoding === 'relative') {
-        // Relative: adjust BPM by delta
         const current = relativeValues[mapping.id] ?? 120
         let delta = rawValue <= 63 ? rawValue : rawValue - 128
         relativeValues[mapping.id] = Math.max(30, Math.min(300, current + delta))
         usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(relativeValues[mapping.id]))
       } else {
-        const bpm = 30 + (rawValue / 127) * 270 // 30-300 BPM range
+        const bpm = 30 + (rawValue / 127) * 270
         usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(bpm))
       }
       break
     }
 
     case 'master': {
-      const masterVal = resolveValue(mapping, rawValue)
-      useDmxStore.getState().setGrandMaster(masterVal)
+      if (behavior !== 'direct') {
+        const bval = applyBehavior(mapping, rawValue)
+        if (bval !== null) useDmxStore.getState().setGrandMaster(bval)
+      } else {
+        const masterVal = resolveValue(mapping, rawValue)
+        useDmxStore.getState().setGrandMaster(masterVal)
+      }
       break
     }
 
     case 'blackout': {
-      if (mapping.source.type === 'note' && rawValue > 0) {
+      if (rawValue > 0) {
         useDmxStore.getState().toggleBlackout()
       }
       break

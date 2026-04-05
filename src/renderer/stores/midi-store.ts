@@ -192,7 +192,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
         min: 0,
         max: 255,
         inverted: false,
-        encoding
+        encoding,
+        behavior: source.type === 'note' ? 'toggle' : 'direct'
       }
     }
 

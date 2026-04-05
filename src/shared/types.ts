@@ -265,6 +265,7 @@ export interface MidiMapping {
     max: number
     inverted: boolean
     encoding: 'absolute' | 'relative' // absolute = 0-127 fader, relative = encoder (1=CW, 127=CCW)
+    behavior: 'direct' | 'toggle' | 'trigger' | 'flash' // direct = continuous, toggle = on/off on press, trigger = momentary, flash = full while held
   }
 }
 

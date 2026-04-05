@@ -1,8 +1,15 @@
 import React from 'react'
 import { useMidiStore } from '../../stores/midi-store'
 
+const BEHAVIOR_OPTIONS = [
+  { value: 'direct', label: 'Direct', desc: 'Continuous / proportional' },
+  { value: 'toggle', label: 'Toggle', desc: 'Press = on, press again = off' },
+  { value: 'trigger', label: 'Trigger', desc: 'On while held, off on release' },
+  { value: 'flash', label: 'Flash', desc: 'Full (255) while held' },
+] as const
+
 export function MidiView() {
-  const { devices, mappings, isLearning, learnTarget, lastMessage, apiStatus, apiError, startLearn, cancelLearn, removeMapping, initMidi } = useMidiStore()
+  const { devices, mappings, isLearning, learnTarget, lastMessage, apiStatus, apiError, startLearn, cancelLearn, removeMapping, updateMapping, initMidi } = useMidiStore()
 
   const inputs = devices.filter(d => d.type === 'input')
   const outputs = devices.filter(d => d.type === 'output')
@@ -107,6 +114,7 @@ export function MidiView() {
                 <th className="px-3 py-1.5 font-medium">Name</th>
                 <th className="px-3 py-1.5 font-medium">Source</th>
                 <th className="px-3 py-1.5 font-medium">Target</th>
+                <th className="px-3 py-1.5 font-medium">Mode</th>
                 <th className="px-3 py-1.5 font-medium">Range</th>
                 <th className="px-3 py-1.5 font-medium w-12"></th>
               </tr>
@@ -114,7 +122,7 @@ export function MidiView() {
             <tbody>
               {mappings.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-8 text-gray-600">
+                  <td colSpan={6} className="text-center py-8 text-gray-600">
                     No MIDI mappings. Use "Quick Learn" or right-click on a control to map it.
                   </td>
                 </tr>
@@ -124,12 +132,27 @@ export function MidiView() {
                     <td className="px-3 py-1.5">{m.name}</td>
                     <td className="px-3 py-1.5 font-mono text-gray-400">
                       {m.source.type.toUpperCase()} Ch{m.source.channel} #{m.source.number}
+                      {m.options.encoding === 'relative' ? ' ↻' : ''}
                     </td>
                     <td className="px-3 py-1.5 text-gray-400">
                       {m.target.type}{m.target.parameter ? ` → ${m.target.parameter}` : ''}
                     </td>
+                    <td className="px-3 py-1.5">
+                      <select
+                        className="bg-surface-3 text-gray-300 text-[10px] rounded px-1.5 py-0.5 border border-surface-4 cursor-pointer hover:border-accent/50 focus:border-accent outline-none"
+                        value={m.options.behavior || 'direct'}
+                        onChange={(e) => updateMapping(m.id, {
+                          options: { ...m.options, behavior: e.target.value as any }
+                        })}
+                        title={BEHAVIOR_OPTIONS.find(b => b.value === (m.options.behavior || 'direct'))?.desc}
+                      >
+                        {BEHAVIOR_OPTIONS.map(b => (
+                          <option key={b.value} value={b.value}>{b.label}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-3 py-1.5 text-gray-500">
-                      {m.options.min}-{m.options.max}{m.options.inverted ? ' (inv)' : ''}{m.options.encoding === 'relative' ? ' ↻' : ''}
+                      {m.options.min}-{m.options.max}{m.options.inverted ? ' (inv)' : ''}
                     </td>
                     <td className="px-3 py-1.5">
                       <button className="text-red-400 hover:text-red-300" onClick={() => removeMapping(m.id)}>x</button>
