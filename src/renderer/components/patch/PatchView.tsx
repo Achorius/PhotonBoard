@@ -451,7 +451,11 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
   }, [groups])
 
   const handleAdd = () => {
-    if (!selectedDef || !selectedMode || !name) return
+    console.log('[PhotonBoard] handleAdd:', { selectedDef, selectedMode, universe, address, name, count, selectedGroupId })
+    if (!selectedDef || !selectedMode || !name) {
+      console.log('[PhotonBoard] handleAdd BLOCKED - missing:', { def: !selectedDef, mode: !selectedMode, name: !name })
+      return
+    }
     addFixture(selectedDef, selectedMode, universe, address, name, count, selectedGroupId || undefined)
     onClose()
   }
@@ -489,9 +493,12 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
                         selectedDef === f.id ? 'bg-surface-2 text-accent' : 'text-gray-300'
                       }`}
                       onClick={() => {
-                        setSelectedDef(f.id)
-                        setSelectedMode(f.modes[0]?.name || '')
-                        if (!name) setName(f.name)
+                        if (selectedDef !== f.id) {
+                          setSelectedDef(f.id)
+                          setSelectedMode(f.modes[0]?.name || '')
+                          setName(f.name)
+                          setAddressManuallySet(false)
+                        }
                       }}
                     >
                       <div className="font-medium">{f.name}</div>
