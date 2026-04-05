@@ -30,20 +30,24 @@ function createMenu(): void {
       submenu: [
         {
           label: 'New Show',
+          accelerator: 'CmdOrCtrl+N',
           click: () => mainWindow?.webContents.send('menu:new')
         },
         { type: 'separator' },
         {
           label: 'Open…',
+          accelerator: 'CmdOrCtrl+O',
           click: () => mainWindow?.webContents.send('menu:load')
         },
         { type: 'separator' },
         {
           label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
           click: () => mainWindow?.webContents.send('menu:save')
         },
         {
           label: 'Save As…',
+          accelerator: 'CmdOrCtrl+Shift+S',
           click: () => mainWindow?.webContents.send('menu:save-as')
         },
         { type: 'separator' },
@@ -184,7 +188,8 @@ function registerIpcHandlers(): void {
     return showManager.newShow()
   })
 
-  ipcMain.handle(IPC.SHOW_SAVE, async (_event, show: ShowFile) => {
+  ipcMain.handle(IPC.SHOW_SAVE, async (_event, showJson: string) => {
+    const show: ShowFile = JSON.parse(showJson)
     console.log('[Main] SHOW_SAVE called, patch entries:', show?.patch?.length)
     const saveResult = showManager.save(show)
     if (saveResult.needsSaveAs) {
@@ -218,10 +223,11 @@ function registerIpcHandlers(): void {
     console.log('[Main] Loading file:', result.filePaths[0])
     const loadResult = showManager.load(result.filePaths[0])
     console.log('[Main] Load result - success:', loadResult.success, 'patch:', loadResult.show?.patch?.length, 'error:', loadResult.error)
-    return loadResult
+    return { ...loadResult, path: result.filePaths[0] }
   })
 
-  ipcMain.handle(IPC.SHOW_SAVE_AS, async (_event, show: ShowFile) => {
+  ipcMain.handle(IPC.SHOW_SAVE_AS, async (_event, showJson: string) => {
+    const show: ShowFile = JSON.parse(showJson)
     const defaultDir = showManager.getDefaultShowsDir()
     const currentPath = showManager.getCurrentPath()
     const result = await dialog.showSaveDialog(mainWindow!, {

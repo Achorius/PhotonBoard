@@ -108,7 +108,8 @@ export default function App() {
       const result = await window.photonboard.show.save(show)
       console.log('[PhotonBoard] Save result:', result)
       if (result && result.path) {
-        useUiStore.getState().setShowName(show.name)
+        const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
+        useUiStore.getState().setShowName(fileName)
       }
     } catch (e) {
       console.error('[PhotonBoard] Save error:', e)
@@ -128,7 +129,8 @@ export default function App() {
       const result = await window.photonboard.show.saveAs(show)
       console.log('[PhotonBoard] SaveAs result:', result)
       if (result && result.path) {
-        useUiStore.getState().setShowName(show.name)
+        const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
+        useUiStore.getState().setShowName(fileName)
       }
     } catch (e) {
       console.error('[PhotonBoard] SaveAs error:', e)
@@ -138,24 +140,35 @@ export default function App() {
   }, [collectShowData])
 
   const handleLoad = useCallback(async () => {
+    console.log('[PhotonBoard] handleLoad ENTERED, isLoading:', isLoading.current)
     if (isLoading.current) {
       console.log('[PhotonBoard] Load already in progress, skipping')
       return
     }
     isLoading.current = true
     try {
+      console.log('[PhotonBoard] Calling show.load() IPC...')
       const result = await window.photonboard.show.load()
-      console.log('[PhotonBoard] Load result:', result)
+      console.log('[PhotonBoard] Load IPC returned:', result ? 'got result' : 'null/undefined')
       if (!result) {
-        console.log('[PhotonBoard] Load cancelled')
+        console.log('[PhotonBoard] Load cancelled (no result)')
         return
       }
+      console.log('[PhotonBoard] Load result keys:', Object.keys(result).join(','), 'success:', result.success)
       // Handle both direct show object and wrapped result
       const show = result.show || (result as any)
+      console.log('[PhotonBoard] Show object:', show ? 'exists' : 'null', 'name:', show?.name, 'patch:', show?.patch?.length, 'groups:', show?.groups?.length)
       if (show && show.patch) {
-        console.log('[PhotonBoard] Loading show:', show.name, 'patch entries:', show.patch.length)
+        // Use filename as show name if available
+        if (result.path) {
+          const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
+          show.name = fileName
+        }
+        console.log('[PhotonBoard] Applying loaded show:', show.name, 'patch entries:', show.patch.length)
         applyShowData(show as ShowFile)
+        console.log('[PhotonBoard] applyShowData done, reloading fixtures...')
         await usePatchStore.getState().loadFixtures()
+        console.log('[PhotonBoard] Load complete!')
       } else {
         console.error('[PhotonBoard] Load failed - no show data in result:', JSON.stringify(result).slice(0, 200))
       }
@@ -163,6 +176,7 @@ export default function App() {
       console.error('[PhotonBoard] Load error:', e)
     } finally {
       isLoading.current = false
+      console.log('[PhotonBoard] handleLoad EXITED, isLoading reset to false')
     }
   }, [applyShowData])
 
@@ -230,6 +244,11 @@ export default function App() {
         const result = await window.photonboard.show.loadLast()
         console.log('[PhotonBoard] Auto-load result:', result)
         if (result && result.success && result.show) {
+          // Use filename as show name
+          if (result.path) {
+            const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || result.show.name
+            result.show.name = fileName
+          }
           applyShowData(result.show as ShowFile)
           console.log('[PhotonBoard] Auto-loaded show:', result.show.name, 'patch:', result.show.patch?.length)
         }
@@ -240,36 +259,18 @@ export default function App() {
     init()
   }, [])
 
-  // Listen for Electron menu events
+  // Register menu event handlers — onMenuEvent replaces (not accumulates) handlers
   useEffect(() => {
-    const unsubs = [
-      window.photonboard.onMenuEvent('menu:new', handleNew),
-      window.photonboard.onMenuEvent('menu:save', handleSave),
-      window.photonboard.onMenuEvent('menu:save-as', handleSaveAs),
-      window.photonboard.onMenuEvent('menu:load', handleLoad)
-    ]
-    return () => unsubs.forEach(u => u())
+    window.photonboard.onMenuEvent('menu:new', handleNew)
+    window.photonboard.onMenuEvent('menu:save', handleSave)
+    window.photonboard.onMenuEvent('menu:save-as', handleSaveAs)
+    window.photonboard.onMenuEvent('menu:load', handleLoad)
   }, [handleNew, handleSave, handleSaveAs, handleLoad])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+S / Cmd+Shift+S / Cmd+O — always active, even in inputs
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault()
-        if (e.shiftKey) handleSaveAs()
-        else handleSave()
-        return
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
-        e.preventDefault()
-        handleLoad()
-        return
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
-        e.preventDefault()
-        handleNew()
-        return
-      }
+      // File shortcuts (Cmd+S/O/N) are handled by Electron menu accelerators → onMenuEvent
+      // Only handle non-file shortcuts here
 
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
 
@@ -295,7 +296,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTab, handleSave, handleSaveAs, handleLoad, handleNew])
+  }, [activeTab])
 
   const renderView = () => {
     switch (activeTab) {

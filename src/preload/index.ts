@@ -2,6 +2,17 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/types'
 import type { ArtNetConfig, ShowFile } from '../shared/types'
 
+// Single callback registry — guarantees ONE handler per menu channel
+const menuHandlers: Record<string, () => void> = {}
+
+// Register IPC listeners ONCE in preload, route to current handler
+for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load']) {
+  ipcRenderer.on(channel, () => {
+    const handler = menuHandlers[channel]
+    if (handler) handler()
+  })
+}
+
 const api = {
   // --- DMX ---
   dmx: {
@@ -28,11 +39,11 @@ const api = {
     new: (): Promise<ShowFile> =>
       ipcRenderer.invoke(IPC.SHOW_NEW),
     save: (show: ShowFile): Promise<{ success: boolean; path?: string; error?: string }> =>
-      ipcRenderer.invoke(IPC.SHOW_SAVE, show),
+      ipcRenderer.invoke(IPC.SHOW_SAVE, JSON.stringify(show)),
     load: (): Promise<{ success: boolean; show?: ShowFile; error?: string } | null> =>
       ipcRenderer.invoke(IPC.SHOW_LOAD),
     saveAs: (show: ShowFile): Promise<{ success: boolean; path?: string; error?: string } | null> =>
-      ipcRenderer.invoke(IPC.SHOW_SAVE_AS, show),
+      ipcRenderer.invoke(IPC.SHOW_SAVE_AS, JSON.stringify(show)),
     getRecent: (): Promise<string[]> =>
       ipcRenderer.invoke(IPC.SHOW_GET_RECENT),
     loadLast: (): Promise<{ success: boolean; show?: any; path?: string }> =>
@@ -53,10 +64,10 @@ const api = {
       ipcRenderer.invoke(IPC.FIXTURES_IMPORT)
   },
 
-  // --- Menu event listeners ---
+  // --- Menu event listeners (replaces handler, guarantees single callback) ---
   onMenuEvent: (channel: string, callback: () => void) => {
-    ipcRenderer.on(channel, callback)
-    return () => { ipcRenderer.removeListener(channel, callback) }
+    menuHandlers[channel] = callback
+    return () => { delete menuHandlers[channel] }
   },
 
   // --- App ---
