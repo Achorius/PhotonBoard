@@ -92,7 +92,16 @@ export default function App() {
     useVisualizerStore.getState().selectFixture(null)
   }, [])
 
+  // Guards to prevent concurrent save/load operations
+  const isSaving = React.useRef(false)
+  const isLoading = React.useRef(false)
+
   const handleSave = useCallback(async () => {
+    if (isSaving.current) {
+      console.log('[PhotonBoard] Save already in progress, skipping')
+      return
+    }
+    isSaving.current = true
     try {
       const show = collectShowData()
       console.log('[PhotonBoard] Saving show:', show.name, 'patch:', show.patch.length)
@@ -103,10 +112,17 @@ export default function App() {
       }
     } catch (e) {
       console.error('[PhotonBoard] Save error:', e)
+    } finally {
+      isSaving.current = false
     }
   }, [collectShowData])
 
   const handleSaveAs = useCallback(async () => {
+    if (isSaving.current) {
+      console.log('[PhotonBoard] SaveAs already in progress, skipping')
+      return
+    }
+    isSaving.current = true
     try {
       const show = collectShowData()
       const result = await window.photonboard.show.saveAs(show)
@@ -116,10 +132,17 @@ export default function App() {
       }
     } catch (e) {
       console.error('[PhotonBoard] SaveAs error:', e)
+    } finally {
+      isSaving.current = false
     }
   }, [collectShowData])
 
   const handleLoad = useCallback(async () => {
+    if (isLoading.current) {
+      console.log('[PhotonBoard] Load already in progress, skipping')
+      return
+    }
+    isLoading.current = true
     try {
       const result = await window.photonboard.show.load()
       console.log('[PhotonBoard] Load result:', result)
@@ -138,10 +161,17 @@ export default function App() {
       }
     } catch (e) {
       console.error('[PhotonBoard] Load error:', e)
+    } finally {
+      isLoading.current = false
     }
   }, [applyShowData])
 
   const handleNew = useCallback(async () => {
+    if (isLoading.current) {
+      console.log('[PhotonBoard] New already in progress, skipping')
+      return
+    }
+    isLoading.current = true
     try {
       const show = await window.photonboard.show.new()
       console.log('[PhotonBoard] New show:', show)
@@ -150,6 +180,8 @@ export default function App() {
       }
     } catch (e) {
       console.error('[PhotonBoard] New error:', e)
+    } finally {
+      isLoading.current = false
     }
   }, [applyShowData])
 

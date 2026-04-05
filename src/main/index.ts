@@ -30,24 +30,20 @@ function createMenu(): void {
       submenu: [
         {
           label: 'New Show',
-          accelerator: 'CmdOrCtrl+N',
           click: () => mainWindow?.webContents.send('menu:new')
         },
         { type: 'separator' },
         {
           label: 'Open…',
-          accelerator: 'CmdOrCtrl+O',
           click: () => mainWindow?.webContents.send('menu:load')
         },
         { type: 'separator' },
         {
           label: 'Save',
-          accelerator: 'CmdOrCtrl+S',
           click: () => mainWindow?.webContents.send('menu:save')
         },
         {
           label: 'Save As…',
-          accelerator: 'CmdOrCtrl+Shift+S',
           click: () => mainWindow?.webContents.send('menu:save-as')
         },
         { type: 'separator' },
