@@ -213,17 +213,17 @@ function FixtureFaders({
 
     return (
       <div className="flex gap-1 h-full">
-        <div className="flex flex-col bg-surface-2 rounded border border-accent p-1.5 min-w-fit">
+        <div className="flex flex-col bg-surface-2 rounded border border-accent p-1.5" style={{ minWidth: Math.max(120, unifiedChannels.length * 32 + 12) }}>
           {/* Group header */}
-          <div className="text-[9px] text-center text-accent truncate max-w-40 mb-1">
+          <div className="text-[9px] text-center text-accent truncate mb-0.5 shrink-0">
             Group ({selectedEntries.length} fixtures)
           </div>
-          <div className="text-[8px] text-center text-gray-600 mb-1">
+          <div className="text-[8px] text-center text-gray-600 mb-1 shrink-0 truncate">
             {selectedEntries.map(e => e.name).join(', ')}
           </div>
 
-          {/* Unified channel faders */}
-          <div className="flex gap-0.5 flex-1 items-end">
+          {/* Unified channel faders — fill remaining height */}
+          <div className="flex gap-1 flex-1 min-h-0">
             {unifiedChannels.map(uch => {
               const color = getChannelTypeColor(uch.type)
               // Read value from first selected fixture
@@ -282,7 +282,7 @@ function FixtureFaders({
 
   // --- Per-fixture fader view (single or no selection) ---
   return (
-    <div className="flex gap-1 h-full">
+    <div className="flex gap-1.5 h-full">
       {fixturesInUniverse.map(entry => {
         const channels = getFixtureChannels(entry)
         const isSelected = selectedFixtureIds.includes(entry.id)
@@ -291,21 +291,22 @@ function FixtureFaders({
         return (
           <div
             key={entry.id}
-            className={`flex flex-col bg-surface-2 rounded border p-1.5 min-w-fit cursor-pointer transition-colors ${
+            className={`flex flex-col bg-surface-2 rounded border p-1.5 cursor-pointer transition-colors ${
               isSelected ? 'border-accent' : 'border-surface-3 hover:border-surface-4'
             }`}
+            style={{ minWidth: Math.max(48, channels.length * 32 + 12) }}
             onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
           >
             {/* Fixture name */}
-            <div className="text-[9px] text-center text-gray-400 truncate max-w-24 mb-1" title={entry.name}>
+            <div className="text-[9px] text-center text-gray-400 truncate mb-0.5 shrink-0" title={entry.name}>
               {entry.name}
             </div>
-            <div className="text-[8px] text-center text-gray-600 mb-1">
+            <div className="text-[8px] text-center text-gray-600 mb-1 shrink-0">
               {universe + 1}.{entry.address}
             </div>
 
-            {/* Channel faders */}
-            <div className="flex gap-0.5 flex-1 items-end">
+            {/* Channel faders — fill remaining height */}
+            <div className="flex gap-1 flex-1 min-h-0">
               {channels.map(ch => {
                 const chDef = def?.channels[ch.name]
                 const color = getChannelTypeColor(chDef?.type || 'generic')
@@ -379,7 +380,7 @@ function RawChannelFaders({
   const channelCount = 64
 
   return (
-    <div className="flex gap-0.5 h-full items-end">
+    <div className="flex gap-1 h-full">
       {Array.from({ length: channelCount }, (_, i) => (
         <Fader
           key={i}

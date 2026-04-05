@@ -28,10 +28,8 @@ export function Fader({
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
 
-  const heights = { sm: 80, md: 120, lg: 180 }
   const widths = { sm: 28, md: 36, lg: 44 }
-  const height = vertical ? heights[size] : 24
-  const width = vertical ? widths[size] : heights[size]
+  const width = vertical ? widths[size] : 180
 
   const computeValue = useCallback((e: React.PointerEvent) => {
     const track = trackRef.current
@@ -68,20 +66,20 @@ export function Fader({
 
   return (
     <div
-      className={`flex ${vertical ? 'flex-col items-center gap-1' : 'flex-row items-center gap-2'} ${className}`}
+      className={`flex ${vertical ? 'flex-col items-center gap-1' : 'flex-row items-center gap-2'} ${vertical ? 'h-full' : ''} ${className}`}
       onDoubleClick={onDoubleClick}
     >
       {showValue && (
-        <span className="text-[10px] font-mono text-gray-400 w-8 text-center tabular-nums">
+        <span className="text-[10px] font-mono text-gray-400 w-8 text-center tabular-nums shrink-0">
           {displayValue}%
         </span>
       )}
       <div
         ref={trackRef}
-        className="relative rounded-full cursor-pointer"
+        className={`relative rounded-full cursor-pointer ${vertical ? 'flex-1 min-h-[60px]' : ''}`}
         style={{
           width: vertical ? 6 : width,
-          height: vertical ? height : 6,
+          ...(vertical ? {} : { height: 6 }),
           backgroundColor: '#1a1a25'
         }}
         onPointerDown={handlePointerDown}
@@ -130,7 +128,7 @@ export function Fader({
         />
       </div>
       {label && (
-        <span className="text-[9px] text-gray-500 text-center w-full truncate">
+        <span className="text-[9px] text-gray-500 text-center w-full truncate shrink-0">
           {label}
         </span>
       )}
