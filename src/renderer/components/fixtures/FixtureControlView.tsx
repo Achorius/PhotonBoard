@@ -1,10 +1,30 @@
 import React from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
-import { Fader } from '../common/Fader'
+import { Fader, FADER_WIDTH, FADER_GAP } from '../common/Fader'
 import { ColorPicker } from '../common/ColorPicker'
 import { XYPad } from '../common/XYPad'
-import { getChannelTypeColor } from '../../lib/fixture-library'
+import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
+
+// Fixed section order for consistent layout across all fixture types
+const SECTION_ORDER: { key: string; label: string; channelMatchers: string[] }[] = [
+  { key: 'intensity', label: 'Intensity', channelMatchers: ['dimmer', 'intensity', 'dimmer fine', 'shutter', 'strobe', 'shutter/strobe'] },
+  { key: 'color', label: 'Color', channelMatchers: ['red', 'green', 'blue', 'white', 'amber', 'uv', 'cyan', 'magenta', 'yellow', 'color wheel', 'color temperature', 'color macro', 'ct fine', 'color wheel effect'] },
+  { key: 'position', label: 'Position', channelMatchers: ['pan', 'pan fine', 'tilt', 'tilt fine', 'speed', 'pan/tilt speed'] },
+  { key: 'beam', label: 'Beam', channelMatchers: ['gobo', 'gobo rotation', 'prism', 'prism rotation', 'focus', 'zoom', 'zoom fine', 'iris'] },
+  { key: 'other', label: 'Other', channelMatchers: [] }, // catch-all
+]
+
+function classifyChannel(name: string): string {
+  const n = name.toLowerCase()
+  for (const section of SECTION_ORDER) {
+    if (section.key === 'other') continue
+    if (section.channelMatchers.some(m => n === m || n.includes(m))) {
+      return section.key
+    }
+  }
+  return 'other'
+}
 
 export function FixtureControlView() {
   const { patch, fixtures, groups, selectedFixtureIds, selectFixture, selectAll, clearSelection, getFixtureChannels } = usePatchStore()
@@ -21,12 +41,16 @@ export function FixtureControlView() {
   const firstEntry = selectedEntries[0]
   const firstDef = firstEntry ? fixtures.find(f => f.id === firstEntry.fixtureDefId) : null
 
-  // Detect channel types available — check for individual RGB channels by name, not just type
   const firstChannels = firstEntry ? getFixtureChannels(firstEntry) : []
   const channelNames = new Set(firstChannels.map(c => c.name.toLowerCase()))
   const hasRGB = channelNames.has('red') && channelNames.has('green') && channelNames.has('blue')
-  const hasColor = hasRGB
   const hasPanTilt = channelNames.has('pan') || channelNames.has('tilt')
+
+  // Group channels by section
+  const sections = SECTION_ORDER.map(section => {
+    const channels = firstChannels.filter(ch => classifyChannel(ch.name) === section.key)
+    return { ...section, channels }
+  }).filter(s => s.channels.length > 0)
 
   return (
     <div className="flex h-full">
@@ -40,7 +64,6 @@ export function FixtureControlView() {
           </div>
         </div>
         <div className="flex-1 overflow-auto">
-          {/* Group quick-select */}
           {groups.length > 0 && (
             <div className="px-2 py-1 border-b border-surface-3 space-y-0.5">
               <div className="text-[9px] text-gray-600 uppercase">Groups</div>
@@ -88,61 +111,70 @@ export function FixtureControlView() {
             Select fixture(s) to control
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="text-sm text-gray-300">
+            <div className="text-sm text-gray-300 mb-3 shrink-0">
               {selectedEntries.length === 1
                 ? `${firstEntry!.name} — ${firstDef?.name || ''}`
                 : `${selectedEntries.length} fixtures selected`
               }
             </div>
 
-            <div className="flex gap-6 flex-wrap">
-              {/* Channel faders */}
-              <div className="space-y-2">
-                <h3 className="text-[10px] text-gray-500 uppercase">Channels</h3>
-                <div className="flex gap-1">
-                  {firstEntry && getFixtureChannels(firstEntry).map(ch => {
-                    const chDef = firstDef?.channels[ch.name]
-                    const color = getChannelTypeColor(chDef?.type || 'generic')
-                    // For multi-select, use first fixture's values as reference
-                    const val = values[firstEntry.universe][ch.absoluteChannel] || 0
+            {/* Fixed sections layout */}
+            <div className="flex gap-4 flex-1 min-h-0">
+              {/* Channel fader sections */}
+              {sections.map(section => {
+                const sectionWidth = section.channels.length * FADER_WIDTH + (section.channels.length - 1) * FADER_GAP + 16
+                return (
+                  <div key={section.key} className="flex flex-col shrink-0" style={{ width: sectionWidth }}>
+                    <h3 className="text-[10px] text-gray-500 uppercase mb-2 text-center shrink-0">{section.label}</h3>
+                    <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
+                      {section.channels.map(ch => {
+                        const chDef = firstDef?.channels[ch.name]
+                        const color = getChannelTypeColor(chDef?.type || 'generic')
+                        const val = values[firstEntry!.universe][ch.absoluteChannel] || 0
 
-                    return (
-                      <Fader
-                        key={ch.name}
-                        value={val}
-                        onChange={(v) => {
-                          // Apply to all selected fixtures
-                          for (const entry of selectedEntries) {
-                            const channels = getFixtureChannels(entry)
-                            const targetCh = channels.find(c => c.name === ch.name)
-                            if (targetCh) {
-                              setChannel(entry.universe, targetCh.absoluteChannel, v)
-                            }
-                          }
-                        }}
-                        label={ch.name}
-                        color={color}
-                        onDoubleClick={() => {
-                          for (const entry of selectedEntries) {
-                            const channels = getFixtureChannels(entry)
-                            const targetCh = channels.find(c => c.name === ch.name)
-                            if (targetCh) {
-                              setChannel(entry.universe, targetCh.absoluteChannel, val > 0 ? 0 : 255)
-                            }
-                          }
-                        }}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
+                        return (
+                          <Fader
+                            key={ch.name}
+                            value={val}
+                            onChange={(v) => {
+                              for (const entry of selectedEntries) {
+                                const channels = getFixtureChannels(entry)
+                                const targetCh = channels.find(c => c.name === ch.name)
+                                if (targetCh) {
+                                  setChannel(entry.universe, targetCh.absoluteChannel, v)
+                                }
+                              }
+                            }}
+                            label={getChannelShortLabel(ch.name)}
+                            color={color}
+                            onDoubleClick={() => {
+                              for (const entry of selectedEntries) {
+                                const channels = getFixtureChannels(entry)
+                                const targetCh = channels.find(c => c.name === ch.name)
+                                if (targetCh) {
+                                  setChannel(entry.universe, targetCh.absoluteChannel, val > 0 ? 0 : 255)
+                                }
+                              }
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Separator */}
+              {(hasRGB || hasPanTilt) && (
+                <div className="w-px bg-surface-3 shrink-0 my-4" />
+              )}
 
               {/* Color picker */}
-              {hasColor && firstEntry && (
-                <div className="space-y-2">
-                  <h3 className="text-[10px] text-gray-500 uppercase">Color</h3>
+              {hasRGB && firstEntry && (
+                <div className="flex flex-col shrink-0">
+                  <h3 className="text-[10px] text-gray-500 uppercase mb-2 text-center shrink-0">Color Picker</h3>
                   <ColorPicker
                     red={getChannelValue(firstEntry, 'Red', values, getFixtureChannels)}
                     green={getChannelValue(firstEntry, 'Green', values, getFixtureChannels)}
@@ -162,8 +194,8 @@ export function FixtureControlView() {
 
               {/* Pan/Tilt */}
               {hasPanTilt && firstEntry && (
-                <div className="space-y-2">
-                  <h3 className="text-[10px] text-gray-500 uppercase">Position</h3>
+                <div className="flex flex-col shrink-0">
+                  <h3 className="text-[10px] text-gray-500 uppercase mb-2 text-center shrink-0">Position</h3>
                   <XYPad
                     x={getChannelValue(firstEntry, 'Pan', values, getFixtureChannels)}
                     y={getChannelValue(firstEntry, 'Tilt', values, getFixtureChannels)}

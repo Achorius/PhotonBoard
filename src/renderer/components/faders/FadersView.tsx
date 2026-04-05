@@ -269,7 +269,7 @@ function FixtureFaders({
                     }}
                     label={getChannelShortLabel(uch.name)}
                     color={color}
-                    showValue={false}
+                    showValue={true}
                   />
                 </div>
               )
@@ -347,7 +347,7 @@ function FixtureFaders({
                       }}
                       label={getChannelShortLabel(ch.name)}
                       color={color}
-                        showValue={false}
+                        showValue={true}
                     />
                   </div>
                 )
