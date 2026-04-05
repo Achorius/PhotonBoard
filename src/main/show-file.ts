@@ -37,6 +37,39 @@ export class ShowFileManager {
     return this.documentsShowsPath
   }
 
+  /** Try to load the most recent show file at startup */
+  loadLastShow(): { success: boolean; show?: ShowFile; path?: string } {
+    // Try recent files first
+    const recentFiles = this.getRecent()
+    for (const filePath of recentFiles) {
+      const result = this.load(filePath)
+      if (result.success && result.show && result.show.patch && result.show.patch.length > 0) {
+        console.log('[Main] Auto-loaded last show:', filePath, 'patch:', result.show.patch.length)
+        return { success: true, show: result.show, path: filePath }
+      }
+    }
+
+    // Fallback: scan Documents/PhotonBoard and userData/shows for any .pbshow files
+    const dirs = [this.documentsShowsPath, join(this.userDataPath, 'shows')]
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue
+      try {
+        const files = readdirSync(dir).filter(f => f.endsWith('.pbshow'))
+        for (const file of files) {
+          const filePath = join(dir, file)
+          const result = this.load(filePath)
+          if (result.success && result.show && result.show.patch && result.show.patch.length > 0) {
+            console.log('[Main] Auto-loaded show from scan:', filePath, 'patch:', result.show.patch.length)
+            return { success: true, show: result.show, path: filePath }
+          }
+        }
+      } catch { /* skip */ }
+    }
+
+    console.log('[Main] No existing show found to auto-load')
+    return { success: false }
+  }
+
   private loadRecentFiles(): void {
     const recentPath = join(this.userDataPath, 'config', 'recent.json')
     if (existsSync(recentPath)) {

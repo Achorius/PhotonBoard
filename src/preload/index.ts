@@ -35,6 +35,8 @@ const api = {
       ipcRenderer.invoke(IPC.SHOW_SAVE_AS, show),
     getRecent: (): Promise<string[]> =>
       ipcRenderer.invoke(IPC.SHOW_GET_RECENT),
+    loadLast: (): Promise<{ success: boolean; show?: any; path?: string }> =>
+      ipcRenderer.invoke(IPC.SHOW_LOAD_LAST),
     getPath: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC.SHOW_GET_PATH),
     reveal: (): Promise<boolean> =>

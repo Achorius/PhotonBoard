@@ -44,10 +44,16 @@ export default function App() {
 
   // ---- Save / Load helpers ----
   const collectShowData = useCallback((): ShowFile => {
-    const { patch, groups } = usePatchStore.getState()
+    const patchState = usePatchStore.getState()
+    const patch = patchState.patch
+    const groups = patchState.groups
     const { cuelists, chases } = usePlaybackStore.getState()
     const { showName } = useUiStore.getState()
     const { roomConfig } = useVisualizerStore.getState()
+    console.log('[PhotonBoard] collectShowData — patch:', patch.length, 'groups:', groups.length, 'showName:', showName)
+    if (patch.length > 0) {
+      console.log('[PhotonBoard] First fixture:', patch[0].name, patch[0].fixtureDefId)
+    }
     return {
       version: '1.0.0',
       name: showName,
@@ -174,14 +180,29 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    loadFixtures()
-    initMidi()
-    initMidiRouting()
-    window.photonboard.artnet.configure([
-      { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
-      { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
-      { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
-    ])
+    const init = async () => {
+      await loadFixtures()
+      initMidi()
+      initMidiRouting()
+      window.photonboard.artnet.configure([
+        { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
+        { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
+        { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
+      ])
+
+      // Auto-load the last saved show
+      try {
+        const result = await window.photonboard.show.loadLast()
+        console.log('[PhotonBoard] Auto-load result:', result)
+        if (result && result.success && result.show) {
+          applyShowData(result.show as ShowFile)
+          console.log('[PhotonBoard] Auto-loaded show:', result.show.name, 'patch:', result.show.patch?.length)
+        }
+      } catch (e) {
+        console.error('[PhotonBoard] Auto-load failed:', e)
+      }
+    }
+    init()
   }, [])
 
   // Listen for Electron menu events

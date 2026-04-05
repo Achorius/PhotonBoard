@@ -339,6 +339,7 @@ export const IPC = {
   // Show helpers
   SHOW_GET_PATH: 'show:get-path',
   SHOW_REVEAL: 'show:reveal',
+  SHOW_LOAD_LAST: 'show:load-last',
 
   // App
   APP_GET_VERSION: 'app:get-version',

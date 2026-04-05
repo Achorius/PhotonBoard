@@ -262,6 +262,10 @@ function registerIpcHandlers(): void {
     return showManager.getCurrentPath()
   })
 
+  ipcMain.handle(IPC.SHOW_LOAD_LAST, () => {
+    return showManager.loadLastShow()
+  })
+
   ipcMain.handle(IPC.SHOW_REVEAL, () => {
     const path = showManager.getCurrentPath()
     if (path) {
