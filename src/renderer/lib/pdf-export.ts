@@ -139,20 +139,17 @@ export function exportStagePDF(
 
   // --- Patch Table (below legend) ---
   const tableTop = planBottom + 8
-  const colWidths = { num: 8, name: 40, type: 42, mode: 25, addr: 18, chCount: 10, group: 27 }
   const totalW = pageW - MARGIN * 2
-  // Adjust name column to fill remaining width
-  const usedW = colWidths.num + colWidths.type + colWidths.mode + colWidths.addr + colWidths.chCount + colWidths.group
-  colWidths.name = totalW - usedW
+  // Fixed-width columns, name gets the remaining space
+  const fixedW = { num: 7, mfr: 28, type: 30, mode: 18, addr: 17, chCount: 8, group: 22 }
+  const nameW = totalW - fixedW.num - fixedW.mfr - fixedW.type - fixedW.mode - fixedW.addr - fixedW.chCount - fixedW.group
 
+  let cx = MARGIN
   const colX = {
-    num: MARGIN,
-    name: MARGIN + colWidths.num,
-    type: MARGIN + colWidths.num + colWidths.name,
-    mode: MARGIN + colWidths.num + colWidths.name + colWidths.type,
-    addr: MARGIN + colWidths.num + colWidths.name + colWidths.type + colWidths.mode,
-    chCount: MARGIN + colWidths.num + colWidths.name + colWidths.type + colWidths.mode + colWidths.addr,
-    group: MARGIN + colWidths.num + colWidths.name + colWidths.type + colWidths.mode + colWidths.addr + colWidths.chCount,
+    num: cx,      name: (cx += fixedW.num),
+    mfr: (cx += nameW), type: (cx += fixedW.mfr),
+    mode: (cx += fixedW.type), addr: (cx += fixedW.mode),
+    chCount: (cx += fixedW.addr), group: (cx += fixedW.chCount),
   }
 
   const rowH = 3.5
@@ -165,17 +162,21 @@ export function exportStagePDF(
   ty += 4
 
   // Header row
-  doc.setFillColor(230, 230, 240)
-  doc.rect(MARGIN, ty - 2.5, totalW, 4, 'F')
-  doc.setFontSize(5.5)
-  doc.setTextColor(40)
-  doc.text('#', colX.num + 1, ty)
-  doc.text('Name', colX.name + 1, ty)
-  doc.text('Type', colX.type + 1, ty)
-  doc.text('Mode', colX.mode + 1, ty)
-  doc.text('Addr', colX.addr + 1, ty)
-  doc.text('Ch', colX.chCount + 1, ty)
-  doc.text('Group', colX.group + 1, ty)
+  const drawTableHeader = (y: number) => {
+    doc.setFillColor(230, 230, 240)
+    doc.rect(MARGIN, y - 2.5, totalW, 4, 'F')
+    doc.setFontSize(5.5)
+    doc.setTextColor(40)
+    doc.text('#', colX.num + 1, y)
+    doc.text('Name', colX.name + 1, y)
+    doc.text('Manufacturer', colX.mfr + 1, y)
+    doc.text('Type', colX.type + 1, y)
+    doc.text('Mode', colX.mode + 1, y)
+    doc.text('Addr', colX.addr + 1, y)
+    doc.text('Ch', colX.chCount + 1, y)
+    doc.text('Group', colX.group + 1, y)
+  }
+  drawTableHeader(ty)
   ty += rowH + 1
 
   // Header line
@@ -191,18 +192,7 @@ export function exportStagePDF(
     if (ty > pageH - 12) {
       doc.addPage()
       ty = MARGIN + 5
-      // Re-draw header on new page
-      doc.setFillColor(230, 230, 240)
-      doc.rect(MARGIN, ty - 2.5, totalW, 4, 'F')
-      doc.setFontSize(5.5)
-      doc.setTextColor(40)
-      doc.text('#', colX.num + 1, ty)
-      doc.text('Name', colX.name + 1, ty)
-      doc.text('Type', colX.type + 1, ty)
-      doc.text('Mode', colX.mode + 1, ty)
-      doc.text('Addr', colX.addr + 1, ty)
-      doc.text('Ch', colX.chCount + 1, ty)
-      doc.text('Group', colX.group + 1, ty)
+      drawTableHeader(ty)
       ty += rowH + 1
       doc.setDrawColor(180)
       doc.setLineWidth(0.2)
@@ -227,13 +217,16 @@ export function exportStagePDF(
     doc.text(`${i + 1}`, colX.num + 1, ty)
 
     doc.setTextColor(20)
-    doc.text(entry.name.substring(0, 28), colX.name + 1, ty)
-
-    doc.setTextColor(80)
-    doc.text((def?.name || '?').substring(0, 28), colX.type + 1, ty)
+    doc.text(entry.name.substring(0, 22), colX.name + 1, ty)
 
     doc.setTextColor(100)
-    doc.text((entry.modeName || '').substring(0, 14), colX.mode + 1, ty)
+    doc.text((def?.manufacturer || '').substring(0, 18), colX.mfr + 1, ty)
+
+    doc.setTextColor(80)
+    doc.text((def?.name || '?').substring(0, 20), colX.type + 1, ty)
+
+    doc.setTextColor(100)
+    doc.text((entry.modeName || '').substring(0, 10), colX.mode + 1, ty)
 
     doc.setTextColor(0)
     doc.setFontSize(5.5)
