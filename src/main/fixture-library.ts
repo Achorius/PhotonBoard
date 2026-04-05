@@ -1273,4 +1273,102 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     ],
     physical: { lens: { degreesMinMax: [15, 55] } }
   },
+
+  // ================================================================
+  // BRITEQ
+  // ================================================================
+  {
+    id: 'briteq/bt-theatre-200',
+    name: 'BT-Theatre 200TW',
+    manufacturer: 'Briteq',
+    categories: ['Fresnel', 'Profile'],
+    channels: chs(dimmerCh(), genericCh('Dimmer Fine'), genericCh('Color Temperature'), genericCh('CT Fine'), strobeCh(), zoomCh(), genericCh('Zoom Fine'), genericCh('Fan')),
+    modes: [
+      { name: '1ch', channels: ['Dimmer'], channelCount: 1 },
+      { name: '2ch', channels: ['Dimmer', 'Color Temperature'], channelCount: 2 },
+      { name: '4ch', channels: ['Dimmer', 'Color Temperature', 'Strobe', 'Zoom'], channelCount: 4 },
+      { name: '8ch', channels: ['Dimmer', 'Dimmer Fine', 'Color Temperature', 'CT Fine', 'Strobe', 'Zoom', 'Zoom Fine', 'Fan'], channelCount: 8 }
+    ],
+    physical: { lens: { degreesMinMax: [12, 56] }, power: 200 }
+  },
+
+  // ================================================================
+  // CHAUVET DJ — Intimidator 375 series
+  // ================================================================
+  {
+    id: 'chauvet-dj/intimidator-spot-375z-irc',
+    name: 'Intimidator Spot 375Z IRC',
+    manufacturer: 'Chauvet DJ',
+    categories: ['Moving Head'],
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), shutterCh(), colorWheelCh(), goboCh(), goboRotCh(), prismCh(), genericCh('Prism Rotation'), focusCh(), zoomCh(), resetCh()),
+    modes: [
+      { name: '9ch', channels: ['Pan', 'Tilt', 'Speed', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Focus', 'Shutter'], channelCount: 9 },
+      { name: '15ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Shutter', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Prism Rotation', 'Focus', 'Zoom', 'Reset'], channelCount: 15 }
+    ],
+    physical: { lens: { degreesMinMax: [12, 22] }, power: 150 }
+  },
+  {
+    id: 'chauvet-dj/intimidator-spot-375zx',
+    name: 'Intimidator Spot 375ZX',
+    manufacturer: 'Chauvet DJ',
+    categories: ['Moving Head'],
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), genericCh('Dimmer Fine'), shutterCh(), colorWheelCh(), goboCh(), goboRotCh(), prismCh(), genericCh('Prism Rotation'), focusCh(), zoomCh(), resetCh()),
+    modes: [
+      { name: '9ch', channels: ['Pan', 'Tilt', 'Speed', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Focus', 'Shutter'], channelCount: 9 },
+      { name: '16ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Dimmer Fine', 'Shutter', 'Color Wheel', 'Gobo', 'Gobo Rotation', 'Prism', 'Prism Rotation', 'Focus', 'Zoom', 'Reset'], channelCount: 16 }
+    ],
+    physical: { lens: { degreesMinMax: [12, 22] }, power: 200 }
+  },
+
+  // ================================================================
+  // SHOWTEC — Shark series
+  // ================================================================
+  {
+    id: 'showtec/shark-wash-one',
+    name: 'Shark Wash One',
+    manufacturer: 'Showtec',
+    categories: ['Moving Head'],
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), dimmerCh(), shutterCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff'), colorCh('Amber', '#ffaa00'), colorCh('UV', '#7700ff'), genericCh('Color Macro'), genericCh('Auto'), genericCh('Sound')),
+    modes: [
+      { name: '7ch', channels: ['Pan', 'Tilt', 'Dimmer', 'Red', 'Green', 'Blue', 'Speed'], channelCount: 7 },
+      { name: '16ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Dimmer', 'Shutter', 'Red', 'Green', 'Blue', 'White', 'Amber', 'UV', 'Color Macro', 'Auto', 'Sound'], channelCount: 16 }
+    ],
+    physical: { lens: { degreesMinMax: [25, 25] }, power: 120 }
+  },
+
+  // ================================================================
+  // MARTIN — RUSH MH / PAR series
+  // ================================================================
+  {
+    id: 'martin/rush-mh-6-wash',
+    name: 'RUSH MH 6 Wash',
+    manufacturer: 'Martin',
+    categories: ['Moving Head'],
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff'), colorWheelCh(), shutterCh(), dimmerCh(), zoomCh(), speedCh(), genericCh('Control')),
+    modes: [{ name: '14ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Red', 'Green', 'Blue', 'White', 'Color Wheel', 'Shutter', 'Dimmer', 'Zoom', 'Speed', 'Control'], channelCount: 14 }],
+    physical: { lens: { degreesMinMax: [10, 60] }, power: 150 }
+  },
+  {
+    id: 'martin/rush-mh-10-beam-fx',
+    name: 'RUSH MH 10 Beam FX',
+    manufacturer: 'Martin',
+    categories: ['Moving Head'],
+    channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), speedCh(), shutterCh(), dimmerCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff'), genericCh('Beam Effect'), genericCh('Ring Red'), genericCh('Ring Green'), genericCh('Ring Blue'), genericCh('Ring Dimmer'), genericCh('Ring Strobe'), genericCh('Ring Effect'), genericCh('Ring Speed'), genericCh('Ring Offset'), genericCh('Ring Step'), genericCh('Ring Rotation'), genericCh('Control'), resetCh()),
+    modes: [
+      { name: '24ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Speed', 'Shutter', 'Dimmer', 'Red', 'Green', 'Blue', 'White', 'Beam Effect', 'Ring Red', 'Ring Green', 'Ring Blue', 'Ring Dimmer', 'Ring Strobe', 'Ring Effect', 'Ring Speed', 'Ring Offset', 'Ring Step', 'Ring Rotation', 'Control', 'Reset'], channelCount: 24 }
+    ],
+    physical: { lens: { degreesMinMax: [4, 4] }, power: 100 }
+  },
+  {
+    id: 'martin/rush-par-2-rgbw',
+    name: 'RUSH PAR 2 RGBW Zoom',
+    manufacturer: 'Martin',
+    categories: ['Color Changer', 'PAR'],
+    channels: chs(colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff'), dimmerCh(), colorWheelCh(), shutterCh(), zoomCh(), genericCh('Control')),
+    modes: [
+      { name: '5ch', channels: ['Red', 'Green', 'Blue', 'White', 'Dimmer'], channelCount: 5 },
+      { name: '9ch', channels: ['Red', 'Green', 'Blue', 'White', 'Dimmer', 'Color Wheel', 'Shutter', 'Zoom', 'Control'], channelCount: 9 }
+    ],
+    physical: { lens: { degreesMinMax: [10, 60] }, power: 150 }
+  },
 ]
