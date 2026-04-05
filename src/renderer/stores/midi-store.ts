@@ -24,7 +24,7 @@ interface MidiState {
   initMidi: () => Promise<void>
   startLearn: (target: MidiLearnTarget) => void
   cancelLearn: () => void
-  completeLearn: (source: { type: MidiSourceType; channel: number; number: number; deviceName?: string }) => void
+  completeLearn: (source: { type: MidiSourceType; channel: number; number: number; value?: number; deviceName?: string }) => void
   addMapping: (mapping: Omit<MidiMapping, 'id'>) => void
   removeMapping: (id: string) => void
   updateMapping: (id: string, updates: Partial<MidiMapping>) => void
@@ -89,7 +89,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
             get().setLastMessage(msg)
 
             if (get().isLearning) {
-              get().completeLearn({ type: 'cc', channel, number: data1, deviceName: input.name || undefined })
+              get().completeLearn({ type: 'cc', channel, number: data1, value: data2 || 0, deviceName: input.name || undefined })
             }
 
             // Route to mappings
@@ -164,7 +164,15 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       console.log('[MIDI] completeLearn called but no learnTarget')
       return
     }
-    console.log('[MIDI] completeLearn:', source.type, 'ch', source.channel, '#', source.number, '→', learnTarget.label)
+
+    // Auto-detect relative encoders: they send small values like 1-3 (CW) or 125-127 (CCW)
+    // Absolute faders/knobs send the full range 0-127
+    const isRelative = source.type === 'cc' && source.value !== undefined &&
+      (source.value <= 3 || source.value >= 125)
+    const encoding = isRelative ? 'relative' : 'absolute'
+
+    console.log('[MIDI] completeLearn:', source.type, 'ch', source.channel, '#', source.number,
+      'val:', source.value, 'encoding:', encoding, '→', learnTarget.label)
 
     const mapping: MidiMapping = {
       id: uuidv4(),
@@ -183,7 +191,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       options: {
         min: 0,
         max: 255,
-        inverted: false
+        inverted: false,
+        encoding
       }
     }
 

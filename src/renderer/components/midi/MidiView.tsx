@@ -129,7 +129,7 @@ export function MidiView() {
                       {m.target.type}{m.target.parameter ? ` → ${m.target.parameter}` : ''}
                     </td>
                     <td className="px-3 py-1.5 text-gray-500">
-                      {m.options.min}-{m.options.max}{m.options.inverted ? ' (inv)' : ''}
+                      {m.options.min}-{m.options.max}{m.options.inverted ? ' (inv)' : ''}{m.options.encoding === 'relative' ? ' ↻' : ''}
                     </td>
                     <td className="px-3 py-1.5">
                       <button className="text-red-400 hover:text-red-300" onClick={() => removeMapping(m.id)}>x</button>

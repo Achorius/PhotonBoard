@@ -7,6 +7,9 @@ import { midiToDmx } from './dmx-utils'
 let tapTempoTimes: number[] = []
 let tapTempoCallback: ((bpm: number) => void) | null = null
 
+// Track current accumulated values for relative encoders (keyed by mapping id)
+const relativeValues: Record<string, number> = {}
+
 export function initMidiRouting(): void {
   setMidiRouter((type, channel, number, value) => {
     const mappings = useMidiStore.getState().mappings
@@ -21,17 +24,48 @@ export function initMidiRouting(): void {
   })
 }
 
+function resolveValue(mapping: any, rawValue: number): number {
+  const { options } = mapping
+  const encoding = options?.encoding || 'absolute'
+
+  if (encoding === 'relative') {
+    // Relative encoder: two's complement
+    // 1-63 = clockwise (increment), 65-127 = counter-clockwise (decrement)
+    let delta: number
+    if (rawValue <= 63) {
+      delta = rawValue // positive increment
+    } else {
+      delta = rawValue - 128 // negative (127 → -1, 126 → -2, etc.)
+    }
+
+    // Scale delta: multiply by 2 for faster response
+    delta *= 2
+
+    // Get or init current accumulated value
+    const current = relativeValues[mapping.id] ?? 0
+    let newVal = current + delta
+
+    // Clamp to min/max
+    newVal = Math.max(options.min, Math.min(options.max, newVal))
+    if (options.inverted) newVal = options.max - (newVal - options.min)
+    relativeValues[mapping.id] = options.inverted ? (options.max - (newVal - options.min)) : newVal
+
+    // Store the uninverted value for next iteration
+    relativeValues[mapping.id] = current + delta
+    relativeValues[mapping.id] = Math.max(options.min, Math.min(options.max, relativeValues[mapping.id]))
+
+    return Math.round(options.inverted ? (options.max - (relativeValues[mapping.id] - options.min)) : relativeValues[mapping.id])
+  }
+
+  // Absolute: scale raw 0-127 to min-max range
+  const range = options.max - options.min
+  let value = options.min + (rawValue / 127) * range
+  if (options.inverted) value = options.max - (value - options.min)
+  return Math.round(value)
+}
+
 function routeMidiToTarget(mapping: any, rawValue: number): void {
   const { target, options } = mapping
-
-  // Apply min/max/invert
-  let value = rawValue
-  if (mapping.source.type === 'cc') {
-    const range = options.max - options.min
-    value = options.min + (rawValue / 127) * range
-    if (options.inverted) value = options.max - (value - options.min)
-    value = Math.round(value)
-  }
 
   switch (target.type) {
     case 'channel': {
@@ -42,7 +76,8 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
       const channels = patchStore.getFixtureChannels(entry)
       const ch = channels.find(c => c.name === target.parameter)
       if (ch) {
-        useDmxStore.getState().setChannel(entry.universe, ch.absoluteChannel, midiToDmx(rawValue))
+        const dmxValue = resolveValue(mapping, rawValue)
+        useDmxStore.getState().setChannel(entry.universe, ch.absoluteChannel, dmxValue)
       }
       break
     }
@@ -55,7 +90,8 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
     }
 
     case 'cuelist_fader': {
-      usePlaybackStore.getState().setCuelistFader(target.id!, midiToDmx(rawValue))
+      const faderVal = resolveValue(mapping, rawValue)
+      usePlaybackStore.getState().setCuelistFader(target.id!, faderVal)
       break
     }
 
@@ -67,13 +103,23 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
     }
 
     case 'chase_bpm': {
-      const bpm = 30 + (rawValue / 127) * 270 // 30-300 BPM range
-      usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(bpm))
+      const encoding = options?.encoding || 'absolute'
+      if (encoding === 'relative') {
+        // Relative: adjust BPM by delta
+        const current = relativeValues[mapping.id] ?? 120
+        let delta = rawValue <= 63 ? rawValue : rawValue - 128
+        relativeValues[mapping.id] = Math.max(30, Math.min(300, current + delta))
+        usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(relativeValues[mapping.id]))
+      } else {
+        const bpm = 30 + (rawValue / 127) * 270 // 30-300 BPM range
+        usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(bpm))
+      }
       break
     }
 
     case 'master': {
-      useDmxStore.getState().setGrandMaster(midiToDmx(rawValue))
+      const masterVal = resolveValue(mapping, rawValue)
+      useDmxStore.getState().setGrandMaster(masterVal)
       break
     }
 

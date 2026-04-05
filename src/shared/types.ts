@@ -264,6 +264,7 @@ export interface MidiMapping {
     min: number
     max: number
     inverted: boolean
+    encoding: 'absolute' | 'relative' // absolute = 0-127 fader, relative = encoder (1=CW, 127=CCW)
   }
 }
 
