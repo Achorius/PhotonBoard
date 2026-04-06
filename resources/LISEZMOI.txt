@@ -1,0 +1,59 @@
+╔══════════════════════════════════════════════════════════════╗
+║                    PhotonBoard - DMX Control                 ║
+║                   Installation sur macOS                     ║
+╚══════════════════════════════════════════════════════════════╝
+
+PhotonBoard n'est pas signé avec un certificat Apple Developer.
+macOS affichera un avertissement au premier lancement.
+Voici comment débloquer l'application :
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  MÉTHODE 1 — Clic droit (la plus simple)
+
+  1. Glissez PhotonBoard.app dans votre dossier Applications
+  2. Faites un clic droit (ou Ctrl + clic) sur PhotonBoard.app
+  3. Cliquez sur "Ouvrir" dans le menu contextuel
+  4. Une boîte de dialogue apparaît → cliquez "Ouvrir"
+  5. L'app se lance ! Les prochains lancements seront normaux.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  MÉTHODE 2 — Via les Réglages Système
+
+  1. Glissez PhotonBoard.app dans votre dossier Applications
+  2. Double-cliquez pour lancer (macOS bloque)
+  3. Ouvrez Réglages Système > Confidentialité et sécurité
+  4. Descendez jusqu'à la section "Sécurité"
+  5. Vous verrez : « PhotonBoard a été bloqué »
+     → Cliquez "Ouvrir quand même"
+  6. Entrez votre mot de passe si demandé
+  7. L'app se lance !
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  MÉTHODE 3 — Via le Terminal (avancé)
+
+  Ouvrez Terminal et tapez :
+
+    xattr -cr /Applications/PhotonBoard.app
+
+  Puis lancez l'app normalement.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  EN CAS DE PROBLÈME
+
+  Si l'app ne se lance toujours pas :
+  - Vérifiez que vous êtes sur macOS 11 (Big Sur) ou plus récent
+  - Essayez la méthode Terminal (méthode 3)
+  - Contactez : https://github.com/Achorius/PhotonBoard/issues
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  PhotonBoard est un logiciel open source.
+  Code source : https://github.com/Achorius/PhotonBoard
+
+╔══════════════════════════════════════════════════════════════╗
+║              Merci d'utiliser PhotonBoard ! 🎛️               ║
+╚══════════════════════════════════════════════════════════════╝
