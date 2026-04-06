@@ -25,13 +25,13 @@ type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
 
 const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'visualizer', label: '3D',       shortcut: '1' },
-  { id: 'fixtures',   label: 'Fixtures', shortcut: '2' },
-  { id: 'faders',     label: 'Faders',   shortcut: '3' },
-  { id: 'playback',   label: 'Playback', shortcut: '4' },
-  { id: 'effects',    label: 'Effects',  shortcut: '5' },
-  { id: 'patch',      label: 'Patch',    shortcut: '6' },
-  { id: 'midi',       label: 'MIDI',     shortcut: '7' },
-  { id: 'live',       label: 'Live',     shortcut: '8' },
+  { id: 'live',       label: 'Live',     shortcut: '2' },
+  { id: 'effects',    label: 'Effects',  shortcut: '3' },
+  { id: 'playback',   label: 'Scenes',   shortcut: '4' },
+  { id: 'faders',     label: 'Faders',   shortcut: '5' },
+  { id: 'fixtures',   label: 'Fixtures', shortcut: '6' },
+  { id: 'patch',      label: 'Patch',    shortcut: '7' },
+  { id: 'midi',       label: 'MIDI',     shortcut: '8' },
   { id: 'settings',   label: 'Settings', shortcut: '9' },
 ]
 

@@ -5,36 +5,16 @@ import { HSlider } from '../common/HSlider'
 const EXECUTOR_COUNT = 8
 
 export function ExecutorBar() {
-  const { cuelists, chases, goCuelist, goBackCuelist, stopCuelist, setCuelistFader, toggleChase, setChaseFader } = usePlaybackStore()
+  const { cuelists, goCuelist, goBackCuelist, stopCuelist, setCuelistFader } = usePlaybackStore()
 
-  // Merge cuelists and chases into a single executor list (cuelists first)
-  const executors = [
-    ...cuelists.map(cl => ({
-      type: 'cuelist' as const,
-      id: cl.id,
-      name: cl.name,
-      isPlaying: cl.isPlaying,
-      faderLevel: cl.faderLevel,
-      cueInfo: `${cl.currentCueIndex >= 0 ? cl.currentCueIndex + 1 : 0}/${cl.cues.length}`
-    })),
-    ...chases.map(ch => ({
-      type: 'chase' as const,
-      id: ch.id,
-      name: ch.name,
-      isPlaying: ch.isPlaying,
-      faderLevel: ch.faderLevel,
-      cueInfo: ch.isPlaying
-        ? `${ch.currentStepIndex + 1}/${ch.steps.length}`
-        : `${ch.bpm}bpm`
-    }))
-  ].slice(0, EXECUTOR_COUNT)
-
-  const slots = Array.from({ length: EXECUTOR_COUNT }, (_, i) => executors[i] ?? null)
+  // Map scenes to executor slots
+  const scenes = cuelists.slice(0, EXECUTOR_COUNT)
+  const slots = Array.from({ length: EXECUTOR_COUNT }, (_, i) => scenes[i] ?? null)
 
   return (
     <div className="h-24 bg-surface-1 border-t-2 border-surface-3 flex items-stretch gap-px px-px py-px shrink-0">
-      {slots.map((ex, i) => {
-        if (!ex) {
+      {slots.map((scene, i) => {
+        if (!scene) {
           return (
             <div
               key={i}
@@ -45,37 +25,38 @@ export function ExecutorBar() {
           )
         }
 
-        const isActive = ex.isPlaying
+        const isActive = scene.isPlaying
+        const stepInfo = scene.currentCueIndex >= 0
+          ? `${scene.currentCueIndex + 1}/${scene.cues.length}`
+          : `${scene.cues.length} step${scene.cues.length !== 1 ? 's' : ''}`
+
         return (
           <div
-            key={ex.id}
+            key={scene.id}
             className={`flex-1 flex flex-col min-w-0 rounded border transition-colors ${
-              isActive ? 'bg-surface-2 border-accent/50' : 'bg-surface-2 border-surface-3'
+              isActive ? 'bg-surface-2 border-green-500/50' : 'bg-surface-2 border-surface-3'
             }`}
           >
-            {/* Name + cue info */}
+            {/* Name + step info */}
             <div className="flex items-center justify-between px-1.5 pt-1">
-              <span className="text-[9px] font-medium text-gray-300 truncate leading-tight" title={ex.name}>
-                {ex.name}
+              <span className="text-[9px] font-medium text-gray-300 truncate leading-tight" title={scene.name}>
+                {scene.name}
               </span>
-              <span className={`text-[8px] font-mono shrink-0 ml-1 ${isActive ? 'text-accent' : 'text-gray-600'}`}>
-                {ex.cueInfo}
+              <span className={`text-[8px] font-mono shrink-0 ml-1 ${isActive ? 'text-green-400' : 'text-gray-600'}`}>
+                {stepInfo}
               </span>
             </div>
 
             {/* Fader */}
             <div className="flex items-center px-1.5 py-0.5">
               <HSlider
-                value={ex.faderLevel}
-                onChange={(v) => {
-                  if (ex.type === 'cuelist') setCuelistFader(ex.id, v)
-                  else setChaseFader(ex.id, v)
-                }}
-                color={isActive ? '#e85d04' : '#444'}
+                value={scene.faderLevel}
+                onChange={(v) => setCuelistFader(scene.id, v)}
+                color={isActive ? '#22c55e' : '#444'}
                 className="flex-1"
               />
               <span className="text-[8px] font-mono text-gray-600 w-5 text-right shrink-0">
-                {Math.round((ex.faderLevel / 255) * 100)}
+                {Math.round((scene.faderLevel / 255) * 100)}
               </span>
             </div>
 
@@ -83,8 +64,8 @@ export function ExecutorBar() {
             <div className="flex gap-px px-1 pb-1">
               <button
                 className="text-[9px] text-gray-500 hover:text-gray-300 px-1 py-0.5 rounded hover:bg-surface-3"
-                onClick={() => ex.type === 'cuelist' && goBackCuelist(ex.id)}
-                title="Back"
+                onClick={() => goBackCuelist(scene.id)}
+                title="Previous step"
               >
                 ◀
               </button>
@@ -94,19 +75,13 @@ export function ExecutorBar() {
                     ? 'bg-green-700 text-white hover:bg-green-600'
                     : 'bg-accent text-white hover:bg-orange-500'
                 }`}
-                onClick={() => {
-                  if (ex.type === 'cuelist') goCuelist(ex.id)
-                  else toggleChase(ex.id)
-                }}
+                onClick={() => goCuelist(scene.id)}
               >
-                {ex.type === 'chase' && isActive ? '■' : 'GO'}
+                GO
               </button>
               <button
                 className="text-[9px] text-gray-500 hover:text-red-400 px-1 py-0.5 rounded hover:bg-surface-3"
-                onClick={() => {
-                  if (ex.type === 'cuelist') stopCuelist(ex.id)
-                  else toggleChase(ex.id)
-                }}
+                onClick={() => stopCuelist(scene.id)}
                 title="Stop"
               >
                 ■
