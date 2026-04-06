@@ -16,6 +16,7 @@ export function PlaybackView() {
   const { patch, selectedFixtureIds, getFixtureChannels } = usePatchStore()
   const { values } = useDmxStore()
   const effects = useEffectsStore(s => s.effects)
+  const hasRunningEffects = effects.some(e => e.isRunning)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // -------------------------------------------------------------------
@@ -86,6 +87,7 @@ export function PlaybackView() {
   // -------------------------------------------------------------------
   const updateSceneEffects = useCallback((sceneId: string) => {
     const effectSnapshots = captureEffects()
+    if (effectSnapshots.length === 0) return // Don't erase if nothing is running
     usePlaybackStore.setState(s => ({
       cuelists: s.cuelists.map(cl =>
         cl.id === sceneId ? { ...cl, effectSnapshots } : cl
@@ -331,9 +333,14 @@ export function PlaybackView() {
                       <div className="flex items-center justify-between">
                         <h4 className="text-[10px] uppercase text-pink-400 font-semibold">Effects in this scene</h4>
                         <button
-                          className="text-[9px] text-accent hover:text-orange-300 px-1.5 py-0.5 rounded hover:bg-surface-3"
-                          onClick={() => updateSceneEffects(scene.id)}
-                          title="Replace all scene effects with currently running effects"
+                          className={`text-[9px] px-1.5 py-0.5 rounded ${
+                            hasRunningEffects
+                              ? 'text-accent hover:text-orange-300 hover:bg-surface-3'
+                              : 'text-gray-600 cursor-not-allowed'
+                          }`}
+                          onClick={() => hasRunningEffects && updateSceneEffects(scene.id)}
+                          disabled={!hasRunningEffects}
+                          title={hasRunningEffects ? 'Replace scene effects with currently running effects' : 'No effects running — start effects in Effects tab first'}
                         >
                           Update FX from current
                         </button>
@@ -434,9 +441,14 @@ export function PlaybackView() {
                       Manual all
                     </button>
                     <button
-                      className="text-[10px] text-gray-500 hover:text-accent px-1.5 py-0.5 rounded hover:bg-surface-3"
-                      onClick={() => updateSceneEffects(scene.id)}
-                      title="Replace effects with currently running ones"
+                      className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        hasRunningEffects
+                          ? 'text-gray-500 hover:text-accent hover:bg-surface-3'
+                          : 'text-gray-700 cursor-not-allowed'
+                      }`}
+                      onClick={() => hasRunningEffects && updateSceneEffects(scene.id)}
+                      disabled={!hasRunningEffects}
+                      title={hasRunningEffects ? 'Replace effects with currently running ones' : 'No effects running'}
                     >
                       Update FX
                     </button>
