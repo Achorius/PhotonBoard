@@ -1,6 +1,13 @@
+// ============================================================
+// PhotonBoard — Effect Engine
+// LFO waveform generator that outputs to the DMX Mixer.
+// Effects are ADDITIVE: they modulate on top of base values
+// (from cuelists/chases/programmer) rather than replacing them.
+// ============================================================
+
 import type { Effect, WaveformType } from '@shared/types'
-import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
+import { setLayer, removeLayer } from './dmx-mixer'
 
 const activeEffects: Map<string, RunningEffect> = new Map()
 let animationFrame: number | null = null
@@ -10,30 +17,7 @@ interface RunningEffect {
   startTime: number
 }
 
-export function startEffect(effect: Effect): void {
-  activeEffects.set(effect.id, { effect, startTime: performance.now() })
-  if (!animationFrame) {
-    animationFrame = requestAnimationFrame(updateEffects)
-  }
-}
-
-export function stopEffect(id: string): void {
-  activeEffects.delete(id)
-  if (activeEffects.size === 0 && animationFrame) {
-    cancelAnimationFrame(animationFrame)
-    animationFrame = null
-  }
-}
-
-export function stopAllEffects(): void {
-  activeEffects.clear()
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame)
-    animationFrame = null
-  }
-}
-
-// Map effect channel type string to actual channel name aliases
+// Channel type name mapping
 const CHANNEL_TYPE_TO_NAME: Record<string, string> = {
   Dimmer: 'dimmer',
   Red: 'red',
@@ -48,9 +32,39 @@ const CHANNEL_TYPE_TO_NAME: Record<string, string> = {
   Shutter: 'shutter',
 }
 
+export function startEffect(effect: Effect): void {
+  activeEffects.set(effect.id, { effect, startTime: performance.now() })
+  if (!animationFrame) {
+    animationFrame = requestAnimationFrame(updateEffects)
+  }
+}
+
+export function stopEffect(id: string): void {
+  activeEffects.delete(id)
+  removeLayer(`effect:${id}`)
+  if (activeEffects.size === 0 && animationFrame) {
+    cancelAnimationFrame(animationFrame)
+    animationFrame = null
+  }
+}
+
+export function stopAllEffects(): void {
+  for (const id of activeEffects.keys()) {
+    removeLayer(`effect:${id}`)
+  }
+  activeEffects.clear()
+  if (animationFrame) {
+    cancelAnimationFrame(animationFrame)
+    animationFrame = null
+  }
+}
+
+export function getActiveEffects(): Map<string, RunningEffect> {
+  return new Map(activeEffects)
+}
+
 function updateEffects(): void {
   const now = performance.now()
-  const dmxStore = useDmxStore.getState()
   const patchStore = usePatchStore.getState()
 
   for (const [, running] of activeEffects) {
@@ -59,6 +73,7 @@ function updateEffects(): void {
 
     const elapsed = (now - startTime) / 1000
     const fixtureCount = effect.fixtureIds.length
+    const layerChannels = new Map<number, Map<number, number>>()
 
     for (let i = 0; i < fixtureCount; i++) {
       const fixtureId = effect.fixtureIds[i]
@@ -88,10 +103,19 @@ function updateEffects(): void {
       if (chIndex === -1) continue
 
       const absChannel = entry.address - 1 + chIndex
-      if (absChannel >= 0 && absChannel < 512) {
-        dmxStore.setChannel(entry.universe, absChannel, value)
+      if (absChannel < 0 || absChannel >= 512) continue
+
+      let uniMap = layerChannels.get(entry.universe)
+      if (!uniMap) {
+        uniMap = new Map()
+        layerChannels.set(entry.universe, uniMap)
       }
+      uniMap.set(absChannel, value)
     }
+
+    // Push to mixer — effects at priority 40 (below cuelists at 50)
+    // This means for LTP channels, cuelists win. For HTP (dimmer), max wins.
+    setLayer(`effect:${effect.id}`, layerChannels, 40)
   }
 
   if (activeEffects.size > 0) {
@@ -116,8 +140,4 @@ function getWaveformValue(waveform: WaveformType, phase: number): number {
     default:
       return 0
   }
-}
-
-export function getActiveEffects(): Map<string, RunningEffect> {
-  return new Map(activeEffects)
 }

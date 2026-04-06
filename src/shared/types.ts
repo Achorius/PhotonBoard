@@ -216,6 +216,7 @@ export interface Chase {
   fadePercent: number // 0-100, percentage of step time used for fade
   direction: 'forward' | 'backward' | 'bounce' | 'random'
   faderLevel: number
+  priority?: number // 0-100, defaults to 50
 }
 
 export interface ChaseStep {

@@ -28,6 +28,7 @@ interface PlaybackState {
   toggleChase: (id: string) => void
   setChaseBpm: (id: string, bpm: number) => void
   setChaseFader: (id: string, level: number) => void
+  setChaseStep: (id: string, stepIndex: number) => void
 
   // Preset actions
   addPreset: (name: string, type: PresetType, values: Record<string, Record<string, number>>) => void
@@ -227,6 +228,14 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
     set((state) => ({
       chases: state.chases.map((ch) =>
         ch.id === id ? { ...ch, faderLevel: Math.max(0, Math.min(255, level)) } : ch
+      )
+    }))
+  },
+
+  setChaseStep: (id, stepIndex) => {
+    set((state) => ({
+      chases: state.chases.map((ch) =>
+        ch.id === id ? { ...ch, currentStepIndex: stepIndex } : ch
       )
     }))
   },

@@ -1,17 +1,26 @@
 import { create } from 'zustand'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
 
+// Programmer hook — set by the mixer to route manual fader changes
+// through the mixing pipeline. Avoids circular import.
+let programmerHook: ((universe: number, channel: number, value: number) => void) | null = null
+
+export function setDmxProgrammerHook(hook: typeof programmerHook): void {
+  programmerHook = hook
+}
+
 interface DmxState {
   universeCount: number
-  // Flat arrays for performance (512 per universe)
+  // Final merged values (output)
   values: number[][]
   // Grand Master 0-255
   grandMaster: number
   // Blackout mode
   blackout: boolean
 
-  // Actions
+  // Called by UI faders — routes through programmer layer if mixer is active
   setChannel: (universe: number, channel: number, value: number) => void
+  // Called by the mixer to write merged output
   setChannels: (universe: number, channels: Record<number, number>) => void
   setGrandMaster: (value: number) => void
   toggleBlackout: () => void
@@ -30,15 +39,23 @@ export const useDmxStore = create<DmxState>((set, get) => ({
 
   setChannel: (universe, channel, value) => {
     const clamped = Math.max(0, Math.min(255, Math.round(value)))
+
+    // Feed the mixer's programmer layer so it gets merged properly
+    if (programmerHook) {
+      programmerHook(universe, channel, clamped)
+      // Don't write directly — let the mixer handle it on next tick
+      return
+    }
+
+    // Fallback: no mixer running, write directly (startup / init)
     set((state) => {
       const newValues = [...state.values]
       newValues[universe] = [...newValues[universe]]
       newValues[universe][channel] = clamped
       return { values: newValues }
     })
-    // Send to main process
     if (!get().blackout) {
-      const effective = Math.round(value * (get().grandMaster / 255))
+      const effective = Math.round(clamped * (get().grandMaster / 255))
       window.photonboard.dmx.setChannel(universe, channel, effective)
     }
   },
@@ -64,7 +81,6 @@ export const useDmxStore = create<DmxState>((set, get) => ({
 
   setGrandMaster: (value) => {
     set({ grandMaster: Math.max(0, Math.min(255, value)) })
-    // Re-send all channels with new GM
     const state = get()
     if (!state.blackout) {
       const gm = value / 255
@@ -86,7 +102,6 @@ export const useDmxStore = create<DmxState>((set, get) => ({
     if (newBlackout) {
       window.photonboard.dmx.blackout()
     } else {
-      // Restore all values
       const state = get()
       const gm = state.grandMaster / 255
       for (let u = 0; u < state.universeCount; u++) {

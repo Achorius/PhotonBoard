@@ -3,7 +3,8 @@ import { usePlaybackStore } from '../../stores/playback-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { Fader } from '../common/Fader'
-import type { CueChannelValue } from '@shared/types'
+import { HSlider } from '../common/HSlider'
+import type { CueChannelValue, Chase } from '@shared/types'
 
 export function PlaybackView() {
   const { cuelists, chases, addCuelist, addChase } = usePlaybackStore()
@@ -45,6 +46,8 @@ export function PlaybackView() {
   )
 }
 
+// ===================== CUELISTS PANEL =====================
+
 function CuelistsPanel() {
   const { cuelists, goCuelist, goBackCuelist, stopCuelist, setCuelistFader, removeCuelist, addCue, removeCue, updateCue } = usePlaybackStore()
   const { patch, selectedFixtureIds, getFixtureChannels } = usePatchStore()
@@ -52,7 +55,6 @@ function CuelistsPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const recordCue = (cuelistId: string) => {
-    // Record current DMX state of selected fixtures (or all if none selected)
     const targetIds = selectedFixtureIds.length > 0 ? selectedFixtureIds : patch.map(p => p.id)
     const cueValues: CueChannelValue[] = []
 
@@ -62,7 +64,7 @@ function CuelistsPanel() {
       const channels = getFixtureChannels(entry)
       for (const ch of channels) {
         const val = values[entry.universe][ch.absoluteChannel]
-        if (val > 0) { // Only record non-zero values
+        if (val > 0) {
           cueValues.push({ fixtureId: entry.id, channelName: ch.name, value: val })
         }
       }
@@ -212,8 +214,47 @@ function CuelistsPanel() {
   )
 }
 
+// ===================== CHASES PANEL =====================
+
+const DIRECTION_LABELS: Record<string, string> = {
+  forward: '→',
+  backward: '←',
+  bounce: '↔',
+  random: '?'
+}
+const DIRECTIONS = ['forward', 'backward', 'bounce', 'random'] as const
+
 function ChasesPanel() {
-  const { chases, toggleChase, setChaseBpm, setChaseFader, removeChase } = usePlaybackStore()
+  const { chases, toggleChase, setChaseBpm, setChaseFader, removeChase, addChaseStep, removeChaseStep } = usePlaybackStore()
+  const { patch, selectedFixtureIds, getFixtureChannels } = usePatchStore()
+  const { values } = useDmxStore()
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const recordStep = (chaseId: string) => {
+    const targetIds = selectedFixtureIds.length > 0 ? selectedFixtureIds : patch.map(p => p.id)
+    const stepValues: CueChannelValue[] = []
+
+    for (const id of targetIds) {
+      const entry = patch.find(p => p.id === id)
+      if (!entry) continue
+      const channels = getFixtureChannels(entry)
+      for (const ch of channels) {
+        const val = values[entry.universe][ch.absoluteChannel]
+        if (val > 0) {
+          stepValues.push({ fixtureId: entry.id, channelName: ch.name, value: val })
+        }
+      }
+    }
+
+    addChaseStep(chaseId, stepValues)
+  }
+
+  // Inline update for chase properties
+  const updateChase = (id: string, updates: Partial<Chase>) => {
+    usePlaybackStore.setState((state) => ({
+      chases: state.chases.map(ch => ch.id === id ? { ...ch, ...updates } : ch)
+    }))
+  }
 
   if (chases.length === 0) {
     return <div className="text-center text-gray-600 text-sm py-8">No chases. Create one to start.</div>
@@ -223,9 +264,22 @@ function ChasesPanel() {
     <div className="space-y-2 p-2">
       {chases.map(ch => (
         <div key={ch.id} className="panel">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <span className="text-xs font-medium flex-1">{ch.name}</span>
+          {/* Chase header */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-3">
+            <button
+              className="text-[10px] text-gray-500"
+              onClick={() => setExpandedId(expandedId === ch.id ? null : ch.id)}
+            >
+              {expandedId === ch.id ? '▼' : '▶'}
+            </button>
 
+            <input
+              className="bg-transparent border-none outline-none text-xs font-medium flex-1 min-w-0"
+              value={ch.name}
+              onChange={e => updateChase(ch.id, { name: e.target.value })}
+            />
+
+            {/* Play/Stop */}
             <button
               className={`px-3 py-0.5 rounded text-[10px] font-bold ${
                 ch.isPlaying ? 'bg-green-600 text-white' : 'bg-surface-3 text-gray-400'
@@ -235,8 +289,18 @@ function ChasesPanel() {
               {ch.isPlaying ? '■ Stop' : '▶ Play'}
             </button>
 
+            {/* Record step */}
+            <button
+              className="px-2 py-0.5 rounded text-[10px] bg-red-900/50 text-red-300 hover:bg-red-800/50"
+              onClick={() => recordStep(ch.id)}
+              title="Record current state as new chase step"
+            >
+              ● REC
+            </button>
+
+            {/* BPM */}
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-gray-500">BPM:</span>
+              <span className="text-[10px] text-gray-500">BPM</span>
               <input
                 className="input w-14 text-center text-[10px]"
                 type="number"
@@ -247,6 +311,23 @@ function ChasesPanel() {
               />
             </div>
 
+            {/* Direction */}
+            <div className="flex gap-px">
+              {DIRECTIONS.map(d => (
+                <button
+                  key={d}
+                  className={`w-6 h-6 rounded text-[10px] ${
+                    ch.direction === d ? 'bg-accent text-white' : 'bg-surface-3 text-gray-500'
+                  }`}
+                  onClick={() => updateChase(ch.id, { direction: d })}
+                  title={d}
+                >
+                  {DIRECTION_LABELS[d]}
+                </button>
+              ))}
+            </div>
+
+            {/* Fader */}
             <div className="w-20">
               <Fader
                 value={ch.faderLevel}
@@ -256,9 +337,64 @@ function ChasesPanel() {
               />
             </div>
 
-            <span className="text-[10px] text-gray-500">{ch.steps.length} steps</span>
+            {/* Step indicator */}
+            <span className="text-[10px] font-mono text-gray-500 w-12 text-right">
+              {ch.steps.length > 0 ? `${ch.currentStepIndex + 1}/${ch.steps.length}` : '0'}
+            </span>
+
             <button className="text-red-400 hover:text-red-300 text-[10px]" onClick={() => removeChase(ch.id)}>x</button>
           </div>
+
+          {/* Expanded: fade %, steps list */}
+          {expandedId === ch.id && (
+            <div className="px-3 py-2 space-y-2">
+              {/* Crossfade */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500 uppercase w-16">Crossfade</span>
+                <HSlider
+                  value={ch.fadePercent}
+                  onChange={(v) => updateChase(ch.id, { fadePercent: v })}
+                  min={0} max={100}
+                  color="#e85d04"
+                  className="flex-1"
+                />
+                <span className="text-[10px] font-mono text-gray-400 w-8 text-right">{ch.fadePercent}%</span>
+              </div>
+
+              {/* Steps list */}
+              {ch.steps.length === 0 ? (
+                <div className="text-[11px] text-gray-600 py-2">No steps. Set fixtures and click REC to add steps.</div>
+              ) : (
+                <div className="max-h-40 overflow-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="text-gray-500 text-left bg-surface-2">
+                        <th className="px-2 py-1 w-8">#</th>
+                        <th className="px-2 py-1">Channels</th>
+                        <th className="px-2 py-1 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ch.steps.map((step, i) => (
+                        <tr
+                          key={step.id}
+                          className={`border-t border-surface-3 ${
+                            i === ch.currentStepIndex && ch.isPlaying ? 'bg-accent/10 text-accent' : 'text-gray-300'
+                          }`}
+                        >
+                          <td className="px-2 py-0.5 font-mono">{i + 1}</td>
+                          <td className="px-2 py-0.5 text-gray-500">{step.values.length} ch</td>
+                          <td className="px-2 py-0.5">
+                            <button className="text-red-400 hover:text-red-300" onClick={() => removeChaseStep(ch.id, step.id)}>x</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

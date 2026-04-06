@@ -9,8 +9,24 @@ export function ExecutorBar() {
 
   // Merge cuelists and chases into a single executor list (cuelists first)
   const executors = [
-    ...cuelists.map(cl => ({ type: 'cuelist' as const, id: cl.id, name: cl.name, isPlaying: cl.isPlaying, faderLevel: cl.faderLevel, cueInfo: `${cl.currentCueIndex >= 0 ? cl.currentCueIndex + 1 : 0}/${cl.cues.length}` })),
-    ...chases.map(ch => ({ type: 'chase' as const, id: ch.id, name: ch.name, isPlaying: ch.isPlaying, faderLevel: ch.faderLevel, cueInfo: `${ch.bpm}bpm` }))
+    ...cuelists.map(cl => ({
+      type: 'cuelist' as const,
+      id: cl.id,
+      name: cl.name,
+      isPlaying: cl.isPlaying,
+      faderLevel: cl.faderLevel,
+      cueInfo: `${cl.currentCueIndex >= 0 ? cl.currentCueIndex + 1 : 0}/${cl.cues.length}`
+    })),
+    ...chases.map(ch => ({
+      type: 'chase' as const,
+      id: ch.id,
+      name: ch.name,
+      isPlaying: ch.isPlaying,
+      faderLevel: ch.faderLevel,
+      cueInfo: ch.isPlaying
+        ? `${ch.currentStepIndex + 1}/${ch.steps.length}`
+        : `${ch.bpm}bpm`
+    }))
   ].slice(0, EXECUTOR_COUNT)
 
   const slots = Array.from({ length: EXECUTOR_COUNT }, (_, i) => executors[i] ?? null)
