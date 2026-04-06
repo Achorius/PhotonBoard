@@ -181,6 +181,7 @@ export default function App() {
         applyShowData(show as ShowFile)
         console.log('[PhotonBoard] applyShowData done, reloading fixtures...')
         await usePatchStore.getState().loadFixtures()
+        usePatchStore.getState().initMovingHeadDefaults()
         console.log('[PhotonBoard] Load complete!')
         useUiStore.getState().showStatus(`Loaded ✓ ${show.name}`, 'success', 2500)
       } else {
@@ -267,6 +268,7 @@ export default function App() {
           }
           applyShowData(result.show as ShowFile)
           console.log('[PhotonBoard] Auto-loaded show:', result.show.name, 'patch:', result.show.patch?.length)
+          usePatchStore.getState().initMovingHeadDefaults()
         }
       } catch (e) {
         console.error('[PhotonBoard] Auto-load failed:', e)

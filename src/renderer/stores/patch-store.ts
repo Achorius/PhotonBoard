@@ -29,6 +29,9 @@ interface PatchState {
   moveSubgroup: (subgroupId: string, newParentId: string | undefined) => void
   selectGroup: (groupId: string) => void
 
+  // Init defaults
+  initMovingHeadDefaults: () => void
+
   // Import
   setPatch: (patch: PatchEntry[]) => void
   setGroups: (groups: Group[]) => void
@@ -226,6 +229,26 @@ export const usePatchStore = create<PatchState>((set, get) => ({
     const group = get().groups.find((g) => g.id === groupId)
     if (group && group.fixtureIds.length > 0) {
       set({ selectedFixtureIds: [...group.fixtureIds] })
+    }
+  },
+
+  initMovingHeadDefaults: () => {
+    // Set Pan & Tilt DMX channels to 128 (center) for all moving-head fixtures
+    const { patch, fixtures } = get()
+    const { setChannel } = useDmxStore.getState()
+    const centerChannels = ['pan', 'tilt']
+    for (const entry of patch) {
+      const def = fixtures.find((f) => f.id === entry.fixtureDefId)
+      if (!def) continue
+      // Only apply to moving-head shape fixtures
+      if (def.physical?.type !== 'moving-head' && !def.modes.some(m => m.channels.some(c => c.toLowerCase() === 'pan'))) continue
+      const mode = def.modes.find((m) => m.name === entry.modeName)
+      if (!mode) continue
+      mode.channels.forEach((chName, index) => {
+        if (centerChannels.includes(chName.toLowerCase())) {
+          setChannel(entry.universe, entry.address - 1 + index, 128)
+        }
+      })
     }
   },
 
