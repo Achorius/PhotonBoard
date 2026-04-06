@@ -1,26 +1,13 @@
 import { create } from 'zustand'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
 
-// Programmer hook — set by the mixer to route manual fader changes
-// through the mixing pipeline. Avoids circular import.
-let programmerHook: ((universe: number, channel: number, value: number) => void) | null = null
-
-export function setDmxProgrammerHook(hook: typeof programmerHook): void {
-  programmerHook = hook
-}
-
 interface DmxState {
   universeCount: number
-  // Final merged values (output)
   values: number[][]
-  // Grand Master 0-255
   grandMaster: number
-  // Blackout mode
   blackout: boolean
 
-  // Called by UI faders — routes through programmer layer if mixer is active
   setChannel: (universe: number, channel: number, value: number) => void
-  // Called by the mixer to write merged output
   setChannels: (universe: number, channels: Record<number, number>) => void
   setGrandMaster: (value: number) => void
   toggleBlackout: () => void
@@ -39,15 +26,6 @@ export const useDmxStore = create<DmxState>((set, get) => ({
 
   setChannel: (universe, channel, value) => {
     const clamped = Math.max(0, Math.min(255, Math.round(value)))
-
-    // Feed the mixer's programmer layer so it gets merged properly
-    if (programmerHook) {
-      programmerHook(universe, channel, clamped)
-      // Don't write directly — let the mixer handle it on next tick
-      return
-    }
-
-    // Fallback: no mixer running, write directly (startup / init)
     set((state) => {
       const newValues = [...state.values]
       newValues[universe] = [...newValues[universe]]

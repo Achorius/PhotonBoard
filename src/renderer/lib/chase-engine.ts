@@ -1,24 +1,21 @@
 // ============================================================
 // PhotonBoard — Chase Engine
 // BPM-based step sequencer with crossfade support.
-// Outputs to the DMX Mixer as named layers.
+// Writes directly to DMX store.
 // ============================================================
 
-import type { Chase, ChaseStep, CueChannelValue } from '@shared/types'
+import type { Chase, CueChannelValue } from '@shared/types'
+import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
-import { setLayer, removeLayer } from './dmx-mixer'
 
 // --------------- Types ---------------
 
 interface RunningChase {
   chaseId: string
   startTime: number
-  /** Current step index in the engine (may differ from store during transitions) */
   currentStep: number
-  /** Direction tracker for bounce mode */
   bounceForward: boolean
-  /** Last random step (to avoid repeats) */
   lastRandomStep: number
 }
 
@@ -47,8 +44,6 @@ export function startChase(chase: Chase): void {
 
 export function stopChase(id: string): void {
   runningChases.delete(id)
-  removeLayer(`chase:${id}`)
-
   if (runningChases.size === 0 && rafId) {
     cancelAnimationFrame(rafId)
     rafId = null
@@ -56,9 +51,6 @@ export function stopChase(id: string): void {
 }
 
 export function stopAllChases(): void {
-  for (const id of runningChases.keys()) {
-    removeLayer(`chase:${id}`)
-  }
   runningChases.clear()
   if (rafId) {
     cancelAnimationFrame(rafId)
@@ -71,35 +63,27 @@ export function stopAllChases(): void {
 function updateChases(): void {
   const now = performance.now()
   const playbackStore = usePlaybackStore.getState()
+  const dmxStore = useDmxStore.getState()
+  const patchStore = usePatchStore.getState()
 
   for (const [id, running] of runningChases) {
     const chase = playbackStore.chases.find(c => c.id === id)
     if (!chase || !chase.isPlaying || chase.steps.length === 0) {
-      // Chase was stopped or deleted
       runningChases.delete(id)
-      removeLayer(`chase:${id}`)
       continue
     }
 
     const stepCount = chase.steps.length
-    if (stepCount === 0) continue
-
-    // Calculate timing
     const msPerBeat = 60000 / chase.bpm
     const elapsed = now - running.startTime
-    const fadeRatio = chase.fadePercent / 100 // 0-1
+    const fadeRatio = chase.fadePercent / 100
 
-    // Total step duration = one beat
     const stepDuration = msPerBeat
-
-    // How far are we into the current step cycle?
     const cycleTime = elapsed % stepDuration
     const progress = cycleTime / stepDuration
-
-    // Determine which step we should be on
     const totalSteps = Math.floor(elapsed / stepDuration)
 
-    // Compute actual step index based on direction
+    // Compute step index based on direction
     let stepIndex: number
     if (stepCount === 1) {
       stepIndex = 0
@@ -112,14 +96,12 @@ function updateChases(): void {
           stepIndex = (stepCount - 1) - (totalSteps % stepCount)
           break
         case 'bounce': {
-          // 0,1,2,...,n-1,n-2,...,1,0,1,2,...
           const bounceLen = (stepCount - 1) * 2
           const pos = totalSteps % bounceLen
           stepIndex = pos < stepCount ? pos : bounceLen - pos
           break
         }
         case 'random':
-          // Change step each beat
           if (totalSteps !== running.currentStep) {
             let next: number
             do {
@@ -135,30 +117,23 @@ function updateChases(): void {
       }
     }
 
-    // Get current and next step
     const currentStepData = chase.steps[stepIndex]
+    if (!currentStepData) continue
+
+    // Get next step for crossfade
     const nextStepIndex = getNextStepIndex(stepIndex, stepCount, chase.direction)
     const nextStepData = chase.steps[nextStepIndex]
 
-    if (!currentStepData) continue
-
-    // Build DMX output with optional crossfade
-    const layerChannels = new Map<number, Map<number, number>>()
-
+    // Build output with optional crossfade
     if (fadeRatio > 0 && nextStepData && progress > (1 - fadeRatio)) {
-      // In fade zone: crossfade from current to next
       const fadeProgress = (progress - (1 - fadeRatio)) / fadeRatio
       const t = fadeProgress * fadeProgress * (3 - 2 * fadeProgress) // smooth step
 
-      applyStepValues(currentStepData.values, layerChannels, 1 - t)
-      applyStepValues(nextStepData.values, layerChannels, t)
+      applyStepValues(currentStepData.values, 1 - t, patchStore, dmxStore, chase.faderLevel)
+      applyStepValues(nextStepData.values, t, patchStore, dmxStore, chase.faderLevel)
     } else {
-      // Static: just show current step
-      applyStepValues(currentStepData.values, layerChannels, 1)
+      applyStepValues(currentStepData.values, 1, patchStore, dmxStore, chase.faderLevel)
     }
-
-    // Push to mixer
-    setLayer(`chase:${id}`, layerChannels, chase.priority ?? 50, chase.faderLevel)
 
     // Update store's currentStepIndex for UI
     if (chase.currentStepIndex !== stepIndex) {
@@ -185,36 +160,32 @@ function getNextStepIndex(current: number, count: number, direction: string): nu
 
 function applyStepValues(
   values: CueChannelValue[],
-  layerChannels: Map<number, Map<number, number>>,
-  weight: number
+  weight: number,
+  patchStore: any,
+  dmxStore: any,
+  faderLevel: number
 ): void {
-  const patchStore = usePatchStore.getState()
+  const masterScale = faderLevel / 255
 
   for (const cv of values) {
-    const entry = patchStore.patch.find(p => p.id === cv.fixtureId)
+    const entry = patchStore.patch.find((p: any) => p.id === cv.fixtureId)
     if (!entry) continue
 
-    const def = patchStore.fixtures.find(f => f.id === entry.fixtureDefId)
+    const def = patchStore.fixtures.find((f: any) => f.id === entry.fixtureDefId)
     if (!def) continue
 
-    const mode = def.modes.find(m => m.name === entry.modeName)
+    const mode = def.modes.find((m: any) => m.name === entry.modeName)
     if (!mode) continue
 
     const chIndex = mode.channels.findIndex(
-      ch => ch.toLowerCase() === cv.channelName.toLowerCase()
+      (ch: string) => ch.toLowerCase() === cv.channelName.toLowerCase()
     )
     if (chIndex === -1) continue
 
     const absChannel = entry.address - 1 + chIndex
     if (absChannel < 0 || absChannel >= 512) continue
 
-    let uniMap = layerChannels.get(entry.universe)
-    if (!uniMap) {
-      uniMap = new Map()
-      layerChannels.set(entry.universe, uniMap)
-    }
-
-    const existing = uniMap.get(absChannel) ?? 0
-    uniMap.set(absChannel, Math.round(existing + cv.value * weight))
+    const scaledValue = Math.round(cv.value * weight * masterScale)
+    dmxStore.setChannel(entry.universe, absChannel, scaledValue)
   }
 }

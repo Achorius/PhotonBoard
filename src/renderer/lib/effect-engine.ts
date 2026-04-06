@@ -1,13 +1,12 @@
 // ============================================================
 // PhotonBoard — Effect Engine
-// LFO waveform generator that outputs to the DMX Mixer.
-// Effects are ADDITIVE: they modulate on top of base values
-// (from cuelists/chases/programmer) rather than replacing them.
+// LFO waveform generator that writes directly to DMX store.
+// Effects TAKE OVER the channels they affect while running.
 // ============================================================
 
 import type { Effect, WaveformType } from '@shared/types'
+import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
-import { setLayer, removeLayer } from './dmx-mixer'
 
 const activeEffects: Map<string, RunningEffect> = new Map()
 let animationFrame: number | null = null
@@ -41,7 +40,6 @@ export function startEffect(effect: Effect): void {
 
 export function stopEffect(id: string): void {
   activeEffects.delete(id)
-  removeLayer(`effect:${id}`)
   if (activeEffects.size === 0 && animationFrame) {
     cancelAnimationFrame(animationFrame)
     animationFrame = null
@@ -49,9 +47,6 @@ export function stopEffect(id: string): void {
 }
 
 export function stopAllEffects(): void {
-  for (const id of activeEffects.keys()) {
-    removeLayer(`effect:${id}`)
-  }
   activeEffects.clear()
   if (animationFrame) {
     cancelAnimationFrame(animationFrame)
@@ -65,6 +60,7 @@ export function getActiveEffects(): Map<string, RunningEffect> {
 
 function updateEffects(): void {
   const now = performance.now()
+  const dmxStore = useDmxStore.getState()
   const patchStore = usePatchStore.getState()
 
   for (const [, running] of activeEffects) {
@@ -73,7 +69,6 @@ function updateEffects(): void {
 
     const elapsed = (now - startTime) / 1000
     const fixtureCount = effect.fixtureIds.length
-    const layerChannels = new Map<number, Map<number, number>>()
 
     for (let i = 0; i < fixtureCount; i++) {
       const fixtureId = effect.fixtureIds[i]
@@ -86,7 +81,7 @@ function updateEffects(): void {
       const mode = def.modes.find(m => m.name === entry.modeName)
       if (!mode) continue
 
-      // Phase offset per fixture (fan effect)
+      // Phase offset per fixture (fan/spread effect)
       const phaseOffset = fixtureCount > 1
         ? (effect.fan / 360) * (i / (fixtureCount - 1))
         : 0
@@ -103,19 +98,10 @@ function updateEffects(): void {
       if (chIndex === -1) continue
 
       const absChannel = entry.address - 1 + chIndex
-      if (absChannel < 0 || absChannel >= 512) continue
-
-      let uniMap = layerChannels.get(entry.universe)
-      if (!uniMap) {
-        uniMap = new Map()
-        layerChannels.set(entry.universe, uniMap)
+      if (absChannel >= 0 && absChannel < 512) {
+        dmxStore.setChannel(entry.universe, absChannel, value)
       }
-      uniMap.set(absChannel, value)
     }
-
-    // Push to mixer — effects at priority 40 (below cuelists at 50)
-    // This means for LTP channels, cuelists win. For HTP (dimmer), max wins.
-    setLayer(`effect:${effect.id}`, layerChannels, 40)
   }
 
   if (activeEffects.size > 0) {
