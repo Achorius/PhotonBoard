@@ -9,6 +9,7 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { HSlider } from '../common/HSlider'
+import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
 
 export function VisualizerView() {
   const {
@@ -50,9 +51,20 @@ export function VisualizerView() {
       const gCh = findCh(channels, 'green', 'g')
       const bCh = findCh(channels, 'blue', 'b')
       const dimCh = findCh(channels, 'dimmer', 'intensity')
-      if (rCh) setChannel(entry.universe, rCh.absoluteChannel, r)
-      if (gCh) setChannel(entry.universe, gCh.absoluteChannel, g)
-      if (bCh) setChannel(entry.universe, bCh.absoluteChannel, b)
+
+      if (rCh && gCh && bCh) {
+        // RGB fixture
+        setChannel(entry.universe, rCh.absoluteChannel, r)
+        setChannel(entry.universe, gCh.absoluteChannel, g)
+        setChannel(entry.universe, bCh.absoluteChannel, b)
+      } else {
+        // Color wheel fixture
+        const cwCh = findCh(channels, 'color wheel', 'color', 'colour wheel', 'color wheel effect')
+        if (cwCh) {
+          setChannel(entry.universe, cwCh.absoluteChannel, rgbToColorWheelDmx(r, g, b))
+        }
+      }
+
       if (dimCh && (r > 0 || g > 0 || b > 0)) {
         const cur = values[entry.universe]?.[dimCh.absoluteChannel] ?? 0
         if (cur === 0) setChannel(entry.universe, dimCh.absoluteChannel, 255)
