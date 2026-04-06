@@ -79,7 +79,21 @@ function inferChannelType(name: string, data: any): FixtureChannel['type'] {
 /**
  * Get a color representation for a channel type (for UI display)
  */
-export function getChannelTypeColor(type: FixtureChannel['type']): string {
+export function getChannelTypeColor(type: FixtureChannel['type'], channelName?: string): string {
+  // For color channels, use the actual color of the channel (R=red, G=green, etc.)
+  if (type === 'color' && channelName) {
+    const n = channelName.toLowerCase()
+    if (n === 'red' || n === 'r') return '#ff3333'
+    if (n === 'green' || n === 'g') return '#33ff33'
+    if (n === 'blue' || n === 'b') return '#3388ff'
+    if (n === 'white' || n === 'w') return '#cccccc'
+    if (n === 'amber') return '#ffaa00'
+    if (n === 'uv') return '#9933ff'
+    if (n === 'cyan') return '#00dddd'
+    if (n === 'magenta') return '#ff33aa'
+    if (n === 'yellow') return '#ffff33'
+    return '#ff3388' // color wheel, color macro, etc.
+  }
   switch (type) {
     case 'intensity': return '#ffaa00'
     case 'color': return '#ff3388'

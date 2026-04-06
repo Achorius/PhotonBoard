@@ -131,7 +131,7 @@ export function FixtureControlView() {
                     <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
                       {section.channels.map(ch => {
                         const chDef = firstDef?.channels[ch.name]
-                        const color = getChannelTypeColor(chDef?.type || 'generic')
+                        const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
                         const val = values[firstEntry!.universe][ch.absoluteChannel] || 0
 
                         return (

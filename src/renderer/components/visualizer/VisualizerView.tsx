@@ -8,6 +8,7 @@ import { exportStagePDF } from '@renderer/lib/pdf-export'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { HSlider } from '../common/HSlider'
 
 export function VisualizerView() {
   const {
@@ -240,17 +241,17 @@ export function VisualizerView() {
                 return (
                   <div key={name} className="flex items-center gap-1.5 flex-1 min-w-0">
                     <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-7">{label}</span>
-                    <input
-                      type="range" min={0} max={255} value={val}
-                      onChange={e => {
-                        const v = parseInt(e.target.value)
+                    <HSlider
+                      value={val}
+                      onChange={(v) => {
                         for (const entry of selectedEntries) {
                           const channels = getFixtureChannels(entry)
                           const c = findCh(channels, name, ...alt)
                           if (c) setChannel(entry.universe, c.absoluteChannel, v)
                         }
                       }}
-                      className="flex-1 min-w-0" style={{ '--slider-color': color } as React.CSSProperties}
+                      color={color}
+                      className="flex-1 min-w-0"
                     />
                     <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{val}</span>
                   </div>
@@ -310,11 +311,12 @@ function FixtureProps3D() {
         ]).map(({ label, key, min, max }) => (
           <div key={key} className="flex items-center gap-1">
             <span className="text-[9px] text-gray-500 w-3">{label}</span>
-            <input
-              type="range" min={min} max={max} step={0.1}
+            <HSlider
               value={pos[key]}
-              onChange={e => updatePos(key, parseFloat(e.target.value))}
-              className="flex-1 h-1"
+              onChange={(v) => updatePos(key, v)}
+              min={min} max={max} step={0.1}
+              color="#e85d04"
+              className="flex-1"
             />
             <span className="text-[9px] font-mono text-accent w-10 text-right">{pos[key].toFixed(1)}m</span>
           </div>
@@ -327,21 +329,23 @@ function FixtureProps3D() {
           <div className="text-[9px] text-gray-500 uppercase">Aim</div>
           <div className="flex items-center gap-1">
             <span className="text-[9px] text-gray-500 w-8">Tilt</span>
-            <input
-              type="range" min={-90} max={90} step={1}
+            <HSlider
               value={mountingAngle}
-              onChange={e => updateFixture(entry.id, { mountingAngle: parseInt(e.target.value) })}
-              className="flex-1 h-1"
+              onChange={(v) => updateFixture(entry.id, { mountingAngle: v })}
+              min={-90} max={90} step={1}
+              color="#e85d04"
+              className="flex-1"
             />
             <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingAngle}°</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-[9px] text-gray-500 w-8">Dir</span>
-            <input
-              type="range" min={-180} max={180} step={1}
+            <HSlider
               value={mountingPan}
-              onChange={e => updateFixture(entry.id, { mountingPan: parseInt(e.target.value) })}
-              className="flex-1 h-1"
+              onChange={(v) => updateFixture(entry.id, { mountingPan: v })}
+              min={-180} max={180} step={1}
+              color="#e85d04"
+              className="flex-1"
             />
             <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingPan}°</span>
           </div>
@@ -372,11 +376,12 @@ function FixtureProps3D() {
       {/* Beam angle */}
       <div className="flex items-center gap-1">
         <span className="text-[9px] text-gray-500 w-8">Beam</span>
-        <input
-          type="range" min={2} max={90} step={1}
+        <HSlider
           value={beamAngle}
-          onChange={e => updateFixture(entry.id, { beamAngle: parseInt(e.target.value) })}
-          className="flex-1 h-1"
+          onChange={(v) => updateFixture(entry.id, { beamAngle: v })}
+          min={2} max={90} step={1}
+          color="#e85d04"
+          className="flex-1"
         />
         <span className="text-[9px] font-mono text-accent w-8 text-right">{beamAngle}°</span>
       </div>

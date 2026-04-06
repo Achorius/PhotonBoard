@@ -1,4 +1,5 @@
 import React, { useCallback, useRef } from 'react'
+import { HSlider } from './HSlider'
 
 interface ColorPickerProps {
   red: number
@@ -137,14 +138,11 @@ export function ColorPicker({ red, green, blue, white, onChange }: ColorPickerPr
         ].map(({ label, value, color, set }) => (
           <div key={label} className="flex items-center gap-2">
             <span className="text-[10px] font-mono w-3" style={{ color }}>{label}</span>
-            <input
-              type="range"
-              min={0}
-              max={255}
+            <HSlider
               value={value}
-              onChange={(e) => set(parseInt(e.target.value))}
+              onChange={set}
+              color={color}
               className="flex-1"
-              style={{ '--slider-color': color } as React.CSSProperties}
             />
             <span className="text-[10px] font-mono w-7 text-right text-gray-400">{value}</span>
           </div>

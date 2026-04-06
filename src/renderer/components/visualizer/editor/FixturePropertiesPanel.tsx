@@ -1,6 +1,7 @@
 import React from 'react'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { HSlider } from '../../common/HSlider'
 import type { Position3D } from '@shared/types'
 
 export function FixturePropertiesPanel({ className = '' }: { className?: string }) {
@@ -57,11 +58,11 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
                 <label className="text-[10px] text-gray-500">{label}</label>
                 <span className="text-[10px] font-mono text-accent">{pos[key].toFixed(2)}m</span>
               </div>
-              <input
-                type="range"
-                min={min} max={max} step={step}
+              <HSlider
                 value={pos[key]}
-                onChange={e => update(key, parseFloat(e.target.value))}
+                onChange={(v) => update(key, v)}
+                min={min} max={max} step={step}
+                color="#e85d04"
                 className="w-full"
               />
               <input
@@ -86,10 +87,11 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
               <span className="text-[10px] text-gray-500">Tilt (0° = down · 90° = horiz)</span>
               <span className="text-[10px] font-mono text-accent">{mountingAngle}°</span>
             </div>
-            <input
-              type="range" min={-90} max={90} step={1}
+            <HSlider
               value={mountingAngle}
-              onChange={e => updateFixture(entry.id, { mountingAngle: parseInt(e.target.value) })}
+              onChange={(v) => updateFixture(entry.id, { mountingAngle: v })}
+              min={-90} max={90} step={1}
+              color="#e85d04"
               className="w-full"
             />
           </div>
@@ -99,10 +101,11 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
               <span className="text-[10px] text-gray-500">Direction (0° = front)</span>
               <span className="text-[10px] font-mono text-accent">{mountingPan}°</span>
             </div>
-            <input
-              type="range" min={-180} max={180} step={1}
+            <HSlider
               value={mountingPan}
-              onChange={e => updateFixture(entry.id, { mountingPan: parseInt(e.target.value) })}
+              onChange={(v) => updateFixture(entry.id, { mountingPan: v })}
+              min={-180} max={180} step={1}
+              color="#e85d04"
               className="w-full"
             />
           </div>
@@ -143,10 +146,11 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
           <span className="text-[10px] text-gray-500">Cone spread</span>
           <span className="text-[10px] font-mono text-accent">{beamAngle}°</span>
         </div>
-        <input
-          type="range" min={2} max={90} step={1}
+        <HSlider
           value={beamAngle}
-          onChange={e => updateFixture(entry.id, { beamAngle: parseInt(e.target.value) })}
+          onChange={(v) => updateFixture(entry.id, { beamAngle: v })}
+          min={2} max={90} step={1}
+          color="#e85d04"
           className="w-full"
         />
       </section>

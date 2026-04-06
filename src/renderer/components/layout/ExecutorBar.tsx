@@ -1,5 +1,6 @@
 import React from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
+import { HSlider } from '../common/HSlider'
 
 const EXECUTOR_COUNT = 8
 
@@ -48,18 +49,14 @@ export function ExecutorBar() {
 
             {/* Fader */}
             <div className="flex items-center px-1.5 py-0.5">
-              <input
-                type="range"
-                min={0}
-                max={255}
+              <HSlider
                 value={ex.faderLevel}
-                onChange={e => {
-                  const v = parseInt(e.target.value)
+                onChange={(v) => {
                   if (ex.type === 'cuelist') setCuelistFader(ex.id, v)
                   else setChaseFader(ex.id, v)
                 }}
+                color={isActive ? '#e85d04' : '#444'}
                 className="flex-1"
-                style={{ '--slider-color': isActive ? '#e85d04' : '#444' } as React.CSSProperties}
               />
               <span className="text-[8px] font-mono text-gray-600 w-5 text-right shrink-0">
                 {Math.round((ex.faderLevel / 255) * 100)}

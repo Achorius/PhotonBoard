@@ -2,6 +2,7 @@ import React from 'react'
 import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useMidiStore } from '../../stores/midi-store'
+import { HSlider } from '../common/HSlider'
 
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()
@@ -27,14 +28,11 @@ export function Toolbar() {
       {/* Grand Master */}
       <div className="flex items-center gap-2 titlebar-no-drag">
         <span className="text-[10px] text-gray-500 uppercase font-medium">GM</span>
-        <input
-          type="range"
-          min={0}
-          max={255}
+        <HSlider
           value={grandMaster}
-          onChange={(e) => setGrandMaster(parseInt(e.target.value))}
+          onChange={setGrandMaster}
+          color="#e85d04"
           className="w-24"
-          style={{ '--slider-color': '#e85d04' } as React.CSSProperties}
         />
         <span className="text-[10px] font-mono text-gray-400 w-8 text-right">
           {Math.round((grandMaster / 255) * 100)}%

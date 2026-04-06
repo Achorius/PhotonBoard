@@ -226,7 +226,7 @@ function FixtureFaders({
           {/* Unified channel faders — fill remaining height */}
           <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
             {unifiedChannels.map(uch => {
-              const color = getChannelTypeColor(uch.type)
+              const color = getChannelTypeColor(uch.type, uch.name)
               // Read value from first selected fixture
               const refCh = firstChannels.find(c => c.name.toLowerCase() === uch.name.toLowerCase())
               const displayValue = refCh ? (values[firstEntry.universe]?.[refCh.absoluteChannel] || 0) : 0
@@ -310,7 +310,7 @@ function FixtureFaders({
             <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
               {channels.map(ch => {
                 const chDef = def?.channels[ch.name]
-                const color = getChannelTypeColor(chDef?.type || 'generic')
+                const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
                 return (
                   <div
                     key={ch.absoluteChannel}

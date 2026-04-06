@@ -2,6 +2,7 @@ import React from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import type { WaveformType } from '@shared/types'
 import { useEffectsStore } from '../../stores/effects-store'
+import { HSlider } from '../common/HSlider'
 
 const WAVEFORMS: WaveformType[] = ['sine', 'square', 'sawtooth', 'triangle', 'random']
 const WAVEFORM_ICONS: Record<WaveformType, string> = {
@@ -92,12 +93,11 @@ export function EffectsView() {
                 {/* Depth */}
                 <div>
                   <label className="text-[10px] text-gray-500 uppercase block mb-1">Depth</label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={255}
+                  <HSlider
                     value={effect.depth}
-                    onChange={e => updateEffect(effect.id, { depth: parseInt(e.target.value) })}
+                    onChange={(v) => updateEffect(effect.id, { depth: v })}
+                    min={0} max={255}
+                    color="#e85d04"
                     className="w-full"
                   />
                   <span className="text-[10px] text-gray-500">{Math.round((effect.depth / 255) * 100)}%</span>
@@ -106,12 +106,11 @@ export function EffectsView() {
                 {/* Fan */}
                 <div>
                   <label className="text-[10px] text-gray-500 uppercase block mb-1">Fan (spread)</label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={360}
+                  <HSlider
                     value={effect.fan}
-                    onChange={e => updateEffect(effect.id, { fan: parseInt(e.target.value) })}
+                    onChange={(v) => updateEffect(effect.id, { fan: v })}
+                    min={0} max={360}
+                    color="#e85d04"
                     className="w-full"
                   />
                   <span className="text-[10px] text-gray-500">{effect.fan}°</span>

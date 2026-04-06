@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, memo } from 'react'
 import { useDmxStore } from '../../stores/dmx-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { resolveChannels, getEffectiveColor } from '../../lib/dmx-channel-resolver'
+import { HSlider } from '../common/HSlider'
 
 // ---------------------------------------------------------------------------
 // Color presets for quick color selection
@@ -294,14 +295,11 @@ export function LiveView() {
               {/* Dimmer slider */}
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0">Dim</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={255}
+                <HSlider
                   value={dimmerSlider}
-                  onChange={(e) => handleDimmerSlider(parseInt(e.target.value))}
+                  onChange={handleDimmerSlider}
+                  color="#e85d04"
                   className="flex-1 min-w-0"
-                  style={{ '--slider-color': '#e85d04' } as React.CSSProperties}
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-8 text-right shrink-0">
                   {Math.round((dimmerSlider / 255) * 100)}%
@@ -340,40 +338,44 @@ export function LiveView() {
               {/* Pan */}
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Pan</span>
-                <input
-                  type="range" min={0} max={255} value={panSlider}
-                  onChange={(e) => { const v = parseInt(e.target.value); setPanSlider(v); setChannelForSelected('pan', v) }}
-                  className="flex-1 min-w-0" style={{ '--slider-color': '#6366f1' } as React.CSSProperties}
+                <HSlider
+                  value={panSlider}
+                  onChange={(v) => { setPanSlider(v); setChannelForSelected('pan', v) }}
+                  color="#6366f1"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{panSlider}</span>
               </div>
               {/* Tilt */}
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Tilt</span>
-                <input
-                  type="range" min={0} max={255} value={tiltSlider}
-                  onChange={(e) => { const v = parseInt(e.target.value); setTiltSlider(v); setChannelForSelected('tilt', v) }}
-                  className="flex-1 min-w-0" style={{ '--slider-color': '#6366f1' } as React.CSSProperties}
+                <HSlider
+                  value={tiltSlider}
+                  onChange={(v) => { setTiltSlider(v); setChannelForSelected('tilt', v) }}
+                  color="#6366f1"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{tiltSlider}</span>
               </div>
               {/* Zoom */}
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Zoom</span>
-                <input
-                  type="range" min={0} max={255} value={zoomSlider}
-                  onChange={(e) => { const v = parseInt(e.target.value); setZoomSlider(v); setChannelForSelected('zoom', v) }}
-                  className="flex-1 min-w-0" style={{ '--slider-color': '#22c55e' } as React.CSSProperties}
+                <HSlider
+                  value={zoomSlider}
+                  onChange={(v) => { setZoomSlider(v); setChannelForSelected('zoom', v) }}
+                  color="#22c55e"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{zoomSlider}</span>
               </div>
               {/* Strobe */}
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-8">Strobe</span>
-                <input
-                  type="range" min={0} max={255} value={strobeSlider}
-                  onChange={(e) => { const v = parseInt(e.target.value); setStrobeSlider(v); setChannelForSelected('strobe', v); setChannelForSelected('shutter', v) }}
-                  className="flex-1 min-w-0" style={{ '--slider-color': '#ef4444' } as React.CSSProperties}
+                <HSlider
+                  value={strobeSlider}
+                  onChange={(v) => { setStrobeSlider(v); setChannelForSelected('strobe', v); setChannelForSelected('shutter', v) }}
+                  color="#ef4444"
+                  className="flex-1 min-w-0"
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{strobeSlider}</span>
               </div>

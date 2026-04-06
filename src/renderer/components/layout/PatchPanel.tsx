@@ -127,7 +127,7 @@ export function PatchPanel() {
           <div className="flex gap-0.5 flex-wrap justify-start">
             {selectedChannels.slice(0, 10).map(ch => {
               const chDef = singleDef?.channels[ch.name]
-              const color = getChannelTypeColor(chDef?.type || 'generic')
+              const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
               const val = values[singleSelected.universe][ch.absoluteChannel] || 0
               return (
                 <Fader
