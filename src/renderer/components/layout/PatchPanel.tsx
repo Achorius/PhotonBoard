@@ -5,6 +5,7 @@ import { useUiStore } from '../../stores/ui-store'
 import { useVisualizerStore } from '../../stores/visualizer-store'
 import { Fader } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
+import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
 
 export function PatchPanel() {
   const { patch, fixtures, selectedFixtureIds, selectFixture, clearSelection, getFixtureChannels } = usePatchStore()
@@ -133,6 +134,7 @@ export function PatchPanel() {
                 <Fader
                   key={ch.absoluteChannel}
                   value={val}
+                  max={isColorWheelChannel(ch.name) ? COLOR_WHEEL_MAX_DMX : 255}
                   onChange={(v) => setChannel(singleSelected.universe, ch.absoluteChannel, v)}
                   label={getChannelShortLabel(ch.name)}
                   color={color}

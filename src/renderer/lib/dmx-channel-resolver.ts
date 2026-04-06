@@ -139,6 +139,54 @@ function colorWheelToRgb3D(dmxValue: number): { r: number; g: number; b: number 
   return { r: 1, g: 1, b: 1 }
 }
 
+/**
+ * Maximum useful DMX value for individual color wheel positions (0-63).
+ * Above 63 = split/scroll modes, rarely useful for manual control.
+ */
+export const COLOR_WHEEL_MAX_DMX = 63
+
+/**
+ * Map an RGB color preset to the nearest color wheel DMX value (center of the range).
+ * Returns undefined if no close match is found.
+ */
+export function rgbToColorWheelDmx(r: number, g: number, b: number): number {
+  // Predefined mapping: preset RGB → center DMX value for that color slot
+  const presetMap: { r: number; g: number; b: number; dmx: number }[] = [
+    { r: 255, g: 0,   b: 0,   dmx: 11 },  // Red (8-15)
+    { r: 255, g: 165, b: 0,   dmx: 19 },  // Orange (16-23) — also Amber
+    { r: 255, g: 191, b: 0,   dmx: 19 },  // Amber → Orange
+    { r: 255, g: 255, b: 0,   dmx: 27 },  // Yellow (24-31)
+    { r: 0,   g: 255, b: 0,   dmx: 35 },  // Green (32-39)
+    { r: 0,   g: 255, b: 255, dmx: 43 },  // Cyan → Light Blue (40-47)
+    { r: 0,   g: 0,   b: 255, dmx: 51 },  // Blue (48-55)
+    { r: 255, g: 0,   b: 255, dmx: 59 },  // Magenta (56-63)
+    { r: 255, g: 255, b: 255, dmx: 3  },  // White / Open (0-7)
+    { r: 255, g: 200, b: 120, dmx: 3  },  // Warm → White/Open
+    { r: 0,   g: 0,   b: 0,   dmx: 0  },  // Off → Open (dimmer handles off)
+  ]
+
+  // Find closest match by Euclidean distance in RGB space
+  let bestDmx = 3
+  let bestDist = Infinity
+  for (const p of presetMap) {
+    const dr = r - p.r, dg = g - p.g, db = b - p.b
+    const dist = dr * dr + dg * dg + db * db
+    if (dist < bestDist) {
+      bestDist = dist
+      bestDmx = p.dmx
+    }
+  }
+  return bestDmx
+}
+
+/**
+ * Check if a channel name refers to a color wheel channel.
+ */
+export function isColorWheelChannel(channelName: string): boolean {
+  const n = channelName.toLowerCase()
+  return n === 'color wheel' || n === 'color wheel effect' || n === 'colour wheel' || n === 'color'
+}
+
 export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number; b: number } {
   const hasColorChannels = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
                            ch.white > 0 || ch.amber > 0 || ch.uv > 0 ||

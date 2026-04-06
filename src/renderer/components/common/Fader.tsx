@@ -5,8 +5,10 @@ export const FADER_WIDTH = 28
 export const FADER_GAP = 6
 
 interface FaderProps {
-  value: number // 0-255
+  value: number
   onChange: (value: number) => void
+  min?: number
+  max?: number
   label?: string
   color?: string
   vertical?: boolean
@@ -18,6 +20,8 @@ interface FaderProps {
 export function Fader({
   value,
   onChange,
+  min = 0,
+  max = 255,
   label,
   color = '#e85d04',
   vertical = true,
@@ -29,6 +33,8 @@ export function Fader({
   const isDragging = useRef(false)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+
+  const range = max - min
 
   const computeValue = useCallback((e: React.PointerEvent) => {
     const track = trackRef.current
@@ -42,8 +48,8 @@ export function Fader({
       ratio = (e.clientX - rect.left) / rect.width
     }
     ratio = Math.max(0, Math.min(1, ratio))
-    onChangeRef.current(Math.round(ratio * 255))
-  }, [vertical])
+    onChangeRef.current(Math.round(min + ratio * range))
+  }, [vertical, min, range])
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     isDragging.current = true
@@ -60,8 +66,8 @@ export function Fader({
     isDragging.current = false
   }, [])
 
-  const percent = (value / 255) * 100
-  const displayValue = Math.round(percent)
+  const percent = range > 0 ? ((value - min) / range) * 100 : 0
+  const displayValue = Math.round((value / 255) * 100)
 
   return (
     <div

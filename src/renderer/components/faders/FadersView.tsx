@@ -5,6 +5,7 @@ import { useUiStore } from '../../stores/ui-store'
 import { useMidiStore } from '../../stores/midi-store'
 import { Fader, FADER_WIDTH, FADER_GAP } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
+import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
 import type { MidiTargetType } from '@shared/types'
 
 // Context menu for MIDI Learn
@@ -259,6 +260,7 @@ function FixtureFaders({
                 >
                   <Fader
                     value={displayValue}
+                    max={isColorWheelChannel(uch.name) ? COLOR_WHEEL_MAX_DMX : 255}
                     onChange={(val) => {
                       // Apply to ALL selected fixtures
                       for (const entry of selectedEntries) {
@@ -342,12 +344,13 @@ function FixtureFaders({
                   >
                     <Fader
                       value={values[universe][ch.absoluteChannel] || 0}
+                      max={isColorWheelChannel(ch.name) ? COLOR_WHEEL_MAX_DMX : 255}
                       onChange={(val) => {
                         setChannel(universe, ch.absoluteChannel, val)
                       }}
                       label={getChannelShortLabel(ch.name)}
                       color={color}
-                        showValue={true}
+                      showValue={true}
                     />
                   </div>
                 )

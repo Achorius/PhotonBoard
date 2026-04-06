@@ -5,6 +5,7 @@ import { Fader, FADER_WIDTH, FADER_GAP } from '../common/Fader'
 import { ColorPicker } from '../common/ColorPicker'
 import { XYPad } from '../common/XYPad'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
+import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
 
 // Fixed section order for consistent layout across all fixture types
 const SECTION_ORDER: { key: string; label: string; channelMatchers: string[] }[] = [
@@ -133,11 +134,13 @@ export function FixtureControlView() {
                         const chDef = firstDef?.channels[ch.name]
                         const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
                         const val = values[firstEntry!.universe][ch.absoluteChannel] || 0
+                        const isCW = isColorWheelChannel(ch.name)
 
                         return (
                           <Fader
                             key={ch.name}
                             value={val}
+                            max={isCW ? COLOR_WHEEL_MAX_DMX : 255}
                             onChange={(v) => {
                               for (const entry of selectedEntries) {
                                 const channels = getFixtureChannels(entry)

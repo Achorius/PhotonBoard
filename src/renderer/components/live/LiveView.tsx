@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, memo } from 'react'
 import { useDmxStore } from '../../stores/dmx-store'
 import { usePatchStore } from '../../stores/patch-store'
-import { resolveChannels, getEffectiveColor } from '../../lib/dmx-channel-resolver'
+import { resolveChannels, getEffectiveColor, rgbToColorWheelDmx } from '../../lib/dmx-channel-resolver'
 import { HSlider } from '../common/HSlider'
 
 // ---------------------------------------------------------------------------
@@ -132,9 +132,21 @@ export function LiveView() {
       const gCh = findChannel(channels, 'green', 'g')
       const bCh = findChannel(channels, 'blue', 'b')
       const dimCh = findChannel(channels, 'dimmer', 'intensity', 'master dimmer', 'master', 'brightness')
-      if (rCh) setChannel(entry.universe, rCh.absoluteChannel, preset.r)
-      if (gCh) setChannel(entry.universe, gCh.absoluteChannel, preset.g)
-      if (bCh) setChannel(entry.universe, bCh.absoluteChannel, preset.b)
+
+      if (rCh && gCh && bCh) {
+        // RGB fixture — set each channel directly
+        setChannel(entry.universe, rCh.absoluteChannel, preset.r)
+        setChannel(entry.universe, gCh.absoluteChannel, preset.g)
+        setChannel(entry.universe, bCh.absoluteChannel, preset.b)
+      } else {
+        // No RGB — try color wheel channel
+        const cwCh = findChannel(channels, 'color wheel', 'color', 'colour wheel', 'color wheel effect')
+        if (cwCh) {
+          const cwDmx = rgbToColorWheelDmx(preset.r, preset.g, preset.b)
+          setChannel(entry.universe, cwCh.absoluteChannel, cwDmx)
+        }
+      }
+
       // Auto-set dimmer to full if applying a non-off color and dimmer is at 0
       if (dimCh && (preset.r > 0 || preset.g > 0 || preset.b > 0)) {
         const currentDim = dmxValues[entry.universe]?.[dimCh.absoluteChannel] ?? 0
