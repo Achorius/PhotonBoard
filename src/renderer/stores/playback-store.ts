@@ -119,14 +119,21 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
     set((state) => ({
       cuelists: state.cuelists.map((cl) => {
         if (cl.id !== id) return cl
-        const nextIndex = cl.currentCueIndex + 1
+        if (cl.cues.length === 0) return cl
+
+        let nextIndex = cl.currentCueIndex + 1
         if (nextIndex >= cl.cues.length) {
-          if (cl.isLooping) {
-            return { ...cl, currentCueIndex: 0, isPlaying: true }
-          }
-          return { ...cl, isPlaying: false }
+          // Always wrap back to 0 (loop behavior)
+          nextIndex = 0
         }
-        return { ...cl, currentCueIndex: nextIndex, isPlaying: true }
+
+        // Bump goGeneration to force re-trigger even if same index
+        return {
+          ...cl,
+          currentCueIndex: nextIndex,
+          isPlaying: true,
+          goGeneration: (cl.goGeneration ?? 0) + 1
+        }
       })
     }))
   },
@@ -134,7 +141,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   stopCuelist: (id) => {
     set((state) => ({
       cuelists: state.cuelists.map((cl) =>
-        cl.id === id ? { ...cl, isPlaying: false } : cl
+        cl.id === id ? { ...cl, isPlaying: false, currentCueIndex: -1 } : cl
       )
     }))
   },
@@ -142,9 +149,15 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   goBackCuelist: (id) => {
     set((state) => ({
       cuelists: state.cuelists.map((cl) => {
-        if (cl.id !== id) return cl
-        const prevIndex = Math.max(-1, cl.currentCueIndex - 1)
-        return { ...cl, currentCueIndex: prevIndex, isPlaying: prevIndex >= 0 }
+        if (cl.id !== id || cl.cues.length === 0) return cl
+        let prevIndex = cl.currentCueIndex - 1
+        if (prevIndex < 0) prevIndex = cl.cues.length - 1
+        return {
+          ...cl,
+          currentCueIndex: prevIndex,
+          isPlaying: true,
+          goGeneration: (cl.goGeneration ?? 0) + 1
+        }
       })
     }))
   },

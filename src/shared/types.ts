@@ -201,6 +201,7 @@ export interface Cuelist {
   priority: number // 0-100, higher wins in LTP
   faderLevel: number // 0-255, master level for this cuelist
   flash: boolean
+  goGeneration?: number // bumped on each GO to force re-trigger
 }
 
 // --- Chases ---

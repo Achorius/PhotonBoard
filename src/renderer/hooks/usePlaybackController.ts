@@ -6,17 +6,17 @@ import { startFade, setFadeUpdateCallback, stopFade } from '../lib/cue-engine'
 import { startChase, stopChase } from '../lib/chase-engine'
 
 /**
- * Playback controller: wires cuelist GO/Stop and chase toggle
- * to the cue-engine and chase-engine.
- *
+ * Playback controller: wires scene GO/Stop to the cue-engine
+ * and chase toggle to the chase-engine.
  * Mount once in App.
  */
 export function usePlaybackController(): void {
-  const prevCueIndices = useRef<Map<string, number>>(new Map())
+  // Track both index AND generation so re-triggers on same index work
+  const prevState = useRef<Map<string, { index: number; gen: number }>>(new Map())
   const prevChasePlaying = useRef<Map<string, boolean>>(new Map())
 
   useEffect(() => {
-    // Wire fade engine output → DMX store (direct write)
+    // Wire fade engine output → DMX store
     setFadeUpdateCallback((allValues) => {
       const dmx = useDmxStore.getState()
       const patch = usePatchStore.getState().patch
@@ -48,25 +48,29 @@ export function usePlaybackController(): void {
     })
 
     // Subscribe to playback state changes
-    const unsub = usePlaybackStore.subscribe((state, prevState) => {
-      // --- Cuelists / Scenes ---
+    const unsub = usePlaybackStore.subscribe((state) => {
+      // --- Scenes (Cuelists) ---
       for (const cl of state.cuelists) {
-        const prevIndex = prevCueIndices.current.get(cl.id) ?? -1
+        const prev = prevState.current.get(cl.id) ?? { index: -1, gen: -1 }
         const curIndex = cl.currentCueIndex
+        const curGen = cl.goGeneration ?? 0
 
-        if (curIndex !== prevIndex && curIndex >= 0 && curIndex < cl.cues.length) {
+        // Trigger fade if index or generation changed
+        const changed = curIndex !== prev.index || curGen !== prev.gen
+        if (changed && curIndex >= 0 && curIndex < cl.cues.length && cl.isPlaying) {
           const toCue = cl.cues[curIndex]
-          const fromCue = prevIndex >= 0 && prevIndex < cl.cues.length
-            ? cl.cues[prevIndex]
+          const fromCue = prev.index >= 0 && prev.index < cl.cues.length
+            ? cl.cues[prev.index]
             : null
           startFade(cl.id, fromCue, toCue)
         }
 
-        if (!cl.isPlaying && prevIndex >= 0) {
+        // Stop: isPlaying went from true to false
+        if (!cl.isPlaying && prev.index >= 0) {
           stopFade(cl.id)
         }
 
-        prevCueIndices.current.set(cl.id, curIndex)
+        prevState.current.set(cl.id, { index: curIndex, gen: curGen })
       }
 
       // --- Chases ---
