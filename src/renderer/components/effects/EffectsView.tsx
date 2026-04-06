@@ -43,16 +43,30 @@ const EFFECT_TEMPLATES: EffectTemplate[] = [
     description: 'Random position changes',
     channels: ['Pan', 'Tilt'], waveform: 'random', defaultSpeed: 40, defaultSize: 50, defaultSpread: 0 },
 
-  // --- Color ---
+  // --- Color (RGB fixtures) ---
   { id: 'rainbow', label: 'Rainbow', icon: '🌈', category: 'color',
-    description: 'Cycle through all colors',
+    description: 'Cycle through RGB colors',
     channels: ['Red', 'Green', 'Blue'], waveform: 'sine', defaultSpeed: 10, defaultSize: 100, defaultSpread: 120 },
   { id: 'color-chase', label: 'Color Chase', icon: '→', category: 'color',
-    description: 'Colors ripple across fixtures',
+    description: 'RGB colors ripple across fixtures',
     channels: ['Red', 'Green', 'Blue'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 60 },
   { id: 'color-pulse', label: 'Color Pulse', icon: '♥', category: 'color',
-    description: 'Pulsing color shifts',
+    description: 'Pulsing RGB color shifts',
     channels: ['Red', 'Green', 'Blue'], waveform: 'triangle', defaultSpeed: 40, defaultSize: 100, defaultSpread: 0 },
+
+  // --- Color (Color Wheel fixtures: Intimidator, Pointe, etc.) ---
+  { id: 'wheel-cycle', label: 'Wheel Cycle', icon: '🎡', category: 'color',
+    description: 'Cycle through color wheel positions',
+    channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 10, defaultSize: 100, defaultSpread: 0 },
+  { id: 'wheel-chase', label: 'Wheel Chase', icon: '🔄', category: 'color',
+    description: 'Color wheel ripple across fixtures',
+    channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 20, defaultSize: 100, defaultSpread: 90 },
+  { id: 'wheel-step', label: 'Wheel Step', icon: '⬛', category: 'color',
+    description: 'Step through wheel colors sharply',
+    channels: ['Color Wheel'], waveform: 'square', defaultSpeed: 30, defaultSize: 100, defaultSpread: 0 },
+  { id: 'wheel-random', label: 'Wheel Random', icon: '🎲', category: 'color',
+    description: 'Random color wheel jumps',
+    channels: ['Color Wheel'], waveform: 'random', defaultSpeed: 40, defaultSize: 100, defaultSpread: 0 },
 
   // --- Intensity ---
   { id: 'pulse', label: 'Pulse', icon: '●', category: 'intensity',

@@ -29,6 +29,13 @@ const CHANNEL_TYPE_TO_NAME: Record<string, string> = {
   Zoom: 'zoom',
   Focus: 'focus',
   Shutter: 'shutter',
+  'Color Wheel': 'color wheel',
+  Cyan: 'cyan',
+  Magenta: 'magenta',
+  Yellow: 'yellow',
+  Prism: 'prism',
+  Frost: 'frost',
+  Iris: 'iris',
 }
 
 export function startEffect(effect: Effect): void {
