@@ -33,8 +33,8 @@ export function Toolbar() {
           max={255}
           value={grandMaster}
           onChange={(e) => setGrandMaster(parseInt(e.target.value))}
-          className="w-24 h-1.5"
-          style={{ accentColor: '#e85d04' }}
+          className="w-24"
+          style={{ '--slider-color': '#e85d04' } as React.CSSProperties}
         />
         <span className="text-[10px] font-mono text-gray-400 w-8 text-right">
           {Math.round((grandMaster / 255) * 100)}%
@@ -49,10 +49,14 @@ export function Toolbar() {
             : 'bg-purple-700/30 text-purple-400 border border-purple-600/40 hover:bg-purple-700/50'
         }`}
         onClick={() => {
-          if (isLearning) cancelLearn()
-          else startLearn({ type: 'master', label: 'Grand Master' })
+          try {
+            if (isLearning) cancelLearn()
+            else startLearn({ type: 'master', label: 'Grand Master' })
+          } catch (e) {
+            console.error('[MIDI] Toolbar learn error:', e)
+          }
         }}
-        title={isLearning ? `Learning: ${learnTarget?.label} — Click to cancel` : 'MIDI Learn (maps to Grand Master)'}
+        title={isLearning ? `Learning: ${learnTarget?.label || '...'} — Click to cancel` : 'MIDI Learn (maps to Grand Master)'}
       >
         {isLearning ? `MIDI ● ${learnTarget?.label || '...'}` : 'MIDI Learn'}
       </button>

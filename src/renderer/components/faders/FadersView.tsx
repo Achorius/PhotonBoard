@@ -388,7 +388,6 @@ function RawChannelFaders({
           onChange={(val) => setChannel(i, val)}
           label={`${i + 1}`}
           color="#e85d04"
-          size="sm"
           showValue={false}
           onDoubleClick={() => setChannel(i, values[i] > 0 ? 0 : 255)}
         />

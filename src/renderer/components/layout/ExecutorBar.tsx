@@ -58,8 +58,8 @@ export function ExecutorBar() {
                   if (ex.type === 'cuelist') setCuelistFader(ex.id, v)
                   else setChaseFader(ex.id, v)
                 }}
-                className="flex-1 h-1"
-                style={{ accentColor: isActive ? '#e85d04' : '#444' }}
+                className="flex-1"
+                style={{ '--slider-color': isActive ? '#e85d04' : '#444' } as React.CSSProperties}
               />
               <span className="text-[8px] font-mono text-gray-600 w-5 text-right shrink-0">
                 {Math.round((ex.faderLevel / 255) * 100)}

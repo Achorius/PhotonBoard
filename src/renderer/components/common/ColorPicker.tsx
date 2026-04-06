@@ -143,8 +143,8 @@ export function ColorPicker({ red, green, blue, white, onChange }: ColorPickerPr
               max={255}
               value={value}
               onChange={(e) => set(parseInt(e.target.value))}
-              className="flex-1 h-2"
-              style={{ accentColor: color }}
+              className="flex-1"
+              style={{ '--slider-color': color } as React.CSSProperties}
             />
             <span className="text-[10px] font-mono w-7 text-right text-gray-400">{value}</span>
           </div>

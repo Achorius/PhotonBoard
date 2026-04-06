@@ -58,7 +58,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #e85d04;
+    background: var(--slider-color, #e85d04);
     margin-top: -5px;
   }
 }

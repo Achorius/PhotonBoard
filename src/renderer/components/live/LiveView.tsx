@@ -300,8 +300,8 @@ export function LiveView() {
                   max={255}
                   value={dimmerSlider}
                   onChange={(e) => handleDimmerSlider(parseInt(e.target.value))}
-                  className="flex-1 h-1.5 min-w-0"
-                  style={{ accentColor: '#e85d04' }}
+                  className="flex-1 min-w-0"
+                  style={{ '--slider-color': '#e85d04' } as React.CSSProperties}
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-8 text-right shrink-0">
                   {Math.round((dimmerSlider / 255) * 100)}%
@@ -343,7 +343,7 @@ export function LiveView() {
                 <input
                   type="range" min={0} max={255} value={panSlider}
                   onChange={(e) => { const v = parseInt(e.target.value); setPanSlider(v); setChannelForSelected('pan', v) }}
-                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#6366f1' }}
+                  className="flex-1 min-w-0" style={{ '--slider-color': '#6366f1' } as React.CSSProperties}
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{panSlider}</span>
               </div>
@@ -353,7 +353,7 @@ export function LiveView() {
                 <input
                   type="range" min={0} max={255} value={tiltSlider}
                   onChange={(e) => { const v = parseInt(e.target.value); setTiltSlider(v); setChannelForSelected('tilt', v) }}
-                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#6366f1' }}
+                  className="flex-1 min-w-0" style={{ '--slider-color': '#6366f1' } as React.CSSProperties}
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{tiltSlider}</span>
               </div>
@@ -363,7 +363,7 @@ export function LiveView() {
                 <input
                   type="range" min={0} max={255} value={zoomSlider}
                   onChange={(e) => { const v = parseInt(e.target.value); setZoomSlider(v); setChannelForSelected('zoom', v) }}
-                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#22c55e' }}
+                  className="flex-1 min-w-0" style={{ '--slider-color': '#22c55e' } as React.CSSProperties}
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{zoomSlider}</span>
               </div>
@@ -373,7 +373,7 @@ export function LiveView() {
                 <input
                   type="range" min={0} max={255} value={strobeSlider}
                   onChange={(e) => { const v = parseInt(e.target.value); setStrobeSlider(v); setChannelForSelected('strobe', v); setChannelForSelected('shutter', v) }}
-                  className="flex-1 h-1.5 min-w-0" style={{ accentColor: '#ef4444' }}
+                  className="flex-1 min-w-0" style={{ '--slider-color': '#ef4444' } as React.CSSProperties}
                 />
                 <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{strobeSlider}</span>
               </div>

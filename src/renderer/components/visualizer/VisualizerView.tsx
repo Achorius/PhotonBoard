@@ -250,7 +250,7 @@ export function VisualizerView() {
                           if (c) setChannel(entry.universe, c.absoluteChannel, v)
                         }
                       }}
-                      className="flex-1 h-1.5 min-w-0" style={{ accentColor: color }}
+                      className="flex-1 min-w-0" style={{ '--slider-color': color } as React.CSSProperties}
                     />
                     <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{val}</span>
                   </div>
