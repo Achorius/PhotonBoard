@@ -125,7 +125,7 @@ export function PatchPanel() {
             <button className="text-[9px] text-gray-600 hover:text-gray-400" onClick={clearSelection}>✕</button>
           </div>
           <div className="flex gap-0.5 flex-wrap justify-start">
-            {selectedChannels.slice(0, 10).map(ch => {
+            {selectedChannels.map(ch => {
               const chDef = singleDef?.channels[ch.name]
               const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
               const val = values[singleSelected.universe][ch.absoluteChannel] || 0
