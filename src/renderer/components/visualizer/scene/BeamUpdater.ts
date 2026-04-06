@@ -25,11 +25,11 @@ export function updateFixtureObjects(
 
   // --- Beam color via centralized resolver (handles RGB, CMY, color wheel, dimmer-only) ---
   // getEffectiveColor returns dimmer-applied values, but we handle dimmer separately via effectiveDim
-  // So we call it with a copy that has full dimmer, then use the raw color
+  // So we call it with dimmer=255 to get the raw beam color at full intensity
   const colorResult = getEffectiveColor({
     ...channels,
     dimmer: 255,            // override: we apply dimmer via effectiveDim below
-    hasDimmerChannel: false  // prevent double-dimming
+    hasDimmerChannel: true  // keep true so dimmer-only fixtures return white beam
   })
   const r = colorResult.r
   const g = colorResult.g
