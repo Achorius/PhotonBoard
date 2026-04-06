@@ -190,7 +190,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
   const spotTarget = new THREE.Object3D()
   if (headGroup) {
     // Moving head: spotlight follows the head's orientation
-    spotTarget.position.set(0, 0, -6)  // Target along -Z (beam direction in head space)
+    spotTarget.position.set(0, 0, 6)  // Target along +Z (beam direction in head space after rotateX)
     headGroup.add(spotLight)
     headGroup.add(spotTarget)
   } else {

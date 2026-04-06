@@ -101,8 +101,8 @@ export function updateFixtureObjects(
     if (options?.panInvert) panDeg = -panDeg
     if (options?.tiltInvert) tiltDeg = -tiltDeg
     objects.yokeGroup.rotation.y = THREE.MathUtils.degToRad(panDeg)
-    // Offset tilt by -90° so center position (tilt=128) points beam straight down
-    objects.headGroup.rotation.x = THREE.MathUtils.degToRad(tiltDeg - 90)
+    // Cone points +Z in headGroup space; offset by +90° so center (tilt=128) points beam straight down
+    objects.headGroup.rotation.x = THREE.MathUtils.degToRad(90 - tiltDeg)
   }
 
   // --- Shutter/strobe ---
