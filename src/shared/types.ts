@@ -202,6 +202,7 @@ export interface Cuelist {
   faderLevel: number // 0-255, master level for this cuelist
   flash: boolean
   goGeneration?: number // bumped on each GO to force re-trigger
+  effectSnapshots?: Effect[] // Effects captured at record time, restarted on GO
 }
 
 // --- Chases ---

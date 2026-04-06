@@ -49,16 +49,26 @@ export function PlaybackView() {
       }
     }
 
-    // Count running effects for the name
+    // Snapshot running effects (deep copy so they're independent)
     const runningEffects = effects.filter(e => e.isRunning)
+    const effectSnapshots = runningEffects.map(e => ({ ...e }))
     const effectLabel = runningEffects.length > 0
-      ? ` + ${runningEffects.length} effect${runningEffects.length > 1 ? 's' : ''}`
+      ? ` + ${runningEffects.length} fx`
       : ''
 
-    // Create a new scene (cuelist with one cue)
+    // Create a new scene (cuelist with one cue + effect snapshots)
     const sceneNumber = cuelists.length + 1
     const sceneId = addCuelist(`Scene ${sceneNumber}${effectLabel}`)
     addCue(sceneId, `Look 1`, cueValues, 2, 2)
+
+    // Store effect snapshots in the cuelist
+    if (effectSnapshots.length > 0) {
+      usePlaybackStore.setState(s => ({
+        cuelists: s.cuelists.map(cl =>
+          cl.id === sceneId ? { ...cl, effectSnapshots } : cl
+        )
+      }))
+    }
   }, [patch, selectedFixtureIds, getFixtureChannels, values, effects, cuelists, addCuelist, addCue])
 
   // Add a step (cue) to an existing scene
@@ -154,18 +164,11 @@ export function PlaybackView() {
                 <button className="btn-ghost text-[10px] py-0.5" onClick={() => goBackCuelist(scene.id)} title="Previous step">◀</button>
                 <button
                   className={`px-3 py-1 rounded text-[10px] font-bold transition-colors ${
-                    isActive ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-accent text-white hover:bg-orange-500'
+                    isActive ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-accent text-white hover:bg-orange-500'
                   }`}
-                  onClick={() => goCuelist(scene.id)}
+                  onClick={() => isActive ? stopCuelist(scene.id) : goCuelist(scene.id)}
                 >
-                  GO
-                </button>
-                <button
-                  className="btn-ghost text-[10px] py-0.5 hover:text-red-400"
-                  onClick={() => stopCuelist(scene.id)}
-                  title="Stop"
-                >
-                  ■
+                  {isActive ? 'STOP' : 'GO'}
                 </button>
 
                 {/* Add step */}

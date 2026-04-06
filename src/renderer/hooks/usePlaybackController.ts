@@ -4,18 +4,22 @@ import { usePatchStore } from '../stores/patch-store'
 import { useDmxStore } from '../stores/dmx-store'
 import { startFade, setFadeUpdateCallback, setFadeCompleteCallback, stopFade } from '../lib/cue-engine'
 import { startChase, stopChase } from '../lib/chase-engine'
+import { startEffect, stopEffect } from '../lib/effect-engine'
 
 /**
  * Playback controller: wires scene GO/Stop to the cue-engine
  * and chase toggle to the chase-engine.
  * Handles auto-advance (loop + followTime).
+ * Starts/stops effect snapshots stored in scenes.
  * Mount once in App.
  */
 export function usePlaybackController(): void {
   // Track both index AND generation so re-triggers on same index work
-  const prevState = useRef<Map<string, { index: number; gen: number }>>(new Map())
+  const prevState = useRef<Map<string, { index: number; gen: number; playing: boolean }>>(new Map())
   const prevChasePlaying = useRef<Map<string, boolean>>(new Map())
   const followTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  // Track which scene effect IDs are currently running (scene ID → effect IDs)
+  const activeSceneEffects = useRef<Map<string, string[]>>(new Map())
 
   useEffect(() => {
     // Wire fade engine output → DMX store
@@ -60,18 +64,13 @@ export function usePlaybackController(): void {
 
       // Check if there's a followTime on this cue
       const hasFollowTime = currentCue.followTime !== null && currentCue.followTime !== undefined
-      // Check if we should auto-advance (loop or followTime)
       const isLastStep = cl.currentCueIndex >= cl.cues.length - 1
-      const shouldAutoAdvance = hasFollowTime || (isLastStep && cl.isLooping) || (!isLastStep)
 
-      if (!shouldAutoAdvance) return
-
-      // For looping on last step or followTime: schedule next GO
-      const waitTime = hasFollowTime ? (currentCue.followTime! * 1000) : 0
-
-      // Only auto-advance if looping or not at last step, or followTime is set
+      // Only auto-advance if followTime is set, or if looping on last step
       if (isLastStep && !cl.isLooping && !hasFollowTime) return
-      if (!isLastStep && !hasFollowTime) return // Non-last step without followTime = manual GO
+      if (!isLastStep && !hasFollowTime) return
+
+      const waitTime = hasFollowTime ? (currentCue.followTime! * 1000) : 0
 
       // Clear any existing timer for this cuelist
       const existingTimer = followTimers.current.get(cuelistId)
@@ -79,7 +78,6 @@ export function usePlaybackController(): void {
 
       const timer = setTimeout(() => {
         followTimers.current.delete(cuelistId)
-        // Re-check state in case stop was pressed during wait
         const currentState = usePlaybackStore.getState()
         const currentCl = currentState.cuelists.find(c => c.id === cuelistId)
         if (currentCl && currentCl.isPlaying) {
@@ -90,11 +88,38 @@ export function usePlaybackController(): void {
       followTimers.current.set(cuelistId, timer)
     })
 
+    // Helper: start scene effects
+    const startSceneEffects = (sceneId: string, effectSnapshots: any[]) => {
+      // Stop any previously running effects for this scene
+      stopSceneEffects(sceneId)
+
+      const effectIds: string[] = []
+      for (const snap of effectSnapshots) {
+        // Create a unique effect ID for this scene instance
+        const sceneEffectId = `scene_${sceneId}_${snap.id}`
+        const effect = { ...snap, id: sceneEffectId, isRunning: true }
+        startEffect(effect)
+        effectIds.push(sceneEffectId)
+      }
+      activeSceneEffects.current.set(sceneId, effectIds)
+    }
+
+    // Helper: stop scene effects
+    const stopSceneEffects = (sceneId: string) => {
+      const effectIds = activeSceneEffects.current.get(sceneId)
+      if (effectIds) {
+        for (const id of effectIds) {
+          stopEffect(id)
+        }
+        activeSceneEffects.current.delete(sceneId)
+      }
+    }
+
     // Subscribe to playback state changes
     const unsub = usePlaybackStore.subscribe((state) => {
       // --- Scenes (Cuelists) ---
       for (const cl of state.cuelists) {
-        const prev = prevState.current.get(cl.id) ?? { index: -1, gen: -1 }
+        const prev = prevState.current.get(cl.id) ?? { index: -1, gen: -1, playing: false }
         const curIndex = cl.currentCueIndex
         const curGen = cl.goGeneration ?? 0
 
@@ -106,11 +131,18 @@ export function usePlaybackController(): void {
             ? cl.cues[prev.index]
             : null
           startFade(cl.id, fromCue, toCue)
+
+          // Start scene effects on first GO (when transitioning from not-playing to playing)
+          if (!prev.playing && cl.effectSnapshots && cl.effectSnapshots.length > 0) {
+            startSceneEffects(cl.id, cl.effectSnapshots)
+          }
         }
 
         // Stop: isPlaying went from true to false
-        if (!cl.isPlaying && prev.index >= 0) {
+        if (!cl.isPlaying && prev.playing) {
           stopFade(cl.id)
+          stopSceneEffects(cl.id)
+
           // Clear any pending auto-advance timer
           const timer = followTimers.current.get(cl.id)
           if (timer) {
@@ -119,7 +151,7 @@ export function usePlaybackController(): void {
           }
         }
 
-        prevState.current.set(cl.id, { index: curIndex, gen: curGen })
+        prevState.current.set(cl.id, { index: curIndex, gen: curGen, playing: cl.isPlaying })
       }
 
       // --- Chases ---
@@ -145,6 +177,14 @@ export function usePlaybackController(): void {
         clearTimeout(timer)
       }
       followTimers.current.clear()
+      // Stop all scene effects
+      for (const sceneId of activeSceneEffects.current.keys()) {
+        const effectIds = activeSceneEffects.current.get(sceneId)
+        if (effectIds) {
+          for (const id of effectIds) stopEffect(id)
+        }
+      }
+      activeSceneEffects.current.clear()
     }
   }, [])
 }

@@ -72,19 +72,12 @@ export function ExecutorBar() {
               <button
                 className={`flex-1 text-[10px] font-bold rounded py-0.5 transition-colors ${
                   isActive
-                    ? 'bg-green-700 text-white hover:bg-green-600'
+                    ? 'bg-red-700 text-white hover:bg-red-600'
                     : 'bg-accent text-white hover:bg-orange-500'
                 }`}
-                onClick={() => goCuelist(scene.id)}
+                onClick={() => isActive ? stopCuelist(scene.id) : goCuelist(scene.id)}
               >
-                GO
-              </button>
-              <button
-                className="text-[9px] text-gray-500 hover:text-red-400 px-1 py-0.5 rounded hover:bg-surface-3"
-                onClick={() => stopCuelist(scene.id)}
-                title="Stop"
-              >
-                ■
+                {isActive ? 'STOP' : 'GO'}
               </button>
             </div>
           </div>
