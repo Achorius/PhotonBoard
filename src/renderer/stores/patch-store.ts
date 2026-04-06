@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import type { PatchEntry, FixtureDefinition, Group } from '@shared/types'
+import { useDmxStore } from './dmx-store'
 
 interface PatchState {
   patch: PatchEntry[]
@@ -80,6 +81,18 @@ export const usePatchStore = create<PatchState>((set, get) => ({
         : state.groups
       return { patch: newPatch, groups: newGroups }
     })
+
+    // Set default DMX values: Pan & Tilt to 128 (center/neutral = pointing down)
+    const { setChannel } = useDmxStore.getState()
+    const centerChannels = ['pan', 'tilt']
+    for (const entry of newEntries) {
+      mode.channels.forEach((chName, index) => {
+        const n = chName.toLowerCase()
+        if (centerChannels.includes(n)) {
+          setChannel(entry.universe, entry.address - 1 + index, 128)
+        }
+      })
+    }
   },
 
   removeFixture: (id) => {

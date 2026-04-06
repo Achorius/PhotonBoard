@@ -183,14 +183,22 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     group.add(lensMesh)
   }
 
-  // SpotLight — child of group, aimed downward
+  // SpotLight — for moving heads, attach to headGroup so it follows pan/tilt
   const spotLight = new THREE.SpotLight(0xffffff, 0, 14, beamAngleRad * 1.1, 0.25, 1.5)
   spotLight.castShadow = false
   spotLight.userData.baseAngle = beamAngleRad * 1.1  // preserve for per-frame reset
   const spotTarget = new THREE.Object3D()
-  spotTarget.position.set(0, -6, 0)
-  group.add(spotLight)
-  group.add(spotTarget)
+  if (headGroup) {
+    // Moving head: spotlight follows the head's orientation
+    spotTarget.position.set(0, 0, -6)  // Target along -Z (beam direction in head space)
+    headGroup.add(spotLight)
+    headGroup.add(spotTarget)
+  } else {
+    // Static fixture: spotlight points straight down from fixture body
+    spotTarget.position.set(0, -6, 0)
+    group.add(spotLight)
+    group.add(spotTarget)
+  }
   spotLight.target = spotTarget
 
   return {
