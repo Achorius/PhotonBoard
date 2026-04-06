@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react'
 import { usePatchStore } from '../../stores/patch-store'
+import { useDmxStore } from '../../stores/dmx-store'
 import { useEffectsStore } from '../../stores/effects-store'
 import { HSlider } from '../common/HSlider'
 import type { WaveformType } from '@shared/types'
@@ -111,6 +112,32 @@ export function EffectsView() {
 
   const addFromTemplate = useCallback((template: EffectTemplate) => {
     const targetIds = hasSelection ? [...selectedFixtureIds] : patch.map(p => p.id)
+    const { fixtures } = usePatchStore.getState()
+    const dmxStore = useDmxStore.getState()
+
+    // For color and intensity effects, ensure dimmers are on for target fixtures
+    if (template.category === 'color' || template.category === 'intensity') {
+      for (const fxId of targetIds) {
+        const entry = patch.find(p => p.id === fxId)
+        if (!entry) continue
+        const def = fixtures.find(f => f.id === entry.fixtureDefId)
+        if (!def) continue
+        const mode = def.modes.find(m => m.name === entry.modeName)
+        if (!mode) continue
+
+        // Find dimmer channel and set to 255 if currently 0
+        const dimmerIdx = mode.channels.findIndex(ch =>
+          ch.toLowerCase() === 'dimmer' || ch.toLowerCase() === 'intensity'
+        )
+        if (dimmerIdx >= 0) {
+          const absChannel = entry.address - 1 + dimmerIdx
+          const currentVal = dmxStore.values[entry.universe]?.[absChannel] ?? 0
+          if (currentVal === 0) {
+            dmxStore.setChannel(entry.universe, absChannel, 255)
+          }
+        }
+      }
+    }
 
     for (let i = 0; i < template.channels.length; i++) {
       const channelType = template.channels[i]

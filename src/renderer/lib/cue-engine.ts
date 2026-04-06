@@ -21,9 +21,14 @@ export interface FadeState {
 const activeFades: Map<string, FadeState> = new Map()
 let animationFrame: number | null = null
 let onUpdate: ((values: Map<string, Map<string, number>>) => void) | null = null
+let onComplete: ((cuelistId: string) => void) | null = null
 
 export function setFadeUpdateCallback(cb: (values: Map<string, Map<string, number>>) => void): void {
   onUpdate = cb
+}
+
+export function setFadeCompleteCallback(cb: (cuelistId: string) => void): void {
+  onComplete = cb
 }
 
 export function startFade(
@@ -123,6 +128,8 @@ function updateFades(): void {
     if (progress >= 1) {
       fade.complete = true
       activeFades.delete(id)
+      // Notify controller that this cuelist's fade finished
+      if (onComplete) onComplete(id)
     }
   }
 

@@ -272,8 +272,32 @@ export function PlaybackView() {
                                   <span className="text-[9px] text-gray-600">s</span>
                                 </div>
                               </td>
-                              <td className="px-2 py-0.5 text-center font-mono text-gray-500">
-                                {cue.followTime !== null ? `${cue.followTime}s` : '—'}
+                              <td className="px-2 py-0.5">
+                                <div className="flex items-center gap-0.5 justify-center">
+                                  {cue.followTime !== null ? (
+                                    <>
+                                      <input
+                                        className="bg-transparent border-none outline-none w-8 text-inherit text-center font-mono"
+                                        type="number" step={0.1} min={0}
+                                        value={cue.followTime}
+                                        onChange={e => updateCue(scene.id, cue.id, { followTime: parseFloat(e.target.value) || 0 })}
+                                      />
+                                      <button
+                                        className="text-[8px] text-gray-600 hover:text-red-400"
+                                        onClick={() => updateCue(scene.id, cue.id, { followTime: null })}
+                                        title="Remove auto-follow"
+                                      >✕</button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      className="text-[9px] text-gray-600 hover:text-accent"
+                                      onClick={() => updateCue(scene.id, cue.id, { followTime: 0 })}
+                                      title="Enable auto-follow (advance after fade)"
+                                    >
+                                      + auto
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-2 py-0.5 text-gray-500 text-center">{cue.values.length}</td>
                               <td className="px-2 py-0.5">
@@ -286,8 +310,8 @@ export function PlaybackView() {
                     </div>
                   )}
 
-                  {/* Loop toggle */}
-                  <div className="px-3 py-1.5 flex items-center gap-2 border-t border-surface-3">
+                  {/* Loop toggle + Auto-follow all steps */}
+                  <div className="px-3 py-1.5 flex items-center gap-3 border-t border-surface-3">
                     <label className="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer">
                       <input
                         type="checkbox"
@@ -297,8 +321,32 @@ export function PlaybackView() {
                         }))}
                         className="rounded"
                       />
-                      Loop (restart after last step)
+                      Loop
                     </label>
+                    <button
+                      className="text-[10px] text-gray-500 hover:text-accent px-1.5 py-0.5 rounded hover:bg-surface-3"
+                      onClick={() => {
+                        // Set followTime=0 on all cues → auto-advance immediately after fade
+                        for (const cue of scene.cues) {
+                          updateCue(scene.id, cue.id, { followTime: 0 })
+                        }
+                      }}
+                      title="Set all steps to auto-advance immediately after fade completes"
+                    >
+                      Auto-follow all
+                    </button>
+                    <button
+                      className="text-[10px] text-gray-500 hover:text-accent px-1.5 py-0.5 rounded hover:bg-surface-3"
+                      onClick={() => {
+                        // Clear followTime on all cues → manual GO only
+                        for (const cue of scene.cues) {
+                          updateCue(scene.id, cue.id, { followTime: null })
+                        }
+                      }}
+                      title="Set all steps to require manual GO"
+                    >
+                      Manual all
+                    </button>
                     <span className="text-[10px] text-gray-600 ml-auto">
                       {scene.cues.length} step{scene.cues.length !== 1 ? 's' : ''}
                     </span>

@@ -2,18 +2,20 @@ import { useEffect, useRef } from 'react'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
 import { useDmxStore } from '../stores/dmx-store'
-import { startFade, setFadeUpdateCallback, stopFade } from '../lib/cue-engine'
+import { startFade, setFadeUpdateCallback, setFadeCompleteCallback, stopFade } from '../lib/cue-engine'
 import { startChase, stopChase } from '../lib/chase-engine'
 
 /**
  * Playback controller: wires scene GO/Stop to the cue-engine
  * and chase toggle to the chase-engine.
+ * Handles auto-advance (loop + followTime).
  * Mount once in App.
  */
 export function usePlaybackController(): void {
   // Track both index AND generation so re-triggers on same index work
   const prevState = useRef<Map<string, { index: number; gen: number }>>(new Map())
   const prevChasePlaying = useRef<Map<string, boolean>>(new Map())
+  const followTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   useEffect(() => {
     // Wire fade engine output → DMX store
@@ -47,6 +49,47 @@ export function usePlaybackController(): void {
       }
     })
 
+    // Handle fade completion → auto-advance for loop/followTime
+    setFadeCompleteCallback((cuelistId) => {
+      const state = usePlaybackStore.getState()
+      const cl = state.cuelists.find(c => c.id === cuelistId)
+      if (!cl || !cl.isPlaying) return
+
+      const currentCue = cl.cues[cl.currentCueIndex]
+      if (!currentCue) return
+
+      // Check if there's a followTime on this cue
+      const hasFollowTime = currentCue.followTime !== null && currentCue.followTime !== undefined
+      // Check if we should auto-advance (loop or followTime)
+      const isLastStep = cl.currentCueIndex >= cl.cues.length - 1
+      const shouldAutoAdvance = hasFollowTime || (isLastStep && cl.isLooping) || (!isLastStep)
+
+      if (!shouldAutoAdvance) return
+
+      // For looping on last step or followTime: schedule next GO
+      const waitTime = hasFollowTime ? (currentCue.followTime! * 1000) : 0
+
+      // Only auto-advance if looping or not at last step, or followTime is set
+      if (isLastStep && !cl.isLooping && !hasFollowTime) return
+      if (!isLastStep && !hasFollowTime) return // Non-last step without followTime = manual GO
+
+      // Clear any existing timer for this cuelist
+      const existingTimer = followTimers.current.get(cuelistId)
+      if (existingTimer) clearTimeout(existingTimer)
+
+      const timer = setTimeout(() => {
+        followTimers.current.delete(cuelistId)
+        // Re-check state in case stop was pressed during wait
+        const currentState = usePlaybackStore.getState()
+        const currentCl = currentState.cuelists.find(c => c.id === cuelistId)
+        if (currentCl && currentCl.isPlaying) {
+          usePlaybackStore.getState().goCuelist(cuelistId)
+        }
+      }, waitTime)
+
+      followTimers.current.set(cuelistId, timer)
+    })
+
     // Subscribe to playback state changes
     const unsub = usePlaybackStore.subscribe((state) => {
       // --- Scenes (Cuelists) ---
@@ -68,6 +111,12 @@ export function usePlaybackController(): void {
         // Stop: isPlaying went from true to false
         if (!cl.isPlaying && prev.index >= 0) {
           stopFade(cl.id)
+          // Clear any pending auto-advance timer
+          const timer = followTimers.current.get(cl.id)
+          if (timer) {
+            clearTimeout(timer)
+            followTimers.current.delete(cl.id)
+          }
         }
 
         prevState.current.set(cl.id, { index: curIndex, gen: curGen })
@@ -90,6 +139,12 @@ export function usePlaybackController(): void {
     return () => {
       unsub()
       setFadeUpdateCallback(() => {})
+      setFadeCompleteCallback(() => {})
+      // Clear all follow timers
+      for (const timer of followTimers.current.values()) {
+        clearTimeout(timer)
+      }
+      followTimers.current.clear()
     }
   }, [])
 }
