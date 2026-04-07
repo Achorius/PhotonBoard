@@ -80,6 +80,7 @@ export default function App() {
       timeline: {
         clips: [...usePlaybackStore.getState().timelineClips],
         markers: [...usePlaybackStore.getState().timelineMarkers],
+        zones: [...usePlaybackStore.getState().timelineZones],
         trackCount: usePlaybackStore.getState().timelineTrackCount
       }
     }
@@ -97,6 +98,7 @@ export default function App() {
     if (show.timeline) {
       usePlaybackStore.getState().setTimelineClips(show.timeline.clips || [])
       usePlaybackStore.getState().setTimelineMarkers(show.timeline.markers || [])
+      usePlaybackStore.getState().setTimelineZones(show.timeline.zones || [])
       if (show.timeline.trackCount) usePlaybackStore.getState().setTimelineTrackCount(show.timeline.trackCount)
     }
     // Clear selections

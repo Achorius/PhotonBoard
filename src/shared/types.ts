@@ -262,9 +262,19 @@ export interface TimelineMarker {
   color?: string
 }
 
+export interface TimelineZone {
+  id: string
+  name: string
+  startTime: number       // seconds
+  endTime: number         // seconds
+  color?: string
+  order: number           // display order in sidebar (for reordering)
+}
+
 export interface TimelineState {
   clips: TimelineClip[]
   markers: TimelineMarker[]
+  zones: TimelineZone[]
   trackCount: number
   isPlaying: boolean
   currentTime: number     // playhead position in seconds
@@ -342,7 +352,7 @@ export interface ShowFile {
   midiMappings: MidiMapping[]
   stageLayout: StageLayout
   roomConfig?: RoomConfig
-  timeline?: { clips: TimelineClip[]; markers: TimelineMarker[]; trackCount: number }
+  timeline?: { clips: TimelineClip[]; markers: TimelineMarker[]; zones: TimelineZone[]; trackCount: number }
 }
 
 // --- IPC Channel Names ---

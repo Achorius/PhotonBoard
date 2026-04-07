@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
-import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType, TimelineClip, TimelineMarker } from '@shared/types'
+import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType, TimelineClip, TimelineMarker, TimelineZone } from '@shared/types'
 
 interface PlaybackState {
   cuelists: Cuelist[]
@@ -47,6 +47,14 @@ interface PlaybackState {
   updateTimelineMarker: (id: string, updates: Partial<TimelineMarker>) => void
   setTimelineMarkers: (markers: TimelineMarker[]) => void
   setTimelineTrackCount: (count: number) => void
+
+  // Timeline zones
+  timelineZones: TimelineZone[]
+  addTimelineZone: (zone: Omit<TimelineZone, 'id'>) => string
+  removeTimelineZone: (id: string) => void
+  updateTimelineZone: (id: string, updates: Partial<TimelineZone>) => void
+  setTimelineZones: (zones: TimelineZone[]) => void
+  reorderTimelineZones: (orderedIds: string[]) => void
 
   // Import
   setCuelists: (cuelists: Cuelist[]) => void
@@ -332,6 +340,47 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   setTimelineMarkers: (markers) => set({ timelineMarkers: markers }),
 
   setTimelineTrackCount: (count) => set({ timelineTrackCount: Math.max(1, count) }),
+
+  // --- Timeline Zones ---
+  timelineZones: [],
+
+  addTimelineZone: (zone) => {
+    const id = uuidv4()
+    set((state) => ({
+      timelineZones: [...state.timelineZones, { ...zone, id }].sort((a, b) => a.order - b.order)
+    }))
+    return id
+  },
+
+  removeTimelineZone: (id) => {
+    set((state) => ({
+      timelineZones: state.timelineZones.filter(z => z.id !== id)
+    }))
+  },
+
+  updateTimelineZone: (id, updates) => {
+    set((state) => ({
+      timelineZones: state.timelineZones.map(z =>
+        z.id === id ? { ...z, ...updates } : z
+      ).sort((a, b) => a.order - b.order)
+    }))
+  },
+
+  setTimelineZones: (zones) => set({ timelineZones: zones }),
+
+  reorderTimelineZones: (orderedIds) => {
+    set((state) => {
+      const zonesMap = new Map(state.timelineZones.map(z => [z.id, z]))
+      return {
+        timelineZones: orderedIds
+          .map((id, i) => {
+            const z = zonesMap.get(id)
+            return z ? { ...z, order: i } : null
+          })
+          .filter(Boolean) as TimelineZone[]
+      }
+    })
+  },
 
   setCuelists: (cuelists) => set({ cuelists }),
   setChases: (chases) => set({ chases }),

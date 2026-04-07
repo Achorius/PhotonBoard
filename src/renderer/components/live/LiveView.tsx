@@ -8,7 +8,7 @@ import {
 } from '../../lib/timeline-engine'
 import { stopAllEffects } from '../../lib/effect-engine'
 import { useUiStore } from '../../stores/ui-store'
-import type { TimelineClip, TimelineMarker, MidiTargetType } from '@shared/types'
+import type { TimelineClip, TimelineMarker, TimelineZone, MidiTargetType } from '@shared/types'
 
 // ── Constants ──
 const TRACK_HEIGHT = 48
@@ -21,6 +21,8 @@ const CLIP_COLORS = [
   '#0891b2', '#ca8a04', '#db2777', '#4f46e5', '#059669'
 ]
 const MARKER_COLORS = ['#facc15', '#f97316', '#ef4444', '#22c55e', '#3b82f6', '#a855f7']
+const ZONE_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#eab308']
+const ZONE_ROW_HEIGHT = 16
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -34,9 +36,11 @@ function formatTime(seconds: number): string {
 export function LiveView() {
   const {
     cuelists, timelineClips, timelineMarkers, timelineTrackCount,
+    timelineZones,
     addTimelineClip, removeTimelineClip, updateTimelineClip,
     addTimelineMarker, removeTimelineMarker, updateTimelineMarker,
-    setTimelineTrackCount
+    setTimelineTrackCount,
+    addTimelineZone, removeTimelineZone, updateTimelineZone, reorderTimelineZones
   } = usePlaybackStore()
   const { startLearn } = useMidiStore()
 
@@ -67,7 +71,16 @@ export function LiveView() {
   const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null)
   const [editingMarkerName, setEditingMarkerName] = useState('')
 
+  // Zone state
+  const [zoneMenu, setZoneMenu] = useState<{ x: number; y: number; zoneId: string } | null>(null)
+  const [editingZoneId, setEditingZoneId] = useState<string | null>(null)
+  const [editingZoneName, setEditingZoneName] = useState('')
+  const [dragZoneSidebar, setDragZoneSidebar] = useState<{ fromId: string; overId: string | null } | null>(null)
+  const [creatingZone, setCreatingZone] = useState<{ startX: number; startTime: number } | null>(null)
+
   const timelineRef = useRef<HTMLDivElement>(null)
+
+  const topOffset = RULER_HEIGHT + MARKER_ROW_HEIGHT + ZONE_ROW_HEIGHT
 
   // Sync with global timeline engine
   useEffect(() => {
@@ -115,7 +128,7 @@ export function LiveView() {
     const rect = timelineRef.current?.getBoundingClientRect()
     if (!rect) return
     const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
-    const y = e.clientY - rect.top - RULER_HEIGHT - MARKER_ROW_HEIGHT
+    const y = e.clientY - rect.top - topOffset
     const startTime = Math.max(0, x / zoom)
     const trackIndex = Math.max(0, Math.floor(y / TRACK_HEIGHT))
     const store = usePlaybackStore.getState()
@@ -140,7 +153,7 @@ export function LiveView() {
     const rect = timelineRef.current?.getBoundingClientRect()
     if (!rect) return
     const clickX = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
-    const clickY = e.clientY - rect.top - RULER_HEIGHT - MARKER_ROW_HEIGHT
+    const clickY = e.clientY - rect.top - topOffset
     setDragClip({
       clipId,
       offsetX: clickX - clip.startTime * zoom,
@@ -173,7 +186,7 @@ export function LiveView() {
 
       if (dragClip) {
         const x = e.clientX - rect.left + sl - dragClip.offsetX
-        const y = e.clientY - rect.top - RULER_HEIGHT - MARKER_ROW_HEIGHT
+        const y = e.clientY - rect.top - topOffset
         const newStart = Math.max(0, Math.round((x / zoom) * 4) / 4)
         const newTrack = Math.max(0, Math.min(timelineTrackCount - 1, Math.floor(y / TRACK_HEIGHT)))
         updateTimelineClip(dragClip.clipId, { startTime: newStart, trackIndex: newTrack })
@@ -200,7 +213,7 @@ export function LiveView() {
       }
 
       if (dragTrack) {
-        const y = e.clientY - rect.top - RULER_HEIGHT - MARKER_ROW_HEIGHT
+        const y = e.clientY - rect.top - topOffset
         const newTrack = Math.max(0, Math.min(timelineTrackCount - 1, Math.floor(y / TRACK_HEIGHT)))
         setDragTrack({ ...dragTrack, current: newTrack })
       }
@@ -281,6 +294,137 @@ export function LiveView() {
     if (prev) { setTimelineTime(prev.time); scrollToTime(prev.time) }
   }, [scrollToTime])
 
+  // ── Zone reorder: shift clips when zones are rearranged ──
+  const handleZoneReorder = useCallback((orderedIds: string[]) => {
+    const store = usePlaybackStore.getState()
+    const zones = store.timelineZones
+    const clips = store.timelineClips
+
+    // Build old order (by current order field)
+    const oldOrder = [...zones].sort((a, b) => a.order - b.order)
+    const newOrder = orderedIds.map(id => zones.find(z => z.id === id)!).filter(Boolean)
+    if (newOrder.length !== oldOrder.length) return
+
+    // Calculate each zone's duration
+    const zoneDurations = oldOrder.map(z => z.endTime - z.startTime)
+    const zoneIdToDuration = new Map(oldOrder.map((z, i) => [z.id, zoneDurations[i]]))
+
+    // Build new start times based on new order
+    let cursor = oldOrder.length > 0 ? Math.min(...oldOrder.map(z => z.startTime)) : 0
+    const newZoneStarts = new Map<string, number>()
+    for (const z of newOrder) {
+      newZoneStarts.set(z.id, cursor)
+      cursor += zoneIdToDuration.get(z.id) || 0
+    }
+
+    // For each clip, figure out which zone it belongs to (by old zone bounds)
+    for (const clip of clips) {
+      const clipMid = clip.startTime + clip.duration / 2
+      const sourceZone = oldOrder.find(z => clipMid >= z.startTime && clipMid < z.endTime)
+      if (!sourceZone) continue
+      const oldZoneStart = sourceZone.startTime
+      const newZoneStart = newZoneStarts.get(sourceZone.id)
+      if (newZoneStart === undefined) continue
+      const offset = newZoneStart - oldZoneStart
+      if (offset !== 0) {
+        updateTimelineClip(clip.id, { startTime: Math.max(0, clip.startTime + offset) })
+      }
+    }
+
+    // Update zone positions
+    for (const z of oldOrder) {
+      const newStart = newZoneStarts.get(z.id)
+      if (newStart === undefined) continue
+      const dur = zoneIdToDuration.get(z.id) || 0
+      updateTimelineZone(z.id, { startTime: newStart, endTime: newStart + dur })
+    }
+
+    // Update markers within zones
+    const markers = store.timelineMarkers
+    for (const marker of markers) {
+      const sourceZone = oldOrder.find(z => marker.time >= z.startTime && marker.time < z.endTime)
+      if (!sourceZone) continue
+      const oldZoneStart = sourceZone.startTime
+      const newZoneStart = newZoneStarts.get(sourceZone.id)
+      if (newZoneStart === undefined) continue
+      const offset = newZoneStart - oldZoneStart
+      if (offset !== 0) {
+        updateTimelineMarker(marker.id, { time: Math.max(0, marker.time + offset) })
+      }
+    }
+
+    reorderTimelineZones(orderedIds)
+  }, [updateTimelineClip, updateTimelineZone, updateTimelineMarker, reorderTimelineZones])
+
+  // ── Zone sidebar drag reorder ──
+  const handleZoneDragStart = useCallback((e: React.DragEvent, zoneId: string) => {
+    e.dataTransfer.setData('application/x-zone-id', zoneId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDragZoneSidebar({ fromId: zoneId, overId: null })
+  }, [])
+
+  const handleZoneDragOver = useCallback((e: React.DragEvent, overId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragZoneSidebar(prev => prev ? { ...prev, overId } : null)
+  }, [])
+
+  const handleZoneDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const fromId = e.dataTransfer.getData('application/x-zone-id')
+    if (!fromId || !dragZoneSidebar?.overId) { setDragZoneSidebar(null); return }
+    const currentOrder = [...sortedZones].map(z => z.id)
+    const fromIdx = currentOrder.indexOf(fromId)
+    const toIdx = currentOrder.indexOf(dragZoneSidebar.overId)
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) { setDragZoneSidebar(null); return }
+    // Reorder
+    currentOrder.splice(fromIdx, 1)
+    currentOrder.splice(toIdx, 0, fromId)
+    handleZoneReorder(currentOrder)
+    setDragZoneSidebar(null)
+  }, [dragZoneSidebar, sortedZones, handleZoneReorder])
+
+  // ── Create zone by Shift+drag on ruler ──
+  const handleRulerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!e.shiftKey) return
+    e.preventDefault()
+    const rect = timelineRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
+    const time = Math.max(0, Math.round((x / zoom) * 4) / 4)
+    setCreatingZone({ startX: x, startTime: time })
+  }, [zoom])
+
+  useEffect(() => {
+    if (!creatingZone) return
+    const handleMouseMove = (e: MouseEvent) => {
+      // Just track — the zone will be created on mouseup
+    }
+    const handleMouseUp = (e: MouseEvent) => {
+      const rect = timelineRef.current?.getBoundingClientRect()
+      if (!rect) { setCreatingZone(null); return }
+      const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
+      const endTime = Math.max(0, Math.round((x / zoom) * 4) / 4)
+      const start = Math.min(creatingZone.startTime, endTime)
+      const end = Math.max(creatingZone.startTime, endTime)
+      if (end - start >= 1) {
+        const idx = usePlaybackStore.getState().timelineZones.length
+        addTimelineZone({ name: `Zone ${idx + 1}`, startTime: start, endTime: end, color: ZONE_COLORS[idx % ZONE_COLORS.length], order: idx })
+      }
+      setCreatingZone(null)
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp) }
+  }, [creatingZone, zoom, addTimelineZone])
+
+  // ── Zone right-click ──
+  const handleZoneContextMenu = useCallback((e: React.MouseEvent, zoneId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setZoneMenu({ x: e.clientX, y: e.clientY, zoneId })
+  }, [])
+
   // ── Click empty area = set playhead ──
   const handleTimelineClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement
@@ -304,19 +448,19 @@ export function LiveView() {
 
   // Close context menus on click
   useEffect(() => {
-    if (!trackMenu && !markerMenu && !midiMenu && !clipMenu) return
-    const handler = () => { setTrackMenu(null); setMarkerMenu(null); setMidiMenu(null); setClipMenu(null) }
+    if (!trackMenu && !markerMenu && !midiMenu && !clipMenu && !zoneMenu) return
+    const handler = () => { setTrackMenu(null); setMarkerMenu(null); setMidiMenu(null); setClipMenu(null); setZoneMenu(null) }
     window.addEventListener('click', handler)
     return () => window.removeEventListener('click', handler)
-  }, [trackMenu, markerMenu, midiMenu, clipMenu])
+  }, [trackMenu, markerMenu, midiMenu, clipMenu, zoneMenu])
 
   const maxEnd = useMemo(() => {
     const clipEnd = timelineClips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0)
     return Math.max(totalDuration, clipEnd + 10)
   }, [timelineClips, totalDuration])
   const totalWidth = maxEnd * zoom
-  const topOffset = RULER_HEIGHT + MARKER_ROW_HEIGHT
   const activeClipIds = isPlaying ? getActiveClipIds() : new Set<string>()
+  const sortedZones = useMemo(() => [...timelineZones].sort((a, b) => a.order - b.order), [timelineZones])
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -386,6 +530,50 @@ export function LiveView() {
             )}
           </div>
         </div>
+
+        {/* Zones list */}
+        <div className="border-t border-surface-3">
+          <div className="px-3 py-1.5 text-[10px] uppercase text-gray-500 font-semibold flex items-center justify-between">
+            <span>Zones</span>
+            <span className="text-[8px] text-gray-600 font-normal">Shift+drag ruler</span>
+          </div>
+          <div className="overflow-y-auto max-h-48 px-1.5 pb-1.5 space-y-0.5">
+            {sortedZones.map(z => (
+              <div
+                key={z.id}
+                draggable
+                onDragStart={(e) => handleZoneDragStart(e, z.id)}
+                onDragOver={(e) => handleZoneDragOver(e, z.id)}
+                onDrop={handleZoneDrop}
+                onContextMenu={(e) => handleZoneContextMenu(e, z.id)}
+                className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] cursor-grab active:cursor-grabbing transition-colors ${
+                  dragZoneSidebar?.overId === z.id ? 'bg-accent/20 border border-accent/30' : 'hover:bg-surface-3'
+                }`}
+                onClick={() => { setTimelineTime(z.startTime); scrollToTime(z.startTime) }}
+              >
+                <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: (z.color || '#3b82f6') + '66', border: `1px solid ${z.color || '#3b82f6'}` }} />
+                {editingZoneId === z.id ? (
+                  <input
+                    autoFocus
+                    className="flex-1 bg-surface-3 text-gray-200 text-[10px] rounded px-1 py-0 border-none outline-none"
+                    value={editingZoneName}
+                    onChange={(e) => setEditingZoneName(e.target.value)}
+                    onBlur={() => { updateTimelineZone(z.id, { name: editingZoneName }); setEditingZoneId(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { updateTimelineZone(z.id, { name: editingZoneName }); setEditingZoneId(null) } }}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="flex-1 text-gray-300 truncate" onDoubleClick={(e) => { e.stopPropagation(); setEditingZoneId(z.id); setEditingZoneName(z.name) }}>{z.name}</span>
+                )}
+                <span className="text-gray-600 font-mono shrink-0 text-[8px]">{formatTime(z.startTime)}-{formatTime(z.endTime)}</span>
+              </div>
+            ))}
+            {sortedZones.length === 0 && (
+              <p className="text-[9px] text-gray-700 text-center py-1">Shift+drag on ruler to create</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ═══════ MAIN ═══════ */}
@@ -434,6 +622,7 @@ export function LiveView() {
           <div className="w-24 shrink-0 border-r border-surface-3 bg-surface-1 flex flex-col">
             <div style={{ height: RULER_HEIGHT }} className="border-b border-surface-3" />
             <div style={{ height: MARKER_ROW_HEIGHT }} className="border-b border-surface-3 flex items-center justify-center text-[8px] text-gray-600">Markers</div>
+            <div style={{ height: ZONE_ROW_HEIGHT }} className="border-b border-surface-3 flex items-center justify-center text-[8px] text-gray-600">Zones</div>
             {Array.from({ length: timelineTrackCount }, (_, i) => (
               <div
                 key={i}
@@ -473,7 +662,7 @@ export function LiveView() {
           >
             <div className="relative" style={{ width: totalWidth, minHeight: topOffset + timelineTrackCount * TRACK_HEIGHT }}>
               {/* Time ruler */}
-              <div className="sticky top-0 z-20 bg-surface-1 border-b border-surface-3 cursor-pointer" style={{ height: RULER_HEIGHT }} onClick={handleRulerClick} onDoubleClick={handleRulerDoubleClick}>
+              <div className="sticky top-0 z-20 bg-surface-1 border-b border-surface-3 cursor-pointer" style={{ height: RULER_HEIGHT }} onClick={handleRulerClick} onDoubleClick={handleRulerDoubleClick} onMouseDown={handleRulerMouseDown}>
                 <svg width={totalWidth} height={RULER_HEIGHT} className="block">
                   {Array.from({ length: Math.ceil(maxEnd) + 1 }, (_, i) => {
                     const x = i * zoom
@@ -507,6 +696,41 @@ export function LiveView() {
                   </div>
                 ))}
               </div>
+
+              {/* Zone row */}
+              <div className="sticky z-14 bg-surface-0/60 border-b border-surface-3/50" style={{ top: RULER_HEIGHT + MARKER_ROW_HEIGHT, height: ZONE_ROW_HEIGHT }}>
+                {sortedZones.map(z => {
+                  const left = z.startTime * zoom
+                  const width = (z.endTime - z.startTime) * zoom
+                  const zColor = z.color || '#3b82f6'
+                  return (
+                    <div
+                      key={z.id}
+                      className="absolute top-0 bottom-0 flex items-center overflow-hidden cursor-pointer hover:brightness-125"
+                      style={{ left, width, backgroundColor: zColor + '33', borderLeft: `2px solid ${zColor}`, borderRight: `2px solid ${zColor}` }}
+                      onClick={() => { setTimelineTime(z.startTime); scrollToTime(z.startTime) }}
+                      onContextMenu={(e) => handleZoneContextMenu(e, z.id)}
+                      title={`${z.name} (${formatTime(z.startTime)} - ${formatTime(z.endTime)})`}
+                    >
+                      <span className="text-[8px] px-1 truncate font-medium" style={{ color: zColor }}>{z.name}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Zone background on tracks */}
+              {sortedZones.map(z => {
+                const left = z.startTime * zoom
+                const width = (z.endTime - z.startTime) * zoom
+                const zColor = z.color || '#3b82f6'
+                return (
+                  <div
+                    key={`zone-bg-${z.id}`}
+                    className="absolute pointer-events-none z-0"
+                    style={{ left, width, top: topOffset, height: timelineTrackCount * TRACK_HEIGHT, backgroundColor: zColor + '08', borderLeft: `1px dashed ${zColor}44`, borderRight: `1px dashed ${zColor}44` }}
+                  />
+                )
+              })}
 
               {/* Track rows */}
               {Array.from({ length: timelineTrackCount }, (_, i) => (
@@ -618,6 +842,21 @@ export function LiveView() {
           </button>
           <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineClip(clipMenu.clipId); setClipMenu(null) }}>
             Remove from Timeline
+          </button>
+        </div>
+      )}
+
+      {/* Zone context menu */}
+      {zoneMenu && (
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[160px]" style={{ left: zoneMenu.x, top: zoneMenu.y }}>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => {
+            const z = sortedZones.find(x => x.id === zoneMenu.zoneId)
+            setEditingZoneId(zoneMenu.zoneId); setEditingZoneName(z?.name || ''); setZoneMenu(null)
+          }}>
+            Rename Zone
+          </button>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineZone(zoneMenu.zoneId); setZoneMenu(null) }}>
+            Delete Zone
           </button>
         </div>
       )}
