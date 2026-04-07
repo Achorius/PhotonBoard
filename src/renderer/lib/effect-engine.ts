@@ -7,6 +7,7 @@
 import type { Effect, WaveformType } from '@shared/types'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
+import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from './dmx-channel-resolver'
 
 const activeEffects: Map<string, RunningEffect> = new Map()
 let animationFrame: number | null = null
@@ -96,13 +97,15 @@ function updateEffects(): void {
       const phase = (elapsed * effect.speed + baseOffset + phaseOffset) % 1
       const waveValue = getWaveformValue(effect.waveform, phase)
 
-      // Map -1..1 to 0..depth
-      const value = Math.round(((waveValue + 1) / 2) * effect.depth)
-
       // Find the actual DMX channel for this channel type
       const targetName = CHANNEL_TYPE_TO_NAME[effect.channelType] || effect.channelType.toLowerCase()
       const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
       if (chIndex === -1) continue
+
+      // Map -1..1 to 0..maxValue (clamped for color wheel channels)
+      const channelName = mode.channels[chIndex]
+      const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : effect.depth
+      const value = Math.round(((waveValue + 1) / 2) * maxValue)
 
       const absChannel = entry.address - 1 + chIndex
       if (absChannel >= 0 && absChannel < 512) {
