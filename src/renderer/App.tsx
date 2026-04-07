@@ -75,7 +75,11 @@ export default function App() {
       midiMappings: [...useMidiStore.getState().mappings],
       stageLayout: { width: 1200, height: 600, fixtures: [] },
       roomConfig: { ...roomConfig },
-      timeline: [...usePlaybackStore.getState().timelineClips]
+      timeline: {
+        clips: [...usePlaybackStore.getState().timelineClips],
+        markers: [...usePlaybackStore.getState().timelineMarkers],
+        trackCount: usePlaybackStore.getState().timelineTrackCount
+      }
     }
   }, [])
 
@@ -88,7 +92,11 @@ export default function App() {
     useUiStore.getState().setShowName(show.name || 'New Show')
     if (show.midiMappings && show.midiMappings.length > 0) useMidiStore.getState().setMappings(show.midiMappings)
     if (show.roomConfig) useVisualizerStore.getState().setRoomConfig(show.roomConfig)
-    if (show.timeline) usePlaybackStore.getState().setTimelineClips(show.timeline)
+    if (show.timeline) {
+      usePlaybackStore.getState().setTimelineClips(show.timeline.clips || [])
+      usePlaybackStore.getState().setTimelineMarkers(show.timeline.markers || [])
+      if (show.timeline.trackCount) usePlaybackStore.getState().setTimelineTrackCount(show.timeline.trackCount)
+    }
     // Clear selections
     usePatchStore.getState().clearSelection()
     useVisualizerStore.getState().selectFixture(null)

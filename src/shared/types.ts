@@ -255,8 +255,17 @@ export interface TimelineClip {
   color?: string          // UI color for the clip block
 }
 
+export interface TimelineMarker {
+  id: string
+  time: number            // seconds
+  name: string
+  color?: string
+}
+
 export interface TimelineState {
   clips: TimelineClip[]
+  markers: TimelineMarker[]
+  trackCount: number
   isPlaying: boolean
   currentTime: number     // playhead position in seconds
   totalDuration: number   // total timeline length in seconds
@@ -333,7 +342,7 @@ export interface ShowFile {
   midiMappings: MidiMapping[]
   stageLayout: StageLayout
   roomConfig?: RoomConfig
-  timeline?: TimelineClip[]
+  timeline?: { clips: TimelineClip[]; markers: TimelineMarker[]; trackCount: number }
 }
 
 // --- IPC Channel Names ---

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
-import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType, TimelineClip } from '@shared/types'
+import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType, TimelineClip, TimelineMarker } from '@shared/types'
 
 interface PlaybackState {
   cuelists: Cuelist[]
@@ -36,10 +36,17 @@ interface PlaybackState {
 
   // Timeline
   timelineClips: TimelineClip[]
+  timelineMarkers: TimelineMarker[]
+  timelineTrackCount: number
   addTimelineClip: (clip: Omit<TimelineClip, 'id'>) => string
   removeTimelineClip: (id: string) => void
   updateTimelineClip: (id: string, updates: Partial<TimelineClip>) => void
   setTimelineClips: (clips: TimelineClip[]) => void
+  addTimelineMarker: (marker: Omit<TimelineMarker, 'id'>) => string
+  removeTimelineMarker: (id: string) => void
+  updateTimelineMarker: (id: string, updates: Partial<TimelineMarker>) => void
+  setTimelineMarkers: (markers: TimelineMarker[]) => void
+  setTimelineTrackCount: (count: number) => void
 
   // Import
   setCuelists: (cuelists: Cuelist[]) => void
@@ -273,6 +280,8 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
 
   // --- Timeline ---
   timelineClips: [],
+  timelineMarkers: [],
+  timelineTrackCount: 3,
 
   addTimelineClip: (clip) => {
     const id = uuidv4()
@@ -297,6 +306,32 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   },
 
   setTimelineClips: (clips) => set({ timelineClips: clips }),
+
+  addTimelineMarker: (marker) => {
+    const id = uuidv4()
+    set((state) => ({
+      timelineMarkers: [...state.timelineMarkers, { ...marker, id }].sort((a, b) => a.time - b.time)
+    }))
+    return id
+  },
+
+  removeTimelineMarker: (id) => {
+    set((state) => ({
+      timelineMarkers: state.timelineMarkers.filter(m => m.id !== id)
+    }))
+  },
+
+  updateTimelineMarker: (id, updates) => {
+    set((state) => ({
+      timelineMarkers: state.timelineMarkers.map(m =>
+        m.id === id ? { ...m, ...updates } : m
+      ).sort((a, b) => a.time - b.time)
+    }))
+  },
+
+  setTimelineMarkers: (markers) => set({ timelineMarkers: markers }),
+
+  setTimelineTrackCount: (count) => set({ timelineTrackCount: Math.max(1, count) }),
 
   setCuelists: (cuelists) => set({ cuelists }),
   setChases: (chases) => set({ chases }),
