@@ -55,18 +55,19 @@ const EFFECT_TEMPLATES: EffectTemplate[] = [
     channels: ['Red', 'Green', 'Blue'], waveform: 'triangle', defaultSpeed: 40, defaultSize: 100, defaultSpread: 0 },
 
   // --- Color (Color Wheel fixtures: Intimidator, Pointe, etc.) ---
+  // Size capped at 50% (~127 DMX) to stay in color slots, not wheel rotation
   { id: 'wheel-cycle', label: 'Wheel Cycle', icon: '🎡', category: 'color',
-    description: 'Cycle through color wheel positions',
-    channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 10, defaultSize: 100, defaultSpread: 0 },
+    description: 'Cycle through color wheel slots',
+    channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 10, defaultSize: 50, defaultSpread: 0 },
   { id: 'wheel-chase', label: 'Wheel Chase', icon: '🔄', category: 'color',
     description: 'Color wheel ripple across fixtures',
-    channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 20, defaultSize: 100, defaultSpread: 90 },
+    channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 20, defaultSize: 50, defaultSpread: 90 },
   { id: 'wheel-step', label: 'Wheel Step', icon: '⬛', category: 'color',
     description: 'Step through wheel colors sharply',
-    channels: ['Color Wheel'], waveform: 'square', defaultSpeed: 30, defaultSize: 100, defaultSpread: 0 },
+    channels: ['Color Wheel'], waveform: 'square', defaultSpeed: 30, defaultSize: 50, defaultSpread: 0 },
   { id: 'wheel-random', label: 'Wheel Random', icon: '🎲', category: 'color',
     description: 'Random color wheel jumps',
-    channels: ['Color Wheel'], waveform: 'random', defaultSpeed: 40, defaultSize: 100, defaultSpread: 0 },
+    channels: ['Color Wheel'], waveform: 'random', defaultSpeed: 40, defaultSize: 50, defaultSpread: 0 },
 
   // --- Intensity ---
   { id: 'pulse', label: 'Pulse', icon: '●', category: 'intensity',
