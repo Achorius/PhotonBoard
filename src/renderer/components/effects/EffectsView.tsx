@@ -108,6 +108,7 @@ export function EffectsView() {
 
   const selectedIds = useMemo(() => new Set(selectedFixtureIds), [selectedFixtureIds])
   const hasSelection = selectedFixtureIds.length > 0
+  const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   // Resolve target label for an effect
   const getEffectTargetLabel = useCallback((fixtureIds: string[]): string => {
@@ -285,32 +286,52 @@ export function EffectsView() {
           </span>
         </div>
 
-        <div className="flex-1 overflow-auto p-3 space-y-4">
-          {/* ============ EFFECT PALETTE ============ */}
-          <div className="space-y-3">
+        <div className="flex-1 overflow-auto p-3 space-y-3">
+          {/* ============ EFFECT PALETTE — Dropdown menus ============ */}
+          <div className="flex gap-1.5">
             {Object.entries(categorizedTemplates).map(([cat, templates]) => (
-              <div key={cat}>
-                <h4 className="text-[11px] font-medium mb-1.5" style={{ color: CATEGORY_COLORS[cat] }}>
+              <div key={cat} className="relative">
+                <button
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    openCategory === cat
+                      ? 'border-accent bg-surface-3 text-white'
+                      : hasSelection
+                        ? 'border-surface-3 bg-surface-2 text-gray-300 hover:border-accent hover:bg-surface-3'
+                        : 'border-surface-2 bg-surface-1 text-gray-600 cursor-not-allowed'
+                  }`}
+                  onClick={() => hasSelection && setOpenCategory(openCategory === cat ? null : cat)}
+                  disabled={!hasSelection}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
                   {CATEGORY_LABELS[cat]}
-                </h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {templates.map(template => (
-                    <button
-                      key={template.id}
-                      className={`px-3 py-2 rounded-lg text-xs border transition-all ${
-                        hasSelection
-                          ? 'bg-surface-2 border-surface-3 hover:border-accent hover:bg-surface-3 text-gray-300'
-                          : 'bg-surface-1 border-surface-2 text-gray-600 cursor-not-allowed'
-                      }`}
-                      onClick={() => hasSelection && addFromTemplate(template)}
-                      disabled={!hasSelection}
-                      title={template.description}
-                    >
-                      <span className="text-base mr-1.5">{template.icon}</span>
-                      <span>{template.label}</span>
-                    </button>
-                  ))}
-                </div>
+                  <span className="text-[9px] text-gray-500 ml-0.5">{openCategory === cat ? '▲' : '▼'}</span>
+                </button>
+
+                {/* Dropdown panel */}
+                {openCategory === cat && (
+                  <>
+                    {/* Backdrop to close on click outside */}
+                    <div className="fixed inset-0 z-10" onClick={() => setOpenCategory(null)} />
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-surface-2 border border-surface-3 rounded-lg shadow-xl min-w-[200px] py-1 overflow-hidden">
+                      {templates.map(template => (
+                        <button
+                          key={template.id}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs text-gray-300 hover:bg-surface-3 hover:text-white transition-colors"
+                          onClick={() => {
+                            addFromTemplate(template)
+                            setOpenCategory(null)
+                          }}
+                        >
+                          <span className="text-base w-6 text-center shrink-0">{template.icon}</span>
+                          <div className="min-w-0">
+                            <div className="font-medium">{template.label}</div>
+                            <div className="text-[10px] text-gray-500 leading-tight">{template.description}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
