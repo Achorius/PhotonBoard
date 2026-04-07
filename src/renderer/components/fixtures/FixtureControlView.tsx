@@ -124,11 +124,10 @@ export function FixtureControlView() {
       </div>
 
       <div className="flex-1 overflow-hidden flex">
-        {/* ---- Left: Groups + Fixture list ---- */}
-        <div className="w-32 shrink-0 border-r border-surface-3 flex flex-col bg-surface-1">
-          {/* Groups section */}
+        {/* ---- Left: Groups ---- */}
+        <div className="w-28 shrink-0 border-r border-surface-3 flex flex-col bg-surface-1">
           <div className="px-2 py-1 text-[9px] text-gray-500 uppercase border-b border-surface-3">Groups</div>
-          <div className="overflow-y-auto p-1 space-y-px border-b border-surface-3" style={{ maxHeight: '30%' }}>
+          <div className="flex-1 overflow-y-auto p-1 space-y-px">
             <button
               className={`w-full text-left px-2 py-1 rounded text-[10px] transition-colors ${
                 selectedFixtureIds.length === 0
@@ -158,37 +157,7 @@ export function FixtureControlView() {
               )
             })}
             {groups.length === 0 && (
-              <p className="text-[9px] text-gray-700 text-center pt-1 px-1">No groups</p>
-            )}
-          </div>
-
-          {/* Fixture list */}
-          <div className="px-2 py-1 text-[9px] text-gray-500 uppercase border-b border-surface-3">Fixtures</div>
-          <div className="flex-1 overflow-y-auto">
-            {patch.map(entry => {
-              const isSelected = selectedFixtureIds.includes(entry.id)
-              const inUniverse = entry.universe === selectedUniverse
-              return (
-                <button
-                  key={entry.id}
-                  className={`w-full text-left px-2 py-1 text-[10px] border-b border-surface-3/50 ${
-                    isSelected
-                      ? 'bg-accent/10 text-accent'
-                      : inUniverse
-                        ? 'text-gray-300 hover:bg-surface-2'
-                        : 'text-gray-600 hover:bg-surface-2'
-                  }`}
-                  onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-                >
-                  <div className="font-medium truncate">{entry.name}</div>
-                  <div className="text-[9px] text-gray-600">
-                    U{entry.universe + 1}.{entry.address}
-                  </div>
-                </button>
-              )
-            })}
-            {patch.length === 0 && (
-              <p className="text-[9px] text-gray-600 text-center py-3">No fixtures patched</p>
+              <p className="text-[9px] text-gray-700 text-center pt-2 px-1">No groups.<br/>Create in Patch.</p>
             )}
           </div>
         </div>
