@@ -16,6 +16,7 @@ import { PlaybackView } from './components/playback/PlaybackView'
 import { EffectsView } from './components/effects/EffectsView'
 import { MidiView } from './components/midi/MidiView'
 import { VisualizerView } from './components/visualizer/VisualizerView'
+import { StageLayoutView } from './components/visualizer/StageLayoutView'
 import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
@@ -24,14 +25,15 @@ import { usePlaybackController } from './hooks/usePlaybackController'
 type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
 
 const WORKSPACE_TABS: WorkspaceTab[] = [
-  { id: 'visualizer', label: '3D',       shortcut: '1' },
-  { id: 'live',       label: 'Timeline', shortcut: '2' },
-  { id: 'effects',    label: 'Effects',  shortcut: '3' },
-  { id: 'playback',   label: 'Scenes',   shortcut: '4' },
-  { id: 'fixtures',   label: 'Fixtures', shortcut: '5' },
-  { id: 'patch',      label: 'Patch',    shortcut: '6' },
-  { id: 'midi',       label: 'MIDI',     shortcut: '7' },
-  { id: 'settings',   label: 'Settings', shortcut: '8' },
+  { id: 'visualizer',    label: '3D View',      shortcut: '1' },
+  { id: 'stage-layout',  label: 'Stage Layout', shortcut: '2' },
+  { id: 'live',          label: 'Timeline',     shortcut: '3' },
+  { id: 'effects',       label: 'Effects',      shortcut: '4' },
+  { id: 'playback',      label: 'Scenes',       shortcut: '5' },
+  { id: 'fixtures',      label: 'Fixtures',     shortcut: '6' },
+  { id: 'patch',         label: 'Patch',        shortcut: '7' },
+  { id: 'midi',          label: 'MIDI',         shortcut: '8' },
+  { id: 'settings',      label: 'Settings',     shortcut: '9' },
 ]
 
 export default function App() {
@@ -333,8 +335,9 @@ export default function App() {
       case 'playback':   return <PlaybackView />
       case 'effects':    return <EffectsView />
       case 'midi':       return <MidiView />
-      case 'visualizer': return <VisualizerView />
-      case 'live':       return <LiveView />
+      case 'visualizer':    return <VisualizerView />
+      case 'stage-layout': return <StageLayoutView />
+      case 'live':         return <LiveView />
       case 'settings':   return <SettingsView />
       default:           return <VisualizerView />
     }

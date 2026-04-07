@@ -1,23 +1,27 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
-import { ThreeCanvas } from './ThreeCanvas'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { LayoutEditor2D } from './editor/LayoutEditor2D'
+import { SideView } from './editor/SideView'
+import { FixturePropertiesPanel } from './editor/FixturePropertiesPanel'
+import { exportStagePDF } from '@renderer/lib/pdf-export'
 import { HSlider } from '../common/HSlider'
 import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
 
-export function VisualizerView() {
+export function StageLayoutView() {
   const {
     roomConfig, setRoomConfig,
     showBeams, setShowBeams,
     showRoom, setShowRoom,
     showGrid, setShowGrid,
-    shadowsEnabled, setShadowsEnabled,
     snapToGrid, setSnapToGrid
   } = useVisualizerStore()
 
   const { patch, fixtures, selectedFixtureIds, getFixtureChannels, groups, selectGroup, clearSelection, selectAll } = usePatchStore()
   const { values, setChannel } = useDmxStore()
+  const { showName } = useUiStore()
   const [showControls, setShowControls] = useState(true)
 
   const selectedEntries = patch.filter(p => selectedFixtureIds.includes(p.id))
@@ -25,6 +29,15 @@ export function VisualizerView() {
   const findCh = useCallback((channels: { name: string; absoluteChannel: number }[], ...names: string[]) => {
     return channels.find(c => names.some(n => c.name.toLowerCase() === n))
   }, [])
+
+  const setNamedChannel = useCallback((channelName: string, value: number) => {
+    const names = [channelName.toLowerCase()]
+    for (const entry of selectedEntries) {
+      const channels = getFixtureChannels(entry)
+      const ch = findCh(channels, ...names)
+      if (ch) setChannel(entry.universe, ch.absoluteChannel, value)
+    }
+  }, [selectedEntries, getFixtureChannels, setChannel, findCh])
 
   const setRGB = useCallback((r: number, g: number, b: number) => {
     for (const entry of selectedEntries) {
@@ -94,30 +107,33 @@ export function VisualizerView() {
               {label}
             </button>
           ))}
-          <button
-            className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-              shadowsEnabled ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30' : 'bg-surface-3 text-gray-500'
-            }`}
-            onClick={() => setShadowsEnabled(!shadowsEnabled)}
-            title="Shadows are GPU-intensive"
-          >
-            Shadows
-          </button>
         </div>
 
         <div className="flex-1" />
 
-        <span className="text-[10px] text-gray-600">
-          Orbit: drag · Zoom: scroll · Pan: right-drag
-        </span>
+        <button
+          className="px-2 py-0.5 rounded text-[10px] bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
+          onClick={() => exportStagePDF(patch, fixtures, roomConfig, showName, groups)}
+        >
+          Export PDF
+        </button>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="flex-1 overflow-hidden">
-          <div className="relative w-full h-full flex">
-            <ThreeCanvas />
-            <FixtureProps3D />
+          <div className="flex h-full">
+            {/* Left: top-down + side view */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <LayoutEditor2D />
+              <div className="h-px bg-surface-3" />
+              <SideView className="h-36 shrink-0" />
+            </div>
+            {/* Right: properties */}
+            <div className="w-60 border-l border-surface-3 shrink-0">
+              <div className="panel-header">Properties</div>
+              <FixturePropertiesPanel />
+            </div>
           </div>
         </div>
 
@@ -138,7 +154,7 @@ export function VisualizerView() {
                         className={`px-1.5 py-0.5 rounded text-[9px] ${isEmpty ? 'opacity-40 cursor-default' : 'hover:opacity-80'}`}
                         style={{ backgroundColor: g.color + '33', color: g.color }}
                         onClick={() => !isEmpty && selectGroup(g.id)}
-                        title={isEmpty ? `${g.name} (empty — add fixtures to this group)` : `Select ${g.name} (${g.fixtureIds.length})`}
+                        title={isEmpty ? `${g.name} (empty)` : `Select ${g.name} (${g.fixtureIds.length})`}
                       >
                         {g.name} {!isEmpty && <span className="opacity-60">({g.fixtureIds.length})</span>}
                       </button>
@@ -178,7 +194,6 @@ export function VisualizerView() {
                 { label: 'Tilt', name: 'tilt', color: '#6366f1', alt: [] },
                 { label: 'Zoom', name: 'zoom', color: '#22c55e', alt: [] },
               ].map(({ label, name, color, alt }) => {
-                // Read first selected fixture's value
                 const first = selectedEntries[0]
                 const chs = first ? getFixtureChannels(first) : []
                 const ch = findCh(chs, name, ...alt)
@@ -214,132 +229,6 @@ export function VisualizerView() {
             Show controls ({selectedEntries.length} fixtures)
           </button>
         )}
-      </div>
-    </div>
-  )
-}
-
-/** Compact fixture properties panel overlaid on 3D view */
-function FixtureProps3D() {
-  const { selectedFixtureId, roomConfig } = useVisualizerStore()
-  const { patch, fixtures, updateFixture } = usePatchStore()
-
-  const entry = useMemo(() => patch.find(p => p.id === selectedFixtureId), [patch, selectedFixtureId])
-  const def = useMemo(() => entry ? fixtures.find(f => f.id === entry.fixtureDefId) : null, [entry, fixtures])
-
-  if (!entry) return null
-
-  const isMovingHead = def?.categories.includes('Moving Head') ?? false
-  const pos = entry.position3D ?? { x: 0, y: roomConfig.height - 0.05, z: 0 }
-  const mountingAngle = entry.mountingAngle ?? 0
-  const mountingPan = entry.mountingPan ?? 0
-  const beamAngle = entry.beamAngle ?? def?.physical?.lens?.degreesMinMax?.[1] ?? 25
-
-  const updatePos = (key: 'x' | 'y' | 'z', value: number) => {
-    updateFixture(entry.id, { position3D: { ...pos, [key]: value } })
-  }
-
-  return (
-    <div className="absolute top-2 right-2 w-52 bg-surface-1/95 backdrop-blur border border-surface-3 rounded-lg p-3 space-y-3 z-10 shadow-xl">
-      {/* Header */}
-      <div>
-        <div className="text-xs font-semibold text-gray-200 truncate">{entry.name}</div>
-        <div className="text-[9px] text-gray-500">{def?.name} — U{entry.universe + 1}.{entry.address}</div>
-      </div>
-
-      {/* Position */}
-      <div className="space-y-1">
-        <div className="text-[9px] text-gray-500 uppercase">Position</div>
-        {([
-          { label: 'X', key: 'x' as const, min: -50, max: 50 },
-          { label: 'Y', key: 'y' as const, min: 0, max: 20 },
-          { label: 'Z', key: 'z' as const, min: -50, max: 50 },
-        ]).map(({ label, key, min, max }) => (
-          <div key={key} className="flex items-center gap-1">
-            <span className="text-[9px] text-gray-500 w-3">{label}</span>
-            <HSlider
-              value={pos[key]}
-              onChange={(v) => updatePos(key, v)}
-              min={min} max={max} step={0.1}
-              color="#e85d04"
-              className="flex-1"
-            />
-            <span className="text-[9px] font-mono text-accent w-10 text-right">{pos[key].toFixed(1)}m</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Aim / Tilt for static fixtures */}
-      {!isMovingHead && (
-        <div className="space-y-1">
-          <div className="text-[9px] text-gray-500 uppercase">Aim</div>
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] text-gray-500 w-8">Tilt</span>
-            <HSlider
-              value={mountingAngle}
-              onChange={(v) => updateFixture(entry.id, { mountingAngle: v })}
-              min={-90} max={90} step={1}
-              color="#e85d04"
-              className="flex-1"
-            />
-            <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingAngle}°</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] text-gray-500 w-8">Dir</span>
-            <HSlider
-              value={mountingPan}
-              onChange={(v) => updateFixture(entry.id, { mountingPan: v })}
-              min={-180} max={180} step={1}
-              color="#e85d04"
-              className="flex-1"
-            />
-            <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingPan}°</span>
-          </div>
-        </div>
-      )}
-
-      {/* Pan/Tilt Invert for moving heads */}
-      {isMovingHead && (
-        <div className="space-y-1">
-          <div className="text-[9px] text-gray-500 uppercase">Invert</div>
-          <div className="flex gap-3">
-            <label className="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" checked={entry.panInvert ?? false}
-                onChange={e => updateFixture(entry.id, { panInvert: e.target.checked })}
-                className="accent-accent w-3 h-3" />
-              <span className="text-[9px] text-gray-400">Pan</span>
-            </label>
-            <label className="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" checked={entry.tiltInvert ?? false}
-                onChange={e => updateFixture(entry.id, { tiltInvert: e.target.checked })}
-                className="accent-accent w-3 h-3" />
-              <span className="text-[9px] text-gray-400">Tilt</span>
-            </label>
-          </div>
-        </div>
-      )}
-
-      {/* Beam angle */}
-      <div className="flex items-center gap-1">
-        <span className="text-[9px] text-gray-500 w-8">Beam</span>
-        <HSlider
-          value={beamAngle}
-          onChange={(v) => updateFixture(entry.id, { beamAngle: v })}
-          min={2} max={90} step={1}
-          color="#e85d04"
-          className="flex-1"
-        />
-        <span className="text-[9px] font-mono text-accent w-8 text-right">{beamAngle}°</span>
-      </div>
-
-      {/* Quick placement */}
-      <div className="flex gap-1">
-        <button className="btn-secondary text-[8px] flex-1 py-0.5"
-          onClick={() => updatePos('y', roomConfig.height - 0.05)}>Ceiling</button>
-        <button className="btn-secondary text-[8px] flex-1 py-0.5"
-          onClick={() => updatePos('y', 4)}>4m</button>
-        <button className="btn-ghost text-[8px] flex-1 py-0.5 text-red-400"
-          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined })}>Reset</button>
       </div>
     </div>
   )
