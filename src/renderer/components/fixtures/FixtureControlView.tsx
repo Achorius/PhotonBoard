@@ -69,6 +69,18 @@ export function FixtureControlView() {
   const hasRGB = channelNames.has('red') && channelNames.has('green') && channelNames.has('blue')
   const hasPanTilt = channelNames.has('pan') || channelNames.has('tilt')
 
+  // Auto-switch universe when selected fixture is on a different one
+  const prevSelectedRef = useRef(selectedFixtureIds)
+  useEffect(() => {
+    if (selectedFixtureIds.length > 0 && selectedFixtureIds !== prevSelectedRef.current) {
+      const firstSelected = patch.find(p => p.id === selectedFixtureIds[0])
+      if (firstSelected && firstSelected.universe !== selectedUniverse) {
+        setSelectedUniverse(firstSelected.universe)
+      }
+    }
+    prevSelectedRef.current = selectedFixtureIds
+  }, [selectedFixtureIds, patch, selectedUniverse, setSelectedUniverse])
+
   // Fixtures in current universe for fader overview
   const fixturesInUniverse = useMemo(() =>
     patch.filter(p => p.universe === selectedUniverse),
@@ -353,6 +365,19 @@ function PerFixtureFaders({
   fixturesInUniverse, universe, values, setChannel, getFixtureChannels,
   selectedFixtureIds, selectFixture, fixtures, startLearn, contextMenu, setContextMenu
 }: any) {
+  const columnRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  // Scroll selected fixture into view
+  useEffect(() => {
+    if (selectedFixtureIds.length > 0) {
+      const firstId = selectedFixtureIds[0]
+      const el = columnRefs.current.get(firstId)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+      }
+    }
+  }, [selectedFixtureIds])
+
   return (
     <div className="flex gap-2 h-full">
       {fixturesInUniverse.map((entry: any) => {
@@ -364,6 +389,7 @@ function PerFixtureFaders({
         return (
           <div
             key={entry.id}
+            ref={(el) => { if (el) columnRefs.current.set(entry.id, el); else columnRefs.current.delete(entry.id) }}
             className={`flex flex-col bg-surface-2 rounded border px-2 py-1.5 cursor-pointer transition-colors ${
               isSelected ? 'border-accent' : 'border-surface-3 hover:border-surface-4'
             }`}
