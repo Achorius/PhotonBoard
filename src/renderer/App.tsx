@@ -28,11 +28,10 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'live',       label: 'Live',     shortcut: '2' },
   { id: 'effects',    label: 'Effects',  shortcut: '3' },
   { id: 'playback',   label: 'Scenes',   shortcut: '4' },
-  { id: 'faders',     label: 'Faders',   shortcut: '5' },
-  { id: 'fixtures',   label: 'Fixtures', shortcut: '6' },
-  { id: 'patch',      label: 'Patch',    shortcut: '7' },
-  { id: 'midi',       label: 'MIDI',     shortcut: '8' },
-  { id: 'settings',   label: 'Settings', shortcut: '9' },
+  { id: 'fixtures',   label: 'Fixtures', shortcut: '5' },
+  { id: 'patch',      label: 'Patch',    shortcut: '6' },
+  { id: 'midi',       label: 'MIDI',     shortcut: '7' },
+  { id: 'settings',   label: 'Settings', shortcut: '8' },
 ]
 
 export default function App() {
@@ -318,9 +317,9 @@ export default function App() {
 
   const renderView = () => {
     switch (activeTab) {
-      case 'faders':     return <FadersView />
       case 'patch':      return <PatchView />
       case 'fixtures':   return <FixtureControlView />
+      case 'faders':     return <FixtureControlView /> // legacy: redirect to unified view
       case 'playback':   return <PlaybackView />
       case 'effects':    return <EffectsView />
       case 'midi':       return <MidiView />

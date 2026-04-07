@@ -1,35 +1,57 @@
-import React from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
+import { useUiStore } from '../../stores/ui-store'
+import { useMidiStore } from '../../stores/midi-store'
 import { Fader, FADER_WIDTH, FADER_GAP } from '../common/Fader'
 import { ColorPicker } from '../common/ColorPicker'
 import { XYPad } from '../common/XYPad'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
+import type { MidiTargetType } from '@shared/types'
 
-// Fixed section order for consistent layout across all fixture types
-const SECTION_ORDER: { key: string; label: string; channelMatchers: string[] }[] = [
-  { key: 'intensity', label: 'Intensity', channelMatchers: ['dimmer', 'intensity', 'dimmer fine', 'shutter', 'strobe', 'shutter/strobe'] },
-  { key: 'color', label: 'Color', channelMatchers: ['red', 'green', 'blue', 'white', 'amber', 'uv', 'cyan', 'magenta', 'yellow', 'color wheel', 'color temperature', 'color macro', 'ct fine', 'color wheel effect'] },
-  { key: 'position', label: 'Position', channelMatchers: ['pan', 'pan fine', 'tilt', 'tilt fine', 'speed', 'pan/tilt speed'] },
-  { key: 'beam', label: 'Beam', channelMatchers: ['gobo', 'gobo rotation', 'prism', 'prism rotation', 'focus', 'zoom', 'zoom fine', 'iris'] },
-  { key: 'other', label: 'Other', channelMatchers: [] }, // catch-all
-]
-
-function classifyChannel(name: string): string {
-  const n = name.toLowerCase()
-  for (const section of SECTION_ORDER) {
-    if (section.key === 'other') continue
-    if (section.channelMatchers.some(m => n === m || n.includes(m))) {
-      return section.key
+// Context menu for MIDI Learn
+function MidiContextMenu({ x, y, items, onClose }: {
+  x: number; y: number
+  items: { label: string; onClick: () => void }[]
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
-  }
-  return 'other'
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[180px]"
+      style={{ left: x, top: y }}
+    >
+      {items.map((item, i) => (
+        <button
+          key={i}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent"
+          onClick={() => { item.onClick(); onClose() }}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 export function FixtureControlView() {
   const { patch, fixtures, groups, selectedFixtureIds, selectFixture, selectAll, clearSelection, getFixtureChannels } = usePatchStore()
   const { values, setChannel } = useDmxStore()
+  const { selectedUniverse, setSelectedUniverse } = useUiStore()
+  const { startLearn } = useMidiStore()
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null)
+
+  const hasPatch = patch.length > 0
 
   const selectGroup = (groupId: string) => {
     const group = groups.find(g => g.id === groupId)
@@ -38,195 +60,431 @@ export function FixtureControlView() {
     for (const fid of group.fixtureIds) selectFixture(fid, true)
   }
 
+  // Selected entries for detail panel
   const selectedEntries = patch.filter(p => selectedFixtureIds.includes(p.id))
   const firstEntry = selectedEntries[0]
   const firstDef = firstEntry ? fixtures.find(f => f.id === firstEntry.fixtureDefId) : null
-
   const firstChannels = firstEntry ? getFixtureChannels(firstEntry) : []
   const channelNames = new Set(firstChannels.map(c => c.name.toLowerCase()))
   const hasRGB = channelNames.has('red') && channelNames.has('green') && channelNames.has('blue')
   const hasPanTilt = channelNames.has('pan') || channelNames.has('tilt')
 
-  // Group channels by section
-  const sections = SECTION_ORDER.map(section => {
-    const channels = firstChannels.filter(ch => classifyChannel(ch.name) === section.key)
-    return { ...section, channels }
-  }).filter(s => s.channels.length > 0)
+  // Fixtures in current universe for fader overview
+  const fixturesInUniverse = useMemo(() =>
+    patch.filter(p => p.universe === selectedUniverse),
+    [patch, selectedUniverse]
+  )
+
+  // Unified channels for multi-select group view
+  const unifiedChannels = useMemo(() => {
+    if (selectedEntries.length < 2) return null
+    const allChannelSets = selectedEntries.map(entry => {
+      const channels = getFixtureChannels(entry)
+      const def = fixtures.find(f => f.id === entry.fixtureDefId)
+      return channels.map(ch => ({
+        ...ch,
+        type: def?.channels[ch.name]?.type || 'generic'
+      }))
+    })
+    const firstNames = allChannelSets[0].map(ch => ch.name.toLowerCase())
+    const commonNames = firstNames.filter(name =>
+      allChannelSets.every(chs => chs.some(c => c.name.toLowerCase() === name))
+    )
+    return commonNames.map(name => {
+      const refCh = allChannelSets[0].find(c => c.name.toLowerCase() === name)!
+      return { name: refCh.name, type: refCh.type }
+    })
+  }, [selectedEntries, fixtures, getFixtureChannels])
 
   return (
-    <div className="flex h-full">
-      {/* Fixture list */}
-      <div className="w-52 border-r border-surface-3 flex flex-col">
-        <div className="panel-header flex items-center justify-between">
-          <span>Fixtures</span>
-          <div className="flex gap-1">
-            <button className="text-[10px] text-accent hover:text-accent-light" onClick={selectAll}>All</button>
-            <button className="text-[10px] text-gray-500 hover:text-gray-300" onClick={clearSelection}>None</button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto">
-          {groups.length > 0 && (
-            <div className="px-2 py-1 border-b border-surface-3 space-y-0.5">
-              <div className="text-[9px] text-gray-600 uppercase">Groups</div>
-              <div className="flex flex-wrap gap-1">
-                {groups.filter(g => !g.parentGroupId).map(g => (
-                  <button
-                    key={g.id}
-                    className="px-1.5 py-0.5 rounded text-[10px] hover:opacity-80"
-                    style={{ backgroundColor: g.color + '33', color: g.color }}
-                    onClick={() => selectGroup(g.id)}
-                  >
-                    {g.name} ({g.fixtureIds.length})
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {patch.map(entry => {
-            const isSelected = selectedFixtureIds.includes(entry.id)
-            return (
-              <button
-                key={entry.id}
-                className={`w-full text-left px-3 py-1.5 text-xs border-b border-surface-3 ${
-                  isSelected ? 'bg-accent/10 text-accent' : 'text-gray-300 hover:bg-surface-2'
-                }`}
-                onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-              >
-                <div className="font-medium">{entry.name}</div>
-                <div className="text-[10px] text-gray-500">
-                  U{entry.universe + 1}.{entry.address}
-                </div>
-              </button>
-            )
-          })}
-          {patch.length === 0 && (
-            <p className="text-[10px] text-gray-600 text-center py-4">No fixtures patched</p>
-          )}
+    <div className="flex flex-col h-full">
+      {/* Top bar: universe selector */}
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-surface-3 shrink-0">
+        <span className="text-[10px] text-gray-500 uppercase">Univ</span>
+        {[0, 1, 2].map(u => (
+          <button
+            key={u}
+            className={`px-2 py-0.5 text-xs rounded ${
+              selectedUniverse === u ? 'bg-accent text-white' : 'bg-surface-3 text-gray-400 hover:bg-surface-4'
+            }`}
+            onClick={() => setSelectedUniverse(u)}
+          >
+            {u + 1}
+          </button>
+        ))}
+        <div className="w-px h-4 bg-surface-3 mx-1" />
+        {selectedFixtureIds.length > 0 && (
+          <span className="text-[10px] text-accent">{selectedFixtureIds.length} selected</span>
+        )}
+        <div className="flex-1" />
+        <div className="flex gap-1">
+          <button className="text-[10px] text-accent hover:text-accent-light" onClick={selectAll}>All</button>
+          <button className="text-[10px] text-gray-500 hover:text-gray-300" onClick={clearSelection}>None</button>
         </div>
       </div>
 
-      {/* Control area */}
-      <div className="flex-1 p-4 overflow-auto">
-        {selectedEntries.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-600 text-sm">
-            Select fixture(s) to control
+      <div className="flex-1 overflow-hidden flex">
+        {/* ---- Left: Groups + Fixture list ---- */}
+        <div className="w-32 shrink-0 border-r border-surface-3 flex flex-col bg-surface-1">
+          {/* Groups section */}
+          <div className="px-2 py-1 text-[9px] text-gray-500 uppercase border-b border-surface-3">Groups</div>
+          <div className="overflow-y-auto p-1 space-y-px border-b border-surface-3" style={{ maxHeight: '30%' }}>
+            <button
+              className={`w-full text-left px-2 py-1 rounded text-[10px] transition-colors ${
+                selectedFixtureIds.length === 0
+                  ? 'bg-accent/20 text-accent'
+                  : 'text-gray-400 hover:bg-surface-3'
+              }`}
+              onClick={() => clearSelection()}
+            >
+              All ({patch.length})
+            </button>
+            {groups.filter(g => !g.parentGroupId).map(g => {
+              const count = g.fixtureIds.filter(id => patch.some(p => p.id === id)).length
+              const isSelected = g.fixtureIds.length > 0 &&
+                g.fixtureIds.every(id => selectedFixtureIds.includes(id))
+              return (
+                <button
+                  key={g.id}
+                  className={`w-full text-left px-2 py-1 rounded text-[10px] transition-colors flex items-center gap-1 ${
+                    isSelected ? 'bg-surface-3 text-gray-200' : 'text-gray-400 hover:bg-surface-3'
+                  }`}
+                  onClick={() => selectGroup(g.id)}
+                >
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                  <span className="truncate flex-1">{g.name}</span>
+                  <span className="text-gray-600 shrink-0">{count}</span>
+                </button>
+              )
+            })}
+            {groups.length === 0 && (
+              <p className="text-[9px] text-gray-700 text-center pt-1 px-1">No groups</p>
+            )}
           </div>
-        ) : (
-          <div className="flex flex-col h-full">
-            {/* Header */}
-            <div className="text-sm text-gray-300 mb-3 shrink-0">
-              {selectedEntries.length === 1
-                ? `${firstEntry!.name} — ${firstDef?.name || ''}`
-                : `${selectedEntries.length} fixtures selected`
-              }
-            </div>
 
-            {/* Fixed sections layout */}
-            <div className="flex gap-4 flex-1 min-h-0">
-              {/* Channel fader sections */}
-              {sections.map(section => {
-                const sectionWidth = section.channels.length * FADER_WIDTH + (section.channels.length - 1) * FADER_GAP + 16
-                return (
-                  <div key={section.key} className="flex flex-col shrink-0" style={{ width: sectionWidth }}>
-                    <h3 className="text-[10px] text-gray-500 uppercase mb-2 text-center shrink-0">{section.label}</h3>
-                    <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
-                      {section.channels.map(ch => {
-                        const chDef = firstDef?.channels[ch.name]
-                        const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
-                        const val = values[firstEntry!.universe][ch.absoluteChannel] || 0
-                        const isCW = isColorWheelChannel(ch.name)
-
-                        return (
-                          <Fader
-                            key={ch.name}
-                            value={val}
-                            max={isCW ? COLOR_WHEEL_MAX_DMX : 255}
-                            onChange={(v) => {
-                              for (const entry of selectedEntries) {
-                                const channels = getFixtureChannels(entry)
-                                const targetCh = channels.find(c => c.name === ch.name)
-                                if (targetCh) {
-                                  setChannel(entry.universe, targetCh.absoluteChannel, v)
-                                }
-                              }
-                            }}
-                            label={getChannelShortLabel(ch.name)}
-                            color={color}
-                            onDoubleClick={() => {
-                              for (const entry of selectedEntries) {
-                                const channels = getFixtureChannels(entry)
-                                const targetCh = channels.find(c => c.name === ch.name)
-                                if (targetCh) {
-                                  setChannel(entry.universe, targetCh.absoluteChannel, val > 0 ? 0 : 255)
-                                }
-                              }
-                            }}
-                          />
-                        )
-                      })}
-                    </div>
+          {/* Fixture list */}
+          <div className="px-2 py-1 text-[9px] text-gray-500 uppercase border-b border-surface-3">Fixtures</div>
+          <div className="flex-1 overflow-y-auto">
+            {patch.map(entry => {
+              const isSelected = selectedFixtureIds.includes(entry.id)
+              const inUniverse = entry.universe === selectedUniverse
+              return (
+                <button
+                  key={entry.id}
+                  className={`w-full text-left px-2 py-1 text-[10px] border-b border-surface-3/50 ${
+                    isSelected
+                      ? 'bg-accent/10 text-accent'
+                      : inUniverse
+                        ? 'text-gray-300 hover:bg-surface-2'
+                        : 'text-gray-600 hover:bg-surface-2'
+                  }`}
+                  onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
+                >
+                  <div className="font-medium truncate">{entry.name}</div>
+                  <div className="text-[9px] text-gray-600">
+                    U{entry.universe + 1}.{entry.address}
                   </div>
-                )
-              })}
+                </button>
+              )
+            })}
+            {patch.length === 0 && (
+              <p className="text-[9px] text-gray-600 text-center py-3">No fixtures patched</p>
+            )}
+          </div>
+        </div>
 
-              {/* Separator */}
-              {(hasRGB || hasPanTilt) && (
-                <div className="w-px bg-surface-3 shrink-0 my-4" />
-              )}
+        {/* ---- Center: Fixture fader columns ---- */}
+        <div className="flex-1 overflow-x-auto overflow-y-hidden p-2 border-r border-surface-3">
+          {hasPatch ? (
+            fixturesInUniverse.length > 0 ? (
+              // Multi-select unified OR per-fixture columns
+              unifiedChannels && unifiedChannels.length > 0 && selectedEntries.length > 1 ? (
+                <UnifiedGroupFaders
+                  selectedEntries={selectedEntries}
+                  unifiedChannels={unifiedChannels}
+                  values={values}
+                  setChannel={setChannel}
+                  getFixtureChannels={getFixtureChannels}
+                  startLearn={startLearn}
+                  contextMenu={contextMenu}
+                  setContextMenu={setContextMenu}
+                />
+              ) : (
+                <PerFixtureFaders
+                  fixturesInUniverse={fixturesInUniverse}
+                  universe={selectedUniverse}
+                  values={values}
+                  setChannel={setChannel}
+                  getFixtureChannels={getFixtureChannels}
+                  selectedFixtureIds={selectedFixtureIds}
+                  selectFixture={selectFixture}
+                  fixtures={fixtures}
+                  startLearn={startLearn}
+                  contextMenu={contextMenu}
+                  setContextMenu={setContextMenu}
+                />
+              )
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-600 text-sm">
+                No fixtures on Universe {selectedUniverse + 1}
+              </div>
+            )
+          ) : (
+            <RawChannelFaders
+              universe={selectedUniverse}
+              values={values[selectedUniverse]}
+              setChannel={(ch, val) => setChannel(selectedUniverse, ch, val)}
+            />
+          )}
+        </div>
 
-              {/* Color picker */}
-              {hasRGB && firstEntry && (
-                <div className="flex flex-col shrink-0">
-                  <h3 className="text-[10px] text-gray-500 uppercase mb-2 text-center shrink-0">Color Picker</h3>
-                  <ColorPicker
-                    red={getChannelValue(firstEntry, 'Red', values, getFixtureChannels)}
-                    green={getChannelValue(firstEntry, 'Green', values, getFixtureChannels)}
-                    blue={getChannelValue(firstEntry, 'Blue', values, getFixtureChannels)}
-                    white={firstDef?.channels['White'] ? getChannelValue(firstEntry, 'White', values, getFixtureChannels) : undefined}
-                    onChange={(r, g, b, w) => {
-                      for (const entry of selectedEntries) {
-                        setChannelByName(entry, 'Red', r, values, setChannel, getFixtureChannels)
-                        setChannelByName(entry, 'Green', g, values, setChannel, getFixtureChannels)
-                        setChannelByName(entry, 'Blue', b, values, setChannel, getFixtureChannels)
-                        if (w !== undefined) setChannelByName(entry, 'White', w, values, setChannel, getFixtureChannels)
-                      }
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Pan/Tilt */}
-              {hasPanTilt && firstEntry && (
-                <div className="flex flex-col shrink-0">
-                  <h3 className="text-[10px] text-gray-500 uppercase mb-2 text-center shrink-0">Position</h3>
-                  <XYPad
-                    x={getChannelValue(firstEntry, 'Pan', values, getFixtureChannels)}
-                    y={getChannelValue(firstEntry, 'Tilt', values, getFixtureChannels)}
-                    onChange={(pan, tilt) => {
-                      for (const entry of selectedEntries) {
-                        setChannelByName(entry, 'Pan', pan, values, setChannel, getFixtureChannels)
-                        setChannelByName(entry, 'Tilt', tilt, values, setChannel, getFixtureChannels)
-                      }
-                    }}
-                    size={180}
-                    label="Pan / Tilt"
-                  />
-                </div>
+        {/* ---- Right: Detail panel (Color Picker + XY Pad + Info) ---- */}
+        {selectedEntries.length > 0 && (hasRGB || hasPanTilt) && (
+          <div className="w-56 shrink-0 flex flex-col bg-surface-1 overflow-y-auto p-3 gap-4">
+            {/* Fixture info header */}
+            <div className="text-center">
+              <div className="text-xs text-gray-300 font-medium truncate">
+                {selectedEntries.length === 1
+                  ? firstEntry!.name
+                  : `${selectedEntries.length} fixtures`
+                }
+              </div>
+              {selectedEntries.length === 1 && firstDef && (
+                <div className="text-[9px] text-gray-500 truncate">{firstDef.name}</div>
               )}
             </div>
+
+            {/* Color picker */}
+            {hasRGB && firstEntry && (
+              <div className="flex flex-col items-center">
+                <h3 className="text-[10px] text-gray-500 uppercase mb-2">Color</h3>
+                <ColorPicker
+                  red={getChannelValue(firstEntry, 'Red', values, getFixtureChannels)}
+                  green={getChannelValue(firstEntry, 'Green', values, getFixtureChannels)}
+                  blue={getChannelValue(firstEntry, 'Blue', values, getFixtureChannels)}
+                  white={firstDef?.channels['White'] ? getChannelValue(firstEntry, 'White', values, getFixtureChannels) : undefined}
+                  onChange={(r, g, b, w) => {
+                    for (const entry of selectedEntries) {
+                      setChannelByName(entry, 'Red', r, setChannel, getFixtureChannels)
+                      setChannelByName(entry, 'Green', g, setChannel, getFixtureChannels)
+                      setChannelByName(entry, 'Blue', b, setChannel, getFixtureChannels)
+                      if (w !== undefined) setChannelByName(entry, 'White', w, setChannel, getFixtureChannels)
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Pan/Tilt pad */}
+            {hasPanTilt && firstEntry && (
+              <div className="flex flex-col items-center">
+                <h3 className="text-[10px] text-gray-500 uppercase mb-2">Position</h3>
+                <XYPad
+                  x={getChannelValue(firstEntry, 'Pan', values, getFixtureChannels)}
+                  y={getChannelValue(firstEntry, 'Tilt', values, getFixtureChannels)}
+                  onChange={(pan, tilt) => {
+                    for (const entry of selectedEntries) {
+                      setChannelByName(entry, 'Pan', pan, setChannel, getFixtureChannels)
+                      setChannelByName(entry, 'Tilt', tilt, setChannel, getFixtureChannels)
+                    }
+                  }}
+                  size={180}
+                  label="Pan / Tilt"
+                />
+              </div>
+            )}
           </div>
         )}
+      </div>
+
+      {contextMenu && (
+        <MidiContextMenu
+          x={contextMenu.x} y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---- Unified Group Faders (multi-select) ----
+function UnifiedGroupFaders({
+  selectedEntries, unifiedChannels, values, setChannel, getFixtureChannels,
+  startLearn, contextMenu, setContextMenu
+}: any) {
+  const firstEntry = selectedEntries[0]
+  const firstChannels = getFixtureChannels(firstEntry)
+  const groupColWidth = unifiedChannels.length * FADER_WIDTH + (unifiedChannels.length - 1) * FADER_GAP + 16
+
+  return (
+    <div className="flex gap-2 h-full">
+      <div className="flex flex-col bg-surface-2 rounded border border-accent px-2 py-1.5" style={{ width: groupColWidth }}>
+        <div className="text-[9px] text-center text-accent truncate mb-0.5 shrink-0">
+          Group ({selectedEntries.length} fixtures)
+        </div>
+        <div className="text-[8px] text-center text-gray-600 mb-1 shrink-0 truncate">
+          {selectedEntries.map((e: any) => e.name).join(', ')}
+        </div>
+        <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
+          {unifiedChannels.map((uch: any) => {
+            const color = getChannelTypeColor(uch.type, uch.name)
+            const refCh = firstChannels.find((c: any) => c.name.toLowerCase() === uch.name.toLowerCase())
+            const displayValue = refCh ? (values[firstEntry.universe]?.[refCh.absoluteChannel] || 0) : 0
+            return (
+              <div
+                key={uch.name}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({
+                    x: e.clientX, y: e.clientY,
+                    items: [
+                      {
+                        label: `MIDI Learn: ${firstEntry.name} → ${uch.name}`,
+                        onClick: () => startLearn({
+                          type: 'channel' as MidiTargetType,
+                          id: firstEntry.id,
+                          parameter: uch.name,
+                          label: `${firstEntry.name} → ${uch.name}`
+                        })
+                      },
+                      {
+                        label: 'MIDI Learn: Grand Master',
+                        onClick: () => startLearn({ type: 'master' as MidiTargetType, label: 'Grand Master' })
+                      }
+                    ]
+                  })
+                }}
+              >
+                <Fader
+                  value={displayValue}
+                  max={isColorWheelChannel(uch.name) ? COLOR_WHEEL_MAX_DMX : 255}
+                  onChange={(val: number) => {
+                    for (const entry of selectedEntries) {
+                      const chs = getFixtureChannels(entry)
+                      const match = chs.find((c: any) => c.name.toLowerCase() === uch.name.toLowerCase())
+                      if (match) setChannel(entry.universe, match.absoluteChannel, val)
+                    }
+                  }}
+                  label={getChannelShortLabel(uch.name)}
+                  color={color}
+                  showValue={true}
+                />
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
 }
 
-function getChannelValue(
-  entry: any,
-  channelName: string,
-  values: number[][],
-  getFixtureChannels: any
-): number {
+// ---- Per-Fixture Fader Columns ----
+function PerFixtureFaders({
+  fixturesInUniverse, universe, values, setChannel, getFixtureChannels,
+  selectedFixtureIds, selectFixture, fixtures, startLearn, contextMenu, setContextMenu
+}: any) {
+  return (
+    <div className="flex gap-2 h-full">
+      {fixturesInUniverse.map((entry: any) => {
+        const channels = getFixtureChannels(entry)
+        const isSelected = selectedFixtureIds.includes(entry.id)
+        const def = fixtures.find((f: any) => f.id === entry.fixtureDefId)
+        const colWidth = channels.length * FADER_WIDTH + (channels.length - 1) * FADER_GAP + 16
+
+        return (
+          <div
+            key={entry.id}
+            className={`flex flex-col bg-surface-2 rounded border px-2 py-1.5 cursor-pointer transition-colors ${
+              isSelected ? 'border-accent' : 'border-surface-3 hover:border-surface-4'
+            }`}
+            style={{ width: colWidth }}
+            onClick={(e) => selectFixture(entry.id, e.metaKey || e.ctrlKey || e.shiftKey)}
+          >
+            <div className="text-[9px] text-center text-gray-400 truncate mb-0.5 shrink-0" title={entry.name}>
+              {entry.name}
+            </div>
+            <div className="text-[8px] text-center text-gray-600 mb-1 shrink-0">
+              {universe + 1}.{entry.address}
+            </div>
+            <div className="flex flex-1 min-h-0 justify-center" style={{ gap: FADER_GAP }}>
+              {channels.map((ch: any) => {
+                const chDef = def?.channels[ch.name]
+                const color = getChannelTypeColor(chDef?.type || 'generic', ch.name)
+                return (
+                  <div
+                    key={ch.absoluteChannel}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      setContextMenu({
+                        x: e.clientX, y: e.clientY,
+                        items: [
+                          {
+                            label: `MIDI Learn: ${entry.name} → ${ch.name}`,
+                            onClick: () => startLearn({
+                              type: 'channel' as MidiTargetType,
+                              id: entry.id,
+                              parameter: ch.name,
+                              label: `${entry.name} → ${ch.name}`
+                            })
+                          },
+                          {
+                            label: 'MIDI Learn: Grand Master',
+                            onClick: () => startLearn({ type: 'master' as MidiTargetType, label: 'Grand Master' })
+                          },
+                          {
+                            label: 'MIDI Learn: Blackout',
+                            onClick: () => startLearn({ type: 'blackout' as MidiTargetType, label: 'Blackout' })
+                          }
+                        ]
+                      })
+                    }}
+                  >
+                    <Fader
+                      value={values[universe][ch.absoluteChannel] || 0}
+                      max={isColorWheelChannel(ch.name) ? COLOR_WHEEL_MAX_DMX : 255}
+                      onChange={(val: number) => setChannel(universe, ch.absoluteChannel, val)}
+                      label={getChannelShortLabel(ch.name)}
+                      color={color}
+                      showValue={true}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---- Raw DMX Faders (no patch) ----
+function RawChannelFaders({
+  universe, values, setChannel
+}: {
+  universe: number; values: number[]; setChannel: (ch: number, val: number) => void
+}) {
+  const channelCount = 64
+  return (
+    <div className="flex h-full" style={{ gap: FADER_GAP }}>
+      {Array.from({ length: channelCount }, (_, i) => (
+        <Fader
+          key={i}
+          value={values[i] || 0}
+          onChange={(val) => setChannel(i, val)}
+          label={`${i + 1}`}
+          color="#e85d04"
+          showValue={false}
+          onDoubleClick={() => setChannel(i, values[i] > 0 ? 0 : 255)}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ---- Helpers ----
+function getChannelValue(entry: any, channelName: string, values: number[][], getFixtureChannels: any): number {
   const channels = getFixtureChannels(entry)
   const ch = channels.find((c: any) => c.name === channelName)
   if (!ch) return 0
@@ -234,10 +492,7 @@ function getChannelValue(
 }
 
 function setChannelByName(
-  entry: any,
-  channelName: string,
-  value: number,
-  values: number[][],
+  entry: any, channelName: string, value: number,
   setChannel: (u: number, ch: number, val: number) => void,
   getFixtureChannels: any
 ): void {
