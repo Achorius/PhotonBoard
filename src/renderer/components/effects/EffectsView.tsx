@@ -2,8 +2,9 @@ import React, { useMemo, useState, useCallback } from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useEffectsStore } from '../../stores/effects-store'
+import { usePlaybackStore } from '../../stores/playback-store'
 import { HSlider } from '../common/HSlider'
-import type { WaveformType } from '@shared/types'
+import type { WaveformType, CueChannelValue } from '@shared/types'
 
 // ============================================================
 // Effect Templates — user-facing presets with clear lighting terms
@@ -206,6 +207,59 @@ export function EffectsView() {
     }
   }, [effects, removeEffect])
 
+  // Save current effects + DMX state as a new scene
+  const [sceneSaved, setSceneSaved] = useState(false)
+  const saveAsScene = useCallback(() => {
+    const runningEffects = effects.filter(e => e.isRunning)
+    if (runningEffects.length === 0) return
+
+    const patchStore = usePatchStore.getState()
+    const dmxStore = useDmxStore.getState()
+    const playbackStore = usePlaybackStore.getState()
+
+    // Collect all fixture IDs involved in running effects
+    const fixtureIdSet = new Set<string>()
+    for (const fx of runningEffects) {
+      for (const id of fx.fixtureIds) fixtureIdSet.add(id)
+    }
+
+    // Snapshot current DMX values for those fixtures
+    const cueValues: CueChannelValue[] = []
+    for (const fixtureId of fixtureIdSet) {
+      const entry = patchStore.patch.find(p => p.id === fixtureId)
+      if (!entry) continue
+      const channels = patchStore.getFixtureChannels(entry)
+      for (const ch of channels) {
+        const val = dmxStore.values[entry.universe]?.[ch.absoluteChannel] ?? 0
+        if (val > 0) {
+          cueValues.push({ fixtureId, channelName: ch.name, value: val })
+        }
+      }
+    }
+
+    // Build scene name from effect names
+    const effectNames = runningEffects.map(e => e.name)
+    const sceneName = effectNames.length <= 2
+      ? effectNames.join(' + ')
+      : `${effectNames[0]} +${effectNames.length - 1} effects`
+
+    // Create cuelist with effect snapshots
+    const cuelistId = playbackStore.addCuelist(sceneName)
+    playbackStore.addCue(cuelistId, 'Cue 1', cueValues)
+
+    // Attach effect snapshots to the cuelist
+    const effectSnapshots = runningEffects.map(fx => ({ ...fx }))
+    usePlaybackStore.setState((state) => ({
+      cuelists: state.cuelists.map(cl =>
+        cl.id === cuelistId ? { ...cl, effectSnapshots } : cl
+      )
+    }))
+
+    // Show confirmation
+    setSceneSaved(true)
+    setTimeout(() => setSceneSaved(false), 2000)
+  }, [effects])
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* ============ LEFT: Fixture/Group Selector ============ */}
@@ -262,6 +316,18 @@ export function EffectsView() {
         {effects.length > 0 && (
           <div className="p-2">
             <h3 className="text-[10px] uppercase text-gray-500 font-semibold mb-1">Quick Actions</h3>
+            {effects.some(e => e.isRunning) && (
+              <button
+                className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 font-medium transition-colors ${
+                  sceneSaved
+                    ? 'bg-green-600/30 text-green-400'
+                    : 'bg-accent/20 text-accent hover:bg-accent/30'
+                }`}
+                onClick={saveAsScene}
+              >
+                {sceneSaved ? '✓ Scene created!' : '🎬 Save as Scene'}
+              </button>
+            )}
             <button
               className="w-full text-left text-xs px-2 py-1 rounded mb-0.5 text-gray-400 hover:bg-surface-3"
               onClick={stopAll}
