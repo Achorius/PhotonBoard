@@ -81,6 +81,7 @@ export function LiveView() {
   const timelineRef = useRef<HTMLDivElement>(null)
 
   const topOffset = RULER_HEIGHT + MARKER_ROW_HEIGHT + ZONE_ROW_HEIGHT
+  const sortedZones = useMemo(() => [...timelineZones].sort((a, b) => a.order - b.order), [timelineZones])
 
   // Sync with global timeline engine
   useEffect(() => {
@@ -460,7 +461,6 @@ export function LiveView() {
   }, [timelineClips, totalDuration])
   const totalWidth = maxEnd * zoom
   const activeClipIds = isPlaying ? getActiveClipIds() : new Set<string>()
-  const sortedZones = useMemo(() => [...timelineZones].sort((a, b) => a.order - b.order), [timelineZones])
 
   return (
     <div className="flex h-full overflow-hidden">
