@@ -86,6 +86,14 @@ export function LiveView() {
 
   const handlePlayStop = useCallback(() => toggleTimeline(), [])
 
+  // Scroll the timeline view to center on a given time
+  const scrollToTime = useCallback((t: number) => {
+    if (!timelineRef.current) return
+    const px = t * zoom
+    const viewWidth = timelineRef.current.clientWidth
+    timelineRef.current.scrollLeft = Math.max(0, px - viewWidth / 3)
+  }, [zoom])
+
   // ── Zoom ──
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -259,14 +267,14 @@ export function LiveView() {
     const markers = usePlaybackStore.getState().timelineMarkers
     const ct = getTimelineState().currentTime
     const next = markers.find(m => m.time > ct + 0.1)
-    if (next) setTimelineTime(next.time)
-  }, [])
+    if (next) { setTimelineTime(next.time); scrollToTime(next.time) }
+  }, [scrollToTime])
   const goToPrevMarker = useCallback(() => {
     const markers = usePlaybackStore.getState().timelineMarkers
     const ct = getTimelineState().currentTime
     const prev = [...markers].reverse().find(m => m.time < ct - 0.1)
-    if (prev) setTimelineTime(prev.time)
-  }, [])
+    if (prev) { setTimelineTime(prev.time); scrollToTime(prev.time) }
+  }, [scrollToTime])
 
   // ── Click empty area = set playhead ──
   const handleTimelineClick = useCallback((e: React.MouseEvent) => {
@@ -347,7 +355,7 @@ export function LiveView() {
               <div
                 key={m.id}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-3 text-[10px] cursor-pointer group"
-                onClick={() => setTimelineTime(m.time)}
+                onClick={() => { setTimelineTime(m.time); scrollToTime(m.time) }}
               >
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.color || '#facc15' }} />
                 {editingMarkerId === m.id ? (
@@ -383,7 +391,7 @@ export function LiveView() {
           >
             {isPlaying ? '■ Stop' : '▶ Play'}
           </button>
-          <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={() => { rewindTimeline(); setCurrentTime(0) }} title="Rewind">⏮</button>
+          <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={() => { rewindTimeline(); setCurrentTime(0); scrollToTime(0) }} title="Rewind">⏮</button>
           <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={goToPrevMarker} title="Prev marker">◂</button>
           <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={goToNextMarker} title="Next marker">▸</button>
           <button

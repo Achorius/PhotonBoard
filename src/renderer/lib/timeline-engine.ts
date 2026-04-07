@@ -68,9 +68,24 @@ function releaseClip(clip: TimelineClip) {
   const store = usePlaybackStore.getState()
   const cuelist = store.cuelists.find(c => c.id === clip.cuelistId)
   if (!cuelist) return
+
+  // Stop effects
   if (cuelist.effectSnapshots) {
     for (const fx of cuelist.effectSnapshots) {
       stopEffect(fx.id)
+    }
+  }
+
+  // Reset DMX channels that were set by this clip back to 0
+  const patchStore = usePatchStore.getState()
+  const dmxStore = useDmxStore.getState()
+  for (const cue of cuelist.cues) {
+    for (const cv of cue.values) {
+      const entry = patchStore.patch.find(p => p.id === cv.fixtureId)
+      if (!entry) continue
+      const channels = patchStore.getFixtureChannels(entry)
+      const ch = channels.find((c: any) => c.name === cv.channelName)
+      if (ch) dmxStore.setChannel(entry.universe, ch.absoluteChannel, 0)
     }
   }
 }
