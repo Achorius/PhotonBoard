@@ -3,6 +3,7 @@ import { useDmxStore } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
 import { midiToDmx } from './dmx-utils'
+import { startTimeline, stopTimeline, toggleTimeline, rewindTimeline, setTimelineTime } from './timeline-engine'
 import type { MidiMapping } from '@shared/types'
 
 let tapTempoTimes: number[] = []
@@ -216,6 +217,30 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
 
     case 'tap_tempo': {
       if (rawValue > 0) handleTapTempo()
+      break
+    }
+
+    case 'timeline_play': {
+      if (rawValue > 0) toggleTimeline()
+      break
+    }
+
+    case 'timeline_stop': {
+      if (rawValue > 0) stopTimeline()
+      break
+    }
+
+    case 'timeline_rewind': {
+      if (rawValue > 0) rewindTimeline()
+      break
+    }
+
+    case 'timeline_goto_marker': {
+      if (rawValue > 0 && target.id) {
+        const markers = usePlaybackStore.getState().timelineMarkers
+        const marker = markers.find(m => m.id === target.id)
+        if (marker) setTimelineTime(marker.time)
+      }
       break
     }
   }

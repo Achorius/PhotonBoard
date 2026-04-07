@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
+import { useMidiStore } from '../../stores/midi-store'
 import {
   startTimeline, stopTimeline, rewindTimeline, toggleTimeline,
   setTimelineTime, setTimelineLooping, setTimelineTotalDuration,
   getTimelineState, setTimelineUpdateCallback, getActiveClipIds
 } from '../../lib/timeline-engine'
 import { stopAllEffects } from '../../lib/effect-engine'
-import type { TimelineClip, TimelineMarker } from '@shared/types'
+import type { TimelineClip, TimelineMarker, MidiTargetType } from '@shared/types'
 
 // ── Constants ──
 const TRACK_HEIGHT = 48
@@ -36,6 +37,7 @@ export function LiveView() {
     addTimelineMarker, removeTimelineMarker, updateTimelineMarker,
     setTimelineTrackCount
   } = usePlaybackStore()
+  const { startLearn } = useMidiStore()
 
   const [zoom, setZoom] = useState(80)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -51,6 +53,7 @@ export function LiveView() {
   // Context menus
   const [trackMenu, setTrackMenu] = useState<{ x: number; y: number; trackIndex: number } | null>(null)
   const [markerMenu, setMarkerMenu] = useState<{ x: number; y: number; markerId: string } | null>(null)
+  const [midiMenu, setMidiMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null)
   const [editingTrack, setEditingTrack] = useState<number | null>(null)
   const [trackNames, setTrackNames] = useState<Record<number, string>>({})
   const [editingTrackName, setEditingTrackName] = useState('')
@@ -299,11 +302,11 @@ export function LiveView() {
 
   // Close context menus on click
   useEffect(() => {
-    if (!trackMenu && !markerMenu) return
-    const handler = () => { setTrackMenu(null); setMarkerMenu(null) }
+    if (!trackMenu && !markerMenu && !midiMenu) return
+    const handler = () => { setTrackMenu(null); setMarkerMenu(null); setMidiMenu(null) }
     window.addEventListener('click', handler)
     return () => window.removeEventListener('click', handler)
-  }, [trackMenu, markerMenu])
+  }, [trackMenu, markerMenu, midiMenu])
 
   const maxEnd = useMemo(() => {
     const clipEnd = timelineClips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0)
@@ -388,10 +391,19 @@ export function LiveView() {
           <button
             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${isPlaying ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-accent hover:bg-accent-light text-white'}`}
             onClick={handlePlayStop}
+            onContextMenu={(e) => { e.preventDefault(); setMidiMenu({ x: e.clientX, y: e.clientY, items: [
+              { label: 'MIDI Learn: Timeline Play/Stop', onClick: () => startLearn({ type: 'timeline_play' as MidiTargetType, label: 'Timeline Play/Stop' }) },
+              { label: 'MIDI Learn: Timeline Stop', onClick: () => startLearn({ type: 'timeline_stop' as MidiTargetType, label: 'Timeline Stop' }) },
+            ]}) }}
           >
             {isPlaying ? '■ Stop' : '▶ Play'}
           </button>
-          <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={() => { rewindTimeline(); setCurrentTime(0); scrollToTime(0) }} title="Rewind">⏮</button>
+          <button
+            className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
+            onClick={() => { rewindTimeline(); setCurrentTime(0); scrollToTime(0) }}
+            onContextMenu={(e) => { e.preventDefault(); startLearn({ type: 'timeline_rewind' as MidiTargetType, label: 'Timeline Rewind' }) }}
+            title="Rewind (right-click: MIDI Learn)"
+          >⏮</button>
           <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={goToPrevMarker} title="Prev marker">◂</button>
           <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={goToNextMarker} title="Next marker">▸</button>
           <button
@@ -576,13 +588,31 @@ export function LiveView() {
       )}
 
       {markerMenu && (
-        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[140px]" style={{ left: markerMenu.x, top: markerMenu.y }}>
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[180px]" style={{ left: markerMenu.x, top: markerMenu.y }}>
           <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => { setEditingMarkerId(markerMenu.markerId); const m = timelineMarkers.find(x => x.id === markerMenu.markerId); setEditingMarkerName(m?.name || ''); setMarkerMenu(null) }}>
             Rename
+          </button>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-purple-400 hover:bg-purple-500/20" onClick={() => {
+            const m = timelineMarkers.find(x => x.id === markerMenu.markerId)
+            startLearn({ type: 'timeline_goto_marker' as MidiTargetType, id: markerMenu.markerId, label: `Go to ${m?.name || 'marker'}` })
+            setMarkerMenu(null)
+          }}>
+            MIDI Learn: Go to Marker
           </button>
           <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineMarker(markerMenu.markerId); setMarkerMenu(null) }}>
             Delete Marker
           </button>
+        </div>
+      )}
+
+      {/* MIDI context menu */}
+      {midiMenu && (
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[200px]" style={{ left: midiMenu.x, top: midiMenu.y }}>
+          {midiMenu.items.map((item, i) => (
+            <button key={i} className="w-full text-left px-3 py-1.5 text-xs text-purple-400 hover:bg-purple-500/20" onClick={() => { item.onClick(); setMidiMenu(null) }}>
+              {item.label}
+            </button>
+          ))}
         </div>
       )}
     </div>
