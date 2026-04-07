@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
-import { useDmxStore } from '../../stores/dmx-store'
-import { usePatchStore } from '../../stores/patch-store'
-import { startEffect, stopEffect, stopAllEffects } from '../../lib/effect-engine'
-import { stopAllFades } from '../../lib/cue-engine'
+import {
+  startTimeline, stopTimeline, rewindTimeline, toggleTimeline,
+  setTimelineTime, setTimelineLooping, setTimelineTotalDuration,
+  getTimelineState, setTimelineUpdateCallback, getActiveClipIds
+} from '../../lib/timeline-engine'
+import { stopAllEffects } from '../../lib/effect-engine'
 import type { TimelineClip, TimelineMarker } from '@shared/types'
 
 // ── Constants ──
@@ -11,9 +13,7 @@ const TRACK_HEIGHT = 48
 const RULER_HEIGHT = 32
 const MARKER_ROW_HEIGHT = 20
 const MIN_CLIP_DURATION = 0.5
-const DEFAULT_TOTAL = 120
 
-// ── Color palette for clips ──
 const CLIP_COLORS = [
   '#e85d04', '#2563eb', '#16a34a', '#dc2626', '#9333ea',
   '#0891b2', '#ca8a04', '#db2777', '#4f46e5', '#059669'
@@ -38,179 +38,77 @@ export function LiveView() {
   } = usePlaybackStore()
 
   const [zoom, setZoom] = useState(80)
-  const [scrollLeft, setScrollLeft] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [isLooping, setIsLooping] = useState(false)
-  const [totalDuration, setTotalDuration] = useState(DEFAULT_TOTAL)
+  const [totalDuration, setTotalDuration] = useState(120)
 
   // Drag state
   const [dragClip, setDragClip] = useState<{ clipId: string; offsetX: number; offsetTrack: number } | null>(null)
   const [resizeClip, setResizeClip] = useState<{ clipId: string; edge: 'left' | 'right' } | null>(null)
+  const [dragMarker, setDragMarker] = useState<string | null>(null)
 
-  // Marker editing
+  // Context menus
+  const [trackMenu, setTrackMenu] = useState<{ x: number; y: number; trackIndex: number } | null>(null)
+  const [markerMenu, setMarkerMenu] = useState<{ x: number; y: number; markerId: string } | null>(null)
+  const [editingTrack, setEditingTrack] = useState<number | null>(null)
+  const [trackNames, setTrackNames] = useState<Record<number, string>>({})
+  const [editingTrackName, setEditingTrackName] = useState('')
+
+  // Track reorder drag
+  const [dragTrack, setDragTrack] = useState<{ from: number; current: number } | null>(null)
+
+  // Marker editing in sidebar
   const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null)
   const [editingMarkerName, setEditingMarkerName] = useState('')
 
   const timelineRef = useRef<HTMLDivElement>(null)
-  const isPlayingRef = useRef(false)
-  const isLoopingRef = useRef(false)
-  const currentTimeRef = useRef(0)
 
-  // Keep refs in sync
-  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
-  useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
-  useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
-
-  const playbackRef = useRef<{ raf: number | null; lastTime: number; activeClipIds: Set<string> }>({
-    raf: null, lastTime: 0, activeClipIds: new Set()
-  })
-
-  // ── Playback engine — reads EVERYTHING from stores/refs, no stale closures ──
-  const triggerClip = useCallback((clip: TimelineClip) => {
-    const store = usePlaybackStore.getState()
-    const cuelist = store.cuelists.find(c => c.id === clip.cuelistId)
-    if (!cuelist || cuelist.cues.length === 0) return
-
-    const patchStore = usePatchStore.getState()
-    const dmxStore = useDmxStore.getState()
-
-    // Apply all cues' DMX values
-    for (const cue of cuelist.cues) {
-      for (const cv of cue.values) {
-        const entry = patchStore.patch.find(p => p.id === cv.fixtureId)
-        if (!entry) continue
-        const channels = patchStore.getFixtureChannels(entry)
-        const ch = channels.find((c: any) => c.name === cv.channelName)
-        if (ch) dmxStore.setChannel(entry.universe, ch.absoluteChannel, cv.value)
-      }
-    }
-
-    // Start effect snapshots if any
-    if (cuelist.effectSnapshots) {
-      for (const fx of cuelist.effectSnapshots) {
-        startEffect({ ...fx, isRunning: true })
-      }
-    }
-  }, [])
-
-  const releaseClip = useCallback((clip: TimelineClip) => {
-    const store = usePlaybackStore.getState()
-    const cuelist = store.cuelists.find(c => c.id === clip.cuelistId)
-    if (!cuelist) return
-    // Stop effects for this clip
-    if (cuelist.effectSnapshots) {
-      for (const fx of cuelist.effectSnapshots) {
-        stopEffect(fx.id)
-      }
-    }
-  }, [])
-
-  const stopPlayback = useCallback(() => {
-    setIsPlaying(false)
-    if (playbackRef.current.raf) {
-      cancelAnimationFrame(playbackRef.current.raf)
-      playbackRef.current.raf = null
-    }
-    playbackRef.current.activeClipIds.clear()
-    stopAllEffects()
-    stopAllFades()
-  }, [])
-
-  const startPlayback = useCallback(() => {
-    setIsPlaying(true)
-    playbackRef.current.lastTime = performance.now()
-    // Check which clips are already active at current time
-    const clips = usePlaybackStore.getState().timelineClips
-    const t = currentTimeRef.current
-    playbackRef.current.activeClipIds.clear()
-    for (const clip of clips) {
-      if (t >= clip.startTime && t < clip.startTime + clip.duration) {
-        triggerClip(clip)
-        playbackRef.current.activeClipIds.add(clip.id)
-      }
-    }
-
-    const tick = () => {
-      if (!isPlayingRef.current) return
-
-      const now = performance.now()
-      const dt = (now - playbackRef.current.lastTime) / 1000
-      playbackRef.current.lastTime = now
-
-      setCurrentTime(prev => {
-        const next = prev + dt
-        const clips = usePlaybackStore.getState().timelineClips
-
-        // Trigger/release clips
-        for (const clip of clips) {
-          const wasActive = playbackRef.current.activeClipIds.has(clip.id)
-          const isActive = next >= clip.startTime && next < clip.startTime + clip.duration
-          if (isActive && !wasActive) {
-            triggerClip(clip)
-            playbackRef.current.activeClipIds.add(clip.id)
-          }
-          if (!isActive && wasActive) {
-            releaseClip(clip)
-            playbackRef.current.activeClipIds.delete(clip.id)
-          }
-        }
-
-        // End of timeline
-        const maxEnd = clips.reduce((max, c) => Math.max(max, c.startTime + c.duration), DEFAULT_TOTAL)
-        if (next >= maxEnd) {
-          if (isLoopingRef.current) {
-            playbackRef.current.activeClipIds.clear()
-            stopAllEffects()
-            return 0
-          }
-          stopPlayback()
-          return maxEnd
-        }
-        return next
-      })
-
-      playbackRef.current.raf = requestAnimationFrame(tick)
-    }
-
-    playbackRef.current.raf = requestAnimationFrame(tick)
-  }, [triggerClip, releaseClip, stopPlayback])
-
+  // Sync with global timeline engine
   useEffect(() => {
-    return () => {
-      if (playbackRef.current.raf) cancelAnimationFrame(playbackRef.current.raf)
-    }
+    const state = getTimelineState()
+    setIsPlaying(state.isPlaying)
+    setCurrentTime(state.currentTime)
+    setIsLooping(state.isLooping)
+    setTotalDuration(state.totalDuration)
+
+    setTimelineUpdateCallback((time, playing) => {
+      setCurrentTime(time)
+      setIsPlaying(playing)
+    })
+
+    return () => setTimelineUpdateCallback(() => {})
   }, [])
 
-  // ── Zoom with scroll wheel ──
+  // Sync loop and duration to engine
+  useEffect(() => { setTimelineLooping(isLooping) }, [isLooping])
+  useEffect(() => { setTimelineTotalDuration(totalDuration) }, [totalDuration])
+
+  const handlePlayStop = useCallback(() => toggleTimeline(), [])
+
+  // ── Zoom ──
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       setZoom(z => Math.max(10, Math.min(400, z - e.deltaY * 0.5)))
-    } else {
-      setScrollLeft(s => Math.max(0, s + e.deltaX + e.deltaY))
     }
   }, [])
 
-  // ── Drop a new scene from sidebar ──
+  // ── Drop scene ──
   const handleTimelineDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const cuelistId = e.dataTransfer.getData('application/x-cuelist-id')
     if (!cuelistId) return
-
     const rect = timelineRef.current?.getBoundingClientRect()
     if (!rect) return
-
     const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
     const y = e.clientY - rect.top - RULER_HEIGHT - MARKER_ROW_HEIGHT
     const startTime = Math.max(0, x / zoom)
     const trackIndex = Math.max(0, Math.floor(y / TRACK_HEIGHT))
-
     const store = usePlaybackStore.getState()
     const cuelist = store.cuelists.find(c => c.id === cuelistId)
     const dur = cuelist?.cues.reduce((sum, cue) => sum + (cue.fadeIn || 1), 0) || 4
     const colorIdx = store.cuelists.findIndex(c => c.id === cuelistId) % CLIP_COLORS.length
-
     addTimelineClip({
       cuelistId,
       trackIndex: Math.min(trackIndex, timelineTrackCount - 1),
@@ -220,7 +118,7 @@ export function LiveView() {
     })
   }, [zoom, addTimelineClip, timelineTrackCount])
 
-  // ── Clip drag (move) ──
+  // ── Clip drag ──
   const handleClipMouseDown = useCallback((e: React.MouseEvent, clipId: string) => {
     if (e.button !== 0) return
     e.stopPropagation()
@@ -243,9 +141,17 @@ export function LiveView() {
     setResizeClip({ clipId, edge })
   }, [])
 
-  // ── Mouse move / up for drag & resize ──
+  // ── Marker drag ──
+  const handleMarkerMouseDown = useCallback((e: React.MouseEvent, markerId: string) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    setDragMarker(markerId)
+  }, [])
+
+  // ── Mouse move/up for clip drag, resize, and marker drag ──
   useEffect(() => {
-    if (!dragClip && !resizeClip) return
+    if (!dragClip && !resizeClip && !dragMarker && !dragTrack) return
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = timelineRef.current?.getBoundingClientRect()
@@ -265,7 +171,6 @@ export function LiveView() {
         if (!clip) return
         const x = e.clientX - rect.left + sl
         const time = Math.max(0, Math.round((x / zoom) * 4) / 4)
-
         if (resizeClip.edge === 'right') {
           updateTimelineClip(resizeClip.clipId, { duration: Math.max(MIN_CLIP_DURATION, time - clip.startTime) })
         } else {
@@ -274,23 +179,58 @@ export function LiveView() {
           updateTimelineClip(resizeClip.clipId, { startTime: newStart, duration: endTime - newStart })
         }
       }
+
+      if (dragMarker) {
+        const x = e.clientX - rect.left + sl
+        const time = Math.max(0, Math.round((x / zoom) * 4) / 4)
+        updateTimelineMarker(dragMarker, { time })
+      }
+
+      if (dragTrack) {
+        const y = e.clientY - rect.top - RULER_HEIGHT - MARKER_ROW_HEIGHT
+        const newTrack = Math.max(0, Math.min(timelineTrackCount - 1, Math.floor(y / TRACK_HEIGHT)))
+        setDragTrack({ ...dragTrack, current: newTrack })
+      }
     }
 
-    const handleMouseUp = () => { setDragClip(null); setResizeClip(null) }
+    const handleMouseUp = () => {
+      if (dragTrack && dragTrack.from !== dragTrack.current) {
+        // Swap clips between tracks
+        const from = dragTrack.from
+        const to = dragTrack.current
+        const clips = usePlaybackStore.getState().timelineClips
+        for (const clip of clips) {
+          if (clip.trackIndex === from) updateTimelineClip(clip.id, { trackIndex: to })
+          else if (clip.trackIndex === to) updateTimelineClip(clip.id, { trackIndex: from })
+        }
+        // Swap track names
+        setTrackNames(prev => {
+          const next = { ...prev }
+          const tmp = next[from]
+          next[from] = next[to] || ''
+          next[to] = tmp || ''
+          return next
+        })
+      }
+      setDragClip(null)
+      setResizeClip(null)
+      setDragMarker(null)
+      setDragTrack(null)
+    }
+
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp) }
-  }, [dragClip, resizeClip, zoom, updateTimelineClip, timelineTrackCount])
+  }, [dragClip, resizeClip, dragMarker, dragTrack, zoom, updateTimelineClip, updateTimelineMarker, timelineTrackCount])
 
-  // ── Click on ruler → set playhead ──
+  // ── Ruler click = set playhead, double-click = add marker ──
   const handleRulerClick = useCallback((e: React.MouseEvent) => {
     const rect = timelineRef.current?.getBoundingClientRect()
     if (!rect) return
     const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
-    setCurrentTime(Math.max(0, x / zoom))
+    setTimelineTime(Math.max(0, x / zoom))
   }, [zoom])
 
-  // ── Double-click ruler → add marker ──
   const handleRulerDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const rect = timelineRef.current?.getBoundingClientRect()
@@ -301,30 +241,44 @@ export function LiveView() {
     addTimelineMarker({ time, name: `M${idx + 1}`, color: MARKER_COLORS[idx % MARKER_COLORS.length] })
   }, [zoom, addTimelineMarker])
 
-  // ── Navigate to next/prev marker ──
+  // ── Marker right-click = delete ──
+  const handleMarkerContextMenu = useCallback((e: React.MouseEvent, markerId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMarkerMenu({ x: e.clientX, y: e.clientY, markerId })
+  }, [])
+
+  // ── Track header right-click ──
+  const handleTrackContextMenu = useCallback((e: React.MouseEvent, trackIndex: number) => {
+    e.preventDefault()
+    setTrackMenu({ x: e.clientX, y: e.clientY, trackIndex })
+  }, [])
+
+  // ── Navigate markers ──
   const goToNextMarker = useCallback(() => {
     const markers = usePlaybackStore.getState().timelineMarkers
-    const next = markers.find(m => m.time > currentTimeRef.current + 0.1)
-    if (next) setCurrentTime(next.time)
+    const ct = getTimelineState().currentTime
+    const next = markers.find(m => m.time > ct + 0.1)
+    if (next) setTimelineTime(next.time)
   }, [])
-
   const goToPrevMarker = useCallback(() => {
     const markers = usePlaybackStore.getState().timelineMarkers
-    const prev = [...markers].reverse().find(m => m.time < currentTimeRef.current - 0.1)
-    if (prev) setCurrentTime(prev.time)
+    const ct = getTimelineState().currentTime
+    const prev = [...markers].reverse().find(m => m.time < ct - 0.1)
+    if (prev) setTimelineTime(prev.time)
   }, [])
 
-  // ── Click on empty area → set playhead ──
+  // ── Click empty area = set playhead ──
   const handleTimelineClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement
     if (!target.classList.contains('timeline-track') && target !== e.currentTarget) return
     const rect = timelineRef.current?.getBoundingClientRect()
     if (!rect) return
     const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
-    setCurrentTime(Math.max(0, x / zoom))
+    setTimelineTime(Math.max(0, x / zoom))
   }, [zoom])
 
-  // Keep playhead visible during playback
+  // Keep playhead visible
   useEffect(() => {
     if (!isPlaying || !timelineRef.current) return
     const playheadX = currentTime * zoom
@@ -335,18 +289,25 @@ export function LiveView() {
     }
   }, [currentTime, isPlaying, zoom])
 
-  // Timeline total width
+  // Close context menus on click
+  useEffect(() => {
+    if (!trackMenu && !markerMenu) return
+    const handler = () => { setTrackMenu(null); setMarkerMenu(null) }
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [trackMenu, markerMenu])
+
   const maxEnd = useMemo(() => {
     const clipEnd = timelineClips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0)
     return Math.max(totalDuration, clipEnd + 10)
   }, [timelineClips, totalDuration])
   const totalWidth = maxEnd * zoom
-
   const topOffset = RULER_HEIGHT + MARKER_ROW_HEIGHT
+  const activeClipIds = isPlaying ? getActiveClipIds() : new Set<string>()
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ═══════ LEFT SIDEBAR: Scene list ═══════ */}
+      {/* ═══════ LEFT SIDEBAR ═══════ */}
       <div className="w-48 shrink-0 border-r border-surface-3 bg-surface-1 flex flex-col">
         <div className="px-3 py-2 border-b border-surface-3">
           <h3 className="text-[10px] uppercase text-gray-500 font-semibold">Scenes</h3>
@@ -374,22 +335,19 @@ export function LiveView() {
             </div>
           ))}
           {cuelists.length === 0 && (
-            <p className="text-[9px] text-gray-600 text-center py-4">No scenes yet.<br/>Create them in Scenes tab.</p>
+            <p className="text-[9px] text-gray-600 text-center py-4">No scenes yet.<br/>Create in Scenes tab.</p>
           )}
         </div>
 
         {/* Markers list */}
         <div className="border-t border-surface-3">
-          <div className="px-3 py-1.5 text-[10px] uppercase text-gray-500 font-semibold flex items-center justify-between">
-            Markers
-            <span className="text-[9px] text-gray-600 font-normal">dbl-click ruler</span>
-          </div>
+          <div className="px-3 py-1.5 text-[10px] uppercase text-gray-500 font-semibold">Markers</div>
           <div className="overflow-y-auto max-h-40 px-1.5 pb-1.5 space-y-0.5">
             {timelineMarkers.map(m => (
               <div
                 key={m.id}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-3 text-[10px] cursor-pointer group"
-                onClick={() => setCurrentTime(m.time)}
+                onClick={() => setTimelineTime(m.time)}
               >
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.color || '#facc15' }} />
                 {editingMarkerId === m.id ? (
@@ -403,20 +361,9 @@ export function LiveView() {
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span
-                    className="flex-1 text-gray-300 truncate"
-                    onDoubleClick={(e) => { e.stopPropagation(); setEditingMarkerId(m.id); setEditingMarkerName(m.name) }}
-                  >
-                    {m.name}
-                  </span>
+                  <span className="flex-1 text-gray-300 truncate" onDoubleClick={(e) => { e.stopPropagation(); setEditingMarkerId(m.id); setEditingMarkerName(m.name) }}>{m.name}</span>
                 )}
                 <span className="text-gray-600 font-mono shrink-0">{formatTime(m.time)}</span>
-                <button
-                  className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0"
-                  onClick={(e) => { e.stopPropagation(); removeTimelineMarker(m.id) }}
-                >
-                  ×
-                </button>
               </div>
             ))}
             {timelineMarkers.length === 0 && (
@@ -426,103 +373,67 @@ export function LiveView() {
         </div>
       </div>
 
-      {/* ═══════ MAIN: Transport + Timeline ═══════ */}
+      {/* ═══════ MAIN ═══════ */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* ── Transport bar ── */}
+        {/* ── Transport ── */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-surface-3 bg-surface-1 shrink-0">
           <button
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              isPlaying ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-accent hover:bg-accent-light text-white'
-            }`}
-            onClick={() => isPlaying ? stopPlayback() : startPlayback()}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${isPlaying ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-accent hover:bg-accent-light text-white'}`}
+            onClick={handlePlayStop}
           >
             {isPlaying ? '■ Stop' : '▶ Play'}
           </button>
-
+          <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={() => { rewindTimeline(); setCurrentTime(0) }} title="Rewind">⏮</button>
+          <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={goToPrevMarker} title="Prev marker">◂</button>
+          <button className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200" onClick={goToNextMarker} title="Next marker">▸</button>
           <button
-            className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
-            onClick={() => { setCurrentTime(0); playbackRef.current.activeClipIds.clear(); stopAllEffects() }}
-            title="Back to start"
-          >
-            ⏮
-          </button>
-
-          {/* Prev / Next marker */}
-          <button
-            className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
-            onClick={goToPrevMarker}
-            title="Previous marker"
-          >
-            ◂
-          </button>
-          <button
-            className="px-2 py-1 rounded text-xs bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
-            onClick={goToNextMarker}
-            title="Next marker"
-          >
-            ▸
-          </button>
-
-          <button
-            className={`px-2 py-1 rounded text-xs transition-colors ${
-              isLooping ? 'bg-accent/20 text-accent' : 'bg-surface-3 text-gray-400 hover:bg-surface-4'
-            }`}
+            className={`px-2 py-1 rounded text-xs transition-colors ${isLooping ? 'bg-accent/20 text-accent' : 'bg-surface-3 text-gray-400 hover:bg-surface-4'}`}
             onClick={() => setIsLooping(!isLooping)}
-            title="Loop"
-          >
-            ↻
-          </button>
+          >↻</button>
 
           <div className="w-px h-5 bg-surface-3" />
           <div className="font-mono text-sm text-gray-300 min-w-[60px]">{formatTime(currentTime)}</div>
-
           <div className="flex-1" />
-
-          {/* Add/Remove track */}
-          <button
-            className="px-2 py-0.5 rounded text-[10px] bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
-            onClick={() => setTimelineTrackCount(timelineTrackCount + 1)}
-            title="Add track"
-          >
-            + Track
-          </button>
-          {timelineTrackCount > 1 && (
-            <button
-              className="px-2 py-0.5 rounded text-[10px] bg-surface-3 text-gray-400 hover:bg-surface-4 hover:text-gray-200"
-              onClick={() => setTimelineTrackCount(timelineTrackCount - 1)}
-              title="Remove last track"
-            >
-              − Track
-            </button>
-          )}
-
-          <div className="w-px h-5 bg-surface-3" />
 
           <span className="text-[10px] text-gray-500">Zoom</span>
           <input type="range" min={10} max={400} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-24 h-1 accent-accent" />
 
           <div className="w-px h-5 bg-surface-3" />
-
           <span className="text-[10px] text-gray-500">Durée</span>
-          <input
-            type="number" min={10} max={3600} value={totalDuration}
-            onChange={(e) => setTotalDuration(Math.max(10, Number(e.target.value)))}
-            className="w-14 text-xs bg-surface-3 border border-surface-4 rounded px-1 py-0.5 text-gray-300 text-center"
-          />
+          <input type="number" min={10} max={3600} value={totalDuration} onChange={(e) => setTotalDuration(Math.max(10, Number(e.target.value)))} className="w-14 text-xs bg-surface-3 border border-surface-4 rounded px-1 py-0.5 text-gray-300 text-center" />
           <span className="text-[10px] text-gray-600">s</span>
         </div>
 
-        {/* ── Timeline area ── */}
+        {/* ── Timeline ── */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Track headers (left) */}
-          <div className="w-20 shrink-0 border-r border-surface-3 bg-surface-1 flex flex-col">
+          {/* Track headers */}
+          <div className="w-24 shrink-0 border-r border-surface-3 bg-surface-1 flex flex-col">
             <div style={{ height: RULER_HEIGHT }} className="border-b border-surface-3" />
-            <div style={{ height: MARKER_ROW_HEIGHT }} className="border-b border-surface-3 flex items-center justify-center text-[8px] text-gray-600">
-              Markers
-            </div>
+            <div style={{ height: MARKER_ROW_HEIGHT }} className="border-b border-surface-3 flex items-center justify-center text-[8px] text-gray-600">Markers</div>
             {Array.from({ length: timelineTrackCount }, (_, i) => (
-              <div key={i} className="border-b border-surface-3/50 flex items-center justify-center text-[10px] text-gray-500" style={{ height: TRACK_HEIGHT }}>
-                Track {i + 1}
+              <div
+                key={i}
+                className={`border-b border-surface-3/50 flex items-center justify-center text-[10px] cursor-grab transition-colors ${
+                  dragTrack?.current === i ? 'bg-accent/10 text-accent' : 'text-gray-500 hover:bg-surface-2'
+                }`}
+                style={{ height: TRACK_HEIGHT }}
+                onContextMenu={(e) => handleTrackContextMenu(e, i)}
+                onMouseDown={(e) => { if (e.button === 0) setDragTrack({ from: i, current: i }) }}
+              >
+                {editingTrack === i ? (
+                  <input
+                    autoFocus
+                    className="w-16 bg-surface-3 text-gray-200 text-[10px] rounded px-1 text-center border-none outline-none"
+                    value={editingTrackName}
+                    onChange={(e) => setEditingTrackName(e.target.value)}
+                    onBlur={() => { setTrackNames(p => ({ ...p, [i]: editingTrackName })); setEditingTrack(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { setTrackNames(p => ({ ...p, [i]: editingTrackName })); setEditingTrack(null) } }}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="truncate px-1">{trackNames[i] || `Track ${i + 1}`}</span>
+                )}
               </div>
             ))}
           </div>
@@ -537,7 +448,7 @@ export function LiveView() {
             onClick={handleTimelineClick}
           >
             <div className="relative" style={{ width: totalWidth, minHeight: topOffset + timelineTrackCount * TRACK_HEIGHT }}>
-              {/* ── Time ruler ── */}
+              {/* Time ruler */}
               <div className="sticky top-0 z-20 bg-surface-1 border-b border-surface-3 cursor-pointer" style={{ height: RULER_HEIGHT }} onClick={handleRulerClick} onDoubleClick={handleRulerDoubleClick}>
                 <svg width={totalWidth} height={RULER_HEIGHT} className="block">
                   {Array.from({ length: Math.ceil(maxEnd) + 1 }, (_, i) => {
@@ -556,34 +467,34 @@ export function LiveView() {
                 </svg>
               </div>
 
-              {/* ── Marker row ── */}
+              {/* Marker row */}
               <div className="sticky z-15 bg-surface-0/80 border-b border-surface-3/50" style={{ top: RULER_HEIGHT, height: MARKER_ROW_HEIGHT }}>
                 {timelineMarkers.map(m => (
                   <div
                     key={m.id}
-                    className="absolute top-0 bottom-0 flex items-center cursor-pointer hover:opacity-80"
+                    className={`absolute top-0 bottom-0 flex items-center cursor-grab hover:opacity-80 ${dragMarker === m.id ? 'opacity-60' : ''}`}
                     style={{ left: m.time * zoom }}
-                    onClick={(e) => { e.stopPropagation(); setCurrentTime(m.time) }}
-                    title={`${m.name} — ${formatTime(m.time)}`}
+                    onMouseDown={(e) => handleMarkerMouseDown(e, m.id)}
+                    onContextMenu={(e) => handleMarkerContextMenu(e, m.id)}
+                    title={`${m.name} — ${formatTime(m.time)} (drag to move, right-click to delete)`}
                   >
                     <div className="w-px h-full" style={{ backgroundColor: m.color || '#facc15' }} />
-                    <span className="text-[8px] px-1 rounded-r whitespace-nowrap" style={{ backgroundColor: (m.color || '#facc15') + '33', color: m.color || '#facc15' }}>
-                      {m.name}
-                    </span>
+                    <span className="text-[8px] px-1 rounded-r whitespace-nowrap" style={{ backgroundColor: (m.color || '#facc15') + '33', color: m.color || '#facc15' }}>{m.name}</span>
                   </div>
                 ))}
               </div>
 
-              {/* ── Track rows ── */}
+              {/* Track rows */}
               {Array.from({ length: timelineTrackCount }, (_, i) => (
                 <div
                   key={i}
                   className={`timeline-track absolute left-0 right-0 border-b border-surface-3/30 ${i % 2 === 0 ? 'bg-surface-0/50' : 'bg-surface-2/30'}`}
                   style={{ top: topOffset + i * TRACK_HEIGHT, height: TRACK_HEIGHT }}
+                  onContextMenu={(e) => handleTrackContextMenu(e, i)}
                 />
               ))}
 
-              {/* ── Clips ── */}
+              {/* Clips */}
               {timelineClips.map(clip => {
                 const cuelist = cuelists.find(c => c.id === clip.cuelistId)
                 const left = clip.startTime * zoom
@@ -592,12 +503,12 @@ export function LiveView() {
                 const isDragging = dragClip?.clipId === clip.id
                 const isResizing = resizeClip?.clipId === clip.id
                 const clipColor = clip.color || '#e85d04'
-                const isActive = playbackRef.current.activeClipIds.has(clip.id) && isPlaying
+                const isActive = activeClipIds.has(clip.id)
 
                 return (
                   <div
                     key={clip.id}
-                    className={`absolute rounded shadow-md flex items-center overflow-hidden select-none group ${isDragging || isResizing ? 'opacity-70 z-30' : 'z-10'} ${isActive ? 'ring-1 ring-white/50' : ''}`}
+                    className={`absolute rounded shadow-md flex items-center overflow-hidden select-none group ${isDragging || isResizing ? 'opacity-70 z-30' : 'z-10'} ${isActive ? 'ring-2 ring-white/60 brightness-125' : ''}`}
                     style={{
                       left, width: Math.max(width, 20), top, height: TRACK_HEIGHT - 8,
                       backgroundColor: clipColor + 'cc', border: `1px solid ${clipColor}`,
@@ -615,16 +526,12 @@ export function LiveView() {
                 )
               })}
 
-              {/* ── Marker lines through tracks ── */}
+              {/* Marker lines through tracks */}
               {timelineMarkers.map(m => (
-                <div
-                  key={`line-${m.id}`}
-                  className="absolute pointer-events-none z-5"
-                  style={{ left: m.time * zoom, top: topOffset, bottom: 0, width: 1, backgroundColor: (m.color || '#facc15') + '40', height: timelineTrackCount * TRACK_HEIGHT }}
-                />
+                <div key={`line-${m.id}`} className="absolute pointer-events-none z-5" style={{ left: m.time * zoom, top: topOffset, width: 1, backgroundColor: (m.color || '#facc15') + '40', height: timelineTrackCount * TRACK_HEIGHT }} />
               ))}
 
-              {/* ── Playhead ── */}
+              {/* Playhead */}
               <div className="absolute top-0 w-px bg-red-500 z-40 pointer-events-none" style={{ left: currentTime * zoom, height: topOffset + timelineTrackCount * TRACK_HEIGHT }}>
                 <div className="absolute -top-0 -left-[5px] w-0 h-0 border-l-[5px] border-r-[5px] border-t-[8px] border-l-transparent border-r-transparent border-t-red-500" />
               </div>
@@ -632,6 +539,44 @@ export function LiveView() {
           </div>
         </div>
       </div>
+
+      {/* ═══════ CONTEXT MENUS ═══════ */}
+      {trackMenu && (
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[160px]" style={{ left: trackMenu.x, top: trackMenu.y }}>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => { setEditingTrack(trackMenu.trackIndex); setEditingTrackName(trackNames[trackMenu.trackIndex] || `Track ${trackMenu.trackIndex + 1}`); setTrackMenu(null) }}>
+            Rename Track
+          </button>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => { setTimelineTrackCount(timelineTrackCount + 1); setTrackMenu(null) }}>
+            Add Track Below
+          </button>
+          {timelineTrackCount > 1 && (
+            <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => {
+              // Remove track: move clips from higher tracks down
+              const idx = trackMenu.trackIndex
+              const clips = usePlaybackStore.getState().timelineClips
+              for (const clip of clips) {
+                if (clip.trackIndex === idx) removeTimelineClip(clip.id)
+                else if (clip.trackIndex > idx) updateTimelineClip(clip.id, { trackIndex: clip.trackIndex - 1 })
+              }
+              setTimelineTrackCount(timelineTrackCount - 1)
+              setTrackMenu(null)
+            }}>
+              Remove Track
+            </button>
+          )}
+        </div>
+      )}
+
+      {markerMenu && (
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[140px]" style={{ left: markerMenu.x, top: markerMenu.y }}>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => { setEditingMarkerId(markerMenu.markerId); const m = timelineMarkers.find(x => x.id === markerMenu.markerId); setEditingMarkerName(m?.name || ''); setMarkerMenu(null) }}>
+            Rename
+          </button>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineMarker(markerMenu.markerId); setMarkerMenu(null) }}>
+            Delete Marker
+          </button>
+        </div>
+      )}
     </div>
   )
 }

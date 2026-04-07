@@ -1,15 +1,26 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useMidiStore } from '../../stores/midi-store'
 import { HSlider } from '../common/HSlider'
+import { toggleTimeline, getTimelineState, setTimelineUpdateCallback } from '../../lib/timeline-engine'
 
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()
   const { grandMaster, setGrandMaster, blackout, toggleBlackout } = useDmxStore()
   const { isLearning, learnTarget, cancelLearn, startLearn } = useMidiStore()
 
-  const isLive = activeTab === 'live'
+  const [timelinePlaying, setTimelinePlaying] = useState(false)
+
+  useEffect(() => {
+    // We piggyback on the timeline engine callback — but LiveView also sets one.
+    // Use a polling approach instead to not conflict.
+    const interval = setInterval(() => {
+      const state = getTimelineState()
+      setTimelinePlaying(state.isPlaying)
+    }, 200)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="h-9 bg-surface-1 border-b border-surface-3 flex items-center px-3 gap-2 shrink-0 titlebar-drag">
@@ -59,15 +70,15 @@ export function Toolbar() {
         {isLearning ? `MIDI ● ${learnTarget?.label || '...'}` : 'MIDI Learn'}
       </button>
 
-      {/* Live button */}
+      {/* Live button — toggles timeline playback */}
       <button
         className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${
-          isLive
+          timelinePlaying
             ? 'bg-green-600 text-white animate-pulse'
             : 'bg-green-700/30 text-green-400 border border-green-600/40 hover:bg-green-700/50'
         }`}
-        onClick={() => setActiveTab('live')}
-        title="Live view"
+        onClick={toggleTimeline}
+        title={timelinePlaying ? 'Stop timeline' : 'Play timeline'}
       >
         Live
       </button>
