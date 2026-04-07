@@ -552,6 +552,7 @@ export function LiveView() {
                 key={m.id}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-3 text-[10px] cursor-pointer group"
                 onClick={() => { setTimelineTime(m.time); scrollToTime(m.time) }}
+                onContextMenu={(e) => handleMarkerContextMenu(e, m.id)}
               >
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.color || '#facc15' }} />
                 {editingMarkerId === m.id ? (
@@ -893,12 +894,19 @@ export function LiveView() {
 
       {/* Zone context menu */}
       {zoneMenu && (
-        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[160px]" style={{ left: zoneMenu.x, top: zoneMenu.y }}>
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[180px]" style={{ left: zoneMenu.x, top: zoneMenu.y }}>
           <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => {
             const z = sortedZones.find(x => x.id === zoneMenu.zoneId)
             setEditingZoneId(zoneMenu.zoneId); setEditingZoneName(z?.name || ''); setZoneMenu(null)
           }}>
             Rename Zone
+          </button>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-purple-400 hover:bg-purple-500/20" onClick={() => {
+            const z = sortedZones.find(x => x.id === zoneMenu.zoneId)
+            startLearn({ type: 'timeline_goto_zone' as MidiTargetType, id: zoneMenu.zoneId, label: `Go to ${z?.name || 'zone'}` })
+            setZoneMenu(null)
+          }}>
+            MIDI Learn: Go to Zone
           </button>
           <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineZone(zoneMenu.zoneId); setZoneMenu(null) }}>
             Delete Zone

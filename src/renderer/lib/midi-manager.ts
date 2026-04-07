@@ -243,6 +243,15 @@ function routeMidiToTarget(mapping: any, rawValue: number): void {
       }
       break
     }
+
+    case 'timeline_goto_zone': {
+      if (rawValue > 0 && target.id) {
+        const zones = usePlaybackStore.getState().timelineZones
+        const zone = zones.find(z => z.id === target.id)
+        if (zone) setTimelineTime(zone.startTime)
+      }
+      break
+    }
   }
 }
 
