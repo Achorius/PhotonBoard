@@ -104,8 +104,12 @@ function updateEffects(): void {
         // Apply effect to each cell with progressive phase offset
         for (let cellIdx = 0; cellIdx < pixelLayout.cellCount; cellIdx++) {
           const cell = pixelLayout.cells[cellIdx]
+          // Reverse cell phase order when pixelInvert is enabled
+          const effectiveCellIdx = entry.pixelInvert
+            ? (pixelLayout.cellCount - 1 - cellIdx)
+            : cellIdx
           const cellPhaseOffset = pixelLayout.cellCount > 1
-            ? (effect.fan / 360) * (cellIdx / (pixelLayout.cellCount - 1))
+            ? (effect.fan / 360) * (effectiveCellIdx / (pixelLayout.cellCount - 1))
             : 0
 
           // Combined phase: fixture offset + cell offset within fixture

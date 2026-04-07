@@ -73,6 +73,8 @@ export function useDmxAnimation(
             }
             cellColors.push({ r: cr, g: cg, b: cb, dimmer: cdim })
           }
+          // Reverse cell order if pixel invert is enabled
+          if (entry.pixelInvert) cellColors.reverse()
         }
 
         updateFixtureObjects(objects, channels, grandMaster, blackout, showBeams, {

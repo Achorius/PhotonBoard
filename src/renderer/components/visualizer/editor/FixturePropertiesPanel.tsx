@@ -159,6 +159,33 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
         </section>
       )}
 
+      {/* Flip & Pixel Invert (multi-cell and static fixtures) */}
+      {!isMovingHead && (
+        <section>
+          <h3 className="text-[10px] text-gray-500 uppercase mb-2">Orientation</h3>
+          <button
+            className="btn-secondary text-[10px] w-full mb-2"
+            onClick={() => {
+              const newPan = ((mountingPan + 180) % 360) - 180  // wrap to -180..180
+              updateFixture(entry.id, { mountingPan: newPan === -180 ? 180 : newPan })
+            }}
+          >
+            ↻ Flip 180°
+          </button>
+          {def && def.modes.find(m => m.name === entry.modeName)?.pixelLayout && (
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={entry.pixelInvert ?? false}
+                onChange={e => updateFixture(entry.id, { pixelInvert: e.target.checked })}
+                className="accent-accent"
+              />
+              <span className="text-[10px] text-gray-400">Pixel Invert (reverse cell order)</span>
+            </label>
+          )}
+        </section>
+      )}
+
       {/* Beam angle */}
       <section>
         <h3 className="text-[10px] text-gray-500 uppercase mb-2">Beam Angle</h3>

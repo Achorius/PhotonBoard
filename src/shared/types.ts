@@ -211,6 +211,7 @@ export interface PatchEntry {
   beamAngle?: number    // degrees, cone spread — defaults from fixture physical
   panInvert?: boolean   // invert pan direction for moving heads
   tiltInvert?: boolean  // invert tilt direction for moving heads
+  pixelInvert?: boolean // reverse cell/pixel order for multi-cell fixtures
 }
 
 // --- Groups ---
