@@ -244,6 +244,25 @@ export interface Effect {
   isRunning: boolean
 }
 
+// --- Timeline ---
+
+export interface TimelineClip {
+  id: string
+  cuelistId: string       // reference to a cuelist/scene
+  trackIndex: number      // which track row (0, 1, 2…)
+  startTime: number       // seconds from timeline start
+  duration: number        // seconds
+  color?: string          // UI color for the clip block
+}
+
+export interface TimelineState {
+  clips: TimelineClip[]
+  isPlaying: boolean
+  currentTime: number     // playhead position in seconds
+  totalDuration: number   // total timeline length in seconds
+  isLooping: boolean
+}
+
 // --- MIDI ---
 
 export type MidiSourceType = 'cc' | 'note' | 'program'
@@ -314,6 +333,7 @@ export interface ShowFile {
   midiMappings: MidiMapping[]
   stageLayout: StageLayout
   roomConfig?: RoomConfig
+  timeline?: TimelineClip[]
 }
 
 // --- IPC Channel Names ---

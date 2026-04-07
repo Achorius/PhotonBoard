@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
-import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType } from '@shared/types'
+import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType, TimelineClip } from '@shared/types'
 
 interface PlaybackState {
   cuelists: Cuelist[]
@@ -33,6 +33,13 @@ interface PlaybackState {
   // Preset actions
   addPreset: (name: string, type: PresetType, values: Record<string, Record<string, number>>) => void
   removePreset: (id: string) => void
+
+  // Timeline
+  timelineClips: TimelineClip[]
+  addTimelineClip: (clip: Omit<TimelineClip, 'id'>) => string
+  removeTimelineClip: (id: string) => void
+  updateTimelineClip: (id: string, updates: Partial<TimelineClip>) => void
+  setTimelineClips: (clips: TimelineClip[]) => void
 
   // Import
   setCuelists: (cuelists: Cuelist[]) => void
@@ -263,6 +270,33 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   removePreset: (id) => {
     set((state) => ({ presets: state.presets.filter((p) => p.id !== id) }))
   },
+
+  // --- Timeline ---
+  timelineClips: [],
+
+  addTimelineClip: (clip) => {
+    const id = uuidv4()
+    set((state) => ({
+      timelineClips: [...state.timelineClips, { ...clip, id }]
+    }))
+    return id
+  },
+
+  removeTimelineClip: (id) => {
+    set((state) => ({
+      timelineClips: state.timelineClips.filter(c => c.id !== id)
+    }))
+  },
+
+  updateTimelineClip: (id, updates) => {
+    set((state) => ({
+      timelineClips: state.timelineClips.map(c =>
+        c.id === id ? { ...c, ...updates } : c
+      )
+    }))
+  },
+
+  setTimelineClips: (clips) => set({ timelineClips: clips }),
 
   setCuelists: (cuelists) => set({ cuelists }),
   setChases: (chases) => set({ chases }),

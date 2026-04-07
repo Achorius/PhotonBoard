@@ -25,7 +25,7 @@ type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
 
 const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'visualizer', label: '3D',       shortcut: '1' },
-  { id: 'live',       label: 'Live',     shortcut: '2' },
+  { id: 'live',       label: 'Timeline', shortcut: '2' },
   { id: 'effects',    label: 'Effects',  shortcut: '3' },
   { id: 'playback',   label: 'Scenes',   shortcut: '4' },
   { id: 'fixtures',   label: 'Fixtures', shortcut: '5' },
@@ -74,7 +74,8 @@ export default function App() {
       effects: [],
       midiMappings: [...useMidiStore.getState().mappings],
       stageLayout: { width: 1200, height: 600, fixtures: [] },
-      roomConfig: { ...roomConfig }
+      roomConfig: { ...roomConfig },
+      timeline: [...usePlaybackStore.getState().timelineClips]
     }
   }, [])
 
@@ -87,6 +88,7 @@ export default function App() {
     useUiStore.getState().setShowName(show.name || 'New Show')
     if (show.midiMappings && show.midiMappings.length > 0) useMidiStore.getState().setMappings(show.midiMappings)
     if (show.roomConfig) useVisualizerStore.getState().setRoomConfig(show.roomConfig)
+    if (show.timeline) usePlaybackStore.getState().setTimelineClips(show.timeline)
     // Clear selections
     usePatchStore.getState().clearSelection()
     useVisualizerStore.getState().selectFixture(null)
