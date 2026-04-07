@@ -295,22 +295,66 @@ export function LiveView() {
     if (prev) { setTimelineTime(prev.time); scrollToTime(prev.time) }
   }, [scrollToTime])
 
-  // ── Zone reorder: shift clips when zones are rearranged ──
+  // ── Zone reorder: split overlapping clips, then shift everything ──
   const handleZoneReorder = useCallback((orderedIds: string[]) => {
     const store = usePlaybackStore.getState()
     const zones = store.timelineZones
-    const clips = store.timelineClips
+    let clips = [...store.timelineClips]
 
     // Build old order (by current order field)
     const oldOrder = [...zones].sort((a, b) => a.order - b.order)
     const newOrder = orderedIds.map(id => zones.find(z => z.id === id)!).filter(Boolean)
     if (newOrder.length !== oldOrder.length) return
 
-    // Calculate each zone's duration
-    const zoneDurations = oldOrder.map(z => z.endTime - z.startTime)
-    const zoneIdToDuration = new Map(oldOrder.map((z, i) => [z.id, zoneDurations[i]]))
+    // ── Phase 1: Split clips that straddle zone boundaries ──
+    for (const zone of oldOrder) {
+      const toSplit: typeof clips = []
+      for (const clip of clips) {
+        const clipEnd = clip.startTime + clip.duration
+        const overlapsStart = clip.startTime < zone.startTime && clipEnd > zone.startTime
+        const overlapsEnd = clip.startTime < zone.endTime && clipEnd > zone.endTime
+        if (overlapsStart || overlapsEnd) toSplit.push(clip)
+      }
 
-    // Build new start times based on new order
+      for (const clip of toSplit) {
+        const clipEnd = clip.startTime + clip.duration
+        const fragments: { startTime: number; duration: number }[] = []
+
+        // Build fragments by cutting at zone boundaries
+        let fragStart = clip.startTime
+        const cuts = [zone.startTime, zone.endTime].filter(t => t > clip.startTime && t < clipEnd).sort((a, b) => a - b)
+        for (const cut of cuts) {
+          if (cut > fragStart) {
+            fragments.push({ startTime: fragStart, duration: cut - fragStart })
+            fragStart = cut
+          }
+        }
+        if (fragStart < clipEnd) {
+          fragments.push({ startTime: fragStart, duration: clipEnd - fragStart })
+        }
+
+        if (fragments.length > 1) {
+          // Update original clip to first fragment
+          updateTimelineClip(clip.id, { startTime: fragments[0].startTime, duration: fragments[0].duration })
+          // Create new clips for remaining fragments
+          for (let i = 1; i < fragments.length; i++) {
+            addTimelineClip({
+              cuelistId: clip.cuelistId,
+              trackIndex: clip.trackIndex,
+              startTime: fragments[i].startTime,
+              duration: fragments[i].duration,
+              color: clip.color
+            })
+          }
+        }
+      }
+    }
+
+    // ── Phase 2: Re-read clips after splits ──
+    clips = [...usePlaybackStore.getState().timelineClips]
+
+    // Calculate each zone's duration & new start positions
+    const zoneIdToDuration = new Map(oldOrder.map(z => [z.id, z.endTime - z.startTime]))
     let cursor = oldOrder.length > 0 ? Math.min(...oldOrder.map(z => z.startTime)) : 0
     const newZoneStarts = new Map<string, number>()
     for (const z of newOrder) {
@@ -318,21 +362,23 @@ export function LiveView() {
       cursor += zoneIdToDuration.get(z.id) || 0
     }
 
-    // For each clip, figure out which zone it belongs to (by old zone bounds)
+    // ── Phase 3: Move clips — any clip fully or partially inside a zone moves with it ──
+    const movedClipIds = new Set<string>()
     for (const clip of clips) {
-      const clipMid = clip.startTime + clip.duration / 2
-      const sourceZone = oldOrder.find(z => clipMid >= z.startTime && clipMid < z.endTime)
+      const clipEnd = clip.startTime + clip.duration
+      // Find zone that contains this clip (clip is inside if it overlaps the zone at all)
+      const sourceZone = oldOrder.find(z => clip.startTime >= z.startTime && clipEnd <= z.endTime + 0.01)
       if (!sourceZone) continue
-      const oldZoneStart = sourceZone.startTime
       const newZoneStart = newZoneStarts.get(sourceZone.id)
       if (newZoneStart === undefined) continue
-      const offset = newZoneStart - oldZoneStart
+      const offset = newZoneStart - sourceZone.startTime
       if (offset !== 0) {
         updateTimelineClip(clip.id, { startTime: Math.max(0, clip.startTime + offset) })
       }
+      movedClipIds.add(clip.id)
     }
 
-    // Update zone positions
+    // ── Phase 4: Update zone positions ──
     for (const z of oldOrder) {
       const newStart = newZoneStarts.get(z.id)
       if (newStart === undefined) continue
@@ -340,22 +386,21 @@ export function LiveView() {
       updateTimelineZone(z.id, { startTime: newStart, endTime: newStart + dur })
     }
 
-    // Update markers within zones
+    // ── Phase 5: Move markers within zones ──
     const markers = store.timelineMarkers
     for (const marker of markers) {
       const sourceZone = oldOrder.find(z => marker.time >= z.startTime && marker.time < z.endTime)
       if (!sourceZone) continue
-      const oldZoneStart = sourceZone.startTime
       const newZoneStart = newZoneStarts.get(sourceZone.id)
       if (newZoneStart === undefined) continue
-      const offset = newZoneStart - oldZoneStart
+      const offset = newZoneStart - sourceZone.startTime
       if (offset !== 0) {
         updateTimelineMarker(marker.id, { time: Math.max(0, marker.time + offset) })
       }
     }
 
     reorderTimelineZones(orderedIds)
-  }, [updateTimelineClip, updateTimelineZone, updateTimelineMarker, reorderTimelineZones])
+  }, [updateTimelineClip, addTimelineClip, updateTimelineZone, updateTimelineMarker, reorderTimelineZones])
 
   // ── Zone sidebar drag reorder ──
   const handleZoneDragStart = useCallback((e: React.DragEvent, zoneId: string) => {
