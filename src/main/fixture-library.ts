@@ -3,7 +3,7 @@
 // Generics + real-world fixtures from major manufacturers
 // ============================================================
 
-import type { FixtureDefinition, FixtureChannel } from '../shared/types'
+import type { FixtureDefinition, FixtureChannel, PixelCell, PixelLayout } from '../shared/types'
 
 // ---- Channel factories ----
 
@@ -85,6 +85,69 @@ function chs(...channels: FixtureChannel[]): Record<string, FixtureChannel> {
   return rec
 }
 
+// ---- Multi-cell helpers ----
+
+/** Create numbered color channels for multi-cell fixtures: "Red 1", "Green 1", "Blue 1", "Red 2", ... */
+function cellColorChs(cellCount: number, colors: { name: string; color: string }[]): Record<string, FixtureChannel> {
+  const rec: Record<string, FixtureChannel> = {}
+  for (let c = 1; c <= cellCount; c++) {
+    for (const { name, color } of colors) {
+      const chName = `${name} ${c}`
+      rec[chName] = colorCh(chName, color)
+    }
+  }
+  return rec
+}
+
+/** Create numbered dimmer channels: "Dimmer 1", "Dimmer 2", ... */
+function cellDimmerChs(cellCount: number): Record<string, FixtureChannel> {
+  const rec: Record<string, FixtureChannel> = {}
+  for (let c = 1; c <= cellCount; c++) {
+    const chName = `Dimmer ${c}`
+    rec[chName] = dimmerCh(chName)
+  }
+  return rec
+}
+
+/** Build channel name list for multi-cell mode: ["Red 1", "Green 1", "Blue 1", "Red 2", ...] */
+function cellChannelNames(cellCount: number, channelBases: string[]): string[] {
+  const names: string[] = []
+  for (let c = 1; c <= cellCount; c++) {
+    for (const base of channelBases) {
+      names.push(`${base} ${c}`)
+    }
+  }
+  return names
+}
+
+/** Build pixel layout for a multi-cell mode */
+function makePixelLayout(cellCount: number, channelsPerCell: number, orientation: 'horizontal' | 'vertical' = 'horizontal'): PixelLayout {
+  const cells: PixelCell[] = []
+  for (let i = 0; i < cellCount; i++) {
+    const offset = i * channelsPerCell
+    cells.push({
+      index: i,
+      channelOffset: offset,
+      channelNames: [] // will be filled after channel names are known
+    })
+  }
+  return { cellCount, cells, orientation }
+}
+
+/** Build a complete pixel layout with channel names */
+function pixelLayout(cellCount: number, channelBases: string[], orientation: 'horizontal' | 'vertical' = 'horizontal'): PixelLayout {
+  const cells: PixelCell[] = []
+  for (let i = 0; i < cellCount; i++) {
+    const offset = i * channelBases.length
+    cells.push({
+      index: i,
+      channelOffset: offset,
+      channelNames: channelBases.map(base => `${base} ${i + 1}`)
+    })
+  }
+  return { cellCount, cells, orientation }
+}
+
 // ---- All built-in fixtures ----
 
 export const BUILTIN_FIXTURES: FixtureDefinition[] = [
@@ -157,6 +220,233 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     channels: chs(panCh(), panFineCh(), tiltCh(), tiltFineCh(), dimmerCh(), shutterCh(), colorWheelCh(), goboCh(), prismCh(), focusCh(), zoomCh(), speedCh(), resetCh()),
     modes: [{ name: '13ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Dimmer', 'Shutter', 'Color Wheel', 'Gobo', 'Prism', 'Focus', 'Zoom', 'Speed', 'Reset'], channelCount: 13 }],
     physical: { lens: { degreesMinMax: [10, 40] } }
+  },
+
+  // ================================================================
+  // GENERIC MULTI-CELL (LED Bars, Sunstrips, Wall Washers)
+  // ================================================================
+
+  // --- Sunstrip 10 (10x Dimmer cells — classic chase/drop effects) ---
+  {
+    id: 'generic/sunstrip-10',
+    name: 'Sunstrip 10',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Batten'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh()),
+      ...cellDimmerChs(10)
+    },
+    modes: [
+      {
+        name: '10ch',
+        channels: cellChannelNames(10, ['Dimmer']),
+        channelCount: 10,
+        pixelLayout: pixelLayout(10, ['Dimmer'])
+      },
+      {
+        name: '12ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(10, ['Dimmer'])],
+        channelCount: 12,
+        pixelLayout: { cellCount: 10, cells: Array.from({ length: 10 }, (_, i) => ({ index: i, channelOffset: 2 + i, channelNames: [`Dimmer ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      { name: '1ch', channels: ['Master Dimmer'], channelCount: 1 }
+    ],
+    physical: { dimensions: [1000, 100, 100], lens: { degreesMinMax: [30, 60] } }
+  },
+
+  // --- LED Bar RGB 8 (8x RGB cells — pixel chase/rainbow effects) ---
+  {
+    id: 'generic/led-bar-rgb-8',
+    name: 'LED Bar RGB 8 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Batten'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff')),
+      ...cellColorChs(8, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }])
+    },
+    modes: [
+      {
+        name: '24ch',
+        channels: cellChannelNames(8, ['Red', 'Green', 'Blue']),
+        channelCount: 24,
+        pixelLayout: pixelLayout(8, ['Red', 'Green', 'Blue'])
+      },
+      {
+        name: '26ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(8, ['Red', 'Green', 'Blue'])],
+        channelCount: 26,
+        pixelLayout: { cellCount: 8, cells: Array.from({ length: 8 }, (_, i) => ({ index: i, channelOffset: 2 + i * 3, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      { name: '3ch', channels: ['Red', 'Green', 'Blue'], channelCount: 3 }
+    ],
+    physical: { dimensions: [1000, 75, 85], lens: { degreesMinMax: [25, 45] } }
+  },
+
+  // --- LED Bar RGBW 6 (6x RGBW cells — wash + pixel effects) ---
+  {
+    id: 'generic/led-bar-rgbw-6',
+    name: 'LED Bar RGBW 6 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Batten'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff'), colorCh('White', '#ffffff')),
+      ...cellColorChs(6, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }, { name: 'White', color: '#ffffff' }])
+    },
+    modes: [
+      {
+        name: '24ch',
+        channels: cellChannelNames(6, ['Red', 'Green', 'Blue', 'White']),
+        channelCount: 24,
+        pixelLayout: pixelLayout(6, ['Red', 'Green', 'Blue', 'White'])
+      },
+      {
+        name: '26ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(6, ['Red', 'Green', 'Blue', 'White'])],
+        channelCount: 26,
+        pixelLayout: { cellCount: 6, cells: Array.from({ length: 6 }, (_, i) => ({ index: i, channelOffset: 2 + i * 4, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`, `White ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      { name: '4ch', channels: ['Red', 'Green', 'Blue', 'White'], channelCount: 4 }
+    ],
+    physical: { dimensions: [1000, 75, 85], lens: { degreesMinMax: [25, 40] } }
+  },
+
+  // --- Wall Washer RGB 12 (12x RGB cells — long bar for wide washes) ---
+  {
+    id: 'generic/wall-washer-rgb-12',
+    name: 'Wall Washer RGB 12 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Strip'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff')),
+      ...cellColorChs(12, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }])
+    },
+    modes: [
+      {
+        name: '36ch',
+        channels: cellChannelNames(12, ['Red', 'Green', 'Blue']),
+        channelCount: 36,
+        pixelLayout: pixelLayout(12, ['Red', 'Green', 'Blue'])
+      },
+      {
+        name: '38ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(12, ['Red', 'Green', 'Blue'])],
+        channelCount: 38,
+        pixelLayout: { cellCount: 12, cells: Array.from({ length: 12 }, (_, i) => ({ index: i, channelOffset: 2 + i * 3, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      { name: '3ch', channels: ['Red', 'Green', 'Blue'], channelCount: 3 }
+    ],
+    physical: { dimensions: [1500, 80, 100], lens: { degreesMinMax: [20, 35] } }
+  },
+
+  // --- Sunstrip RGBW 5 (5x RGBW cells — compact bar, great for drops) ---
+  {
+    id: 'generic/sunstrip-rgbw-5',
+    name: 'Sunstrip RGBW 5 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Batten'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh()),
+      ...cellColorChs(5, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }, { name: 'White', color: '#ffffff' }])
+    },
+    modes: [
+      {
+        name: '20ch',
+        channels: cellChannelNames(5, ['Red', 'Green', 'Blue', 'White']),
+        channelCount: 20,
+        pixelLayout: pixelLayout(5, ['Red', 'Green', 'Blue', 'White'])
+      },
+      {
+        name: '22ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(5, ['Red', 'Green', 'Blue', 'White'])],
+        channelCount: 22,
+        pixelLayout: { cellCount: 5, cells: Array.from({ length: 5 }, (_, i) => ({ index: i, channelOffset: 2 + i * 4, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`, `White ${i + 1}`] })), orientation: 'horizontal' as const }
+      }
+    ],
+    physical: { dimensions: [600, 80, 85], lens: { degreesMinMax: [30, 50] } }
+  },
+
+  // --- Wall Washer RGBW 28 Cell (114ch — large LED bar like 336-LED models) ---
+  {
+    id: 'generic/wall-washer-rgbw-28',
+    name: 'Wall Washer RGBW 28 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Strip'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh()),
+      ...cellColorChs(28, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }, { name: 'White', color: '#ffffff' }])
+    },
+    modes: [
+      {
+        name: '114ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(28, ['Red', 'Green', 'Blue', 'White'])],
+        channelCount: 114,
+        pixelLayout: { cellCount: 28, cells: Array.from({ length: 28 }, (_, i) => ({ index: i, channelOffset: 2 + i * 4, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`, `White ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      {
+        name: '112ch',
+        channels: cellChannelNames(28, ['Red', 'Green', 'Blue', 'White']),
+        channelCount: 112,
+        pixelLayout: pixelLayout(28, ['Red', 'Green', 'Blue', 'White'])
+      },
+      { name: '4ch', channels: ['Red 1', 'Green 1', 'Blue 1', 'White 1'], channelCount: 4 }
+    ],
+    physical: { dimensions: [1200, 90, 110], lens: { degreesMinMax: [15, 30] } }
+  },
+
+  // --- Wall Washer RGBW 14 Cell (58ch — medium high-density LED bar) ---
+  {
+    id: 'generic/wall-washer-rgbw-14',
+    name: 'Wall Washer RGBW 14 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Strip'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh()),
+      ...cellColorChs(14, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }, { name: 'White', color: '#ffffff' }])
+    },
+    modes: [
+      {
+        name: '58ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(14, ['Red', 'Green', 'Blue', 'White'])],
+        channelCount: 58,
+        pixelLayout: { cellCount: 14, cells: Array.from({ length: 14 }, (_, i) => ({ index: i, channelOffset: 2 + i * 4, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`, `White ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      {
+        name: '56ch',
+        channels: cellChannelNames(14, ['Red', 'Green', 'Blue', 'White']),
+        channelCount: 56,
+        pixelLayout: pixelLayout(14, ['Red', 'Green', 'Blue', 'White'])
+      },
+      { name: '4ch', channels: ['Red 1', 'Green 1', 'Blue 1', 'White 1'], channelCount: 4 }
+    ],
+    physical: { dimensions: [1000, 85, 100], lens: { degreesMinMax: [15, 30] } }
+  },
+
+  // --- LED Bar RGB 4 (4x RGB cells — small bar, ideal for truss accents) ---
+  {
+    id: 'generic/led-bar-rgb-4',
+    name: 'LED Bar RGB 4 Cell',
+    manufacturer: 'Generic',
+    categories: ['Pixel Bar', 'Batten'],
+    channels: {
+      ...chs(dimmerCh('Master Dimmer'), strobeCh(), colorCh('Red', '#ff0000'), colorCh('Green', '#00ff00'), colorCh('Blue', '#0000ff')),
+      ...cellColorChs(4, [{ name: 'Red', color: '#ff0000' }, { name: 'Green', color: '#00ff00' }, { name: 'Blue', color: '#0000ff' }])
+    },
+    modes: [
+      {
+        name: '12ch',
+        channels: cellChannelNames(4, ['Red', 'Green', 'Blue']),
+        channelCount: 12,
+        pixelLayout: pixelLayout(4, ['Red', 'Green', 'Blue'])
+      },
+      {
+        name: '14ch',
+        channels: ['Master Dimmer', 'Strobe', ...cellChannelNames(4, ['Red', 'Green', 'Blue'])],
+        channelCount: 14,
+        pixelLayout: { cellCount: 4, cells: Array.from({ length: 4 }, (_, i) => ({ index: i, channelOffset: 2 + i * 3, channelNames: [`Red ${i + 1}`, `Green ${i + 1}`, `Blue ${i + 1}`] })), orientation: 'horizontal' as const }
+      },
+      { name: '3ch', channels: ['Red', 'Green', 'Blue'], channelCount: 3 }
+    ],
+    physical: { dimensions: [500, 75, 85], lens: { degreesMinMax: [25, 45] } }
   },
 
   // ================================================================
