@@ -58,8 +58,10 @@ const api = {
   fixtures: {
     scan: (): Promise<any[]> =>
       ipcRenderer.invoke(IPC.FIXTURES_SCAN),
-    getAll: (): Promise<any[]> =>
-      ipcRenderer.invoke(IPC.FIXTURES_GET_ALL),
+    getAll: async (): Promise<any[]> => {
+      const json = await ipcRenderer.invoke(IPC.FIXTURES_GET_ALL)
+      return JSON.parse(json)
+    },
     import: (): Promise<any[] | null> =>
       ipcRenderer.invoke(IPC.FIXTURES_IMPORT)
   },

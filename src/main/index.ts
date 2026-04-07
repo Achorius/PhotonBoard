@@ -249,7 +249,18 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FIXTURES_GET_ALL, () => {
-    return showManager.getAllFixtures()
+    // Return as JSON string to avoid Electron structured clone dropping multi-cell fixtures
+    const fixtures = showManager.getAllFixtures()
+    const result: any[] = []
+    for (const f of fixtures) {
+      try {
+        JSON.stringify(f) // test if this fixture serializes
+        result.push(f)
+      } catch (e) {
+        console.error('[Main] Failed to serialize fixture:', f.id, f.name, (e as Error).message)
+      }
+    }
+    return JSON.stringify(result)
   })
 
   ipcMain.handle(IPC.FIXTURES_IMPORT, async () => {
