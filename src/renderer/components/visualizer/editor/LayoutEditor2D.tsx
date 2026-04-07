@@ -4,7 +4,7 @@ import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { getFixtureDisplayColor } from '@renderer/lib/dmx-utils'
 import { resolveChannels, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
-import type { PatchEntry } from '@shared/types'
+import type { PatchEntry, MountingLocation } from '@shared/types'
 
 const METRE_TO_PX = 40  // 40px per metre at default zoom
 const TRUSS_HIT_TOLERANCE = 8  // px tolerance for clicking on a truss line
@@ -145,7 +145,8 @@ export function LayoutEditor2D() {
         ctx.beginPath(); ctx.arc(cxs, cys, 20, 0, Math.PI * 2); ctx.fill()
       }
 
-      // Fixture symbol
+      // Fixture symbol — shape varies by mounting location
+      const mount = entry.mountingLocation ?? 'ceiling'
       ctx.beginPath()
       if (isMovingHead) {
         // Diamond
@@ -153,6 +154,15 @@ export function LayoutEditor2D() {
         ctx.moveTo(cxs, cys - r); ctx.lineTo(cxs + r, cys)
         ctx.lineTo(cxs, cys + r); ctx.lineTo(cxs - r, cys)
         ctx.closePath()
+      } else if (mount === 'floor') {
+        // Upward triangle for floor-mounted
+        const r = 7
+        ctx.moveTo(cxs, cys - r); ctx.lineTo(cxs + r, cys + r); ctx.lineTo(cxs - r, cys + r)
+        ctx.closePath()
+      } else if (mount.startsWith('wall')) {
+        // Square for wall-mounted
+        const r = 6
+        ctx.rect(cxs - r, cys - r, r * 2, r * 2)
       } else {
         ctx.arc(cxs, cys, 7, 0, Math.PI * 2)
       }
@@ -173,6 +183,14 @@ export function LayoutEditor2D() {
       ctx.font = '8px monospace'
       ctx.textAlign = 'center'
       ctx.fillText(`${entry.universe + 1}.${entry.address}`, cxs, cys + 17)
+
+      // Mounting indicator for non-ceiling fixtures
+      if (mount !== 'ceiling') {
+        const mountLabel = mount === 'floor' ? 'FLR' : mount === 'wall-left' ? 'W-L' : mount === 'wall-right' ? 'W-R' : 'W-B'
+        ctx.fillStyle = isSelected ? '#e85d0488' : '#55557788'
+        ctx.font = '7px sans-serif'
+        ctx.fillText(mountLabel, cxs, cys + 25)
+      }
 
       // Name label
       ctx.fillStyle = isSelected ? '#fff' : '#888'
@@ -277,7 +295,8 @@ export function LayoutEditor2D() {
       y + draggingRef.current.offsetZ
     )
     const entry = patch.find(p => p.id === draggingRef.current!.id)
-    const curY = entry?.position3D?.y ?? (roomConfig.height - 0.05)
+    const mount = entry?.mountingLocation ?? 'ceiling'
+    const curY = entry?.position3D?.y ?? getDefaultY(mount, roomConfig.height)
     updateFixture(draggingRef.current.id, { position3D: { x: wx, y: curY, z: wz } })
   }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar])
 
@@ -346,4 +365,14 @@ function getAutoZ(entry: PatchEntry, patch: PatchEntry[], room: { width: number;
   const i = patch.findIndex(p => p.id === entry.id)
   const row = Math.floor(i / cols)
   return rows > 1 ? (row / (rows - 1) - 0.5) * room.depth * 0.6 : 0
+}
+
+function getDefaultY(mount: MountingLocation | undefined, roomHeight: number): number {
+  switch (mount) {
+    case 'floor': return 0.15
+    case 'wall-left':
+    case 'wall-right':
+    case 'wall-back': return roomHeight * 0.6
+    default: return roomHeight - 0.05
+  }
 }

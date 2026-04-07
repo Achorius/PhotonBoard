@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import type { PatchEntry, FixtureDefinition, RoomConfig } from '@shared/types'
+import type { PatchEntry, FixtureDefinition, RoomConfig, MountingLocation } from '@shared/types'
 import { getFixtureShape } from '@shared/types'
 import { createFixtureObjects, setFixtureSelected, type FixtureObjects } from './scene/FixtureModel'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
@@ -49,9 +49,12 @@ export function useFixtureObjects(
       const def = fixtures.find((f) => f.id === entry.fixtureDefId)
       const shape = getFixtureShape(def?.categories || [])
       const beamAngle = def?.physical?.lens?.degreesMinMax?.[1] ?? 25
-      const fixtureY = entry.position3D?.y ?? (roomConfig.height - 0.05)
+      const fixtureY = entry.position3D?.y ?? getDefaultY(entry.mountingLocation, roomConfig.height)
       const roomDiagonal = Math.sqrt(roomConfig.width ** 2 + roomConfig.depth ** 2 + roomConfig.height ** 2)
-      const objects = createFixtureObjects(shape, beamAngle, fixtureY, roomDiagonal)
+      // Get cell count for multi-cell fixtures (LED bars, pixel strips)
+      const mode = def?.modes.find(m => m.name === entry.modeName)
+      const cellCount = mode?.pixelLayout?.cellCount ?? 1
+      const objects = createFixtureObjects(shape, beamAngle, fixtureY, roomDiagonal, cellCount)
       objects.group.name = `fixture-${entry.id}`
       map.set(entry.id, objects)
       scene.add(objects.group)
@@ -93,6 +96,8 @@ function positionAll(
 
     let x: number, y: number, z: number
 
+    const mount = entry.mountingLocation
+
     if (entry.position3D) {
       x = entry.position3D.x
       y = entry.position3D.y
@@ -102,7 +107,12 @@ function positionAll(
       const row = Math.floor(i / cols)
       x = cols > 1 ? (col / (cols - 1) - 0.5) * width * 0.8 : 0
       z = rows > 1 ? (row / (rows - 1) - 0.5) * depth * 0.6 : 0
-      y = height - 0.05
+      y = getDefaultY(mount, height)
+
+      // Auto-position wall-mounted fixtures at the wall edge
+      if (mount === 'wall-left') x = -width / 2 + 0.1
+      else if (mount === 'wall-right') x = width / 2 - 0.1
+      else if (mount === 'wall-back') z = depth / 2 - 0.1
     }
 
     objects.group.position.set(x, y, z)
@@ -110,12 +120,31 @@ function positionAll(
     if (entry.rotation3D) {
       objects.group.rotation.set(entry.rotation3D.rx, entry.rotation3D.ry, entry.rotation3D.rz)
     } else {
-      // Apply mounting tilt (X) and pan direction (Y) for static fixtures
-      objects.group.rotation.set(
-        THREE.MathUtils.degToRad(entry.mountingAngle ?? 0),
-        THREE.MathUtils.degToRad(entry.mountingPan ?? 0),
-        0
-      )
+      // Base rotation depends on mounting location
+      const base = getMountingBaseRotation(mount)
+      const tilt = THREE.MathUtils.degToRad(entry.mountingAngle ?? 0)
+      const pan = THREE.MathUtils.degToRad(entry.mountingPan ?? 0)
+      objects.group.rotation.set(base.rx + tilt, base.ry + pan, base.rz)
     }
   })
+}
+
+function getDefaultY(mount: MountingLocation | undefined, roomHeight: number): number {
+  switch (mount) {
+    case 'floor': return 0.15
+    case 'wall-left':
+    case 'wall-right':
+    case 'wall-back': return roomHeight * 0.6
+    default: return roomHeight - 0.05 // ceiling
+  }
+}
+
+function getMountingBaseRotation(mount: MountingLocation | undefined): { rx: number; ry: number; rz: number } {
+  switch (mount) {
+    case 'floor':      return { rx: Math.PI, ry: 0, rz: 0 }           // beam points up
+    case 'wall-left':  return { rx: 0, ry: 0, rz: -Math.PI / 2 }      // beam points right (inward)
+    case 'wall-right': return { rx: 0, ry: 0, rz: Math.PI / 2 }       // beam points left (inward)
+    case 'wall-back':  return { rx: -Math.PI / 2, ry: 0, rz: 0 }      // beam points toward audience
+    default:           return { rx: 0, ry: 0, rz: 0 }                  // ceiling: beam points down
+  }
 }

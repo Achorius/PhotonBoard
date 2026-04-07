@@ -2,7 +2,7 @@ import React from 'react'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { HSlider } from '../../common/HSlider'
-import type { Position3D } from '@shared/types'
+import type { Position3D, MountingLocation } from '@shared/types'
 
 export function FixturePropertiesPanel({ className = '' }: { className?: string }) {
   const { patch, fixtures, updateFixture } = usePatchStore()
@@ -19,11 +19,9 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
     )
   }
 
-  const pos: Position3D = entry.position3D ?? {
-    x: 0,
-    y: roomConfig.height - 0.05,
-    z: 0
-  }
+  const mount = entry.mountingLocation ?? 'ceiling'
+  const defaultY = mount === 'floor' ? 0.15 : mount.startsWith('wall') ? roomConfig.height * 0.6 : roomConfig.height - 0.05
+  const pos: Position3D = entry.position3D ?? { x: 0, y: defaultY, z: 0 }
 
   const update = (key: keyof Position3D, value: number) => {
     updateFixture(entry.id, { position3D: { ...pos, [key]: value } })
@@ -43,6 +41,28 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
           {def?.name} — U{entry.universe + 1}.{entry.address}
         </div>
       </div>
+
+      {/* Mounting location */}
+      <section>
+        <h3 className="text-[10px] text-gray-500 uppercase mb-1.5">Mounting</h3>
+        <select
+          className="input w-full text-[10px]"
+          value={mount}
+          onChange={e => {
+            const loc = e.target.value as MountingLocation
+            updateFixture(entry.id, {
+              mountingLocation: loc === 'ceiling' ? undefined : loc,
+              position3D: undefined  // reset position when changing mount
+            })
+          }}
+        >
+          <option value="ceiling">Ceiling</option>
+          <option value="floor">Floor</option>
+          <option value="wall-left">Wall Left</option>
+          <option value="wall-right">Wall Right</option>
+          <option value="wall-back">Wall Back</option>
+        </select>
+      </section>
 
       {/* Position */}
       <section>
@@ -158,21 +178,39 @@ export function FixturePropertiesPanel({ className = '' }: { className?: string 
       {/* Quick actions */}
       <section className="space-y-1">
         <h3 className="text-[10px] text-gray-500 uppercase mb-2">Quick Placement</h3>
-        <button
-          className="btn-secondary text-[10px] w-full"
-          onClick={() => update('y', roomConfig.height - 0.05)}
-        >
-          Snap to ceiling ({(roomConfig.height - 0.05).toFixed(1)}m)
-        </button>
-        <button
-          className="btn-secondary text-[10px] w-full"
-          onClick={() => update('y', 4)}
-        >
-          Snap to 4m (low truss)
-        </button>
+        {mount === 'ceiling' && (
+          <>
+            <button className="btn-secondary text-[10px] w-full" onClick={() => update('y', roomConfig.height - 0.05)}>
+              Snap to ceiling ({(roomConfig.height - 0.05).toFixed(1)}m)
+            </button>
+            <button className="btn-secondary text-[10px] w-full" onClick={() => update('y', 4)}>
+              Snap to 4m (low truss)
+            </button>
+          </>
+        )}
+        {mount === 'floor' && (
+          <button className="btn-secondary text-[10px] w-full" onClick={() => update('y', 0.15)}>
+            Snap to floor (0.15m)
+          </button>
+        )}
+        {mount === 'wall-left' && (
+          <button className="btn-secondary text-[10px] w-full" onClick={() => update('x', -roomConfig.width / 2 + 0.1)}>
+            Snap to left wall
+          </button>
+        )}
+        {mount === 'wall-right' && (
+          <button className="btn-secondary text-[10px] w-full" onClick={() => update('x', roomConfig.width / 2 - 0.1)}>
+            Snap to right wall
+          </button>
+        )}
+        {mount === 'wall-back' && (
+          <button className="btn-secondary text-[10px] w-full" onClick={() => update('z', roomConfig.depth / 2 - 0.1)}>
+            Snap to back wall
+          </button>
+        )}
         <button
           className="btn-ghost text-[10px] w-full text-red-400 hover:text-red-300"
-          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined })}
+          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined, mountingLocation: undefined })}
         >
           Reset to auto-position
         </button>

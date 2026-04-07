@@ -48,6 +48,7 @@ export interface FixtureMode {
   shortName?: string
   channels: string[]
   channelCount: number
+  pixelLayout?: PixelLayout  // for multi-cell fixtures (LED bars, pixel strips)
 }
 
 export interface FixturePhysical {
@@ -77,7 +78,23 @@ export interface FixtureDefinition {
 
 // --- 3D Visualizer ---
 
+// --- Multi-cell / Pixel fixtures ---
+
+export interface PixelCell {
+  index: number          // 0-based cell index
+  channelOffset: number  // offset from mode start channel (0-based)
+  channelNames: string[] // channel names in this cell (e.g., ['Red 1', 'Green 1', 'Blue 1'])
+}
+
+export interface PixelLayout {
+  cellCount: number
+  cells: PixelCell[]
+  orientation: 'horizontal' | 'vertical' | 'grid'
+  gridColumns?: number   // for grid layout
+}
+
 export type FixtureShape = 'par' | 'moving-head' | 'strip' | 'generic'
+export type MountingLocation = 'ceiling' | 'floor' | 'wall-left' | 'wall-right' | 'wall-back'
 
 export interface Position3D {
   x: number // metres, origin = stage centre floor
@@ -120,6 +137,51 @@ export const DEFAULT_ROOM_CONFIG: RoomConfig = {
   trussBars: defaultTrussBars(20, 15, 6)
 }
 
+/**
+ * Detect pixel layout from a mode's channel names.
+ * Looks for numbered suffixes like "Red 1", "Green 1", "Blue 1", "Red 2", etc.
+ * Returns a PixelLayout if cells are detected, undefined otherwise.
+ */
+export function detectPixelLayout(channels: string[]): PixelLayout | undefined {
+  // Match channel names ending with a number: "Red 1", "Green 2", "Dimmer 3"
+  const cellMap = new Map<number, { offset: number; names: string[] }>()
+  const numbered = /^(.+?)\s+(\d+)$/
+
+  for (let i = 0; i < channels.length; i++) {
+    const match = channels[i].match(numbered)
+    if (!match) continue
+    const cellIndex = parseInt(match[2], 10)
+    if (!cellMap.has(cellIndex)) {
+      cellMap.set(cellIndex, { offset: i, names: [] })
+    }
+    cellMap.get(cellIndex)!.names.push(channels[i])
+  }
+
+  // Need at least 2 cells with consistent channel counts
+  if (cellMap.size < 2) return undefined
+
+  const cells = Array.from(cellMap.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([idx, data]) => data)
+
+  // Verify all cells have the same number of channels
+  const channelsPerCell = cells[0].names.length
+  if (channelsPerCell === 0) return undefined
+  if (!cells.every(c => c.names.length === channelsPerCell)) return undefined
+
+  const pixelCells: PixelCell[] = cells.map((c, i) => ({
+    index: i,
+    channelOffset: c.offset,
+    channelNames: c.names
+  }))
+
+  return {
+    cellCount: pixelCells.length,
+    cells: pixelCells,
+    orientation: 'horizontal'  // default for LED bars/strips
+  }
+}
+
 /** Map OFL categories to a simplified shape for 3D rendering */
 export function getFixtureShape(categories: string[]): FixtureShape {
   if (categories.some(c => c === 'Moving Head')) return 'moving-head'
@@ -145,6 +207,7 @@ export interface PatchEntry {
   rotation3D?: Rotation3D
   mountingAngle?: number // degrees, 0 = straight down (for static fixtures)
   mountingPan?: number   // degrees, horizontal aim direction for static fixtures
+  mountingLocation?: MountingLocation // where the fixture is mounted (default: ceiling)
   beamAngle?: number    // degrees, cone spread — defaults from fixture physical
   panInvert?: boolean   // invert pan direction for moving heads
   tiltInvert?: boolean  // invert tilt direction for moving heads

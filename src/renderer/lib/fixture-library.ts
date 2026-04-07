@@ -1,4 +1,5 @@
 import type { FixtureDefinition, FixtureChannel } from '@shared/types'
+import { detectPixelLayout } from '@shared/types'
 
 /**
  * Parse an Open Fixture Library JSON file into our FixtureDefinition format
@@ -28,12 +29,17 @@ export function parseOFLFixture(json: any, manufacturer: string): FixtureDefinit
       }
     }
 
-    const modes = (json.modes || []).map((mode: any) => ({
-      name: mode.name || mode.shortName || 'Default',
-      shortName: mode.shortName,
-      channels: mode.channels?.filter((ch: any) => typeof ch === 'string') || [],
-      channelCount: mode.channels?.filter((ch: any) => typeof ch === 'string')?.length || 0
-    }))
+    const modes = (json.modes || []).map((mode: any) => {
+      const modeChannels = mode.channels?.filter((ch: any) => typeof ch === 'string') || []
+      const pixelLayout = detectPixelLayout(modeChannels)
+      return {
+        name: mode.name || mode.shortName || 'Default',
+        shortName: mode.shortName,
+        channels: modeChannels,
+        channelCount: modeChannels.length,
+        ...(pixelLayout ? { pixelLayout } : {})
+      }
+    })
 
     return {
       id,

@@ -5,6 +5,7 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { HSlider } from '../common/HSlider'
 import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
+import type { MountingLocation } from '@shared/types'
 
 export function VisualizerView() {
   const {
@@ -230,7 +231,9 @@ function FixtureProps3D() {
   if (!entry) return null
 
   const isMovingHead = def?.categories.includes('Moving Head') ?? false
-  const pos = entry.position3D ?? { x: 0, y: roomConfig.height - 0.05, z: 0 }
+  const mount = entry.mountingLocation ?? 'ceiling'
+  const defaultY = mount === 'floor' ? 0.15 : mount.startsWith('wall') ? roomConfig.height * 0.6 : roomConfig.height - 0.05
+  const pos = entry.position3D ?? { x: 0, y: defaultY, z: 0 }
   const mountingAngle = entry.mountingAngle ?? 0
   const mountingPan = entry.mountingPan ?? 0
   const beamAngle = entry.beamAngle ?? def?.physical?.lens?.degreesMinMax?.[1] ?? 25
@@ -332,14 +335,56 @@ function FixtureProps3D() {
         <span className="text-[9px] font-mono text-accent w-8 text-right">{beamAngle}°</span>
       </div>
 
+      {/* Mounting location */}
+      <div className="space-y-1">
+        <div className="text-[9px] text-gray-500 uppercase">Mount</div>
+        <select
+          className="input w-full text-[9px] py-0.5"
+          value={mount}
+          onChange={e => {
+            const loc = e.target.value as MountingLocation
+            updateFixture(entry.id, {
+              mountingLocation: loc === 'ceiling' ? undefined : loc,
+              position3D: undefined  // reset position when changing mount
+            })
+          }}
+        >
+          <option value="ceiling">Ceiling</option>
+          <option value="floor">Floor</option>
+          <option value="wall-left">Wall Left</option>
+          <option value="wall-right">Wall Right</option>
+          <option value="wall-back">Wall Back</option>
+        </select>
+      </div>
+
       {/* Quick placement */}
-      <div className="flex gap-1">
-        <button className="btn-secondary text-[8px] flex-1 py-0.5"
-          onClick={() => updatePos('y', roomConfig.height - 0.05)}>Ceiling</button>
-        <button className="btn-secondary text-[8px] flex-1 py-0.5"
-          onClick={() => updatePos('y', 4)}>4m</button>
+      <div className="flex gap-1 flex-wrap">
+        {mount === 'ceiling' && (
+          <>
+            <button className="btn-secondary text-[8px] flex-1 py-0.5"
+              onClick={() => updatePos('y', roomConfig.height - 0.05)}>Ceiling</button>
+            <button className="btn-secondary text-[8px] flex-1 py-0.5"
+              onClick={() => updatePos('y', 4)}>4m</button>
+          </>
+        )}
+        {mount === 'floor' && (
+          <button className="btn-secondary text-[8px] flex-1 py-0.5"
+            onClick={() => updatePos('y', 0.15)}>Floor</button>
+        )}
+        {mount === 'wall-left' && (
+          <button className="btn-secondary text-[8px] flex-1 py-0.5"
+            onClick={() => updatePos('x', -roomConfig.width / 2 + 0.1)}>L Wall</button>
+        )}
+        {mount === 'wall-right' && (
+          <button className="btn-secondary text-[8px] flex-1 py-0.5"
+            onClick={() => updatePos('x', roomConfig.width / 2 - 0.1)}>R Wall</button>
+        )}
+        {mount === 'wall-back' && (
+          <button className="btn-secondary text-[8px] flex-1 py-0.5"
+            onClick={() => updatePos('z', roomConfig.depth / 2 - 0.1)}>Back</button>
+        )}
         <button className="btn-ghost text-[8px] flex-1 py-0.5 text-red-400"
-          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined })}>Reset</button>
+          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined, mountingLocation: undefined })}>Reset</button>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
-import type { PatchEntry, FixtureDefinition, Group } from '@shared/types'
+import type { PatchEntry, FixtureDefinition, Group, PixelLayout } from '@shared/types'
 import { useDmxStore } from './dmx-store'
 
 interface PatchState {
@@ -19,6 +19,7 @@ interface PatchState {
   clearSelection: () => void
   getFixtureDef: (fixtureDefId: string) => FixtureDefinition | undefined
   getFixtureChannels: (patchEntry: PatchEntry) => { name: string; absoluteChannel: number; type: string }[]
+  getFixturePixelLayout: (patchEntry: PatchEntry) => PixelLayout | undefined
 
   // Groups
   addGroup: (name: string, color: string, parentGroupId?: string) => void
@@ -146,6 +147,13 @@ export const usePatchStore = create<PatchState>((set, get) => ({
       absoluteChannel: patchEntry.address - 1 + index, // 0-indexed DMX channel
       type: def.channels[chName]?.type || 'generic'
     }))
+  },
+
+  getFixturePixelLayout: (patchEntry) => {
+    const def = get().fixtures.find((f) => f.id === patchEntry.fixtureDefId)
+    if (!def) return undefined
+    const mode = def.modes.find((m) => m.name === patchEntry.modeName)
+    return mode?.pixelLayout
   },
 
   addGroup: (name, color, parentGroupId?) => {

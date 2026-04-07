@@ -25,6 +25,10 @@ export interface FixtureObjects {
   /** Lens flare disc at the aperture */
   lensMesh: THREE.Mesh
   shape: FixtureShape
+  /** For multi-cell fixtures: per-cell lens meshes for individual color */
+  cellLenses?: THREE.Mesh[]
+  /** For multi-cell fixtures: per-cell cone meshes */
+  cellCones?: THREE.Mesh[]
 }
 
 const bodyMaterial = () =>
@@ -65,7 +69,7 @@ const hazeMaterial = () =>
  * The root group should be positioned and oriented by the caller.
  * By default, the fixture points downward (beam along -Y).
  */
-export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtureY?: number, roomDiagonal?: number): FixtureObjects {
+export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtureY?: number, roomDiagonal?: number, cellCount = 1): FixtureObjects {
   const group = new THREE.Group()
   const beamAngleRad = THREE.MathUtils.degToRad(Math.min(beamAngle, 60))
   // Cone height = room diagonal so beams can reach any corner even when tilted
@@ -78,6 +82,8 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
   let coneMesh: THREE.Mesh
   let hazeMesh: THREE.Mesh | null = null
   let lensMesh: THREE.Mesh
+  let cellLenses: THREE.Mesh[] | undefined
+  let cellCones: THREE.Mesh[] | undefined
 
   if (shape === 'moving-head') {
     // --- Moving Head ---
@@ -136,17 +142,49 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     headGroup.add(hazeMesh)
   } else if (shape === 'strip') {
     // --- LED Strip / Batten ---
-    const stripGeo = new THREE.BoxGeometry(1.0, 0.06, 0.08)
+    const stripWidth = 1.0
+    const stripGeo = new THREE.BoxGeometry(stripWidth, 0.06, 0.08)
     bodyMesh = new THREE.Mesh(stripGeo, bodyMaterial())
     group.add(bodyMesh)
 
-    // Wide beam cone
+    // Wide beam cone (overall glow)
     const coneGeo = new THREE.ConeGeometry(0.8, coneHeight, 18, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.04
     coneMesh.renderOrder = 100
     group.add(coneMesh)
+
+    // Per-cell lens segments and mini cones
+    const effectiveCells = Math.max(1, cellCount)
+    if (effectiveCells > 1) {
+      cellLenses = []
+      cellCones = []
+      const cellWidth = (stripWidth * 0.9) / effectiveCells
+      const startX = -((effectiveCells - 1) * cellWidth) / 2
+
+      for (let c = 0; c < effectiveCells; c++) {
+        const cx = startX + c * cellWidth
+
+        // Cell lens
+        const cellLensGeo = new THREE.PlaneGeometry(cellWidth * 0.85, 0.035)
+        const cellLensMesh = new THREE.Mesh(cellLensGeo, lensMaterial())
+        cellLensMesh.position.set(cx, -0.04, 0)
+        cellLensMesh.rotation.x = -Math.PI / 2
+        group.add(cellLensMesh)
+        cellLenses.push(cellLensMesh)
+
+        // Cell cone
+        const cellConeRadius = cellWidth * 0.6
+        const cellConeGeo = new THREE.ConeGeometry(cellConeRadius, coneHeight * 0.6, 8, 1, true)
+        cellConeGeo.translate(0, -coneHeight * 0.3, 0)
+        const cellConeMesh = new THREE.Mesh(cellConeGeo, coneMaterial())
+        cellConeMesh.position.set(cx, -0.04, 0)
+        cellConeMesh.renderOrder = 100
+        group.add(cellConeMesh)
+        cellCones.push(cellConeMesh)
+      }
+    }
 
     const lensGeo = new THREE.PlaneGeometry(0.9, 0.04)
     lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
@@ -211,7 +249,9 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     spotLight,
     spotTarget,
     lensMesh,
-    shape
+    shape,
+    cellLenses,
+    cellCones
   }
 }
 

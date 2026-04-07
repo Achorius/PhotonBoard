@@ -90,26 +90,57 @@ function updateEffects(): void {
       if (!mode) continue
 
       // Phase offset per fixture (fan/spread effect)
-      const phaseOffset = fixtureCount > 1
+      const fixturePhaseOffset = fixtureCount > 1
         ? (effect.fan / 360) * (i / (fixtureCount - 1))
         : 0
       const baseOffset = effect.offset / 360
-      const phase = (elapsed * effect.speed + baseOffset + phaseOffset) % 1
-      const waveValue = getWaveformValue(effect.waveform, phase)
 
       // Find the actual DMX channel for this channel type
       const targetName = CHANNEL_TYPE_TO_NAME[effect.channelType] || effect.channelType.toLowerCase()
-      const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
-      if (chIndex === -1) continue
 
-      // Map -1..1 to 0..maxValue (clamped for color wheel channels)
-      const channelName = mode.channels[chIndex]
-      const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : effect.depth
-      const value = Math.round(((waveValue + 1) / 2) * maxValue)
+      // Multi-cell support: if fixture has pixel layout, apply effect per cell with cell phase spread
+      const pixelLayout = mode.pixelLayout
+      if (pixelLayout && pixelLayout.cellCount > 1) {
+        // Apply effect to each cell with progressive phase offset
+        for (let cellIdx = 0; cellIdx < pixelLayout.cellCount; cellIdx++) {
+          const cell = pixelLayout.cells[cellIdx]
+          const cellPhaseOffset = pixelLayout.cellCount > 1
+            ? (effect.fan / 360) * (cellIdx / (pixelLayout.cellCount - 1))
+            : 0
 
-      const absChannel = entry.address - 1 + chIndex
-      if (absChannel >= 0 && absChannel < 512) {
-        dmxStore.setChannel(entry.universe, absChannel, value)
+          // Combined phase: fixture offset + cell offset within fixture
+          const phase = (elapsed * effect.speed + baseOffset + fixturePhaseOffset + cellPhaseOffset) % 1
+          const waveValue = getWaveformValue(effect.waveform, phase)
+
+          // Find matching channel in this cell
+          const cellChIndex = cell.channelNames.findIndex(ch => ch.toLowerCase().includes(targetName))
+          if (cellChIndex === -1) continue
+
+          const absChannel = entry.address - 1 + cell.channelOffset + cellChIndex
+          const channelName = cell.channelNames[cellChIndex]
+          const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : effect.depth
+          const value = Math.round(((waveValue + 1) / 2) * maxValue)
+
+          if (absChannel >= 0 && absChannel < 512) {
+            dmxStore.setChannel(entry.universe, absChannel, value)
+          }
+        }
+      } else {
+        // Single-cell fixture: original behavior
+        const phase = (elapsed * effect.speed + baseOffset + fixturePhaseOffset) % 1
+        const waveValue = getWaveformValue(effect.waveform, phase)
+
+        const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
+        if (chIndex === -1) continue
+
+        const channelName = mode.channels[chIndex]
+        const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : effect.depth
+        const value = Math.round(((waveValue + 1) / 2) * maxValue)
+
+        const absChannel = entry.address - 1 + chIndex
+        if (absChannel >= 0 && absChannel < 512) {
+          dmxStore.setChannel(entry.universe, absChannel, value)
+        }
       }
     }
   }

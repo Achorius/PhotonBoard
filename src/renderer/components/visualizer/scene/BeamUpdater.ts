@@ -3,9 +3,17 @@ import type { FixtureObjects } from './FixtureModel'
 import type { ResolvedChannels } from '@renderer/lib/dmx-channel-resolver'
 import { dmxToPanDeg, dmxToTiltDeg, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
 
+export interface CellColor {
+  r: number  // 0-1
+  g: number
+  b: number
+  dimmer: number // 0-255
+}
+
 export interface FixtureUpdateOptions {
   panInvert?: boolean
   tiltInvert?: boolean
+  cellColors?: CellColor[]  // per-cell colors for multi-cell fixtures
 }
 
 /**
@@ -117,6 +125,40 @@ export function updateFixtureObjects(
       objects.coneMesh.visible = false
       objects.spotLight.intensity = 0
       if (objects.hazeMesh) objects.hazeMesh.visible = false
+    }
+  }
+
+  // --- Multi-cell rendering ---
+  if (options?.cellColors && objects.cellLenses && objects.cellCones) {
+    const cellColors = options.cellColors
+    const cellLenses = objects.cellLenses
+    const cellCones = objects.cellCones
+    const count = Math.min(cellColors.length, cellLenses.length)
+
+    for (let i = 0; i < count; i++) {
+      const cc = cellColors[i]
+      const cellDim = blackout ? 0 : (cc.dimmer / 255) * gm
+      const cellCol = new THREE.Color(cc.r, cc.g, cc.b)
+
+      // Cell lens
+      const cellLensMat = cellLenses[i].material as THREE.MeshBasicMaterial
+      if (cc.r > 0 || cc.g > 0 || cc.b > 0) {
+        cellLensMat.color.copy(cellCol)
+        cellLensMat.opacity = Math.min(0.95, cellDim * 1.4)
+      } else {
+        cellLensMat.color.setRGB(0.5, 0.5, 0.65)
+        cellLensMat.opacity = 0.3
+      }
+
+      // Cell cone
+      if (showBeams) {
+        const cellConeMat = cellCones[i].material as THREE.MeshBasicMaterial
+        cellConeMat.color.copy(cellCol)
+        cellConeMat.opacity = cellDim * 0.25
+        cellCones[i].visible = cellDim > 0.005 && (cc.r > 0 || cc.g > 0 || cc.b > 0)
+      } else {
+        cellCones[i].visible = false
+      }
     }
   }
 }

@@ -5,6 +5,7 @@ import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { resolveChannels } from '@renderer/lib/dmx-channel-resolver'
 import { updateFixtureObjects } from './scene/BeamUpdater'
+import type { CellColor } from './scene/BeamUpdater'
 import type { FixtureObjectMap } from './useFixtureObjects'
 import type { PatchEntry, FixtureDefinition } from '@shared/types'
 
@@ -50,9 +51,34 @@ export function useDmxAnimation(
         if (!objects) continue
         const def = fixtures.find((f) => f.id === entry.fixtureDefId)
         const channels = resolveChannels(entry, def, values)
+
+        // Resolve per-cell colors for multi-cell fixtures
+        let cellColors: CellColor[] | undefined
+        const mode = def?.modes.find(m => m.name === entry.modeName)
+        const pixelLayout = mode?.pixelLayout
+        if (pixelLayout && pixelLayout.cellCount > 1 && objects.cellLenses) {
+          cellColors = []
+          const uniValues = values[entry.universe]
+          for (const cell of pixelLayout.cells) {
+            let cr = 0, cg = 0, cb = 0, cdim = 255
+            for (const chName of cell.channelNames) {
+              const n = chName.toLowerCase()
+              const absIdx = entry.address - 1 + cell.channelOffset + cell.channelNames.indexOf(chName)
+              const v = uniValues?.[absIdx] ?? 0
+              if (n.includes('red')) cr = v / 255
+              else if (n.includes('green')) cg = v / 255
+              else if (n.includes('blue')) cb = v / 255
+              else if (n.includes('white')) { cr = Math.max(cr, v / 255); cg = Math.max(cg, v / 255); cb = Math.max(cb, v / 255) }
+              else if (n.includes('dimmer') || n.includes('intensity')) cdim = v
+            }
+            cellColors.push({ r: cr, g: cg, b: cb, dimmer: cdim })
+          }
+        }
+
         updateFixtureObjects(objects, channels, grandMaster, blackout, showBeams, {
           panInvert: entry.panInvert,
-          tiltInvert: entry.tiltInvert
+          tiltInvert: entry.tiltInvert,
+          cellColors
         })
       }
 
