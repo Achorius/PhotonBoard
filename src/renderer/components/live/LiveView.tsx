@@ -7,6 +7,7 @@ import {
   getTimelineState, setTimelineUpdateCallback, getActiveClipIds
 } from '../../lib/timeline-engine'
 import { stopAllEffects } from '../../lib/effect-engine'
+import { useUiStore } from '../../stores/ui-store'
 import type { TimelineClip, TimelineMarker, MidiTargetType } from '@shared/types'
 
 // ── Constants ──
@@ -53,6 +54,7 @@ export function LiveView() {
   // Context menus
   const [trackMenu, setTrackMenu] = useState<{ x: number; y: number; trackIndex: number } | null>(null)
   const [markerMenu, setMarkerMenu] = useState<{ x: number; y: number; markerId: string } | null>(null)
+  const [clipMenu, setClipMenu] = useState<{ x: number; y: number; clipId: string; cuelistId: string } | null>(null)
   const [midiMenu, setMidiMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null)
   const [editingTrack, setEditingTrack] = useState<number | null>(null)
   const [trackNames, setTrackNames] = useState<Record<number, string>>({})
@@ -302,11 +304,11 @@ export function LiveView() {
 
   // Close context menus on click
   useEffect(() => {
-    if (!trackMenu && !markerMenu && !midiMenu) return
-    const handler = () => { setTrackMenu(null); setMarkerMenu(null); setMidiMenu(null) }
+    if (!trackMenu && !markerMenu && !midiMenu && !clipMenu) return
+    const handler = () => { setTrackMenu(null); setMarkerMenu(null); setMidiMenu(null); setClipMenu(null) }
     window.addEventListener('click', handler)
     return () => window.removeEventListener('click', handler)
-  }, [trackMenu, markerMenu, midiMenu])
+  }, [trackMenu, markerMenu, midiMenu, clipMenu])
 
   const maxEnd = useMemo(() => {
     const clipEnd = timelineClips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0)
@@ -333,7 +335,9 @@ export function LiveView() {
                 e.dataTransfer.setData('application/x-cuelist-id', cl.id)
                 e.dataTransfer.effectAllowed = 'copy'
               }}
+              onDoubleClick={() => useUiStore.getState().navigateToCuelist(cl.id)}
               className="px-2 py-1.5 rounded bg-surface-2 border border-surface-3 cursor-grab active:cursor-grabbing hover:border-accent/50 transition-colors flex items-center gap-2"
+              title="Drag onto timeline — Double-click to edit"
             >
               <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: CLIP_COLORS[idx % CLIP_COLORS.length] }} />
               <div className="flex-1 min-w-0">
@@ -535,8 +539,9 @@ export function LiveView() {
                       cursor: isDragging ? 'grabbing' : 'grab'
                     }}
                     onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
-                    onDoubleClick={() => removeTimelineClip(clip.id)}
-                    title={`${cuelist?.name || '?'} — ${clip.duration.toFixed(1)}s (double-click to remove)`}
+                    onDoubleClick={() => useUiStore.getState().navigateToCuelist(clip.cuelistId)}
+                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setClipMenu({ x: e.clientX, y: e.clientY, clipId: clip.id, cuelistId: clip.cuelistId }) }}
+                    title={`${cuelist?.name || '?'} — ${clip.duration.toFixed(1)}s (double-click to edit, right-click for options)`}
                   >
                     <div className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20" onMouseDown={(e) => handleResizeMouseDown(e, clip.id, 'left')} />
                     <div className="flex-1 px-2 truncate text-[10px] text-white font-medium pointer-events-none">{cuelist?.name || '?'}</div>
@@ -601,6 +606,18 @@ export function LiveView() {
           </button>
           <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineMarker(markerMenu.markerId); setMarkerMenu(null) }}>
             Delete Marker
+          </button>
+        </div>
+      )}
+
+      {/* Clip context menu */}
+      {clipMenu && (
+        <div className="fixed z-50 bg-surface-1 border border-surface-3 rounded shadow-xl py-1 min-w-[160px]" style={{ left: clipMenu.x, top: clipMenu.y }}>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-accent/20 hover:text-accent" onClick={() => { useUiStore.getState().navigateToCuelist(clipMenu.cuelistId); setClipMenu(null) }}>
+            Edit Scene
+          </button>
+          <button className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20" onClick={() => { removeTimelineClip(clipMenu.clipId); setClipMenu(null) }}>
+            Remove from Timeline
           </button>
         </div>
       )}

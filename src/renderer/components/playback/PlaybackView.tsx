@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useEffectsStore } from '../../stores/effects-store'
+import { useUiStore } from '../../stores/ui-store'
 import { Fader } from '../common/Fader'
 import { HSlider } from '../common/HSlider'
 import type { CueChannelValue, Effect } from '@shared/types'
@@ -18,6 +19,15 @@ export function PlaybackView() {
   const effects = useEffectsStore(s => s.effects)
   const hasRunningEffects = effects.some(e => e.isRunning)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Auto-expand cuelist when navigating from Timeline
+  useEffect(() => {
+    const pending = useUiStore.getState().pendingCuelistId
+    if (pending) {
+      setExpandedId(pending)
+      useUiStore.setState({ pendingCuelistId: null })
+    }
+  }, [])
 
   // -------------------------------------------------------------------
   // Capture current DMX + running effects

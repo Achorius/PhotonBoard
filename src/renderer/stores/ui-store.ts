@@ -16,9 +16,12 @@ interface UiState {
   // Status toast
   statusMessage: string | null
   statusType: 'info' | 'success' | 'error'
+  // Navigation data (e.g. open Scenes tab with a specific cuelist selected)
+  pendingCuelistId: string | null
 
   // Actions
   setActiveTab: (tab: ViewTab) => void
+  navigateToCuelist: (cuelistId: string) => void
   setShowName: (name: string) => void
   setDirty: (dirty: boolean) => void
   setSelectedUniverse: (u: number) => void
@@ -40,8 +43,10 @@ export const useUiStore = create<UiState>((set) => ({
   modalData: null,
   statusMessage: null,
   statusType: 'info',
+  pendingCuelistId: null,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  navigateToCuelist: (cuelistId) => set({ activeTab: 'playback', pendingCuelistId: cuelistId }),
   setShowName: (name) => set({ showName: name }),
   setDirty: (dirty) => set({ isDirty: dirty }),
   setSelectedUniverse: (u) => set({ selectedUniverse: u }),
