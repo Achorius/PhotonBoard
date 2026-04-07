@@ -30,15 +30,6 @@ export function StageLayoutView() {
     return channels.find(c => names.some(n => c.name.toLowerCase() === n))
   }, [])
 
-  const setNamedChannel = useCallback((channelName: string, value: number) => {
-    const names = [channelName.toLowerCase()]
-    for (const entry of selectedEntries) {
-      const channels = getFixtureChannels(entry)
-      const ch = findCh(channels, ...names)
-      if (ch) setChannel(entry.universe, ch.absoluteChannel, value)
-    }
-  }, [selectedEntries, getFixtureChannels, setChannel, findCh])
-
   const setRGB = useCallback((r: number, g: number, b: number) => {
     for (const entry of selectedEntries) {
       const channels = getFixtureChannels(entry)

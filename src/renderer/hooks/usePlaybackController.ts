@@ -3,6 +3,7 @@ import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
 import { useDmxStore } from '../stores/dmx-store'
 import { startFade, setFadeUpdateCallback, setFadeCompleteCallback, stopFade } from '../lib/cue-engine'
+import type { Effect } from '@shared/types'
 import { startChase, stopChase } from '../lib/chase-engine'
 import { startEffect, stopEffect } from '../lib/effect-engine'
 
@@ -89,7 +90,7 @@ export function usePlaybackController(): void {
     })
 
     // Helper: start scene effects
-    const startSceneEffects = (sceneId: string, effectSnapshots: any[]) => {
+    const startSceneEffects = (sceneId: string, effectSnapshots: Effect[]) => {
       // Stop any previously running effects for this scene
       stopSceneEffects(sceneId)
 

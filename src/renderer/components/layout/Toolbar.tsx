@@ -3,7 +3,7 @@ import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useMidiStore } from '../../stores/midi-store'
 import { HSlider } from '../common/HSlider'
-import { toggleTimeline, getTimelineState, setTimelineUpdateCallback } from '../../lib/timeline-engine'
+import { toggleTimeline, getTimelineState } from '../../lib/timeline-engine'
 
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()

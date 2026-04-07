@@ -50,7 +50,6 @@ export const usePatchStore = create<PatchState>((set, get) => ({
   },
 
   addFixture: (fixtureDefId, modeName, universe, address, name, count = 1, groupId?) => {
-    console.log('[PhotonBoard] addFixture called:', { fixtureDefId, modeName, universe, address, name, count, groupId })
     const def = get().fixtures.find((f) => f.id === fixtureDefId)
     if (!def) { console.error('[PhotonBoard] addFixture: fixture def not found:', fixtureDefId); return }
     const mode = def.modes.find((m) => m.name === modeName)
@@ -71,7 +70,6 @@ export const usePatchStore = create<PatchState>((set, get) => ({
       })
     }
 
-    console.log('[PhotonBoard] addFixture: created', newEntries.length, 'entries, mode:', modeName, 'ch:', mode.channelCount, 'groupId:', groupId)
     set((state) => {
       const newPatch = [...state.patch, ...newEntries]
       // Also update the group's fixtureIds if a group was specified
@@ -253,7 +251,6 @@ export const usePatchStore = create<PatchState>((set, get) => ({
   },
 
   setPatch: (patch) => {
-    console.log('[PhotonBoard] setPatch called with', patch.length, 'entries', new Error().stack?.split('\n')[2]?.trim())
     set({ patch })
   },
   setGroups: (groups) => set({ groups }),

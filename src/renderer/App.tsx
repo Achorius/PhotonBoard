@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback } from 'react'
 import { useUiStore, type ViewTab } from './stores/ui-store'
 import { usePatchStore } from './stores/patch-store'
+import { useDmxStore } from './stores/dmx-store'
 import { useMidiStore } from './stores/midi-store'
 import { usePlaybackStore } from './stores/playback-store'
 import { useVisualizerStore } from './stores/visualizer-store'
@@ -9,7 +10,6 @@ import { initMidiRouting } from './lib/midi-manager'
 import { Toolbar } from './components/layout/Toolbar'
 import { StatusBar } from './components/layout/StatusBar'
 import { PatchPanel } from './components/layout/PatchPanel'
-import { FadersView } from './components/faders/FadersView'
 import { PatchView } from './components/patch/PatchView'
 import { FixtureControlView } from './components/fixtures/FixtureControlView'
 import { PlaybackView } from './components/playback/PlaybackView'
@@ -21,6 +21,12 @@ import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
 import { usePlaybackController } from './hooks/usePlaybackController'
+
+const DEFAULT_ARTNET_CONFIG = [
+  { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
+  { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
+  { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 },
+]
 
 type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
 
@@ -52,22 +58,12 @@ export default function App() {
     const { cuelists, chases } = usePlaybackStore.getState()
     const { showName } = useUiStore.getState()
     const { roomConfig } = useVisualizerStore.getState()
-    console.log('[PhotonBoard] collectShowData — patch:', patch.length, 'groups:', groups.length, 'showName:', showName, 'storeKeys:', Object.keys(fullPatchState).join(','))
-    if (patch.length > 0) {
-      console.log('[PhotonBoard] First fixture:', JSON.stringify(patch[0]).slice(0, 100))
-    } else {
-      console.log('[PhotonBoard] WARNING: patch is EMPTY!')
-    }
     return {
       version: '1.0.0',
       name: showName,
       createdAt: new Date().toISOString(),
       modifiedAt: new Date().toISOString(),
-      artnetConfig: [
-        { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
-        { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
-        { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
-      ],
+      artnetConfig: DEFAULT_ARTNET_CONFIG,
       patch,
       groups,
       presets: [],
@@ -87,7 +83,6 @@ export default function App() {
   }, [])
 
   const applyShowData = useCallback((show: ShowFile) => {
-    console.log('[PhotonBoard] Applying show data:', show.name, 'patch:', show.patch?.length, 'groups:', show.groups?.length)
     usePatchStore.getState().setPatch(show.patch || [])
     usePatchStore.getState().setGroups(show.groups || [])
     usePlaybackStore.getState().setCuelists(show.cuelists || [])
@@ -111,17 +106,12 @@ export default function App() {
   const isLoading = React.useRef(false)
 
   const handleSave = useCallback(async () => {
-    if (isSaving.current) {
-      console.log('[PhotonBoard] Save already in progress, skipping')
-      return
-    }
+    if (isSaving.current) return
     isSaving.current = true
     useUiStore.getState().showStatus('Saving…', 'info', 0)
     try {
       const show = collectShowData()
-      console.log('[PhotonBoard] Saving show:', show.name, 'patch:', show.patch.length)
       const result = await window.photonboard.show.save(show)
-      console.log('[PhotonBoard] Save result:', result)
       if (result && result.path) {
         const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
         useUiStore.getState().setShowName(fileName)
@@ -138,16 +128,12 @@ export default function App() {
   }, [collectShowData])
 
   const handleSaveAs = useCallback(async () => {
-    if (isSaving.current) {
-      console.log('[PhotonBoard] SaveAs already in progress, skipping')
-      return
-    }
+    if (isSaving.current) return
     isSaving.current = true
     useUiStore.getState().showStatus('Save As…', 'info', 0)
     try {
       const show = collectShowData()
       const result = await window.photonboard.show.saveAs(show)
-      console.log('[PhotonBoard] SaveAs result:', result)
       if (result && result.path) {
         const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
         useUiStore.getState().setShowName(fileName)
@@ -164,38 +150,26 @@ export default function App() {
   }, [collectShowData])
 
   const handleLoad = useCallback(async () => {
-    console.log('[PhotonBoard] handleLoad ENTERED, isLoading:', isLoading.current)
-    if (isLoading.current) {
-      console.log('[PhotonBoard] Load already in progress, skipping')
-      return
-    }
+    if (isLoading.current) return
     isLoading.current = true
     useUiStore.getState().showStatus('Opening…', 'info', 0)
     try {
-      console.log('[PhotonBoard] Calling show.load() IPC...')
       const result = await window.photonboard.show.load()
-      console.log('[PhotonBoard] Load IPC returned:', result ? 'got result' : 'null/undefined')
       if (!result) {
-        console.log('[PhotonBoard] Load cancelled (no result)')
         useUiStore.getState().showStatus('Load cancelled', 'info', 2000)
         return
       }
-      console.log('[PhotonBoard] Load result keys:', Object.keys(result).join(','), 'success:', result.success)
       // Handle both direct show object and wrapped result
       const show = result.show || (result as any)
-      console.log('[PhotonBoard] Show object:', show ? 'exists' : 'null', 'name:', show?.name, 'patch:', show?.patch?.length, 'groups:', show?.groups?.length)
       if (show && show.patch) {
         // Use filename as show name if available
         if (result.path) {
           const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
           show.name = fileName
         }
-        console.log('[PhotonBoard] Applying loaded show:', show.name, 'patch entries:', show.patch.length)
         applyShowData(show as ShowFile)
-        console.log('[PhotonBoard] applyShowData done, reloading fixtures...')
         await usePatchStore.getState().loadFixtures()
         usePatchStore.getState().initMovingHeadDefaults()
-        console.log('[PhotonBoard] Load complete!')
         useUiStore.getState().showStatus(`Loaded ✓ ${show.name}`, 'success', 2500)
       } else {
         console.error('[PhotonBoard] Load failed - no show data in result:', JSON.stringify(result).slice(0, 200))
@@ -206,19 +180,14 @@ export default function App() {
       useUiStore.getState().showStatus('Load failed!', 'error', 3000)
     } finally {
       isLoading.current = false
-      console.log('[PhotonBoard] handleLoad EXITED, isLoading reset to false')
     }
   }, [applyShowData])
 
   const handleNew = useCallback(async () => {
-    if (isLoading.current) {
-      console.log('[PhotonBoard] New already in progress, skipping')
-      return
-    }
+    if (isLoading.current) return
     isLoading.current = true
     try {
       const show = await window.photonboard.show.new()
-      console.log('[PhotonBoard] New show:', show)
       if (show) {
         applyShowData(show as ShowFile)
       }
@@ -263,16 +232,11 @@ export default function App() {
       await loadFixtures()
       initMidi()
       initMidiRouting()
-      window.photonboard.artnet.configure([
-        { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
-        { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
-        { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
-      ])
+      window.photonboard.artnet.configure(DEFAULT_ARTNET_CONFIG)
 
       // Auto-load the last saved show
       try {
         const result = await window.photonboard.show.loadLast()
-        console.log('[PhotonBoard] Auto-load result:', result)
         if (result && result.success && result.show) {
           // Use filename as show name
           if (result.path) {
@@ -280,7 +244,6 @@ export default function App() {
             result.show.name = fileName
           }
           applyShowData(result.show as ShowFile)
-          console.log('[PhotonBoard] Auto-loaded show:', result.show.name, 'patch:', result.show.patch?.length)
           usePatchStore.getState().initMovingHeadDefaults()
         }
       } catch (e) {
@@ -312,15 +275,13 @@ export default function App() {
       }
 
       if (e.key === 'Escape') {
-        const { useDmxStore } = require('./stores/dmx-store')
         useDmxStore.getState().toggleBlackout()
       }
 
       if (e.key === ' ' && activeTab === 'playback') {
-        const { usePlaybackStore: PBStore } = require('./stores/playback-store')
-        const cuelists = PBStore.getState().cuelists
+        const cuelists = usePlaybackStore.getState().cuelists
         if (cuelists.length > 0) {
-          PBStore.getState().goCuelist(cuelists[0].id)
+          usePlaybackStore.getState().goCuelist(cuelists[0].id)
           e.preventDefault()
         }
       }

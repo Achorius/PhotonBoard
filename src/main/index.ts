@@ -201,39 +201,28 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SHOW_SAVE, async (_event, showJson: string) => {
     const show: ShowFile = JSON.parse(showJson)
-    console.log('[Main] SHOW_SAVE called, patch entries:', show?.patch?.length)
     const saveResult = showManager.save(show)
     if (saveResult.needsSaveAs) {
       const defaultDir = showManager.getDefaultShowsDir()
-      console.log('[Main] First save, opening dialog in:', defaultDir)
       const result = await dialog.showSaveDialog(mainWindow!, {
         filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
         defaultPath: join(defaultDir, `${show.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`)
       })
       if (result.canceled || !result.filePath) return null
-      const saveAsResult = showManager.saveAs(show, result.filePath)
-      console.log('[Main] SaveAs result:', saveAsResult)
-      return saveAsResult
+      return showManager.saveAs(show, result.filePath)
     }
-    console.log('[Main] Save result:', saveResult)
     return saveResult
   })
 
   ipcMain.handle(IPC.SHOW_LOAD, async () => {
     const defaultDir = showManager.getDefaultShowsDir()
-    console.log('[Main] SHOW_LOAD opening dialog in:', defaultDir)
     const result = await dialog.showOpenDialog(mainWindow!, {
       filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
       defaultPath: defaultDir,
       properties: ['openFile']
     })
-    if (result.canceled || !result.filePaths.length) {
-      console.log('[Main] Load cancelled')
-      return null
-    }
-    console.log('[Main] Loading file:', result.filePaths[0])
+    if (result.canceled || !result.filePaths.length) return null
     const loadResult = showManager.load(result.filePaths[0])
-    console.log('[Main] Load result - success:', loadResult.success, 'patch:', loadResult.show?.patch?.length, 'error:', loadResult.error)
     return { ...loadResult, path: result.filePaths[0] }
   })
 

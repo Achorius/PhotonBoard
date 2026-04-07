@@ -58,7 +58,7 @@ export function initMidiRouting(): void {
   })
 }
 
-function resolveValue(mapping: any, rawValue: number): number {
+function resolveValue(mapping: MidiMapping, rawValue: number): number {
   const { options } = mapping
   const encoding = options?.encoding || 'absolute'
 
@@ -102,7 +102,7 @@ function resolveValue(mapping: any, rawValue: number): number {
  * Apply behavior mode (toggle/trigger/flash) to resolve a DMX value from a button press.
  * Returns the DMX value to apply, or null if the message should be ignored.
  */
-function applyBehavior(mapping: any, rawValue: number): number | null {
+function applyBehavior(mapping: MidiMapping, rawValue: number): number | null {
   const behavior = mapping.options?.behavior || 'direct'
 
   switch (behavior) {
@@ -127,7 +127,7 @@ function applyBehavior(mapping: any, rawValue: number): number | null {
   }
 }
 
-function routeMidiToTarget(mapping: any, rawValue: number): void {
+function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
   const { target, options } = mapping
   const behavior = options?.behavior || 'direct'
 
