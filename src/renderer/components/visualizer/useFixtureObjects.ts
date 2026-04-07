@@ -144,7 +144,7 @@ function getMountingBaseRotation(mount: MountingLocation | undefined): { rx: num
     case 'floor':      return { rx: Math.PI, ry: 0, rz: 0 }           // beam points up
     case 'wall-left':  return { rx: 0, ry: 0, rz: -Math.PI / 2 }      // beam points right (inward)
     case 'wall-right': return { rx: 0, ry: 0, rz: Math.PI / 2 }       // beam points left (inward)
-    case 'wall-back':  return { rx: -Math.PI / 2, ry: 0, rz: 0 }      // beam points toward audience
+    case 'wall-back':  return { rx: Math.PI / 2, ry: 0, rz: 0 }       // beam points toward audience (-Z = downstage)
     default:           return { rx: 0, ry: 0, rz: 0 }                  // ceiling: beam points down
   }
 }
