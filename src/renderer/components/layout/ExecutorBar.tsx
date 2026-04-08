@@ -16,6 +16,15 @@ const COLOR_PALETTE = [
   '#ec4899', '#6b7280', '#ffffff', '#8b5cf6'
 ]
 
+type SceneMode = 'toggle' | 'trigger' | 'flash'
+const MODE_LABELS: Record<SceneMode, string> = { toggle: 'TOG', trigger: 'TRIG', flash: 'FLASH' }
+const MODE_CYCLE: SceneMode[] = ['toggle', 'trigger', 'flash']
+const MODE_DESCRIPTIONS: Record<SceneMode, string> = {
+  toggle: 'Toggle — GO / STOP alternés',
+  trigger: 'Trigger — Joue tant qu\'on appuie',
+  flash: 'Flash — Plein fader tant qu\'on appuie'
+}
+
 interface ColumnMeta {
   title: string
   color: string
@@ -23,11 +32,11 @@ interface ColumnMeta {
 
 export function ExecutorBar() {
   const { cuelists, goCuelist, stopCuelist, renameCuelist } = usePlaybackStore()
-  const { mappings, isLearning, learnTarget, startLearn, cancelLearn } = useMidiStore()
+  const { mappings, isLearning, learnTarget, startLearn, cancelLearn, updateMapping } = useMidiStore()
 
-  // Check if a cuelist has a MIDI GO mapping
-  const hasMidiMapping = (cuelistId: string) =>
-    mappings.some(m => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
+  // Get MIDI mapping for a cuelist
+  const getMidiMapping = (cuelistId: string) =>
+    mappings.find(m => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
   const isLearningScene = (cuelistId: string) =>
     isLearning && learnTarget?.type === 'cuelist_go' && learnTarget?.id === cuelistId
 
@@ -43,6 +52,13 @@ export function ExecutorBar() {
   const [grid, setGrid] = useState<(string | null)[][]>(() =>
     Array.from({ length: COLUMN_COUNT }, () =>
       Array.from({ length: ROWS_PER_COLUMN }, () => null)
+    )
+  )
+
+  // Mode per cell: [col][row] → SceneMode
+  const [modes, setModes] = useState<SceneMode[][]>(() =>
+    Array.from({ length: COLUMN_COUNT }, () =>
+      Array.from({ length: ROWS_PER_COLUMN }, () => 'toggle' as SceneMode)
     )
   )
 
@@ -127,6 +143,14 @@ export function ExecutorBar() {
       newGrid[dragSource.col][dragSource.row] = targetId
       return newGrid
     })
+    // Also swap modes
+    setModes(prev => {
+      const newModes = prev.map(c => [...c])
+      const srcMode = newModes[dragSource.col][dragSource.row]
+      newModes[dragSource.col][dragSource.row] = newModes[col][row]
+      newModes[col][row] = srcMode
+      return newModes
+    })
     setDragSource(null)
     setDragOver(null)
   }, [dragSource])
@@ -153,6 +177,59 @@ export function ExecutorBar() {
       return updated
     })
     setColorPicker(null)
+  }
+
+  // Cycle mode for a cell and update existing MIDI mapping behavior
+  const cycleMode = (col: number, row: number) => {
+    const currentMode = modes[col][row]
+    const nextIdx = (MODE_CYCLE.indexOf(currentMode) + 1) % MODE_CYCLE.length
+    const nextMode = MODE_CYCLE[nextIdx]
+
+    setModes(prev => {
+      const newModes = prev.map(c => [...c])
+      newModes[col][row] = nextMode
+      return newModes
+    })
+
+    // Update existing MIDI mapping behavior to match
+    const sceneId = grid[col]?.[row]
+    if (sceneId) {
+      const mapping = getMidiMapping(sceneId)
+      if (mapping) {
+        updateMapping(mapping.id, {
+          options: { ...mapping.options, behavior: nextMode }
+        })
+      }
+    }
+  }
+
+  // Right-click: MIDI Learn
+  const handleContextMenu = (e: React.MouseEvent, sceneId: string, sceneName: string, col: number, row: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (isLearningScene(sceneId)) {
+      cancelLearn()
+    } else {
+      const mode = modes[col][row]
+      startLearn({ type: 'cuelist_go', id: sceneId, label: sceneName })
+      // After learn completes, the behavior will be set by completeLearn
+      // We need to update it to the cell's mode after mapping is created
+      // Use a timeout to let completeLearn finish first
+      const unwatch = useMidiStore.subscribe((state) => {
+        if (!state.isLearning && state.learnTarget === null) {
+          // Learn just completed — update the new mapping's behavior
+          const newMapping = state.mappings.find(m => m.target.type === 'cuelist_go' && m.target.id === sceneId)
+          if (newMapping && newMapping.options.behavior !== mode) {
+            setTimeout(() => {
+              useMidiStore.getState().updateMapping(newMapping.id, {
+                options: { ...newMapping.options, behavior: mode }
+              })
+            }, 0)
+          }
+          unwatch()
+        }
+      })
+    }
   }
 
   return (
@@ -246,6 +323,9 @@ export function ExecutorBar() {
                 }
 
                 const isActive = scene.isPlaying
+                const midiMap = getMidiMapping(scene.id)
+                const learning = isLearningScene(scene.id)
+                const cellMode = modes[col][row]
 
                 return (
                   <div
@@ -255,27 +335,38 @@ export function ExecutorBar() {
                     onDragOver={(e) => handleDragOver(e, col, row)}
                     onDrop={() => handleDrop(col, row)}
                     onDragEnd={handleDragEnd}
+                    onContextMenu={(e) => handleContextMenu(e, scene.id, scene.name, col, row)}
                     className={`flex-1 rounded flex items-center min-h-0 transition-all ${
                       !isEditing ? 'cursor-grab active:cursor-grabbing' : ''
-                    } ${isDragSource_ ? 'opacity-30 scale-95' : ''} ${isDragTarget ? 'ring-1' : ''}`}
+                    } ${isDragSource_ ? 'opacity-30 scale-95' : ''} ${isDragTarget ? 'ring-1' : ''} ${
+                      learning ? 'ring-1 ring-purple-500 animate-pulse' : ''
+                    }`}
                     style={{
                       backgroundColor: isActive ? colColor + '25' : colColor + '10',
                       borderWidth: 1,
                       borderStyle: 'solid',
-                      borderColor: isActive ? colColor + '70' : colColor + '25',
+                      borderColor: learning ? '#a855f7' : isActive ? colColor + '70' : colColor + '25',
                       ...(isDragTarget ? { ringColor: colColor } : {})
                     }}
-                    title={isEditing ? '' : `${scene.name} — Click: ${isActive ? 'stop' : 'GO'} | Double-click: rename | Drag: move`}
+                    title={isEditing ? '' : `${scene.name} — Click: ${isActive ? 'stop' : 'GO'} | Double-click: rename | Right-click: MIDI Learn | Drag: move`}
                   >
-                    {/* Status dot */}
+                    {/* Status dot + MIDI indicator */}
                     <div
-                      className="h-full flex items-center pl-1.5 cursor-pointer"
+                      className="h-full flex items-center pl-1 gap-0.5 cursor-pointer"
                       onClick={() => isActive ? stopCuelist(scene.id) : goCuelist(scene.id)}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'animate-pulse' : ''}`}
                         style={{ backgroundColor: isActive ? '#22c55e' : colColor + '60' }}
                       />
+                      {/* Small purple dot if MIDI mapped */}
+                      {midiMap && !learning && (
+                        <span
+                          className="w-1 h-1 rounded-full shrink-0"
+                          style={{ backgroundColor: '#a855f7' }}
+                          title={`MIDI: ${midiMap.source.type.toUpperCase()} ch${midiMap.source.channel} #${midiMap.source.number}`}
+                        />
+                      )}
                     </div>
 
                     {/* Name — click to GO, double-click to rename */}
@@ -302,32 +393,16 @@ export function ExecutorBar() {
                       </span>
                     )}
 
-                    {/* MIDI Learn button */}
+                    {/* Mode selector button */}
                     <button
-                      className={`shrink-0 w-4 h-4 flex items-center justify-center rounded text-[7px] font-bold mr-0.5 transition-colors ${
-                        isLearningScene(scene.id)
-                          ? 'bg-purple-500 text-white animate-pulse'
-                          : hasMidiMapping(scene.id)
-                            ? 'bg-purple-800/50 text-purple-300 hover:bg-purple-700/60'
-                            : 'bg-transparent text-gray-600 hover:text-purple-400 hover:bg-purple-900/30'
-                      }`}
+                      className="shrink-0 px-1 h-4 flex items-center justify-center rounded text-[7px] font-bold mr-0.5 transition-colors bg-surface-2/60 text-gray-500 hover:text-gray-300 hover:bg-surface-3"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (isLearningScene(scene.id)) {
-                          cancelLearn()
-                        } else {
-                          startLearn({ type: 'cuelist_go', id: scene.id, label: scene.name })
-                        }
+                        cycleMode(col, row)
                       }}
-                      title={
-                        isLearningScene(scene.id)
-                          ? 'Waiting for MIDI input… Click to cancel'
-                          : hasMidiMapping(scene.id)
-                            ? 'MIDI mapped — Click to re-learn'
-                            : 'MIDI Learn — Assign a MIDI button to this scene'
-                      }
+                      title={MODE_DESCRIPTIONS[cellMode]}
                     >
-                      M
+                      {MODE_LABELS[cellMode]}
                     </button>
                   </div>
                 )

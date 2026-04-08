@@ -154,8 +154,27 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
     }
 
     case 'cuelist_go': {
-      if (rawValue > 0) {
-        usePlaybackStore.getState().goCuelist(target.id!)
+      const goBehavior = options?.behavior || 'toggle'
+      if (goBehavior === 'trigger') {
+        // Trigger: GO on press, STOP on release (play while held)
+        if (rawValue > 0) {
+          usePlaybackStore.getState().goCuelist(target.id!)
+        } else {
+          usePlaybackStore.getState().stopCuelist(target.id!)
+        }
+      } else if (goBehavior === 'flash') {
+        // Flash: full fader while held
+        usePlaybackStore.getState().flashCuelist(target.id!, rawValue > 0)
+      } else {
+        // Toggle (default): press = GO if stopped, STOP if playing
+        if (rawValue > 0) {
+          const scene = usePlaybackStore.getState().cuelists.find(c => c.id === target.id)
+          if (scene?.isPlaying) {
+            usePlaybackStore.getState().stopCuelist(target.id!)
+          } else {
+            usePlaybackStore.getState().goCuelist(target.id!)
+          }
+        }
       }
       break
     }
