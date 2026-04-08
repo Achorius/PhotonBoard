@@ -155,12 +155,26 @@ export function LiveView() {
     if (!rect) return
     const clickX = e.clientX - rect.left + (timelineRef.current?.scrollLeft || 0)
     const clickY = e.clientY - rect.top - topOffset
+
+    // Option+click (Alt+click) → duplicate clip and drag the copy
+    let targetClipId = clipId
+    if (e.altKey) {
+      const newId = addTimelineClip({
+        cuelistId: clip.cuelistId,
+        trackIndex: clip.trackIndex,
+        startTime: clip.startTime,
+        duration: clip.duration,
+        color: clip.color
+      })
+      targetClipId = newId
+    }
+
     setDragClip({
-      clipId,
+      clipId: targetClipId,
       offsetX: clickX - clip.startTime * zoom,
       offsetTrack: Math.floor(clickY / TRACK_HEIGHT) - clip.trackIndex
     })
-  }, [timelineClips, zoom])
+  }, [timelineClips, zoom, addTimelineClip])
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
     e.stopPropagation()
