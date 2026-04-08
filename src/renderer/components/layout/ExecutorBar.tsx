@@ -1,88 +1,191 @@
-import React from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
-import { HSlider } from '../common/HSlider'
 
-const EXECUTOR_COUNT = 8
+const COLUMN_COUNT = 8
+const ROWS_PER_COLUMN = 4
 
+/**
+ * ExecutorBar — Ableton-style grid of scene launchers
+ * 8 columns x 4 rows. Scenes can be dragged between cells.
+ */
 export function ExecutorBar() {
-  const { cuelists, goCuelist, goBackCuelist, stopCuelist, setCuelistFader } = usePlaybackStore()
+  const { cuelists, goCuelist, stopCuelist, setCuelistFader } = usePlaybackStore()
 
-  // Map scenes to executor slots
-  const scenes = cuelists.slice(0, EXECUTOR_COUNT)
-  const slots = Array.from({ length: EXECUTOR_COUNT }, (_, i) => scenes[i] ?? null)
+  // Grid state: [col][row] → cuelist id or null
+  const [grid, setGrid] = useState<(string | null)[][]>(() =>
+    Array.from({ length: COLUMN_COUNT }, () =>
+      Array.from({ length: ROWS_PER_COLUMN }, () => null)
+    )
+  )
+
+  // Track which cuelist ids are already placed in the grid
+  const placedIdsRef = useRef<Set<string>>(new Set())
+
+  // Sync: when cuelists change, place any new ones in the first available slot
+  useEffect(() => {
+    const currentPlaced = new Set<string>()
+    // Collect all ids currently in the grid
+    for (const col of grid) {
+      for (const cell of col) {
+        if (cell) currentPlaced.add(cell)
+      }
+    }
+
+    // Find new cuelists not yet in grid
+    const newCuelists = cuelists.filter(cl => !currentPlaced.has(cl.id))
+    if (newCuelists.length === 0) {
+      placedIdsRef.current = currentPlaced
+      return
+    }
+
+    // Also remove stale ids (cuelists deleted)
+    const validIds = new Set(cuelists.map(c => c.id))
+
+    setGrid(prev => {
+      const newGrid = prev.map(c => [...c])
+
+      // Clear deleted cuelists
+      for (let col = 0; col < COLUMN_COUNT; col++) {
+        for (let row = 0; row < ROWS_PER_COLUMN; row++) {
+          if (newGrid[col][row] && !validIds.has(newGrid[col][row]!)) {
+            newGrid[col][row] = null
+          }
+        }
+      }
+
+      // Place new cuelists in first empty slot
+      let newIdx = 0
+      for (let col = 0; col < COLUMN_COUNT && newIdx < newCuelists.length; col++) {
+        for (let row = 0; row < ROWS_PER_COLUMN && newIdx < newCuelists.length; row++) {
+          if (!newGrid[col][row]) {
+            newGrid[col][row] = newCuelists[newIdx].id
+            newIdx++
+          }
+        }
+      }
+
+      return newGrid
+    })
+  }, [cuelists])
+
+  // Drag state
+  const [dragSource, setDragSource] = useState<{ col: number; row: number } | null>(null)
+  const [dragOver, setDragOver] = useState<{ col: number; row: number } | null>(null)
+
+  const handleDragStart = useCallback((e: React.DragEvent, col: number, row: number) => {
+    setDragSource({ col, row })
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, col: number, row: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOver({ col, row })
+  }, [])
+
+  const handleDrop = useCallback((col: number, row: number) => {
+    if (!dragSource) return
+    setGrid(prev => {
+      const newGrid = prev.map(c => [...c])
+      // Swap source and target
+      const sourceId = newGrid[dragSource.col][dragSource.row]
+      const targetId = newGrid[col][row]
+      newGrid[col][row] = sourceId
+      newGrid[dragSource.col][dragSource.row] = targetId
+      return newGrid
+    })
+    setDragSource(null)
+    setDragOver(null)
+  }, [dragSource])
+
+  const handleDragEnd = useCallback(() => {
+    setDragSource(null)
+    setDragOver(null)
+  }, [])
+
+  const getCuelist = (id: string | null) => id ? cuelists.find(c => c.id === id) : null
 
   return (
-    <div className="h-24 bg-surface-1 border-t-2 border-surface-3 flex items-stretch gap-px px-px py-px shrink-0">
-      {slots.map((scene, i) => {
-        if (!scene) {
-          return (
-            <div
-              key={i}
-              className="flex-1 bg-surface-0 rounded flex flex-col items-center justify-center text-[9px] text-surface-4 min-w-0 border border-surface-2"
-            >
-              <span className="font-mono opacity-40">{i + 1}</span>
-            </div>
-          )
-        }
+    <div className="bg-surface-1 border-t-2 border-surface-3 shrink-0" style={{ height: 140 }}>
+      <div className="flex h-full gap-px p-px">
+        {Array.from({ length: COLUMN_COUNT }, (_, col) => (
+          <div key={col} className="flex-1 flex flex-col min-w-0 gap-px">
+            {Array.from({ length: ROWS_PER_COLUMN }, (_, row) => {
+              const sceneId = grid[col]?.[row] ?? null
+              const scene = getCuelist(sceneId)
+              const isDragTarget = dragOver?.col === col && dragOver?.row === row
+              const isDragSource_ = dragSource?.col === col && dragSource?.row === row
 
-        const isActive = scene.isPlaying
-        const stepInfo = scene.currentCueIndex >= 0
-          ? `${scene.currentCueIndex + 1}/${scene.cues.length}`
-          : `${scene.cues.length} step${scene.cues.length !== 1 ? 's' : ''}`
+              if (!scene) {
+                return (
+                  <div
+                    key={row}
+                    className={`flex-1 rounded flex items-center justify-center min-h-0 transition-colors ${
+                      isDragTarget
+                        ? 'bg-accent/20 border border-accent/50'
+                        : 'bg-surface-0 border border-surface-2'
+                    }`}
+                    onDragOver={(e) => handleDragOver(e, col, row)}
+                    onDrop={() => handleDrop(col, row)}
+                  >
+                    {row === 0 && (
+                      <span className="text-[8px] font-mono text-surface-4 opacity-30">{col + 1}</span>
+                    )}
+                  </div>
+                )
+              }
 
-        return (
-          <div
-            key={scene.id}
-            className={`flex-1 flex flex-col min-w-0 rounded border transition-colors ${
-              isActive ? 'bg-surface-2 border-green-500/50' : 'bg-surface-2 border-surface-3'
-            }`}
-          >
-            {/* Name + step info */}
-            <div className="flex items-center justify-between px-1.5 pt-1">
-              <span className="text-[9px] font-medium text-gray-300 truncate leading-tight" title={scene.name}>
-                {scene.name}
-              </span>
-              <span className={`text-[8px] font-mono shrink-0 ml-1 ${isActive ? 'text-green-400' : 'text-gray-600'}`}>
-                {stepInfo}
-              </span>
-            </div>
+              const isActive = scene.isPlaying
 
-            {/* Fader */}
-            <div className="flex items-center px-1.5 py-0.5">
-              <HSlider
-                value={scene.faderLevel}
-                onChange={(v) => setCuelistFader(scene.id, v)}
-                color={isActive ? '#22c55e' : '#444'}
-                className="flex-1"
-              />
-              <span className="text-[8px] font-mono text-gray-600 w-5 text-right shrink-0">
-                {Math.round((scene.faderLevel / 255) * 100)}
-              </span>
-            </div>
+              return (
+                <div
+                  key={row}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, col, row)}
+                  onDragOver={(e) => handleDragOver(e, col, row)}
+                  onDrop={() => handleDrop(col, row)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex-1 rounded flex items-center min-h-0 cursor-grab active:cursor-grabbing transition-all ${
+                    isDragSource_ ? 'opacity-30 scale-95' : ''
+                  } ${isDragTarget ? 'ring-1 ring-accent' : ''} ${
+                    isActive
+                      ? 'bg-green-900/40 border border-green-500/50'
+                      : 'bg-surface-2 border border-surface-3 hover:border-surface-4'
+                  }`}
+                  title={`${scene.name} — Click to ${isActive ? 'stop' : 'launch'}, drag to move`}
+                >
+                  {/* Click to GO/STOP */}
+                  <div
+                    className="flex-1 min-w-0 px-1.5 flex items-center gap-1 cursor-pointer h-full"
+                    onClick={() => isActive ? stopCuelist(scene.id) : goCuelist(scene.id)}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-600'
+                    }`} />
+                    <span className="text-[9px] text-gray-300 truncate leading-none">
+                      {scene.name}
+                    </span>
+                  </div>
 
-            {/* Transport buttons */}
-            <div className="flex gap-px px-1 pb-1">
-              <button
-                className="text-[9px] text-gray-500 hover:text-gray-300 px-1 py-0.5 rounded hover:bg-surface-3"
-                onClick={() => goBackCuelist(scene.id)}
-                title="Previous step"
-              >
-                ◀
-              </button>
-              <button
-                className={`flex-1 text-[10px] font-bold rounded py-0.5 transition-colors ${
-                  isActive
-                    ? 'bg-red-700 text-white hover:bg-red-600'
-                    : 'bg-accent text-white hover:bg-orange-500'
-                }`}
-                onClick={() => isActive ? stopCuelist(scene.id) : goCuelist(scene.id)}
-              >
-                {isActive ? 'STOP' : 'GO'}
-              </button>
-            </div>
+                  {/* Mini fader */}
+                  <input
+                    type="range"
+                    min={0} max={255}
+                    value={scene.faderLevel}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      setCuelistFader(scene.id, parseInt(e.target.value))
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-8 h-0.5 mr-1 shrink-0 accent-accent cursor-pointer opacity-50 hover:opacity-100"
+                    style={{ WebkitAppearance: 'none', height: 2 }}
+                  />
+                </div>
+              )
+            })}
           </div>
-        )
-      })}
+        ))}
+      </div>
     </div>
   )
 }
