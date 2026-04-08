@@ -39,6 +39,23 @@ const CHANNEL_TYPE_TO_NAME: Record<string, string> = {
   Iris: 'iris',
 }
 
+// Position channels oscillate around center (128) instead of 0
+const POSITION_CHANNELS = new Set(['pan', 'tilt'])
+
+function isPositionChannel(channelType: string): boolean {
+  return POSITION_CHANNELS.has(channelType.toLowerCase())
+}
+
+/** Convert waveform value (-1..+1) to DMX (0..255) with correct centering */
+function waveToValue(waveValue: number, depth: number, centerAt128: boolean): number {
+  if (centerAt128) {
+    // Oscillate around 128: center ± depth/2
+    return Math.round(Math.max(0, Math.min(255, 128 + waveValue * (depth / 2))))
+  }
+  // Standard: oscillate 0..depth
+  return Math.round(((waveValue + 1) / 2) * depth)
+}
+
 export function startEffect(effect: Effect): void {
   activeEffects.set(effect.id, { effect, startTime: performance.now() })
   if (!animationFrame) {
@@ -145,7 +162,7 @@ function updateEffects(): void {
             const absChannel = entry.address - 1 + cell.channelOffset + cellChIndex
             const channelName = cell.channelNames[cellChIndex]
             const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : channelDepth
-            const value = Math.round(((waveValue + 1) / 2) * maxValue)
+            const value = waveToValue(waveValue, maxValue, isPositionChannel(ech.channelType))
 
             if (absChannel >= 0 && absChannel < 512) {
               dmxStore.setChannel(entry.universe, absChannel, value)
@@ -161,7 +178,7 @@ function updateEffects(): void {
 
           const channelName = mode.channels[chIndex]
           const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : channelDepth
-          const value = Math.round(((waveValue + 1) / 2) * maxValue)
+          const value = waveToValue(waveValue, maxValue, isPositionChannel(ech.channelType))
 
           const absChannel = entry.address - 1 + chIndex
           if (absChannel >= 0 && absChannel < 512) {
