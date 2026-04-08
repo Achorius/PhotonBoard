@@ -9,6 +9,7 @@ interface DmxState {
   blinder: boolean
   strobe: boolean
   strobeRate: number // Hz (1-25)
+  _strobePhase: boolean // internal: current on/off phase for strobe
 
   setChannel: (universe: number, channel: number, value: number) => void
   setChannels: (universe: number, channels: Record<number, number>) => void
@@ -19,6 +20,44 @@ interface DmxState {
   setStrobeRate: (rate: number) => void
   resetAll: () => void
   getEffectiveValue: (universe: number, channel: number) => number
+}
+
+// Strobe interval handle (module-level to survive re-renders)
+let strobeInterval: ReturnType<typeof setInterval> | null = null
+
+function startStrobeLoop() {
+  stopStrobeLoop()
+  const rate = useDmxStore.getState().strobeRate
+  const intervalMs = Math.round(1000 / (rate * 2))
+
+  strobeInterval = setInterval(() => {
+    const state = useDmxStore.getState()
+    if (!state.strobe) { stopStrobeLoop(); return }
+
+    const newPhase = !state._strobePhase
+    useDmxStore.setState({ _strobePhase: newPhase })
+
+    // Send strobe output: active channels flash on/off
+    for (let u = 0; u < state.universeCount; u++) {
+      const channels: Record<number, number> = {}
+      const gm = state.grandMaster / 255
+      for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
+        if (state.values[u][ch] > 0) {
+          channels[ch] = newPhase ? Math.round(state.values[u][ch] * gm) : 0
+        }
+      }
+      if (Object.keys(channels).length > 0) {
+        window.photonboard.dmx.setChannels(u, channels)
+      }
+    }
+  }, intervalMs)
+}
+
+function stopStrobeLoop() {
+  if (strobeInterval) {
+    clearInterval(strobeInterval)
+    strobeInterval = null
+  }
 }
 
 export const useDmxStore = create<DmxState>((set, get) => ({
@@ -33,6 +72,7 @@ export const useDmxStore = create<DmxState>((set, get) => ({
   blinder: false,
   strobe: false,
   strobeRate: 10,
+  _strobePhase: false,
 
   setChannel: (universe, channel, value) => {
     const clamped = Math.max(0, Math.min(255, Math.round(value)))
@@ -42,10 +82,19 @@ export const useDmxStore = create<DmxState>((set, get) => ({
       newValues[universe][channel] = clamped
       return { values: newValues }
     })
-    if (!get().blackout) {
-      const effective = Math.round(clamped * (get().grandMaster / 255))
-      window.photonboard.dmx.setChannel(universe, channel, effective)
+    const state = get()
+    // Blinder overrides everything: always send 255
+    if (state.blinder) {
+      window.photonboard.dmx.setChannel(universe, channel, 255)
+      return
     }
+    // Strobe: don't send — the strobe loop handles hardware output
+    if (state.strobe) return
+    // Blackout: don't send
+    if (state.blackout) return
+    // Normal output
+    const effective = Math.round(clamped * (state.grandMaster / 255))
+    window.photonboard.dmx.setChannel(universe, channel, effective)
   },
 
   setChannels: (universe, channels) => {
@@ -57,30 +106,42 @@ export const useDmxStore = create<DmxState>((set, get) => ({
       }
       return { values: newValues }
     })
-    if (!get().blackout) {
-      const gm = get().grandMaster / 255
+    const state = get()
+    // Blinder overrides: send 255 for all
+    if (state.blinder) {
       const effective: Record<number, number> = {}
-      for (const [ch, val] of Object.entries(channels)) {
-        effective[parseInt(ch)] = Math.round(val * gm)
+      for (const ch of Object.keys(channels)) {
+        effective[parseInt(ch)] = 255
       }
       window.photonboard.dmx.setChannels(universe, effective)
+      return
     }
+    // Strobe: don't send — the strobe loop handles it
+    if (state.strobe) return
+    // Blackout: don't send
+    if (state.blackout) return
+    // Normal output
+    const gm = state.grandMaster / 255
+    const effective: Record<number, number> = {}
+    for (const [ch, val] of Object.entries(channels)) {
+      effective[parseInt(ch)] = Math.round(val * gm)
+    }
+    window.photonboard.dmx.setChannels(universe, effective)
   },
 
   setGrandMaster: (value) => {
     set({ grandMaster: Math.max(0, Math.min(255, value)) })
     const state = get()
-    if (!state.blackout) {
-      const gm = value / 255
-      for (let u = 0; u < state.universeCount; u++) {
-        const channels: Record<number, number> = {}
-        for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-          if (state.values[u][ch] > 0) {
-            channels[ch] = Math.round(state.values[u][ch] * gm)
-          }
+    if (state.blackout || state.blinder || state.strobe) return
+    const gm = value / 255
+    for (let u = 0; u < state.universeCount; u++) {
+      const channels: Record<number, number> = {}
+      for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
+        if (state.values[u][ch] > 0) {
+          channels[ch] = Math.round(state.values[u][ch] * gm)
         }
-        window.photonboard.dmx.setChannels(u, channels)
       }
+      window.photonboard.dmx.setChannels(u, channels)
     }
   },
 
@@ -91,6 +152,7 @@ export const useDmxStore = create<DmxState>((set, get) => ({
       window.photonboard.dmx.blackout()
     } else {
       const state = get()
+      if (state.blinder || state.strobe) return // let those modes handle output
       const gm = state.grandMaster / 255
       for (let u = 0; u < state.universeCount; u++) {
         const channels: Record<number, number> = {}
@@ -106,7 +168,7 @@ export const useDmxStore = create<DmxState>((set, get) => ({
     const newBlinder = on !== undefined ? on : !get().blinder
     set({ blinder: newBlinder })
     if (newBlinder) {
-      // All channels to 255 (full white flash)
+      // Immediately send 255 on all channels
       const state = get()
       for (let u = 0; u < state.universeCount; u++) {
         const channels: Record<number, number> = {}
@@ -116,44 +178,71 @@ export const useDmxStore = create<DmxState>((set, get) => ({
         window.photonboard.dmx.setChannels(u, channels)
       }
     } else {
-      // Restore normal values
+      // Restore: let the normal pipeline take over on next setChannel call
+      // Force an immediate restore of current values
       const state = get()
-      const gm = state.grandMaster / 255
-      for (let u = 0; u < state.universeCount; u++) {
-        const channels: Record<number, number> = {}
-        for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-          channels[ch] = state.blackout ? 0 : Math.round(state.values[u][ch] * gm)
+      if (state.blackout) {
+        window.photonboard.dmx.blackout()
+      } else if (!state.strobe) {
+        const gm = state.grandMaster / 255
+        for (let u = 0; u < state.universeCount; u++) {
+          const channels: Record<number, number> = {}
+          for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
+            channels[ch] = Math.round(state.values[u][ch] * gm)
+          }
+          window.photonboard.dmx.setChannels(u, channels)
         }
-        window.photonboard.dmx.setChannels(u, channels)
       }
     }
   },
 
   toggleStrobe: (on?: boolean) => {
     const newStrobe = on !== undefined ? on : !get().strobe
-    set({ strobe: newStrobe })
-    // Strobe effect is handled by the strobe loop (started/stopped externally)
+    set({ strobe: newStrobe, _strobePhase: false })
+    if (newStrobe) {
+      startStrobeLoop()
+    } else {
+      stopStrobeLoop()
+      // Restore normal output
+      const state = get()
+      if (state.blackout) {
+        window.photonboard.dmx.blackout()
+      } else if (!state.blinder) {
+        const gm = state.grandMaster / 255
+        for (let u = 0; u < state.universeCount; u++) {
+          const channels: Record<number, number> = {}
+          for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
+            channels[ch] = Math.round(state.values[u][ch] * gm)
+          }
+          window.photonboard.dmx.setChannels(u, channels)
+        }
+      }
+    }
   },
 
   setStrobeRate: (rate: number) => {
     set({ strobeRate: Math.max(1, Math.min(25, rate)) })
+    // Restart strobe loop with new rate if active
+    if (get().strobe) {
+      startStrobeLoop()
+    }
   },
 
   resetAll: () => {
+    stopStrobeLoop()
     const state = get()
-    // Zero all channel values
     const freshValues = []
     for (let u = 0; u < state.universeCount; u++) {
       freshValues.push(new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0))
     }
-    set({ values: freshValues, blackout: false, grandMaster: 255, blinder: false, strobe: false })
-    // Send blackout to engine to zero all outputs
+    set({ values: freshValues, blackout: false, grandMaster: 255, blinder: false, strobe: false, _strobePhase: false })
     window.photonboard.dmx.blackout()
   },
 
   getEffectiveValue: (universe, channel) => {
     const state = get()
     if (state.blackout) return 0
+    if (state.blinder) return 255
     return Math.round(state.values[universe][channel] * (state.grandMaster / 255))
   }
 }))

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useMidiStore } from '../../stores/midi-store'
@@ -20,61 +20,6 @@ export function Toolbar() {
     }, 200)
     return () => clearInterval(interval)
   }, [])
-
-  // Strobe engine — flashes active channels on/off at strobeRate Hz
-  const strobeRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const strobePhase = useRef(false)
-
-  useEffect(() => {
-    if (strobe) {
-      const rate = useDmxStore.getState().strobeRate
-      const intervalMs = Math.round(1000 / (rate * 2)) // half period for on/off
-
-      strobeRef.current = setInterval(() => {
-        const state = useDmxStore.getState()
-        strobePhase.current = !strobePhase.current
-
-        for (let u = 0; u < state.universeCount; u++) {
-          const channels: Record<number, number> = {}
-          for (let ch = 0; ch < 512; ch++) {
-            if (state.values[u][ch] > 0) {
-              // Only strobe channels that are currently active
-              const gm = state.grandMaster / 255
-              channels[ch] = strobePhase.current ? Math.round(state.values[u][ch] * gm) : 0
-            }
-          }
-          if (Object.keys(channels).length > 0) {
-            window.photonboard.dmx.setChannels(u, channels)
-          }
-        }
-      }, intervalMs)
-    } else {
-      // Strobe off — restore normal output
-      if (strobeRef.current) {
-        clearInterval(strobeRef.current)
-        strobeRef.current = null
-      }
-      strobePhase.current = false
-      // Restore values
-      const state = useDmxStore.getState()
-      if (!state.blackout && !state.blinder) {
-        const gm = state.grandMaster / 255
-        for (let u = 0; u < state.universeCount; u++) {
-          const channels: Record<number, number> = {}
-          for (let ch = 0; ch < 512; ch++) {
-            channels[ch] = Math.round(state.values[u][ch] * gm)
-          }
-          window.photonboard.dmx.setChannels(u, channels)
-        }
-      }
-    }
-    return () => {
-      if (strobeRef.current) {
-        clearInterval(strobeRef.current)
-        strobeRef.current = null
-      }
-    }
-  }, [strobe])
 
   // MIDI learn helpers
   const hasMidi = (type: MidiTargetType) =>
