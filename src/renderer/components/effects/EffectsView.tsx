@@ -5,6 +5,7 @@ import { useEffectsStore } from '../../stores/effects-store'
 import { usePlaybackStore } from '../../stores/playback-store'
 import { getWaveformValue } from '../../lib/effect-engine'
 import { HSlider } from '../common/HSlider'
+import { CurveEditor } from './CurveEditor'
 import type { WaveformType, EffectChannel, CueChannelValue } from '@shared/types'
 
 // ============================================================
@@ -193,14 +194,15 @@ const WAVEFORM_LABELS: Record<WaveformType, string> = {
   pulse: 'Pulse',
   bounce: 'Bounce',
   step: 'Step',
+  custom: 'Custom',
 }
 
 // ============================================================
 // Waveform Preview — small canvas showing the curve shape
 // ============================================================
 
-function WaveformPreview({ waveform, color, width = 60, height = 24 }: {
-  waveform: WaveformType, color: string, width?: number, height?: number
+function WaveformPreview({ waveform, color, width = 60, height = 24, keyframes }: {
+  waveform: WaveformType, color: string, width?: number, height?: number, keyframes?: import('@shared/types').WaveformKeyframe[]
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -233,13 +235,13 @@ function WaveformPreview({ waveform, color, width = 60, height = 24 }: {
       const phase = x / width
       const val = waveform === 'random'
         ? Math.sin(phase * 13.7) * Math.cos(phase * 7.3) // deterministic "random" for preview
-        : getWaveformValue(waveform, phase)
+        : getWaveformValue(waveform, phase, keyframes)
       const y = height / 2 - val * (height / 2 - 2)
       if (x === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
     ctx.stroke()
-  }, [waveform, color, width, height])
+  }, [waveform, color, width, height, keyframes])
 
   return <canvas ref={canvasRef} style={{ width, height }} className="rounded" />
 }
@@ -634,7 +636,7 @@ export function EffectsView() {
                         <span className="text-[10px] text-gray-500">{getEffectTargetLabel(effect.fixtureIds)}</span>
                       </div>
 
-                      <WaveformPreview waveform={effect.waveform} color={categoryColor} />
+                      <WaveformPreview waveform={effect.waveform} color={categoryColor} keyframes={effect.keyframes} />
 
                       <button
                         className="text-red-400 hover:text-red-300 text-xs px-2"
@@ -708,7 +710,18 @@ export function EffectsView() {
                         <select
                           className="input w-full text-xs"
                           value={effect.waveform}
-                          onChange={e => updateEffect(effect.id, { waveform: e.target.value as WaveformType })}
+                          onChange={e => {
+                            const wf = e.target.value as WaveformType
+                            const updates: Record<string, any> = { waveform: wf }
+                            // Initialize default keyframes when switching to custom
+                            if (wf === 'custom' && !effect.keyframes?.length) {
+                              updates.keyframes = [
+                                { x: 0, y: -1 }, { x: 0.25, y: 1 },
+                                { x: 0.5, y: -1 }, { x: 0.75, y: 1 }, { x: 1, y: -1 },
+                              ]
+                            }
+                            updateEffect(effect.id, updates)
+                          }}
                         >
                           {Object.entries(WAVEFORM_LABELS).map(([key, label]) => (
                             <option key={key} value={key}>{label}</option>
@@ -729,6 +742,17 @@ export function EffectsView() {
                         <span className="text-[10px] text-gray-400">One-shot (trigger once)</span>
                       </label>
                     </div>
+
+                    {/* Curve editor for custom waveform */}
+                    {effect.waveform === 'custom' && (
+                      <div className="pt-1">
+                        <CurveEditor
+                          keyframes={effect.keyframes}
+                          onChange={(keyframes) => updateEffect(effect.id, { keyframes })}
+                          color={categoryColor}
+                        />
+                      </div>
+                    )}
                   </div>
                 )
               })}

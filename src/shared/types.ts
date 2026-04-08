@@ -293,7 +293,13 @@ export interface ChaseStep {
 
 // --- Effects ---
 
-export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random' | 'pulse' | 'bounce' | 'step'
+export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random' | 'pulse' | 'bounce' | 'step' | 'custom'
+
+/** Keyframe point for custom waveform curves (Avolites-style) */
+export interface WaveformKeyframe {
+  x: number  // 0-1 phase position
+  y: number  // -1 to +1 value
+}
 
 /** Per-channel definition for compound (multi-channel) effects */
 export interface EffectChannel {
@@ -317,6 +323,7 @@ export interface Effect {
   isRunning: boolean
   channels?: EffectChannel[] // compound multi-channel effects (overrides channelType)
   oneShot?: boolean          // trigger once then auto-stop
+  keyframes?: WaveformKeyframe[] // custom waveform curve points (used when waveform === 'custom')
 }
 
 // --- Timeline ---

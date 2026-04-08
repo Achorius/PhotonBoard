@@ -4,7 +4,7 @@
 // Supports compound multi-channel effects and one-shot mode.
 // ============================================================
 
-import type { Effect, EffectChannel, WaveformType } from '@shared/types'
+import type { Effect, EffectChannel, WaveformType, WaveformKeyframe } from '@shared/types'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from './dmx-channel-resolver'
@@ -154,7 +154,7 @@ function updateEffects(): void {
               : 0
 
             const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + cellPhaseOffset + channelPhaseOffset) % 1
-            const waveValue = getWaveformValue(channelWaveform, phase)
+            const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
 
             const cellChIndex = cell.channelNames.findIndex(ch => ch.toLowerCase().includes(targetName))
             if (cellChIndex === -1) continue
@@ -171,7 +171,7 @@ function updateEffects(): void {
         } else {
           // Single-cell fixture
           const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + channelPhaseOffset) % 1
-          const waveValue = getWaveformValue(channelWaveform, phase)
+          const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
 
           const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
           if (chIndex === -1) continue
@@ -204,7 +204,7 @@ function updateEffects(): void {
   }
 }
 
-export function getWaveformValue(waveform: WaveformType, phase: number): number {
+export function getWaveformValue(waveform: WaveformType, phase: number, keyframes?: WaveformKeyframe[]): number {
   switch (waveform) {
     case 'sine':
       return Math.sin(phase * 2 * Math.PI)
@@ -217,17 +217,53 @@ export function getWaveformValue(waveform: WaveformType, phase: number): number 
     case 'random':
       return Math.random() * 2 - 1
     case 'pulse':
-      // Fast attack, slow decay (exponential)
       return Math.exp(-phase * 5) * 2 - 1
     case 'bounce':
-      // Ball bounce — abs sine with decay
       return Math.abs(Math.sin(phase * Math.PI * 3)) * Math.exp(-phase * 2) * 2 - 1
     case 'step': {
-      // Quantized sawtooth — 4 discrete steps
       const steps = 4
       return Math.floor(phase * steps) / (steps - 1) * 2 - 1
     }
+    case 'custom':
+      return interpolateKeyframes(phase, keyframes)
     default:
       return 0
   }
+}
+
+/** Catmull-Rom spline interpolation through keyframe points */
+function interpolateKeyframes(phase: number, keyframes?: WaveformKeyframe[]): number {
+  if (!keyframes || keyframes.length === 0) return 0
+  if (keyframes.length === 1) return keyframes[0].y
+
+  // Ensure sorted by x
+  const sorted = [...keyframes].sort((a, b) => a.x - b.x)
+
+  // Find the segment
+  if (phase <= sorted[0].x) return sorted[0].y
+  if (phase >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y
+
+  let i = 0
+  while (i < sorted.length - 1 && sorted[i + 1].x < phase) i++
+
+  const p0 = sorted[Math.max(0, i - 1)]
+  const p1 = sorted[i]
+  const p2 = sorted[Math.min(sorted.length - 1, i + 1)]
+  const p3 = sorted[Math.min(sorted.length - 1, i + 2)]
+
+  const segLen = p2.x - p1.x
+  if (segLen === 0) return p1.y
+  const t = (phase - p1.x) / segLen
+
+  // Catmull-Rom spline
+  const t2 = t * t
+  const t3 = t2 * t
+  const y = 0.5 * (
+    (2 * p1.y) +
+    (-p0.y + p2.y) * t +
+    (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+    (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+  )
+
+  return Math.max(-1, Math.min(1, y))
 }
