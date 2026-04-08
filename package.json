@@ -19,6 +19,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.4.0",
+    "serialport": "^13.0.0",
     "three": "^0.183.2",
     "uuid": "^11.1.0",
     "zustand": "^5.0.0"
@@ -51,7 +52,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "build/icon.icns",
@@ -68,12 +72,22 @@
     "dmg": {
       "title": "PhotonBoard",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "deb": {
-      "depends": ["libusb-1.0-0"]
+      "depends": [
+        "libusb-1.0-0"
+      ]
     }
   }
 }
