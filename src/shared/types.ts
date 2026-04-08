@@ -21,6 +21,38 @@ export interface ArtNetConfig {
   net: number // 0-127
 }
 
+// --- USB DMX ---
+
+export type UsbDmxDriver = 'enttec-open-dmx' | 'enttec-pro' | 'udmx'
+
+export interface UsbDmxConfig {
+  driver: UsbDmxDriver
+  portPath: string    // e.g., '/dev/tty.usbserial-XXX' or 'COM3'
+  universe: number    // which universe this adapter handles (0-based)
+  label?: string      // user-friendly label
+}
+
+export interface SerialPortInfo {
+  path: string
+  manufacturer?: string
+  serialNumber?: string
+  vendorId?: string
+  productId?: string
+  friendlyName?: string
+}
+
+// --- DMX Output System ---
+
+export type DmxOutputType = 'artnet' | 'usb-dmx'
+
+export interface DmxOutputConfig {
+  id: string
+  type: DmxOutputType
+  enabled: boolean
+  artnet?: ArtNetConfig
+  usbDmx?: UsbDmxConfig
+}
+
 // --- Fixture Definitions (OFL-compatible) ---
 
 export interface FixtureCapability {
@@ -425,6 +457,7 @@ export interface ShowFile {
   createdAt: string
   modifiedAt: string
   artnetConfig: ArtNetConfig[]
+  dmxOutputs?: DmxOutputConfig[]
   patch: PatchEntry[]
   groups: Group[]
   presets: Preset[]
@@ -449,6 +482,11 @@ export const IPC = {
   // ArtNet
   ARTNET_CONFIGURE: 'artnet:configure',
   ARTNET_GET_STATUS: 'artnet:get-status',
+
+  // DMX Outputs (multi-output system)
+  DMX_OUTPUTS_CONFIGURE: 'dmx-outputs:configure',
+  DMX_OUTPUTS_GET_STATUS: 'dmx-outputs:get-status',
+  DMX_OUTPUTS_SCAN_USB: 'dmx-outputs:scan-usb',
 
   // Show
   SHOW_NEW: 'show:new',

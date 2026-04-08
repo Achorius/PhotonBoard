@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, session, Menu, shell } from 'electron'
 import { join } from 'path'
 import { DmxEngine } from './dmx-engine'
-import { ArtNetOutput } from './artnet-output'
+import { DmxOutputManager } from './dmx-output-manager'
 import { ShowFileManager } from './show-file'
-import { IPC, type ArtNetConfig, type ShowFile } from '../shared/types'
+import { IPC, type ArtNetConfig, type DmxOutputConfig, type ShowFile } from '../shared/types'
 
 // Prevent EPIPE crashes when stdout pipe is closed (e.g. terminal closed during dev)
 process.on('uncaughtException', (err) => {
@@ -15,7 +15,7 @@ process.stderr?.on('error', () => { /* ignore EPIPE */ })
 
 let mainWindow: BrowserWindow | null = null
 let dmxEngine: DmxEngine
-let artnetOutput: ArtNetOutput
+let outputManager: DmxOutputManager
 let showManager: ShowFileManager
 
 function createMenu(): void {
@@ -155,11 +155,11 @@ function createWindow(): void {
 
 function initDmxEngine(): void {
   dmxEngine = new DmxEngine(3) // 3 universes
-  artnetOutput = new ArtNetOutput()
+  outputManager = new DmxOutputManager()
 
-  // Start the DMX output loop at ~40Hz
+  // Start the DMX output loop at ~40Hz — sends to all active outputs (ArtNet + USB)
   dmxEngine.onFrame((universes) => {
-    artnetOutput.send(universes)
+    outputManager.send(universes)
   })
   dmxEngine.start()
 }
@@ -184,14 +184,28 @@ function registerIpcHandlers(): void {
     dmxEngine.blackout()
   })
 
-  // --- ArtNet ---
+  // --- ArtNet (legacy compat) ---
   ipcMain.handle(IPC.ARTNET_CONFIGURE, (_event, configs: ArtNetConfig[]) => {
-    artnetOutput.configure(configs)
+    outputManager.configureArtnet(configs)
     return true
   })
 
   ipcMain.handle(IPC.ARTNET_GET_STATUS, () => {
-    return artnetOutput.getStatus()
+    return outputManager.getArtnetStatus()
+  })
+
+  // --- DMX Outputs (multi-output system) ---
+  ipcMain.handle(IPC.DMX_OUTPUTS_CONFIGURE, async (_event, configs: DmxOutputConfig[]) => {
+    await outputManager.configure(configs)
+    return true
+  })
+
+  ipcMain.handle(IPC.DMX_OUTPUTS_GET_STATUS, () => {
+    return outputManager.getStatus()
+  })
+
+  ipcMain.handle(IPC.DMX_OUTPUTS_SCAN_USB, async () => {
+    return outputManager.scanUsbPorts()
   })
 
   // --- Show File ---
@@ -317,7 +331,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   dmxEngine?.stop()
-  artnetOutput?.destroy()
+  outputManager?.destroy()
   if (process.platform !== 'darwin') {
     app.quit()
   }

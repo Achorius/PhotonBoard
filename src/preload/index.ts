@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/types'
-import type { ArtNetConfig, ShowFile } from '../shared/types'
+import type { ArtNetConfig, DmxOutputConfig, ShowFile } from '../shared/types'
 
 // Single callback registry — guarantees ONE handler per menu channel
 const menuHandlers: Record<string, () => void> = {}
@@ -32,6 +32,16 @@ const api = {
       ipcRenderer.invoke(IPC.ARTNET_CONFIGURE, configs),
     getStatus: (): Promise<{ connected: boolean; senders: { universe: number; host: string }[] }> =>
       ipcRenderer.invoke(IPC.ARTNET_GET_STATUS)
+  },
+
+  // --- DMX Outputs (multi-output system) ---
+  dmxOutputs: {
+    configure: (configs: DmxOutputConfig[]): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.DMX_OUTPUTS_CONFIGURE, configs),
+    getStatus: (): Promise<any> =>
+      ipcRenderer.invoke(IPC.DMX_OUTPUTS_GET_STATUS),
+    scanUsb: (): Promise<any[]> =>
+      ipcRenderer.invoke(IPC.DMX_OUTPUTS_SCAN_USB)
   },
 
   // --- Show ---

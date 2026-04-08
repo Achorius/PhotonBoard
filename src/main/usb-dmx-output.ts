@@ -1,0 +1,320 @@
+import type { UsbDmxConfig, SerialPortInfo } from '../shared/types'
+
+/**
+ * USB DMX Output - supports multiple cheap USB-DMX adapters:
+ *
+ * 1. ENTTEC Open DMX USB (FTDI-based, ~30EUR)
+ *    - Simple serial at 250kbaud, sends raw DMX frames
+ *    - No feedback, cheapest option
+ *
+ * 2. ENTTEC DMX USB Pro (~150EUR)
+ *    - Uses ENTTEC Pro protocol with message framing
+ *    - More reliable, has RDM support
+ *
+ * 3. uDMX (cheap Chinese clones, ~15EUR)
+ *    - USB HID device, sends via control transfers
+ *    - Very common, many clones available
+ */
+
+interface UsbDmxInstance {
+  config: UsbDmxConfig
+  port: any // SerialPort instance
+  connected: boolean
+  buffer: Buffer
+}
+
+export class UsbDmxOutput {
+  private instances: Map<number, UsbDmxInstance> = new Map()
+  private SerialPort: any = null
+  private available = false
+
+  constructor() {
+    try {
+      const sp = require('serialport')
+      this.SerialPort = sp.SerialPort
+      this.available = true
+    } catch (e) {
+      console.warn('[USB-DMX] serialport not available:', (e as Error).message)
+      this.available = false
+    }
+  }
+
+  /**
+   * Scan for available serial ports (USB DMX adapters)
+   */
+  async scanPorts(): Promise<SerialPortInfo[]> {
+    if (!this.available) return []
+    try {
+      const { SerialPort } = require('serialport')
+      const ports = await SerialPort.list()
+      return ports.map((p: any) => ({
+        path: p.path,
+        manufacturer: p.manufacturer || undefined,
+        serialNumber: p.serialNumber || undefined,
+        vendorId: p.vendorId || undefined,
+        productId: p.productId || undefined,
+        friendlyName: p.friendlyName || p.pnpId || undefined
+      }))
+    } catch (e) {
+      console.error('[USB-DMX] Failed to scan ports:', e)
+      return []
+    }
+  }
+
+  /**
+   * Configure USB DMX outputs
+   */
+  async configure(configs: UsbDmxConfig[]): Promise<void> {
+    // Close existing connections
+    await this.destroyAll()
+
+    if (!this.available) return
+
+    for (const config of configs) {
+      try {
+        const instance = await this.openPort(config)
+        if (instance) {
+          this.instances.set(config.universe, instance)
+        }
+      } catch (e) {
+        console.error(`[USB-DMX] Failed to open ${config.driver} on ${config.portPath}:`, e)
+      }
+    }
+  }
+
+  private async openPort(config: UsbDmxConfig): Promise<UsbDmxInstance | null> {
+    const { SerialPort } = require('serialport')
+
+    switch (config.driver) {
+      case 'enttec-open-dmx':
+        return this.openEnttecOpen(SerialPort, config)
+      case 'enttec-pro':
+        return this.openEnttecPro(SerialPort, config)
+      case 'udmx':
+        return this.openUdmx(config)
+      default:
+        console.warn(`[USB-DMX] Unknown driver: ${config.driver}`)
+        return null
+    }
+  }
+
+  /**
+   * ENTTEC Open DMX USB - simple FTDI serial at 250kbaud
+   * Sends raw DMX512 frames: BREAK + MAB + START_CODE + 512 bytes
+   */
+  private async openEnttecOpen(SP: any, config: UsbDmxConfig): Promise<UsbDmxInstance> {
+    const port = new SP({
+      path: config.portPath,
+      baudRate: 250000,
+      dataBits: 8,
+      stopBits: 2,
+      parity: 'none',
+      autoOpen: false
+    })
+
+    return new Promise((resolve, reject) => {
+      port.open((err: Error | null) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        console.log(`[USB-DMX] ENTTEC Open DMX connected on ${config.portPath}`)
+        const buffer = Buffer.alloc(513) // Start code (0x00) + 512 channels
+        buffer[0] = 0x00 // DMX start code
+        resolve({
+          config,
+          port,
+          connected: true,
+          buffer
+        })
+      })
+    })
+  }
+
+  /**
+   * ENTTEC DMX USB Pro - uses message protocol
+   * Frame format: 0x7E [label] [length_lsb] [length_msb] [data...] 0xE7
+   */
+  private async openEnttecPro(SP: any, config: UsbDmxConfig): Promise<UsbDmxInstance> {
+    const port = new SP({
+      path: config.portPath,
+      baudRate: 57600, // Pro uses 57600 for the USB serial, internally generates 250kbaud DMX
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+      autoOpen: false
+    })
+
+    return new Promise((resolve, reject) => {
+      port.open((err: Error | null) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        console.log(`[USB-DMX] ENTTEC Pro connected on ${config.portPath}`)
+        // Pro frame: header(1) + label(1) + length(2) + start_code(1) + 512ch + footer(1) = 518
+        const buffer = Buffer.alloc(518)
+        resolve({
+          config,
+          port,
+          connected: true,
+          buffer
+        })
+      })
+    })
+  }
+
+  /**
+   * uDMX - USB HID control transfers
+   * Uses libusb via node-hid or usb package
+   */
+  private async openUdmx(config: UsbDmxConfig): Promise<UsbDmxInstance> {
+    // uDMX uses USB HID, not serial port
+    // For now, we try to use it via serialport if it exposes a serial interface
+    // Many uDMX clones present as serial devices
+    console.log(`[USB-DMX] uDMX mode on ${config.portPath} (serial fallback)`)
+    const { SerialPort } = require('serialport')
+
+    const port = new SerialPort({
+      path: config.portPath,
+      baudRate: 250000,
+      dataBits: 8,
+      stopBits: 2,
+      parity: 'none',
+      autoOpen: false
+    })
+
+    return new Promise((resolve, reject) => {
+      port.open((err: Error | null) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        console.log(`[USB-DMX] uDMX connected on ${config.portPath}`)
+        const buffer = Buffer.alloc(513)
+        buffer[0] = 0x00
+        resolve({
+          config,
+          port,
+          connected: true,
+          buffer
+        })
+      })
+    })
+  }
+
+  /**
+   * Send DMX data to all connected USB adapters
+   */
+  send(universes: Uint8Array[]): void {
+    for (const [universeIdx, instance] of this.instances) {
+      if (!instance.connected || universeIdx >= universes.length) continue
+      const data = universes[universeIdx]
+
+      switch (instance.config.driver) {
+        case 'enttec-open-dmx':
+        case 'udmx':
+          this.sendOpenDmx(instance, data)
+          break
+        case 'enttec-pro':
+          this.sendEnttecPro(instance, data)
+          break
+      }
+    }
+  }
+
+  /**
+   * Send raw DMX frame (Open DMX / uDMX style)
+   * The FTDI chip handles the BREAK signal via serial settings
+   */
+  private sendOpenDmx(instance: UsbDmxInstance, data: Uint8Array): void {
+    try {
+      // Copy channel data after start code
+      for (let i = 0; i < 512; i++) {
+        instance.buffer[i + 1] = data[i]
+      }
+
+      // Send BREAK by setting baud to low rate momentarily
+      instance.port.update({ baudRate: 76800 }, () => {
+        // Send break byte
+        const breakBuf = Buffer.from([0x00])
+        instance.port.write(breakBuf, () => {
+          instance.port.drain(() => {
+            // Restore DMX baud rate and send data
+            instance.port.update({ baudRate: 250000 }, () => {
+              instance.port.write(instance.buffer)
+            })
+          })
+        })
+      })
+    } catch (e) {
+      // Port may have disconnected
+      instance.connected = false
+    }
+  }
+
+  /**
+   * Send ENTTEC Pro message frame
+   * Label 6 = "Send DMX Packet"
+   */
+  private sendEnttecPro(instance: UsbDmxInstance, data: Uint8Array): void {
+    try {
+      const dataLength = 513 // start code + 512 channels
+      const buf = instance.buffer
+
+      buf[0] = 0x7E        // Start delimiter
+      buf[1] = 6            // Label: Send DMX Packet
+      buf[2] = dataLength & 0xFF        // Length LSB
+      buf[3] = (dataLength >> 8) & 0xFF // Length MSB
+      buf[4] = 0x00         // DMX start code
+
+      // Copy channel data
+      for (let i = 0; i < 512; i++) {
+        buf[i + 5] = data[i]
+      }
+
+      buf[517] = 0xE7       // End delimiter
+
+      instance.port.write(buf)
+    } catch (e) {
+      instance.connected = false
+    }
+  }
+
+  /**
+   * Get status of all USB DMX outputs
+   */
+  getStatus(): { available: boolean; outputs: { universe: number; driver: string; port: string; connected: boolean }[] } {
+    return {
+      available: this.available,
+      outputs: Array.from(this.instances.entries()).map(([universe, inst]) => ({
+        universe,
+        driver: inst.config.driver,
+        port: inst.config.portPath,
+        connected: inst.connected
+      }))
+    }
+  }
+
+  /**
+   * Close all ports
+   */
+  async destroyAll(): Promise<void> {
+    for (const [, instance] of this.instances) {
+      try {
+        if (instance.port && instance.port.isOpen) {
+          await new Promise<void>((resolve) => {
+            instance.port.close(() => resolve())
+          })
+        }
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
+    this.instances.clear()
+  }
+
+  isAvailable(): boolean {
+    return this.available
+  }
+}
