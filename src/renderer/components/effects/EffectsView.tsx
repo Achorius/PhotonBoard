@@ -6,7 +6,74 @@ import { usePlaybackStore } from '../../stores/playback-store'
 import { getWaveformValue } from '../../lib/effect-engine'
 import { HSlider } from '../common/HSlider'
 import { CurveEditor } from './CurveEditor'
-import type { WaveformType, EffectChannel, CueChannelValue } from '@shared/types'
+import type { WaveformType, EffectChannel, CueChannelValue, PatchEntry, FixtureDefinition } from '@shared/types'
+
+// ============================================================
+// Fixture Capability Detection
+// ============================================================
+
+/** Get the set of channel type names a fixture supports (lowercase) */
+function getFixtureSupportedChannels(entry: PatchEntry, fixtures: FixtureDefinition[]): Set<string> {
+  const def = fixtures.find(f => f.id === entry.fixtureDefId)
+  if (!def) return new Set()
+  const mode = def.modes.find(m => m.name === entry.modeName)
+  if (!mode) return new Set()
+  const result = new Set<string>()
+  for (const ch of mode.channels) {
+    const n = ch.toLowerCase()
+    if (n.includes('pan')) result.add('pan')
+    else if (n.includes('tilt')) result.add('tilt')
+    else if (n.includes('red')) result.add('red')
+    else if (n.includes('green')) result.add('green')
+    else if (n.includes('blue')) result.add('blue')
+    else if (n.includes('white')) result.add('white')
+    else if (n.includes('dimmer') || n.includes('intensity')) result.add('dimmer')
+    else if (n.includes('zoom')) result.add('zoom')
+    else if (n.includes('iris')) result.add('iris')
+    else if (n.includes('focus')) result.add('focus')
+    else if (n.includes('gobo')) result.add('gobo')
+    else if (n.includes('prism')) result.add('prism')
+    else if (n.includes('frost')) result.add('frost')
+    else if (n.includes('color') && n.includes('wheel')) result.add('color wheel')
+    else if (n.includes('shutter') || n.includes('strobe')) result.add('shutter')
+  }
+  return result
+}
+
+/** Check if a template's required channels are supported by a fixture */
+function getTemplateRequiredChannels(template: EffectTemplate): string[] {
+  if (template.compound) {
+    return template.compound.map(ch => ch.channelType.toLowerCase())
+  }
+  return (template.channels ?? []).map(ch => ch.toLowerCase())
+}
+
+type TemplateCompat = 'full' | 'partial' | 'none'
+
+/** Check compatibility of a template with selected fixtures */
+function checkTemplateCompat(
+  template: EffectTemplate,
+  fixtureIds: string[],
+  patch: PatchEntry[],
+  fixtures: FixtureDefinition[]
+): TemplateCompat {
+  if (fixtureIds.length === 0) return 'none'
+  const required = getTemplateRequiredChannels(template)
+  if (required.length === 0) return 'full'
+
+  let supportCount = 0
+  for (const fid of fixtureIds) {
+    const entry = patch.find(p => p.id === fid)
+    if (!entry) continue
+    const supported = getFixtureSupportedChannels(entry, fixtures)
+    const hasAll = required.every(ch => supported.has(ch))
+    if (hasAll) supportCount++
+  }
+
+  if (supportCount === fixtureIds.length) return 'full'
+  if (supportCount > 0) return 'partial'
+  return 'none'
+}
 
 // ============================================================
 // Effect Templates — rich presets with compound multi-channel support
@@ -251,12 +318,35 @@ function WaveformPreview({ waveform, color, width = 60, height = 24, keyframes }
 // ============================================================
 
 export function EffectsView() {
-  const { patch, groups, selectedFixtureIds, selectFixture, selectGroup, clearSelection } = usePatchStore()
+  const { patch, fixtures, groups, selectedFixtureIds, selectFixture, selectGroup, clearSelection } = usePatchStore()
   const { effects, addEffect, updateEffect, toggleEffect, removeEffect, checkOneShotCompleted } = useEffectsStore()
 
   const selectedIds = useMemo(() => new Set(selectedFixtureIds), [selectedFixtureIds])
   const hasSelection = selectedFixtureIds.length > 0
   const [openCategory, setOpenCategory] = useState<string | null>(null)
+
+  // Compute per-template compatibility with selected fixtures
+  const templateCompat = useMemo(() => {
+    const targetIds = hasSelection ? selectedFixtureIds : patch.map(p => p.id)
+    const map = new Map<string, TemplateCompat>()
+    for (const t of EFFECT_TEMPLATES) {
+      map.set(t.id, checkTemplateCompat(t, targetIds, patch, fixtures))
+    }
+    return map
+  }, [hasSelection, selectedFixtureIds, patch, fixtures])
+
+  // Check if an entire category has any compatible templates
+  const categoryHasCompat = useMemo(() => {
+    const result: Record<string, boolean> = {}
+    for (const [cat, templates] of Object.entries({ movement: [] as EffectTemplate[], color: [] as EffectTemplate[], intensity: [] as EffectTemplate[], beam: [] as EffectTemplate[] })) {
+      result[cat] = false
+    }
+    for (const t of EFFECT_TEMPLATES) {
+      const compat = templateCompat.get(t.id) ?? 'none'
+      if (compat !== 'none') result[t.category] = true
+    }
+    return result
+  }, [templateCompat])
 
   // Poll for one-shot effect completions
   useEffect(() => {
@@ -532,12 +622,12 @@ export function EffectsView() {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                     openCategory === cat
                       ? 'border-accent bg-surface-3 text-white'
-                      : hasSelection
+                      : hasSelection && categoryHasCompat[cat]
                         ? 'border-surface-3 bg-surface-2 text-gray-300 hover:border-accent hover:bg-surface-3'
-                        : 'border-surface-2 bg-surface-1 text-gray-600 cursor-not-allowed'
+                        : 'border-surface-2 bg-surface-1 text-gray-600 cursor-not-allowed opacity-40'
                   }`}
-                  onClick={() => hasSelection && setOpenCategory(openCategory === cat ? null : cat)}
-                  disabled={!hasSelection}
+                  onClick={() => hasSelection && categoryHasCompat[cat] && setOpenCategory(openCategory === cat ? null : cat)}
+                  disabled={!hasSelection || !categoryHasCompat[cat]}
                 >
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
                   {CATEGORY_LABELS[cat]}
@@ -549,31 +639,48 @@ export function EffectsView() {
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setOpenCategory(null)} />
                     <div className="absolute top-full left-0 mt-1 z-20 bg-surface-2 border border-surface-3 rounded-lg shadow-xl min-w-[240px] py-1 overflow-hidden max-h-[400px] overflow-y-auto">
-                      {templates.map(template => (
-                        <button
-                          key={template.id}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs text-gray-300 hover:bg-surface-3 hover:text-white transition-colors"
-                          onClick={() => {
-                            addFromTemplate(template)
-                            setOpenCategory(null)
-                          }}
-                        >
-                          <span className="text-base w-6 text-center shrink-0">{template.icon}</span>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium flex items-center gap-1.5">
-                              {template.label}
-                              {template.oneShot && (
-                                <span className="text-[9px] bg-yellow-600/30 text-yellow-400 px-1 rounded">1x</span>
-                              )}
-                              {template.compound && (
-                                <span className="text-[9px] bg-indigo-600/30 text-indigo-400 px-1 rounded">multi</span>
-                              )}
+                      {templates.map(template => {
+                        const compat = templateCompat.get(template.id) ?? 'none'
+                        const isDisabled = compat === 'none'
+                        return (
+                          <button
+                            key={template.id}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors ${
+                              isDisabled
+                                ? 'text-gray-600 cursor-not-allowed opacity-40'
+                                : 'text-gray-300 hover:bg-surface-3 hover:text-white'
+                            }`}
+                            onClick={() => {
+                              if (isDisabled) return
+                              addFromTemplate(template)
+                              setOpenCategory(null)
+                            }}
+                            disabled={isDisabled}
+                          >
+                            <span className={`text-base w-6 text-center shrink-0 ${isDisabled ? 'grayscale' : ''}`}>{template.icon}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium flex items-center gap-1.5">
+                                {template.label}
+                                {template.oneShot && (
+                                  <span className="text-[9px] bg-yellow-600/30 text-yellow-400 px-1 rounded">1x</span>
+                                )}
+                                {template.compound && (
+                                  <span className="text-[9px] bg-indigo-600/30 text-indigo-400 px-1 rounded">multi</span>
+                                )}
+                                {compat === 'partial' && (
+                                  <span className="text-[9px] bg-amber-600/30 text-amber-400 px-1 rounded" title="Some selected fixtures don't support this effect">
+                                    ⚠
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-gray-500 leading-tight">
+                                {isDisabled ? 'Not compatible with selected fixtures' : template.description}
+                              </div>
                             </div>
-                            <div className="text-[10px] text-gray-500 leading-tight">{template.description}</div>
-                          </div>
-                          <WaveformPreview waveform={template.waveform} color={CATEGORY_COLORS[cat]} width={40} height={18} />
-                        </button>
-                      ))}
+                            <WaveformPreview waveform={template.waveform} color={isDisabled ? '#555' : CATEGORY_COLORS[cat]} width={40} height={18} />
+                          </button>
+                        )
+                      })}
                     </div>
                   </>
                 )}
