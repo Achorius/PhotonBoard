@@ -23,6 +23,7 @@ export function StageLayoutView() {
   const { values, setChannel } = useDmxStore()
   const { showName } = useUiStore()
   const [showControls, setShowControls] = useState(true)
+  const [showSideView, setShowSideView] = useState(true)
 
   const selectedEntries = patch.filter(p => selectedFixtureIds.includes(p.id))
 
@@ -111,18 +112,33 @@ export function StageLayoutView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0">
           <div className="flex h-full">
             {/* Left: top-down + side view */}
-            <div className="flex-1 flex flex-col min-w-0">
-              <LayoutEditor2D />
-              <div className="h-px bg-surface-3" />
-              <SideView className="h-36 shrink-0" />
+            <div className="flex-1 flex flex-col min-w-0 min-h-0">
+              <div className="flex-1 min-h-0">
+                <LayoutEditor2D />
+              </div>
+              {showSideView && (
+                <>
+                  <div className="h-px bg-surface-3" />
+                  <SideView className="h-28 shrink-0" />
+                </>
+              )}
             </div>
             {/* Right: properties */}
-            <div className="w-60 border-l border-surface-3 shrink-0">
-              <div className="panel-header">Properties</div>
+            <div className="w-52 border-l border-surface-3 shrink-0 overflow-y-auto">
+              <div className="panel-header flex items-center justify-between">
+                <span>Properties</span>
+                <button
+                  className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${showSideView ? 'text-accent' : 'text-gray-600 hover:text-gray-400'}`}
+                  onClick={() => setShowSideView(!showSideView)}
+                  title={showSideView ? 'Hide side view' : 'Show side view'}
+                >
+                  Side
+                </button>
+              </div>
               <FixturePropertiesPanel />
             </div>
           </div>
