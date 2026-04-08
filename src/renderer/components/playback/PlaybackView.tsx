@@ -4,6 +4,7 @@ import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useEffectsStore } from '../../stores/effects-store'
 import { useUiStore } from '../../stores/ui-store'
+import { useMidiStore } from '../../stores/midi-store'
 import { Fader } from '../common/Fader'
 import { HSlider } from '../common/HSlider'
 import type { CueChannelValue, Effect } from '@shared/types'
@@ -18,7 +19,14 @@ export function PlaybackView() {
   const { values } = useDmxStore()
   const effects = useEffectsStore(s => s.effects)
   const hasRunningEffects = effects.some(e => e.isRunning)
+  const { mappings, isLearning, learnTarget, startLearn, cancelLearn } = useMidiStore()
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // MIDI helpers
+  const getMidiMapping = (cuelistId: string) =>
+    mappings.find(m => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
+  const isLearningScene = (cuelistId: string) =>
+    isLearning && learnTarget?.type === 'cuelist_go' && learnTarget?.id === cuelistId
 
   // Auto-expand cuelist when navigating from Timeline
   useEffect(() => {
@@ -227,6 +235,36 @@ export function PlaybackView() {
                 <div className="w-20">
                   <Fader value={scene.faderLevel} onChange={(v) => setCuelistFader(scene.id, v)} vertical={false} showValue={false} />
                 </div>
+
+                {/* MIDI Learn */}
+                {(() => {
+                  const midiMap = getMidiMapping(scene.id)
+                  const learning = isLearningScene(scene.id)
+                  return (
+                    <button
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors ${
+                        learning
+                          ? 'bg-purple-500 text-white animate-pulse'
+                          : midiMap
+                            ? 'bg-purple-900/40 text-purple-300 hover:bg-purple-800/50'
+                            : 'text-gray-600 hover:text-purple-400 hover:bg-purple-900/30'
+                      }`}
+                      onClick={() => {
+                        if (learning) cancelLearn()
+                        else startLearn({ type: 'cuelist_go', id: scene.id, label: scene.name })
+                      }}
+                      title={
+                        learning
+                          ? 'Waiting for MIDI input… Click to cancel'
+                          : midiMap
+                            ? `MIDI: ${midiMap.source.type.toUpperCase()} ch${midiMap.source.channel} #${midiMap.source.number} — Click to re-learn`
+                            : 'MIDI Learn — Assign a MIDI button to trigger this scene'
+                      }
+                    >
+                      {learning ? 'MIDI ●' : midiMap ? `M:${midiMap.source.number}` : 'MIDI'}
+                    </button>
+                  )
+                })()}
 
                 <span className="text-[10px] font-mono text-gray-500 w-10 text-right">
                   {scene.currentCueIndex >= 0 ? `${scene.currentCueIndex + 1}` : '-'}/{scene.cues.length}

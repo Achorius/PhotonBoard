@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
+import { useMidiStore } from '../../stores/midi-store'
 
 const COLUMN_COUNT = 8
 const ROWS_PER_COLUMN = 4
@@ -22,6 +23,13 @@ interface ColumnMeta {
 
 export function ExecutorBar() {
   const { cuelists, goCuelist, stopCuelist, renameCuelist } = usePlaybackStore()
+  const { mappings, isLearning, learnTarget, startLearn, cancelLearn } = useMidiStore()
+
+  // Check if a cuelist has a MIDI GO mapping
+  const hasMidiMapping = (cuelistId: string) =>
+    mappings.some(m => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
+  const isLearningScene = (cuelistId: string) =>
+    isLearning && learnTarget?.type === 'cuelist_go' && learnTarget?.id === cuelistId
 
   // Column metadata (title + color)
   const [columns, setColumns] = useState<ColumnMeta[]>(() =>
@@ -293,6 +301,34 @@ export function ExecutorBar() {
                         {scene.name}
                       </span>
                     )}
+
+                    {/* MIDI Learn button */}
+                    <button
+                      className={`shrink-0 w-4 h-4 flex items-center justify-center rounded text-[7px] font-bold mr-0.5 transition-colors ${
+                        isLearningScene(scene.id)
+                          ? 'bg-purple-500 text-white animate-pulse'
+                          : hasMidiMapping(scene.id)
+                            ? 'bg-purple-800/50 text-purple-300 hover:bg-purple-700/60'
+                            : 'bg-transparent text-gray-600 hover:text-purple-400 hover:bg-purple-900/30'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isLearningScene(scene.id)) {
+                          cancelLearn()
+                        } else {
+                          startLearn({ type: 'cuelist_go', id: scene.id, label: scene.name })
+                        }
+                      }}
+                      title={
+                        isLearningScene(scene.id)
+                          ? 'Waiting for MIDI input… Click to cancel'
+                          : hasMidiMapping(scene.id)
+                            ? 'MIDI mapped — Click to re-learn'
+                            : 'MIDI Learn — Assign a MIDI button to this scene'
+                      }
+                    >
+                      M
+                    </button>
                   </div>
                 )
               })}
