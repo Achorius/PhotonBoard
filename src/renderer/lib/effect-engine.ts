@@ -64,7 +64,12 @@ export function startEffect(effect: Effect): void {
 }
 
 export function stopEffect(id: string): void {
-  activeEffects.delete(id)
+  const running = activeEffects.get(id)
+  if (running) {
+    // Reset all DMX channels this effect was controlling back to 0
+    resetEffectChannels(running.effect)
+    activeEffects.delete(id)
+  }
   if (activeEffects.size === 0 && animationFrame) {
     cancelAnimationFrame(animationFrame)
     animationFrame = null
@@ -72,10 +77,60 @@ export function stopEffect(id: string): void {
 }
 
 export function stopAllEffects(): void {
+  // Reset all channels before clearing
+  for (const [, running] of activeEffects) {
+    resetEffectChannels(running.effect)
+  }
   activeEffects.clear()
   if (animationFrame) {
     cancelAnimationFrame(animationFrame)
     animationFrame = null
+  }
+}
+
+/** Reset all DMX channels controlled by an effect back to their neutral value (0, or 128 for pan/tilt) */
+function resetEffectChannels(effect: Effect): void {
+  const dmxStore = useDmxStore.getState()
+  const patchStore = usePatchStore.getState()
+
+  const effectChannels: EffectChannel[] = effect.channels && effect.channels.length > 0
+    ? effect.channels
+    : [{ channelType: effect.channelType, phaseOffset: 0, depth: effect.depth, frequencyMultiplier: 1 }]
+
+  for (const fixtureId of effect.fixtureIds) {
+    const entry = patchStore.patch.find(p => p.id === fixtureId)
+    if (!entry) continue
+
+    const def = patchStore.fixtures.find(f => f.id === entry.fixtureDefId)
+    if (!def) continue
+
+    const mode = def.modes.find(m => m.name === entry.modeName)
+    if (!mode) continue
+
+    for (const ech of effectChannels) {
+      const targetName = CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType.toLowerCase()
+      const neutralValue = isPositionChannel(ech.channelType) ? 128 : 0
+
+      const pixelLayout = mode.pixelLayout
+      if (pixelLayout && pixelLayout.cellCount > 1) {
+        for (let cellIdx = 0; cellIdx < pixelLayout.cellCount; cellIdx++) {
+          const cell = pixelLayout.cells[cellIdx]
+          const cellChIndex = cell.channelNames.findIndex(ch => ch.toLowerCase().includes(targetName))
+          if (cellChIndex === -1) continue
+          const absChannel = entry.address - 1 + cell.channelOffset + cellChIndex
+          if (absChannel >= 0 && absChannel < 512) {
+            dmxStore.setChannel(entry.universe, absChannel, neutralValue)
+          }
+        }
+      } else {
+        const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
+        if (chIndex === -1) continue
+        const absChannel = entry.address - 1 + chIndex
+        if (absChannel >= 0 && absChannel < 512) {
+          dmxStore.setChannel(entry.universe, absChannel, neutralValue)
+        }
+      }
+    }
   }
 }
 
