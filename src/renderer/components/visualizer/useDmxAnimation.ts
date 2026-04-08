@@ -43,7 +43,7 @@ export function useDmxAnimation(
       lastTime = time
 
       // Imperative store reads — no React re-renders
-      const { values, grandMaster, blackout } = useDmxStore.getState()
+      const { values, grandMaster, blackout, blinder, strobe, _strobePhase } = useDmxStore.getState()
       const { showBeams } = useVisualizerStore.getState()
 
       for (const entry of patch) {
@@ -77,10 +77,31 @@ export function useDmxAnimation(
           if (entry.pixelInvert) cellColors.reverse()
         }
 
-        updateFixtureObjects(objects, channels, grandMaster, blackout, showBeams, {
+        // Blinder: override all color/dimmer to max white
+        // Strobe: alternate between normal and off
+        const effectiveBlackout = blackout || (strobe && !_strobePhase)
+        const effectiveGM = blinder ? 255 : grandMaster
+        const blinderChannels = blinder ? {
+          ...channels,
+          dimmer: 255,
+          red: 255,
+          green: 255,
+          blue: 255,
+          white: 255,
+          amber: 255
+        } : channels
+
+        // Override cell colors for blinder
+        const effectiveCellColors = blinder && cellColors
+          ? cellColors.map(() => ({ r: 1, g: 1, b: 1, dimmer: 255 }))
+          : (strobe && !_strobePhase && cellColors)
+            ? cellColors.map(() => ({ r: 0, g: 0, b: 0, dimmer: 0 }))
+            : cellColors
+
+        updateFixtureObjects(objects, blinderChannels, effectiveGM, effectiveBlackout, showBeams, {
           panInvert: entry.panInvert,
           tiltInvert: entry.tiltInvert,
-          cellColors
+          cellColors: effectiveCellColors
         })
       }
 

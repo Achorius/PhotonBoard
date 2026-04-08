@@ -22,7 +22,7 @@ export function LayoutEditor2D() {
     addTrussBar, removeTrussBar, updateTrussBar,
     gridSize, snapToGrid
   } = useVisualizerStore()
-  const { values } = useDmxStore()
+  const { values, blinder, strobe, _strobePhase } = useDmxStore()
 
   const [trussNameInput, setTrussNameInput] = useState('')
   const selectedTruss = roomConfig.trussBars.find(t => t.id === selectedTrussId)
@@ -136,9 +136,13 @@ export function LayoutEditor2D() {
       const isMovingHead = def?.categories.includes('Moving Head')
       const isSelected = entry.id === selectedFixtureId
 
-      // Beam glow
+      // Beam glow — apply blinder/strobe overrides
       const ch = resolveChannels(entry, def, values)
-      const col = getEffectiveColor(ch)
+      const col = blinder
+        ? { r: 1, g: 1, b: 1 }
+        : (strobe && !_strobePhase)
+          ? { r: 0, g: 0, b: 0 }
+          : getEffectiveColor(ch)
       const dim = (col.r + col.g + col.b) / 3
       if (dim > 0.02 && isFinite(cxs) && isFinite(cys)) {
         const grad = ctx.createRadialGradient(cxs, cys, 0, cxs, cys, 20)
