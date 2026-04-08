@@ -229,6 +229,25 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
       break
     }
 
+    case 'blinder': {
+      // Hold = blinder on, release = blinder off
+      useDmxStore.getState().toggleBlinder(rawValue > 0)
+      break
+    }
+
+    case 'strobe': {
+      // Hold = strobe on, release = strobe off
+      useDmxStore.getState().toggleStrobe(rawValue > 0)
+      break
+    }
+
+    case 'reset': {
+      if (rawValue > 0) {
+        useDmxStore.getState().resetAll()
+      }
+      break
+    }
+
     case 'flash': {
       usePlaybackStore.getState().flashCuelist(target.id!, rawValue > 0)
       break

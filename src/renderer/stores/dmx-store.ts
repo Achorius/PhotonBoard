@@ -6,11 +6,17 @@ interface DmxState {
   values: number[][]
   grandMaster: number
   blackout: boolean
+  blinder: boolean
+  strobe: boolean
+  strobeRate: number // Hz (1-25)
 
   setChannel: (universe: number, channel: number, value: number) => void
   setChannels: (universe: number, channels: Record<number, number>) => void
   setGrandMaster: (value: number) => void
   toggleBlackout: () => void
+  toggleBlinder: (on?: boolean) => void
+  toggleStrobe: (on?: boolean) => void
+  setStrobeRate: (rate: number) => void
   resetAll: () => void
   getEffectiveValue: (universe: number, channel: number) => number
 }
@@ -24,6 +30,9 @@ export const useDmxStore = create<DmxState>((set, get) => ({
   ],
   grandMaster: 255,
   blackout: false,
+  blinder: false,
+  strobe: false,
+  strobeRate: 10,
 
   setChannel: (universe, channel, value) => {
     const clamped = Math.max(0, Math.min(255, Math.round(value)))
@@ -93,6 +102,43 @@ export const useDmxStore = create<DmxState>((set, get) => ({
     }
   },
 
+  toggleBlinder: (on?: boolean) => {
+    const newBlinder = on !== undefined ? on : !get().blinder
+    set({ blinder: newBlinder })
+    if (newBlinder) {
+      // All channels to 255 (full white flash)
+      const state = get()
+      for (let u = 0; u < state.universeCount; u++) {
+        const channels: Record<number, number> = {}
+        for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
+          channels[ch] = 255
+        }
+        window.photonboard.dmx.setChannels(u, channels)
+      }
+    } else {
+      // Restore normal values
+      const state = get()
+      const gm = state.grandMaster / 255
+      for (let u = 0; u < state.universeCount; u++) {
+        const channels: Record<number, number> = {}
+        for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
+          channels[ch] = state.blackout ? 0 : Math.round(state.values[u][ch] * gm)
+        }
+        window.photonboard.dmx.setChannels(u, channels)
+      }
+    }
+  },
+
+  toggleStrobe: (on?: boolean) => {
+    const newStrobe = on !== undefined ? on : !get().strobe
+    set({ strobe: newStrobe })
+    // Strobe effect is handled by the strobe loop (started/stopped externally)
+  },
+
+  setStrobeRate: (rate: number) => {
+    set({ strobeRate: Math.max(1, Math.min(25, rate)) })
+  },
+
   resetAll: () => {
     const state = get()
     // Zero all channel values
@@ -100,7 +146,7 @@ export const useDmxStore = create<DmxState>((set, get) => ({
     for (let u = 0; u < state.universeCount; u++) {
       freshValues.push(new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0))
     }
-    set({ values: freshValues, blackout: false, grandMaster: 255 })
+    set({ values: freshValues, blackout: false, grandMaster: 255, blinder: false, strobe: false })
     // Send blackout to engine to zero all outputs
     window.photonboard.dmx.blackout()
   },

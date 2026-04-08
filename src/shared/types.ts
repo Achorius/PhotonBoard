@@ -401,7 +401,7 @@ export interface TimelineState {
 // --- MIDI ---
 
 export type MidiSourceType = 'cc' | 'note' | 'program'
-export type MidiTargetType = 'channel' | 'cuelist_go' | 'cuelist_fader' | 'chase_toggle' | 'chase_bpm' | 'master' | 'effect_toggle' | 'flash' | 'blackout' | 'tap_tempo' | 'timeline_play' | 'timeline_stop' | 'timeline_rewind' | 'timeline_goto_marker' | 'timeline_goto_zone'
+export type MidiTargetType = 'channel' | 'cuelist_go' | 'cuelist_fader' | 'chase_toggle' | 'chase_bpm' | 'master' | 'effect_toggle' | 'flash' | 'blackout' | 'blinder' | 'strobe' | 'reset' | 'tap_tempo' | 'timeline_play' | 'timeline_stop' | 'timeline_rewind' | 'timeline_goto_marker' | 'timeline_goto_zone'
 
 export interface MidiMapping {
   id: string
