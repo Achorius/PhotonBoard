@@ -293,7 +293,16 @@ export interface ChaseStep {
 
 // --- Effects ---
 
-export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random'
+export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random' | 'pulse' | 'bounce' | 'step'
+
+/** Per-channel definition for compound (multi-channel) effects */
+export interface EffectChannel {
+  channelType: string        // 'Pan', 'Tilt', 'Red', etc.
+  phaseOffset: number        // degrees, relative to main phase
+  depth: number              // 0-255, per-channel amplitude
+  frequencyMultiplier?: number // default 1, e.g. 2 for figure-8 tilt
+  waveform?: WaveformType    // per-channel waveform override
+}
 
 export interface Effect {
   id: string
@@ -302,10 +311,12 @@ export interface Effect {
   speed: number // Hz
   depth: number // 0-255 amplitude
   offset: number // 0-360 phase offset
-  channelType: string // Which channel type to affect
+  channelType: string // Which channel type to affect (single-channel mode)
   fixtureIds: string[]
   fan: number // Phase spread across fixtures (0-360)
   isRunning: boolean
+  channels?: EffectChannel[] // compound multi-channel effects (overrides channelType)
+  oneShot?: boolean          // trigger once then auto-stop
 }
 
 // --- Timeline ---
