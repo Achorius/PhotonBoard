@@ -56,15 +56,13 @@ export function LayoutEditor2D() {
     const container = containerRef.current
     if (!canvas || !container) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width  = container.clientWidth  * dpr
-    canvas.height = container.clientHeight * dpr
-    canvas.style.width  = container.clientWidth  + 'px'
-    canvas.style.height = container.clientHeight + 'px'
+    const W = container.clientWidth
+    const H = container.clientHeight
+    canvas.width  = W * dpr
+    canvas.height = H * dpr
 
     const ctx = canvas.getContext('2d')!
     ctx.scale(dpr, dpr)
-    const W = container.clientWidth
-    const H = container.clientHeight
 
     // Background
     ctx.fillStyle = '#07070d'
@@ -378,7 +376,7 @@ export function LayoutEditor2D() {
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         <canvas
           ref={canvasRef}
-          className="absolute inset-0"
+          className="absolute inset-0 w-full h-full"
           style={{ cursor: 'crosshair' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
