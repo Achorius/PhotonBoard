@@ -144,13 +144,15 @@ export function LayoutEditor2D() {
           ? { r: 0, g: 0, b: 0 }
           : getEffectiveColor(ch)
       const dim = (col.r + col.g + col.b) / 3
+      const glowAlpha = blinder ? 0.8 : 0.4
+      const glowRadius = blinder ? 30 : 20
       if (dim > 0.02 && isFinite(cxs) && isFinite(cys)) {
-        const grad = ctx.createRadialGradient(cxs, cys, 0, cxs, cys, 20)
+        const grad = ctx.createRadialGradient(cxs, cys, 0, cxs, cys, glowRadius)
         const hex = `rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)}`
-        grad.addColorStop(0, `${hex},0.4)`)
+        grad.addColorStop(0, `${hex},${glowAlpha})`)
         grad.addColorStop(1, `${hex},0)`)
         ctx.fillStyle = grad
-        ctx.beginPath(); ctx.arc(cxs, cys, 20, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath(); ctx.arc(cxs, cys, glowRadius, 0, Math.PI * 2); ctx.fill()
       }
 
       // Fixture symbol — shape varies by mounting location
@@ -205,7 +207,7 @@ export function LayoutEditor2D() {
       ctx.font = '8px sans-serif'
       ctx.fillText(entry.name.length > 10 ? entry.name.slice(0, 9) + '…' : entry.name, cxs, cys - 11)
     }
-  }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, values, worldToCanvas, gridSize, snapToGrid])
+  }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, values, blinder, strobe, _strobePhase, worldToCanvas, gridSize, snapToGrid])
 
   // Redraw on changes
   useEffect(() => { draw() }, [draw])
