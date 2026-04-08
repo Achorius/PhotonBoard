@@ -111,7 +111,7 @@ export function FixtureControlView() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar: universe selector */}
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-surface-3 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-3 shrink-0">
         <span className="text-[10px] text-gray-500 uppercase">Univ</span>
         {[0, 1, 2].map(u => (
           <button
