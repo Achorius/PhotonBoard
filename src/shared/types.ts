@@ -154,6 +154,7 @@ export interface RoomConfig {
   depth: number  // metres
   height: number // metres
   trussBars: TrussBar[]
+  stageEdgeZ: number // metres, Z position of the upstage/audience divider (default 0)
 }
 
 export function defaultTrussBars(roomWidth: number, roomDepth: number, roomHeight: number): TrussBar[] {
@@ -166,7 +167,8 @@ export function defaultTrussBars(roomWidth: number, roomDepth: number, roomHeigh
 
 export const DEFAULT_ROOM_CONFIG: RoomConfig = {
   width: 20, depth: 15, height: 6,
-  trussBars: defaultTrussBars(20, 15, 6)
+  trussBars: defaultTrussBars(20, 15, 6),
+  stageEdgeZ: 0
 }
 
 /**

@@ -8,15 +8,16 @@ import type { PatchEntry, MountingLocation } from '@shared/types'
 
 const METRE_TO_PX = 40  // 40px per metre at default zoom
 const TRUSS_HIT_TOLERANCE = 8  // px tolerance for clicking on a truss line
+const STAGE_EDGE_HIT_TOLERANCE = 8  // px tolerance for stage edge line
 
 export function LayoutEditor2D() {
   const canvasRef   = useRef<HTMLCanvasElement>(null)
   const containerRef= useRef<HTMLDivElement>(null)
-  const draggingRef = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' } | null>(null)
+  const draggingRef = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' | 'stage-edge' } | null>(null)
 
   const { patch, fixtures, updateFixture } = usePatchStore()
   const {
-    roomConfig, selectedFixtureId, selectFixture,
+    roomConfig, setRoomConfig, selectedFixtureId, selectFixture,
     selectedTrussId, selectTruss,
     addTrussBar, removeTrussBar, updateTrussBar,
     gridSize, snapToGrid
@@ -85,19 +86,22 @@ export function LayoutEditor2D() {
     ctx.strokeRect(W / 2 - rw / 2 * METRE_TO_PX, H / 2 - rd / 2 * METRE_TO_PX,
                    rw * METRE_TO_PX, rd * METRE_TO_PX)
 
-    // Stage edge (Z = 0 line)
-    ctx.strokeStyle = '#e85d0466'
-    ctx.lineWidth = 1.5
+    // Stage edge line (draggable)
+    const stageEdgeZ = roomConfig.stageEdgeZ ?? 0
+    const { cy: edgeCy } = worldToCanvas(0, stageEdgeZ, W, H)
+    const isEdgeSelected = draggingRef.current?.type === 'stage-edge'
+    ctx.strokeStyle = isEdgeSelected ? '#e85d04' : '#e85d0466'
+    ctx.lineWidth = isEdgeSelected ? 2.5 : 1.5
     ctx.setLineDash([5, 5])
-    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(0, edgeCy); ctx.lineTo(W, edgeCy); ctx.stroke()
     ctx.setLineDash([])
 
     // Labels
-    ctx.fillStyle = '#333'
+    ctx.fillStyle = isEdgeSelected ? '#e85d04' : '#333'
     ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('UPSTAGE', W / 2, H / 2 - 8)
-    ctx.fillText('AUDIENCE', W / 2, H / 2 + 16)
+    ctx.fillText('UPSTAGE', W / 2, edgeCy - 8)
+    ctx.fillText('AUDIENCE', W / 2, edgeCy + 16)
 
     // Truss bars (drawn before fixtures so fixtures appear on top)
     for (const bar of roomConfig.trussBars) {
@@ -243,10 +247,18 @@ export function LayoutEditor2D() {
     return null
   }
 
+  const hitTestStageEdge = (my: number): boolean => {
+    const canvas = canvasRef.current!
+    const W = canvas.clientWidth, H = canvas.clientHeight
+    const stageEdgeZ = roomConfig.stageEdgeZ ?? 0
+    const { cy: edgeCy } = worldToCanvas(0, stageEdgeZ, W, H)
+    return Math.abs(my - edgeCy) < STAGE_EDGE_HIT_TOLERANCE
+  }
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const { x, y } = getCanvasPos(e as any)
 
-    // Fixtures take priority over trusses
+    // Fixtures take priority
     const hitFixture = hitTestFixture(x, y)
     if (hitFixture) {
       selectFixture(hitFixture.id)
@@ -275,6 +287,19 @@ export function LayoutEditor2D() {
       return
     }
 
+    // Check stage edge hit
+    if (hitTestStageEdge(y)) {
+      const canvas = canvasRef.current!
+      const W = canvas.clientWidth, H = canvas.clientHeight
+      const stageEdgeZ = roomConfig.stageEdgeZ ?? 0
+      const { cy: edgeCy } = worldToCanvas(0, stageEdgeZ, W, H)
+      draggingRef.current = { id: 'stage-edge', offsetX: 0, offsetZ: edgeCy - y, type: 'stage-edge' }
+      selectFixture(null)
+      selectTruss(null)
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
+
     selectFixture(null)
     selectTruss(null)
   }, [patch, roomConfig, selectFixture, selectTruss, worldToCanvas])
@@ -282,6 +307,13 @@ export function LayoutEditor2D() {
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!draggingRef.current) return
     const { x, y } = getCanvasPos(e as any)
+
+    if (draggingRef.current.type === 'stage-edge') {
+      // Move stage edge along Z axis
+      const { wz } = canvasToWorld(0, y + draggingRef.current.offsetZ)
+      setRoomConfig({ stageEdgeZ: wz })
+      return
+    }
 
     if (draggingRef.current.type === 'truss') {
       // Only move along Z axis
@@ -298,7 +330,7 @@ export function LayoutEditor2D() {
     const mount = entry?.mountingLocation ?? 'ceiling'
     const curY = entry?.position3D?.y ?? getDefaultY(mount, roomConfig.height)
     updateFixture(draggingRef.current.id, { position3D: { x: wx, y: curY, z: wz } })
-  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar])
+  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar, setRoomConfig])
 
   const handlePointerUp = useCallback(() => {
     draggingRef.current = null

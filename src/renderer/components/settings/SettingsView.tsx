@@ -287,61 +287,63 @@ export function SettingsView() {
               </div>
 
               {artnetConfigs.map((config, i) => (
-                <div key={i} className="flex items-center gap-2 bg-surface-2 rounded p-2">
-                  <span className="text-[10px] text-gray-500 w-14 shrink-0">Univ {i + 1}</span>
-                  <div className="flex-1">
-                    <label className="text-[9px] text-gray-600">IP</label>
-                    <input
-                      className="input w-full"
-                      value={config.host}
-                      onChange={e => {
-                        const c = [...artnetConfigs]
-                        c[i] = { ...config, host: e.target.value }
-                        setArtnetConfigs(c)
-                      }}
-                      placeholder="255.255.255.255"
-                    />
-                  </div>
-                  <div className="w-14">
-                    <label className="text-[9px] text-gray-600">Port</label>
-                    <input
-                      className="input w-full"
-                      type="number"
-                      value={config.port}
-                      onChange={e => {
-                        const c = [...artnetConfigs]
-                        c[i] = { ...config, port: parseInt(e.target.value) || 6454 }
-                        setArtnetConfigs(c)
-                      }}
-                    />
-                  </div>
-                  <div className="w-10">
-                    <label className="text-[9px] text-gray-600">Sub</label>
-                    <input
-                      className="input w-full"
-                      type="number"
-                      min={0} max={15}
-                      value={config.subnet}
-                      onChange={e => {
-                        const c = [...artnetConfigs]
-                        c[i] = { ...config, subnet: parseInt(e.target.value) || 0 }
-                        setArtnetConfigs(c)
-                      }}
-                    />
-                  </div>
-                  <div className="w-10">
-                    <label className="text-[9px] text-gray-600">Net</label>
-                    <input
-                      className="input w-full"
-                      type="number"
-                      min={0} max={127}
-                      value={config.net}
-                      onChange={e => {
-                        const c = [...artnetConfigs]
-                        c[i] = { ...config, net: parseInt(e.target.value) || 0 }
-                        setArtnetConfigs(c)
-                      }}
-                    />
+                <div key={i} className="bg-surface-2 rounded p-2 space-y-1">
+                  <span className="text-[10px] text-gray-500">Universe {i + 1}</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="col-span-1">
+                      <label className="text-[9px] text-gray-600">IP Address</label>
+                      <input
+                        className="input w-full"
+                        value={config.host}
+                        onChange={e => {
+                          const c = [...artnetConfigs]
+                          c[i] = { ...config, host: e.target.value }
+                          setArtnetConfigs(c)
+                        }}
+                        placeholder="255.255.255.255"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-600">Port</label>
+                      <input
+                        className="input w-full"
+                        type="number"
+                        value={config.port}
+                        onChange={e => {
+                          const c = [...artnetConfigs]
+                          c[i] = { ...config, port: parseInt(e.target.value) || 6454 }
+                          setArtnetConfigs(c)
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-600">Subnet</label>
+                      <input
+                        className="input w-full"
+                        type="number"
+                        min={0} max={15}
+                        value={config.subnet}
+                        onChange={e => {
+                          const c = [...artnetConfigs]
+                          c[i] = { ...config, subnet: parseInt(e.target.value) || 0 }
+                          setArtnetConfigs(c)
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-600">Net</label>
+                      <input
+                        className="input w-full"
+                        type="number"
+                        min={0} max={127}
+                        value={config.net}
+                        onChange={e => {
+                          const c = [...artnetConfigs]
+                          c[i] = { ...config, net: parseInt(e.target.value) || 0 }
+                          setArtnetConfigs(c)
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
