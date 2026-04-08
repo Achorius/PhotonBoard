@@ -144,6 +144,38 @@ export function usePlaybackController(): void {
           stopFade(cl.id)
           stopSceneEffects(cl.id)
 
+          // Reset all DMX channels used by this scene to 0 (lights off, neutral position)
+          const dmx = useDmxStore.getState()
+          const patch = usePatchStore.getState().patch
+          const fixtures = usePatchStore.getState().fixtures
+          const resetChannels = new Set<string>()
+
+          // Collect all channels from all cues in this scene
+          for (const cue of cl.cues) {
+            for (const cv of cue.values) {
+              resetChannels.add(`${cv.fixtureId}:${cv.channelName}`)
+            }
+          }
+
+          // Zero them all out
+          for (const key of resetChannels) {
+            const [fixtureId, channelName] = key.split(':')
+            const entry = patch.find(p => p.id === fixtureId)
+            if (!entry) continue
+            const def = fixtures.find(f => f.id === entry.fixtureDefId)
+            if (!def) continue
+            const mode = def.modes.find(m => m.name === entry.modeName)
+            if (!mode) continue
+            const chIndex = mode.channels.findIndex(
+              ch => ch.toLowerCase() === channelName.toLowerCase()
+            )
+            if (chIndex === -1) continue
+            const absChannel = entry.address - 1 + chIndex
+            if (absChannel >= 0 && absChannel < 512) {
+              dmx.setChannel(entry.universe, absChannel, 0)
+            }
+          }
+
           // Clear any pending auto-advance timer
           const timer = followTimers.current.get(cl.id)
           if (timer) {
