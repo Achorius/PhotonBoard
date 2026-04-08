@@ -6,14 +6,20 @@ import { getFixtureDisplayColor } from '@renderer/lib/dmx-utils'
 import { resolveChannels, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
 import type { PatchEntry, MountingLocation } from '@shared/types'
 
-const METRE_TO_PX = 40  // 40px per metre at default zoom
-const TRUSS_HIT_TOLERANCE = 8  // px tolerance for clicking on a truss line
-const STAGE_EDGE_HIT_TOLERANCE = 8  // px tolerance for stage edge line
+const BASE_SCALE = 40   // 40px per metre at zoom=1
+const TRUSS_HIT_TOLERANCE = 8
+const STAGE_EDGE_HIT_TOLERANCE = 8
+const MIN_ZOOM = 0.15
+const MAX_ZOOM = 8
+const FIT_PADDING = 60  // px padding when auto-fitting
 
 export function LayoutEditor2D() {
-  const canvasRef   = useRef<HTMLCanvasElement>(null)
-  const containerRef= useRef<HTMLDivElement>(null)
-  const draggingRef = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' | 'stage-edge' } | null>(null)
+  const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const draggingRef  = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' | 'stage-edge' } | null>(null)
+  const panningRef   = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; pointerId: number } | null>(null)
+  const viewRef      = useRef({ panX: 0, panY: 0, zoom: 1 })
+  const didFitRef    = useRef(false)
 
   const { patch, fixtures, updateFixture } = usePatchStore()
   const {
@@ -27,14 +33,18 @@ export function LayoutEditor2D() {
   const [trussNameInput, setTrussNameInput] = useState('')
   const selectedTruss = roomConfig.trussBars.find(t => t.id === selectedTrussId)
 
-  // Sync name input when selection changes
   useEffect(() => {
     if (selectedTruss) setTrussNameInput(selectedTruss.name)
   }, [selectedTrussId])
 
+  // ── Coordinate helpers ─────────────────────────────────────────────
+  const getScale = useCallback(() => BASE_SCALE * viewRef.current.zoom, [])
+
   const worldToCanvas = useCallback((wx: number, wz: number, W: number, H: number) => {
-    const cx = W / 2 + wx * METRE_TO_PX
-    const cy = H / 2 - wz * METRE_TO_PX  // +Z (upstage) → top of screen
+    const scale = BASE_SCALE * viewRef.current.zoom
+    const { panX, panY } = viewRef.current
+    const cx = W / 2 + wx * scale + panX
+    const cy = H / 2 - wz * scale + panY
     return { cx, cy }
   }, [])
 
@@ -42,8 +52,10 @@ export function LayoutEditor2D() {
     const container = containerRef.current
     if (!container) return { wx: 0, wz: 0 }
     const W = container.clientWidth, H = container.clientHeight
-    let wx = (cx - W / 2) / METRE_TO_PX
-    let wz = -(cy - H / 2) / METRE_TO_PX  // flip Z for stage-top orientation
+    const scale = BASE_SCALE * viewRef.current.zoom
+    const { panX, panY } = viewRef.current
+    let wx = (cx - W / 2 - panX) / scale
+    let wz = -(cy - H / 2 - panY) / scale
     if (snapToGrid) {
       wx = Math.round(wx / gridSize) * gridSize
       wz = Math.round(wz / gridSize) * gridSize
@@ -51,6 +63,21 @@ export function LayoutEditor2D() {
     return { wx, wz }
   }, [snapToGrid, gridSize])
 
+  // ── Auto-fit room to canvas ────────────────────────────────────────
+  const fitToView = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+    const W = container.clientWidth
+    const H = container.clientHeight
+    if (W === 0 || H === 0) return
+    const { width: rw, depth: rd } = roomConfig
+    const scaleX = (W - FIT_PADDING * 2) / rw
+    const scaleY = (H - FIT_PADDING * 2) / rd
+    const fitScale = Math.min(scaleX, scaleY)
+    viewRef.current = { panX: 0, panY: 0, zoom: Math.max(MIN_ZOOM, fitScale / BASE_SCALE) }
+  }, [roomConfig])
+
+  // ── Draw ───────────────────────────────────────────────────────────
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
@@ -64,25 +91,32 @@ export function LayoutEditor2D() {
     const ctx = canvas.getContext('2d')!
     ctx.scale(dpr, dpr)
 
+    const scale = BASE_SCALE * viewRef.current.zoom
+
     // Background
     ctx.fillStyle = '#07070d'
     ctx.fillRect(0, 0, W, H)
 
-    // Grid
+    // Grid — scaled & panned
     ctx.strokeStyle = '#111118'
     ctx.lineWidth = 0.5
-    const gridPx = gridSize * METRE_TO_PX
-    const offX = (W / 2) % gridPx
-    const offZ = (H / 2) % gridPx
-    for (let x = offX; x < W; x += gridPx) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() }
-    for (let z = offZ; z < H; z += gridPx) { ctx.beginPath(); ctx.moveTo(0, z); ctx.lineTo(W, z); ctx.stroke() }
+    const gridPx = gridSize * scale
+    if (gridPx > 4) { // only draw grid when it wouldn't be too dense
+      const { panX, panY } = viewRef.current
+      const offX = ((W / 2 + panX) % gridPx + gridPx) % gridPx
+      const offZ = ((H / 2 + panY) % gridPx + gridPx) % gridPx
+      for (let x = offX; x < W; x += gridPx) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() }
+      for (let z = offZ; z < H; z += gridPx) { ctx.beginPath(); ctx.moveTo(0, z); ctx.lineTo(W, z); ctx.stroke() }
+    }
 
     // Room outline
     const { width: rw, depth: rd } = roomConfig
+    const topLeft = worldToCanvas(-rw / 2, rd / 2, W, H)
+    const roomW = rw * scale
+    const roomH = rd * scale
     ctx.strokeStyle = '#333355'
     ctx.lineWidth = 1.5
-    ctx.strokeRect(W / 2 - rw / 2 * METRE_TO_PX, H / 2 - rd / 2 * METRE_TO_PX,
-                   rw * METRE_TO_PX, rd * METRE_TO_PX)
+    ctx.strokeRect(topLeft.cx, topLeft.cy, roomW, roomH)
 
     // Stage edge line (draggable)
     const stageEdgeZ = roomConfig.stageEdgeZ ?? 0
@@ -98,10 +132,10 @@ export function LayoutEditor2D() {
     ctx.fillStyle = isEdgeSelected ? '#e85d04' : '#333'
     ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('UPSTAGE', W / 2, edgeCy - 8)
-    ctx.fillText('AUDIENCE', W / 2, edgeCy + 16)
+    ctx.fillText('UPSTAGE', W / 2 + viewRef.current.panX, edgeCy - 8)
+    ctx.fillText('AUDIENCE', W / 2 + viewRef.current.panX, edgeCy + 16)
 
-    // Truss bars (drawn before fixtures so fixtures appear on top)
+    // Truss bars
     for (const bar of roomConfig.trussBars) {
       const barHalfW = (bar.width ?? rw) / 2
       const leftPt = worldToCanvas(-barHalfW, bar.z, W, H)
@@ -117,14 +151,13 @@ export function LayoutEditor2D() {
       ctx.stroke()
       ctx.setLineDash([])
 
-      // Bar name label
       ctx.fillStyle = isSelectedTruss ? '#e85d04' : '#888'
       ctx.font = '9px sans-serif'
       ctx.textAlign = 'left'
       ctx.fillText(bar.name, leftPt.cx + 4, leftPt.cy - 5)
     }
 
-    // Fixtures (top-down, X=left-right, Z=front-back)
+    // Fixtures
     for (const entry of patch) {
       const def = fixtures.find(f => f.id === entry.fixtureDefId)
       const pos = entry.position3D
@@ -133,6 +166,9 @@ export function LayoutEditor2D() {
       const { cx: cxs, cy: cys } = worldToCanvas(wx, wz, W, H)
       const isMovingHead = def?.categories.includes('Moving Head')
       const isSelected = entry.id === selectedFixtureId
+
+      // Skip fixtures completely off-screen (perf)
+      if (cxs < -40 || cxs > W + 40 || cys < -40 || cys > H + 40) continue
 
       // Beam glow — apply blinder/strobe overrides
       const ch = resolveChannels(entry, def, values)
@@ -153,22 +189,19 @@ export function LayoutEditor2D() {
         ctx.beginPath(); ctx.arc(cxs, cys, glowRadius, 0, Math.PI * 2); ctx.fill()
       }
 
-      // Fixture symbol — shape varies by mounting location
+      // Fixture symbol
       const mount = entry.mountingLocation ?? 'ceiling'
       ctx.beginPath()
       if (isMovingHead) {
-        // Diamond
         const r = 7
         ctx.moveTo(cxs, cys - r); ctx.lineTo(cxs + r, cys)
         ctx.lineTo(cxs, cys + r); ctx.lineTo(cxs - r, cys)
         ctx.closePath()
       } else if (mount === 'floor') {
-        // Upward triangle for floor-mounted
         const r = 7
         ctx.moveTo(cxs, cys - r); ctx.lineTo(cxs + r, cys + r); ctx.lineTo(cxs - r, cys + r)
         ctx.closePath()
       } else if (mount.startsWith('wall')) {
-        // Square for wall-mounted
         const r = 6
         ctx.rect(cxs - r, cys - r, r * 2, r * 2)
       } else {
@@ -181,7 +214,6 @@ export function LayoutEditor2D() {
       ctx.fillStyle = fillColor
       ctx.fill()
 
-      // Selection ring
       ctx.strokeStyle = isSelected ? '#e85d04' : '#444466'
       ctx.lineWidth = isSelected ? 2 : 1
       ctx.stroke()
@@ -205,16 +237,75 @@ export function LayoutEditor2D() {
       ctx.font = '8px sans-serif'
       ctx.fillText(entry.name.length > 10 ? entry.name.slice(0, 9) + '…' : entry.name, cxs, cys - 11)
     }
+
+    // Zoom indicator
+    const zoomPct = Math.round(viewRef.current.zoom * 100)
+    ctx.fillStyle = '#444'
+    ctx.font = '9px sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillText(`${zoomPct}%`, W - 8, H - 8)
   }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, values, blinder, strobe, _strobePhase, worldToCanvas, gridSize, snapToGrid])
 
-  // Redraw on changes
-  useEffect(() => { draw() }, [draw])
+  // ── Initial fit + redraw on changes ────────────────────────────────
   useEffect(() => {
-    const ro = new ResizeObserver(draw)
+    if (!didFitRef.current && containerRef.current) {
+      const W = containerRef.current.clientWidth
+      if (W > 0) {
+        fitToView()
+        didFitRef.current = true
+      }
+    }
+    draw()
+  }, [draw, fitToView])
+
+  // Re-fit when room dimensions change
+  useEffect(() => {
+    fitToView()
+    draw()
+  }, [roomConfig.width, roomConfig.depth])
+
+  // ResizeObserver — re-fit on container resize
+  useEffect(() => {
+    const ro = new ResizeObserver(() => {
+      fitToView()
+      draw()
+    })
     if (containerRef.current) ro.observe(containerRef.current)
     return () => ro.disconnect()
+  }, [draw, fitToView])
+
+  // ── Wheel → zoom toward cursor ────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const container = containerRef.current!
+      const W = container.clientWidth, H = container.clientHeight
+
+      const oldScale = BASE_SCALE * viewRef.current.zoom
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewRef.current.zoom * zoomFactor))
+      const newScale = BASE_SCALE * newZoom
+
+      // Keep point under cursor fixed
+      const { panX, panY } = viewRef.current
+      const worldX = (mx - W / 2 - panX) / oldScale
+      const worldZ = -(my - H / 2 - panY) / oldScale
+      viewRef.current.zoom = newZoom
+      viewRef.current.panX = mx - W / 2 - worldX * newScale
+      viewRef.current.panY = my - H / 2 + worldZ * newScale
+
+      draw()
+    }
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', handleWheel)
   }, [draw])
 
+  // ── Interaction helpers ────────────────────────────────────────────
   const getCanvasPos = (e: React.MouseEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect()
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
@@ -227,8 +318,7 @@ export function LayoutEditor2D() {
       const pos = entry.position3D
       const wx = pos?.x ?? getAutoX(entry, patch, roomConfig)
       const wz = pos?.z ?? getAutoZ(entry, patch, roomConfig)
-      const cx = W / 2 + wx * METRE_TO_PX
-      const cy = H / 2 - wz * METRE_TO_PX  // flipped Z
+      const { cx, cy } = worldToCanvas(wx, wz, W, H)
       if (Math.hypot(mx - cx, my - cy) < 12) return entry
     }
     return null
@@ -242,7 +332,6 @@ export function LayoutEditor2D() {
       const barHalfW = (bar.width ?? rw) / 2
       const leftPt = worldToCanvas(-barHalfW, bar.z, W, H)
       const rightPt = worldToCanvas(barHalfW, bar.z, W, H)
-      // Check if click is near the horizontal truss line (within tolerance in Y, within X span)
       if (mx >= leftPt.cx - 4 && mx <= rightPt.cx + 4 &&
           Math.abs(my - leftPt.cy) < TRUSS_HIT_TOLERANCE) {
         return bar.id
@@ -259,10 +348,25 @@ export function LayoutEditor2D() {
     return Math.abs(my - edgeCy) < STAGE_EDGE_HIT_TOLERANCE
   }
 
+  // ── Pointer events ─────────────────────────────────────────────────
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const { x, y } = getCanvasPos(e as any)
 
-    // Fixtures take priority
+    // Middle-click or shift+left → start panning
+    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+      panningRef.current = {
+        startX: e.clientX, startY: e.clientY,
+        startPanX: viewRef.current.panX, startPanY: viewRef.current.panY,
+        pointerId: e.pointerId
+      }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      e.preventDefault()
+      return
+    }
+
+    // Left click — fixture / truss / stage-edge interaction
+    if (e.button !== 0) return
+
     const hitFixture = hitTestFixture(x, y)
     if (hitFixture) {
       selectFixture(hitFixture.id)
@@ -271,14 +375,12 @@ export function LayoutEditor2D() {
       const W = canvas.clientWidth, H = canvas.clientHeight
       const wx = pos?.x ?? getAutoX(hitFixture, patch, roomConfig)
       const wz = pos?.z ?? getAutoZ(hitFixture, patch, roomConfig)
-      const cx = W / 2 + wx * METRE_TO_PX
-      const cy = H / 2 - wz * METRE_TO_PX  // flipped Z
+      const { cx, cy } = worldToCanvas(wx, wz, W, H)
       draggingRef.current = { id: hitFixture.id, offsetX: cx - x, offsetZ: cy - y, type: 'fixture' }
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
       return
     }
 
-    // Check truss hit
     const hitTrussId = hitTestTruss(x, y)
     if (hitTrussId) {
       selectTruss(hitTrussId)
@@ -291,7 +393,6 @@ export function LayoutEditor2D() {
       return
     }
 
-    // Check stage edge hit
     if (hitTestStageEdge(y)) {
       const canvas = canvasRef.current!
       const W = canvas.clientWidth, H = canvas.clientHeight
@@ -309,18 +410,27 @@ export function LayoutEditor2D() {
   }, [patch, roomConfig, selectFixture, selectTruss, worldToCanvas])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // Panning
+    if (panningRef.current) {
+      const dx = e.clientX - panningRef.current.startX
+      const dy = e.clientY - panningRef.current.startY
+      viewRef.current.panX = panningRef.current.startPanX + dx
+      viewRef.current.panY = panningRef.current.startPanY + dy
+      draw()
+      return
+    }
+
+    // Dragging fixture / truss / stage-edge
     if (!draggingRef.current) return
     const { x, y } = getCanvasPos(e as any)
 
     if (draggingRef.current.type === 'stage-edge') {
-      // Move stage edge along Z axis
       const { wz } = canvasToWorld(0, y + draggingRef.current.offsetZ)
       setRoomConfig({ stageEdgeZ: wz })
       return
     }
 
     if (draggingRef.current.type === 'truss') {
-      // Only move along Z axis
       const { wz } = canvasToWorld(0, y + draggingRef.current.offsetZ)
       updateTrussBar(draggingRef.current.id, { z: wz })
       return
@@ -334,9 +444,10 @@ export function LayoutEditor2D() {
     const mount = entry?.mountingLocation ?? 'ceiling'
     const curY = entry?.position3D?.y ?? getDefaultY(mount, roomConfig.height)
     updateFixture(draggingRef.current.id, { position3D: { x: wx, y: curY, z: wz } })
-  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar, setRoomConfig])
+  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar, setRoomConfig, draw])
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    panningRef.current = null
     draggingRef.current = null
   }, [])
 
@@ -349,6 +460,13 @@ export function LayoutEditor2D() {
           className="px-2 py-1 rounded bg-[#1a1a2e] hover:bg-[#252540] text-[#aaa] hover:text-white transition-colors"
         >
           + Add Bar
+        </button>
+        <button
+          onClick={() => { fitToView(); draw() }}
+          className="px-2 py-1 rounded bg-[#1a1a2e] hover:bg-[#252540] text-[#aaa] hover:text-white transition-colors"
+          title="Fit room to view (reset zoom & pan)"
+        >
+          Fit
         </button>
         {selectedTruss && (
           <>
@@ -373,14 +491,15 @@ export function LayoutEditor2D() {
         )}
       </div>
       {/* Canvas */}
-      <div ref={containerRef} className="flex-1 relative overflow-hidden">
+      <div ref={containerRef} className="flex-1 relative overflow-hidden min-h-0">
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
-          style={{ cursor: 'crosshair' }}
+          style={{ cursor: panningRef.current ? 'grabbing' : 'crosshair' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onContextMenu={(e) => e.preventDefault()}
         />
       </div>
     </div>
