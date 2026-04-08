@@ -11,6 +11,7 @@ interface DmxState {
   setChannels: (universe: number, channels: Record<number, number>) => void
   setGrandMaster: (value: number) => void
   toggleBlackout: () => void
+  resetAll: () => void
   getEffectiveValue: (universe: number, channel: number) => number
 }
 
@@ -90,6 +91,18 @@ export const useDmxStore = create<DmxState>((set, get) => ({
         window.photonboard.dmx.setChannels(u, channels)
       }
     }
+  },
+
+  resetAll: () => {
+    const state = get()
+    // Zero all channel values
+    const freshValues = []
+    for (let u = 0; u < state.universeCount; u++) {
+      freshValues.push(new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0))
+    }
+    set({ values: freshValues, blackout: false, grandMaster: 255 })
+    // Send blackout to engine to zero all outputs
+    window.photonboard.dmx.blackout()
   },
 
   getEffectiveValue: (universe, channel) => {

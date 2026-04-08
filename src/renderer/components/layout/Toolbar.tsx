@@ -7,7 +7,7 @@ import { toggleTimeline, getTimelineState } from '../../lib/timeline-engine'
 
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()
-  const { grandMaster, setGrandMaster, blackout, toggleBlackout } = useDmxStore()
+  const { grandMaster, setGrandMaster, blackout, toggleBlackout, resetAll } = useDmxStore()
   const { isLearning, learnTarget, cancelLearn, startLearn } = useMidiStore()
 
   const [timelinePlaying, setTimelinePlaying] = useState(false)
@@ -38,7 +38,7 @@ export function Toolbar() {
 
       {/* Grand Master */}
       <div className="flex items-center gap-2 titlebar-no-drag">
-        <span className="text-[10px] text-gray-500 uppercase font-medium">GM</span>
+        <span className="text-xs text-gray-400 uppercase font-semibold tracking-wider">GM</span>
         <HSlider
           value={grandMaster}
           onChange={setGrandMaster}
@@ -81,6 +81,15 @@ export function Toolbar() {
         title={timelinePlaying ? 'Stop timeline' : 'Play timeline'}
       >
         Live
+      </button>
+
+      {/* Reset */}
+      <button
+        className="px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors bg-surface-3 text-gray-400 hover:bg-yellow-700/40 hover:text-yellow-300"
+        onClick={resetAll}
+        title="Reset all channels to zero, GM to 100%"
+      >
+        Reset
       </button>
 
       {/* Blackout */}
