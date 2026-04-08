@@ -23,7 +23,7 @@ export interface ArtNetConfig {
 
 // --- USB DMX ---
 
-export type UsbDmxDriver = 'enttec-open-dmx' | 'enttec-pro' | 'udmx'
+export type UsbDmxDriver = 'enttec-open-dmx' | 'enttec-pro' | 'eurolite' | 'showtec' | 'beamz' | 'velleman' | 'stairville' | 'udmx' | 'generic-ftdi'
 
 export interface UsbDmxConfig {
   driver: UsbDmxDriver

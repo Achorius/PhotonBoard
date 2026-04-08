@@ -86,12 +86,18 @@ export class UsbDmxOutput {
     const { SerialPort } = require('serialport')
 
     switch (config.driver) {
-      case 'enttec-open-dmx':
-        return this.openEnttecOpen(SerialPort, config)
       case 'enttec-pro':
         return this.openEnttecPro(SerialPort, config)
+      // All FTDI-based adapters use the same Open DMX protocol
+      case 'enttec-open-dmx':
+      case 'eurolite':
+      case 'showtec':
+      case 'beamz':
+      case 'velleman':
+      case 'stairville':
       case 'udmx':
-        return this.openUdmx(config)
+      case 'generic-ftdi':
+        return this.openEnttecOpen(SerialPort, config)
       default:
         console.warn(`[USB-DMX] Unknown driver: ${config.driver}`)
         return null
@@ -165,45 +171,6 @@ export class UsbDmxOutput {
   }
 
   /**
-   * uDMX - USB HID control transfers
-   * Uses libusb via node-hid or usb package
-   */
-  private async openUdmx(config: UsbDmxConfig): Promise<UsbDmxInstance> {
-    // uDMX uses USB HID, not serial port
-    // For now, we try to use it via serialport if it exposes a serial interface
-    // Many uDMX clones present as serial devices
-    console.log(`[USB-DMX] uDMX mode on ${config.portPath} (serial fallback)`)
-    const { SerialPort } = require('serialport')
-
-    const port = new SerialPort({
-      path: config.portPath,
-      baudRate: 250000,
-      dataBits: 8,
-      stopBits: 2,
-      parity: 'none',
-      autoOpen: false
-    })
-
-    return new Promise((resolve, reject) => {
-      port.open((err: Error | null) => {
-        if (err) {
-          reject(err)
-          return
-        }
-        console.log(`[USB-DMX] uDMX connected on ${config.portPath}`)
-        const buffer = Buffer.alloc(513)
-        buffer[0] = 0x00
-        resolve({
-          config,
-          port,
-          connected: true,
-          buffer
-        })
-      })
-    })
-  }
-
-  /**
    * Send DMX data to all connected USB adapters
    */
   send(universes: Uint8Array[]): void {
@@ -211,14 +178,11 @@ export class UsbDmxOutput {
       if (!instance.connected || universeIdx >= universes.length) continue
       const data = universes[universeIdx]
 
-      switch (instance.config.driver) {
-        case 'enttec-open-dmx':
-        case 'udmx':
-          this.sendOpenDmx(instance, data)
-          break
-        case 'enttec-pro':
-          this.sendEnttecPro(instance, data)
-          break
+      if (instance.config.driver === 'enttec-pro') {
+        this.sendEnttecPro(instance, data)
+      } else {
+        // All other drivers use FTDI/Open DMX protocol
+        this.sendOpenDmx(instance, data)
       }
     }
   }
