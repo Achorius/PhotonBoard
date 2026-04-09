@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useMidiStore } from '../../stores/midi-store'
+import { useFollowStore } from '../../stores/follow-store'
 import { HSlider } from '../common/HSlider'
 import { toggleTimeline, getTimelineState } from '../../lib/timeline-engine'
 import type { MidiTargetType } from '@shared/types'
@@ -9,6 +10,7 @@ import type { MidiTargetType } from '@shared/types'
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()
   const { grandMaster, setGrandMaster, blackout, toggleBlackout, blinder, toggleBlinder, strobe, toggleStrobe, resetAll } = useDmxStore()
+  const followActive = useFollowStore(s => s.active)
   const { mappings, isLearning, learnTarget, cancelLearn, startLearn } = useMidiStore()
 
   const [timelinePlaying, setTimelinePlaying] = useState(false)
@@ -72,7 +74,7 @@ export function Toolbar() {
 
       {/* MIDI Learn button */}
       <button
-        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${
           isLearning
             ? 'bg-purple-600 text-white animate-pulse'
             : 'bg-purple-700/30 text-purple-400 border border-purple-600/40 hover:bg-purple-700/50'
@@ -92,7 +94,7 @@ export function Toolbar() {
 
       {/* Live button — toggles timeline playback */}
       <button
-        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${midiRing('timeline_play')} ${
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('timeline_play')} ${
           timelinePlaying
             ? 'bg-green-600 text-white animate-pulse'
             : 'bg-green-700/30 text-green-400 border border-green-600/40 hover:bg-green-700/50'
@@ -106,7 +108,7 @@ export function Toolbar() {
 
       {/* Reset */}
       <button
-        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${midiRing('reset')} bg-surface-3 text-gray-400 hover:bg-yellow-700/40 hover:text-yellow-300`}
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('reset')} bg-surface-3 text-gray-400 hover:bg-yellow-700/40 hover:text-yellow-300`}
         onClick={resetAll}
         onContextMenu={(e) => handleMidiLearn(e, 'reset', 'Reset')}
         title="Reset all channels to zero, GM to 100% — Right-click: MIDI Learn"
@@ -116,7 +118,7 @@ export function Toolbar() {
 
       {/* Blinder */}
       <button
-        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${midiRing('blinder')} ${
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('blinder')} ${
           blinder
             ? 'bg-yellow-400 text-black'
             : 'bg-surface-3 text-gray-400 hover:bg-yellow-600/40 hover:text-yellow-200'
@@ -132,7 +134,7 @@ export function Toolbar() {
 
       {/* Strobe */}
       <button
-        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${midiRing('strobe')} ${
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('strobe')} ${
           strobe
             ? 'bg-cyan-400 text-black animate-pulse'
             : 'bg-surface-3 text-gray-400 hover:bg-cyan-700/40 hover:text-cyan-200'
@@ -146,9 +148,18 @@ export function Toolbar() {
         Strobe
       </button>
 
+      {/* Follow indicator (only when tracking) */}
+      {followActive && (
+        <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-green-600/80 text-white animate-pulse titlebar-no-drag cursor-pointer"
+          onClick={() => setActiveTab('follow')}
+        >
+          FOLLOW
+        </span>
+      )}
+
       {/* Blackout */}
       <button
-        className={`px-3 py-1 text-xs font-bold rounded titlebar-no-drag transition-colors ${midiRing('blackout')} ${
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('blackout')} ${
           blackout
             ? 'bg-red-600 text-white animate-pulse'
             : 'bg-surface-3 text-gray-400 hover:bg-surface-4'
@@ -159,6 +170,7 @@ export function Toolbar() {
       >
         Blackout
       </button>
+
     </div>
   )
 }

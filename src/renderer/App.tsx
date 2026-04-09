@@ -20,6 +20,7 @@ import { StageLayoutView } from './components/visualizer/StageLayoutView'
 import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
+import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
 
 const DEFAULT_ARTNET_CONFIG = [
@@ -39,7 +40,8 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'fixtures',      label: 'Fixtures',     shortcut: '6' },
   { id: 'patch',         label: 'Patch',        shortcut: '7' },
   { id: 'midi',          label: 'MIDI',         shortcut: '8' },
-  { id: 'settings',      label: 'Settings',     shortcut: '9' },
+  { id: 'follow',        label: 'Follow',       shortcut: '9' },
+  { id: 'settings',      label: 'Settings',     shortcut: '0' },
 ]
 
 export default function App() {
@@ -268,9 +270,9 @@ export default function App() {
 
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
 
-      const num = parseInt(e.key)
-      if (num >= 1 && num <= WORKSPACE_TABS.length) {
-        setActiveTab(WORKSPACE_TABS[num - 1].id)
+      const tab = WORKSPACE_TABS.find(t => t.shortcut === e.key)
+      if (tab) {
+        setActiveTab(tab.id)
         e.preventDefault()
       }
 
@@ -301,6 +303,7 @@ export default function App() {
       case 'visualizer':    return <VisualizerView />
       case 'stage-layout': return <StageLayoutView />
       case 'live':         return <LiveView />
+      case 'follow':       return <FollowPanel />
       case 'settings':   return <SettingsView />
       default:           return <VisualizerView />
     }
