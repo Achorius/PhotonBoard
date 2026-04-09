@@ -241,8 +241,8 @@ export function FollowPanel() {
             <li>1. Select moving head fixtures above</li>
             <li>2. Place them in Stage Layout (positions required)</li>
             <li>3. Hold <b className="text-gray-300">{BUTTON_NAMES[activateButton] ?? `Button ${activateButton}`}</b> on the gamepad to activate</li>
-            <li>4. <b className="text-gray-300">Left stick</b> = move target on stage (X/Z)</li>
-            <li>5. <b className="text-gray-300">Right stick Y</b> = adjust height</li>
+            <li>4. <b className="text-gray-300">Left stick</b> = move target left/right &amp; up/down</li>
+            <li>5. <b className="text-gray-300">Right stick Y</b> = adjust depth (closer/further)</li>
             <li>6. Release trigger to deactivate</li>
           </ul>
         </section>

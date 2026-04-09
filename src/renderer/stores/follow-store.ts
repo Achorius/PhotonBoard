@@ -78,18 +78,12 @@ export interface FollowConfig {
   targetHeight: number
   /** Dimmer value to apply to follow fixtures (0-255) */
   followDimmer: number
-  /** Left stick axis for X movement */
-  axisX: number
-  /** Left stick axis for Z movement */
-  axisZ: number
-  /** Right stick axis for Y (height) adjustment */
-  axisY: number
-  /** Invert X axis */
+  /** Invert X axis (left stick horizontal) */
   invertX: boolean
-  /** Invert Z axis */
-  invertZ: boolean
-  /** Invert Y axis */
+  /** Invert Y axis (left stick vertical → up/down) */
   invertY: boolean
+  /** Invert Z axis (right stick vertical → depth) */
+  invertZ: boolean
 }
 
 interface FollowState extends FollowConfig {
@@ -125,12 +119,9 @@ export const useFollowStore = create<FollowState>((set, get) => ({
   sensitivity: 8,          // metres/s at full stick
   targetHeight: 1.5,       // chest height
   followDimmer: 255,
-  axisX: XBOX_AXES.LEFT_X,
-  axisZ: XBOX_AXES.LEFT_Y,
-  axisY: XBOX_AXES.RIGHT_Y,
   invertX: false,
-  invertZ: true,            // push stick forward → upstage (+Z)
-  invertY: false,
+  invertY: true,            // push stick up → target goes up (stick Y axis is inverted)
+  invertZ: true,            // push stick forward → closer to audience
 
   // State
   active: false,
@@ -336,19 +327,22 @@ function onGamepadFrame(gpState: GamepadState) {
   lastTimestamp = now
 
   // Read joystick axes
-  const axX = gpState.axes[store.axisX] ?? 0
-  const axZ = gpState.axes[store.axisZ] ?? 0
-  const axY = gpState.axes[store.axisY] ?? 0
+  // Left stick: X = left/right, Y = up/down on stage wall
+  // Right stick: Y = depth (closer/further from audience)
+  const leftX = gpState.axes[XBOX_AXES.LEFT_X] ?? 0
+  const leftY = gpState.axes[XBOX_AXES.LEFT_Y] ?? 0
+  const rightY = gpState.axes[XBOX_AXES.RIGHT_Y] ?? 0
 
   const speed = store.sensitivity
-  const dx = (store.invertX ? -axX : axX) * speed * dt
-  const dz = (store.invertZ ? -axZ : axZ) * speed * dt
-  const dy = (store.invertY ? -axY : axY) * speed * dt
+  const dx = (store.invertX ? -leftX : leftX) * speed * dt
+  const dy = (store.invertY ? -leftY : leftY) * speed * dt   // left stick Y → height
+  const dz = (store.invertZ ? -rightY : rightY) * speed * dt // right stick Y → depth
 
-  if (Math.abs(dx) > 0.0001 || Math.abs(dz) > 0.0001 || Math.abs(dy) > 0.0001) {
-    const newX = store.targetX + dx
-    const newY = Math.max(0, Math.min(8, store.targetY + dy))
-    const newZ = store.targetZ + dz
+  if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001 || Math.abs(dz) > 0.001) {
+    const { roomConfig } = useVisualizerStore.getState()
+    const newX = Math.max(-roomConfig.width / 2, Math.min(roomConfig.width / 2, store.targetX + dx))
+    const newY = Math.max(0, Math.min(roomConfig.height, store.targetY + dy))
+    const newZ = Math.max(-roomConfig.depth / 2, Math.min(roomConfig.depth / 2, store.targetZ + dz))
     useFollowStore.setState({ targetX: newX, targetY: newY, targetZ: newZ })
 
     // Apply to DMX
