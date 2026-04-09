@@ -280,6 +280,7 @@ export function LayoutEditor2D() {
     if (!canvas) return
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
+      e.stopPropagation()
       const rect = canvas.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
@@ -287,7 +288,8 @@ export function LayoutEditor2D() {
       const W = container.clientWidth, H = container.clientHeight
 
       const oldScale = BASE_SCALE * viewRef.current.zoom
-      const zoomFactor = e.deltaY > 0 ? 1.12 : 1 / 1.12
+      // deltaY > 0 = scroll down = zoom out, deltaY < 0 = scroll up = zoom in
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15
       const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewRef.current.zoom * zoomFactor))
       const newScale = BASE_SCALE * newZoom
 

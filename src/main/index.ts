@@ -129,6 +129,13 @@ function createWindow(): void {
     }
   })
 
+  // Disable Electron's built-in scroll-to-zoom (we handle zoom ourselves in canvas)
+  mainWindow.webContents.setVisualZoomLevelLimits(1, 1)
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.setZoomLevel(0)
+    mainWindow?.webContents.setZoomFactor(1)
+  })
+
   // Dev or production
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
