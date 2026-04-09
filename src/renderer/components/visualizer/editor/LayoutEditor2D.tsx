@@ -287,7 +287,7 @@ export function LayoutEditor2D() {
       const W = container.clientWidth, H = container.clientHeight
 
       const oldScale = BASE_SCALE * viewRef.current.zoom
-      const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      const zoomFactor = e.deltaY > 0 ? 1.12 : 1 / 1.12
       const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewRef.current.zoom * zoomFactor))
       const newScale = BASE_SCALE * newZoom
 
