@@ -129,7 +129,7 @@ export const useFollowStore = create<FollowState>((set, get) => ({
   sensitivity: 8,          // metres/s at full stick
   targetHeight: 1.5,       // chest height
   followDimmer: 255,
-  invertX: false,
+  invertX: true,             // invert left/right to match stage perspective
   invertY: true,            // push stick up → target goes up (stick Y axis is inverted)
   invertZ: true,            // push stick forward → closer to audience
 
@@ -179,12 +179,11 @@ export const useFollowStore = create<FollowState>((set, get) => ({
         console.log(`[Follow] saved ${entry.name}: pan=${ch.pan} tilt=${ch.tilt} dim=${ch.dimmer} pos3D=`, entry.position3D)
       }
 
-      // Reset target to center of back wall (upstage center)
-      const { roomConfig } = useVisualizerStore.getState()
+      // Reset target to center stage floor
       const targetX = 0
-      const targetY = roomConfig.height / 2
-      const targetZ = roomConfig.depth / 2
-      console.log(`[Follow] Initial target: (${targetX}, ${targetY}, ${targetZ}) room: ${roomConfig.width}x${roomConfig.depth}x${roomConfig.height}`)
+      const targetY = 0
+      const targetZ = 0
+      console.log(`[Follow] Initial target: center stage floor (${targetX}, ${targetY}, ${targetZ})`)
 
       set({
         active: true,
@@ -206,32 +205,8 @@ export const useFollowStore = create<FollowState>((set, get) => ({
   deactivate: () => {
     const state = get()
     if (!state.active) return
-
-    // Restore saved channels
-    const patchStore = usePatchStore.getState()
-    const dmxStore = useDmxStore.getState()
-
-    for (const fid of state.fixtureIds) {
-      const entry = patchStore.patch.find(p => p.id === fid)
-      if (!entry) continue
-      const saved = state.savedChannels[fid]
-      if (!saved) continue
-
-      const channels = patchStore.getFixtureChannels(entry)
-      const panCh = channels.find(c => c.name.toLowerCase() === 'pan')
-      const panFineCh = channels.find(c => c.name.toLowerCase() === 'pan fine')
-      const tiltCh = channels.find(c => c.name.toLowerCase() === 'tilt')
-      const tiltFineCh = channels.find(c => c.name.toLowerCase() === 'tilt fine')
-      const dimCh = channels.find(c => c.name.toLowerCase() === 'dimmer' || c.name.toLowerCase() === 'intensity')
-
-      if (panCh) dmxStore.setChannel(entry.universe, panCh.absoluteChannel, saved.pan)
-      if (panFineCh) dmxStore.setChannel(entry.universe, panFineCh.absoluteChannel, saved.panFine)
-      if (tiltCh) dmxStore.setChannel(entry.universe, tiltCh.absoluteChannel, saved.tilt)
-      if (tiltFineCh) dmxStore.setChannel(entry.universe, tiltFineCh.absoluteChannel, saved.tiltFine)
-      if (dimCh) dmxStore.setChannel(entry.universe, dimCh.absoluteChannel, saved.dimmer)
-    }
-
-    set({ active: false, savedChannels: {} })
+    // Keep current fixture positions — don't restore or reset anything
+    set({ active: false })
   },
 
   toggleActive: () => {
