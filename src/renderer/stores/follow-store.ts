@@ -31,7 +31,17 @@ function tiltDegToDmx(degrees: number, range = 270): { coarse: number; fine: num
   return { coarse, fine }
 }
 
-/** Calculate the pan/tilt angles for a fixture at `fixturePos` aiming at `target` */
+/**
+ * Calculate the pan/tilt angles for a fixture at `fixturePos` aiming at `target`.
+ *
+ * The DMX/3D convention (from BeamUpdater) is:
+ *   yokeGroup.rotation.y = degToRad(panDeg)   → 0° = facing +Z (upstage)
+ *   headGroup.rotation.x = degToRad(90 - tiltDeg) → 0° = beam straight down, 90° = horizontal
+ *
+ * So we compute:
+ *   panDeg  = atan2(dx, dz) — horizontal angle from +Z
+ *   tiltDeg = atan2(horizontalDist, -dy) — angle from straight down (0° = down, 90° = horizontal)
+ */
 function calcPanTilt(
   fixturePos: { x: number; y: number; z: number },
   target: { x: number; y: number; z: number },
@@ -39,17 +49,17 @@ function calcPanTilt(
   tiltInvert: boolean
 ): { panDeg: number; tiltDeg: number } {
   const dx = target.x - fixturePos.x
-  const dy = target.y - fixturePos.y   // negative when target is below
+  const dy = target.y - fixturePos.y   // negative when target is below fixture
   const dz = target.z - fixturePos.z
 
   // Pan: horizontal angle from +Z axis (upstage)
   let panDeg = Math.atan2(dx, dz) * (180 / Math.PI)
   if (panInvert) panDeg = -panDeg
 
-  // Tilt: angle from horizontal downward
-  // 0° = horizontal, -90° = straight down, +90° = straight up
+  // Tilt: angle from straight down (-Y axis)
+  // 0° = beam straight down, 90° = beam horizontal, 180° = beam straight up
   const horizontalDist = Math.sqrt(dx * dx + dz * dz)
-  let tiltDeg = Math.atan2(dy, horizontalDist) * (180 / Math.PI)
+  let tiltDeg = Math.atan2(horizontalDist, -dy) * (180 / Math.PI)
   if (tiltInvert) tiltDeg = -tiltDeg
 
   return { panDeg, tiltDeg }
