@@ -122,7 +122,7 @@ export const useFollowStore = create<FollowState>((set, get) => ({
   fixtureIds: [],
   activateButton: XBOX_BUTTONS.LT,
   activateMode: 'hold',
-  sensitivity: 4,          // metres/s at full stick
+  sensitivity: 8,          // metres/s at full stick
   targetHeight: 1.5,       // chest height
   followDimmer: 255,
   axisX: XBOX_AXES.LEFT_X,
@@ -154,40 +154,52 @@ export const useFollowStore = create<FollowState>((set, get) => ({
   setTarget: (x, y, z) => set({ targetX: x, targetY: y, targetZ: z }),
 
   activate: () => {
-    const state = get()
-    console.log('[Follow] activate() called, fixtureIds:', state.fixtureIds, 'already active:', state.active)
-    if (state.active || state.fixtureIds.length === 0) return
+    try {
+      const state = get()
+      console.log('[Follow] activate() called, fixtureIds:', state.fixtureIds, 'already active:', state.active)
+      if (state.active || state.fixtureIds.length === 0) return
 
-    // Save current pan/tilt/dimmer for each fixture
-    const patchStore = usePatchStore.getState()
-    const dmxStore = useDmxStore.getState()
-    const saved: Record<string, SavedFixtureChannels> = {}
+      // Save current pan/tilt/dimmer for each fixture
+      const patchStore = usePatchStore.getState()
+      const dmxStore = useDmxStore.getState()
+      const saved: Record<string, SavedFixtureChannels> = {}
 
-    for (const fid of state.fixtureIds) {
-      const entry = patchStore.patch.find(p => p.id === fid)
-      if (!entry) continue
-      const def = patchStore.getFixtureDef(entry.fixtureDefId)
-      if (!def) continue
-      const ch = resolveChannels(entry, def, dmxStore.values)
-      saved[fid] = {
-        pan: ch.pan, panFine: ch.panFine,
-        tilt: ch.tilt, tiltFine: ch.tiltFine,
-        dimmer: ch.dimmer
+      for (const fid of state.fixtureIds) {
+        const entry = patchStore.patch.find(p => p.id === fid)
+        if (!entry) continue
+        const def = patchStore.getFixtureDef(entry.fixtureDefId)
+        if (!def) continue
+        const ch = resolveChannels(entry, def, dmxStore.values)
+        saved[fid] = {
+          pan: ch.pan, panFine: ch.panFine,
+          tilt: ch.tilt, tiltFine: ch.tiltFine,
+          dimmer: ch.dimmer
+        }
+        console.log(`[Follow] saved ${entry.name}: pan=${ch.pan} tilt=${ch.tilt} dim=${ch.dimmer} pos3D=`, entry.position3D)
       }
+
+      // Reset target to center of back wall (upstage center)
+      const { roomConfig } = useVisualizerStore.getState()
+      const targetX = 0
+      const targetY = roomConfig.height / 2
+      const targetZ = roomConfig.depth / 2
+      console.log(`[Follow] Initial target: (${targetX}, ${targetY}, ${targetZ}) room: ${roomConfig.width}x${roomConfig.depth}x${roomConfig.height}`)
+
+      set({
+        active: true,
+        targetX,
+        targetY,
+        targetZ,
+        savedChannels: saved
+      })
+
+      // Apply IK to all follow fixtures immediately
+      const newState = get()
+      console.log('[Follow] Applying initial DMX, active:', newState.active)
+      applyFollowDmx(newState)
+    } catch (e) {
+      console.error('[Follow] activate() error:', e)
     }
-
-    // Reset target to center of back wall (upstage center)
-    const { roomConfig } = useVisualizerStore.getState()
-    set({
-      active: true,
-      targetX: 0,
-      targetY: roomConfig.height / 2,
-      targetZ: roomConfig.depth / 2,
-      savedChannels: saved
-    })
-
-    // Set dimmer on follow fixtures
-    applyFollowDmx(get())
   },
 
   deactivate: () => {
@@ -243,7 +255,10 @@ function applyFollowDmx(state: FollowState) {
 
     // Fixture 3D position
     const pos = entry.position3D
-    if (!pos) continue   // can't calculate IK without a position
+    if (!pos) {
+      console.warn(`[Follow] ${entry.name} has no position3D — skipping IK`)
+      continue
+    }
 
     const fixturePos = { x: pos.x, y: pos.y, z: pos.z }
     const target = { x: state.targetX, y: state.targetY, z: state.targetZ }
