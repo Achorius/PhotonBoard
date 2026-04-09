@@ -8,6 +8,7 @@ import { create } from 'zustand'
 import { gamepadManager, XBOX_BUTTONS, XBOX_AXES, type GamepadState } from '@renderer/lib/gamepad-manager'
 import { usePatchStore } from './patch-store'
 import { useDmxStore } from './dmx-store'
+import { useVisualizerStore } from './visualizer-store'
 import { resolveChannels } from '@renderer/lib/dmx-channel-resolver'
 
 // ── IK helpers ──────────────────────────────────────────────────────
@@ -175,12 +176,13 @@ export const useFollowStore = create<FollowState>((set, get) => ({
       }
     }
 
-    // Reset target to center stage at configured height
+    // Reset target to center of back wall (upstage center)
+    const { roomConfig } = useVisualizerStore.getState()
     set({
       active: true,
       targetX: 0,
-      targetY: state.targetHeight,
-      targetZ: 0,
+      targetY: roomConfig.height / 2,
+      targetZ: roomConfig.depth / 2,
       savedChannels: saved
     })
 
