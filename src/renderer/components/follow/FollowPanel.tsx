@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useFollowStore, startFollowGamepadLoop, stopFollowGamepadLoop } from '@renderer/stores/follow-store'
+import { useFollowStore } from '@renderer/stores/follow-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { XBOX_BUTTONS } from '@renderer/lib/gamepad-manager'
 
@@ -29,12 +29,6 @@ export function FollowPanel() {
 
   const { patch, fixtures } = usePatchStore()
   const [learningButton, setLearningButton] = useState(false)
-
-  // Start/stop the gamepad loop when this panel mounts/unmounts
-  useEffect(() => {
-    startFollowGamepadLoop()
-    return () => stopFollowGamepadLoop()
-  }, [])
 
   // Button learn mode
   useEffect(() => {

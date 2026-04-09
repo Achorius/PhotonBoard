@@ -7,6 +7,7 @@ import { usePlaybackStore } from './stores/playback-store'
 import { useVisualizerStore } from './stores/visualizer-store'
 import type { ShowFile } from '@shared/types'
 import { initMidiRouting } from './lib/midi-manager'
+import { startFollowGamepadLoop } from './stores/follow-store'
 import { Toolbar } from './components/layout/Toolbar'
 import { StatusBar } from './components/layout/StatusBar'
 import { PatchPanel } from './components/layout/PatchPanel'
@@ -234,6 +235,7 @@ export default function App() {
       await loadFixtures()
       initMidi()
       initMidiRouting()
+      startFollowGamepadLoop()  // Gamepad follow loop runs globally (not tied to Follow tab)
       window.photonboard.artnet.configure(DEFAULT_ARTNET_CONFIG)
 
       // Auto-load the last saved show

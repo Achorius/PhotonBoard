@@ -154,6 +154,7 @@ export const useFollowStore = create<FollowState>((set, get) => ({
 
   activate: () => {
     const state = get()
+    console.log('[Follow] activate() called, fixtureIds:', state.fixtureIds, 'already active:', state.active)
     if (state.active || state.fixtureIds.length === 0) return
 
     // Save current pan/tilt/dimmer for each fixture
@@ -265,6 +266,7 @@ function applyFollowDmx(state: FollowState) {
     const dimCh = channels.find(c => c.name.toLowerCase() === 'dimmer' || c.name.toLowerCase() === 'intensity')
 
     // Write DMX
+    console.log(`[Follow] ${entry.name}: pan=${panDeg.toFixed(1)}° tilt=${tiltDeg.toFixed(1)}° → DMX pan=${panDmx.coarse}/${panDmx.fine} tilt=${tiltDmx.coarse}/${tiltDmx.fine} pos3D=${pos ? `${pos.x},${pos.y},${pos.z}` : 'NONE'} target=${state.targetX.toFixed(2)},${state.targetY.toFixed(2)},${state.targetZ.toFixed(2)} panCh=${panCh?.absoluteChannel} tiltCh=${tiltCh?.absoluteChannel}`)
     if (panCh) dmxStore.setChannel(entry.universe, panCh.absoluteChannel, panDmx.coarse)
     if (panFineCh) dmxStore.setChannel(entry.universe, panFineCh.absoluteChannel, panDmx.fine)
     if (tiltCh) dmxStore.setChannel(entry.universe, tiltCh.absoluteChannel, tiltDmx.coarse)
@@ -295,8 +297,10 @@ function onGamepadFrame(gpState: GamepadState) {
   if (store.activateMode === 'hold') {
     // Hold to activate
     if (btn.pressed && !store.active) {
+      console.log('[Follow] Gamepad trigger pressed — activating')
       store.activate()
     } else if (!btn.pressed && store.active) {
+      console.log('[Follow] Gamepad trigger released — deactivating')
       store.deactivate()
     }
   } else {
