@@ -205,7 +205,18 @@ export const useFollowStore = create<FollowState>((set, get) => ({
   deactivate: () => {
     const state = get()
     if (!state.active) return
-    // Keep current fixture positions — don't restore or reset anything
+
+    // Turn off follow fixtures (dimmer to 0) but keep pan/tilt position
+    const patchStore = usePatchStore.getState()
+    const dmxStore = useDmxStore.getState()
+    for (const fid of state.fixtureIds) {
+      const entry = patchStore.patch.find(p => p.id === fid)
+      if (!entry) continue
+      const channels = patchStore.getFixtureChannels(entry)
+      const dimCh = channels.find(c => c.name.toLowerCase() === 'dimmer' || c.name.toLowerCase() === 'intensity')
+      if (dimCh) dmxStore.setChannel(entry.universe, dimCh.absoluteChannel, 0)
+    }
+
     set({ active: false })
   },
 
