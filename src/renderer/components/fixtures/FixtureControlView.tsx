@@ -8,6 +8,7 @@ import { ColorPicker } from '../common/ColorPicker'
 import { XYPad } from '../common/XYPad'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
+import { setProgrammerChannel } from '../../lib/dmx-mixer'
 import type { MidiTargetType } from '@shared/types'
 
 // Context menu for MIDI Learn
@@ -46,7 +47,8 @@ function MidiContextMenu({ x, y, items, onClose }: {
 
 export function FixtureControlView() {
   const { patch, fixtures, groups, selectedFixtureIds, selectFixture, selectAll, clearSelection, getFixtureChannels } = usePatchStore()
-  const { values, setChannel } = useDmxStore()
+  const { values } = useDmxStore()
+  const setChannel = setProgrammerChannel
   const { selectedUniverse, setSelectedUniverse } = useUiStore()
   const { startLearn } = useMidiStore()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null)

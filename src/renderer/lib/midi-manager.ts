@@ -2,6 +2,7 @@ import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn } f
 import { useDmxStore } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
+import { setProgrammerChannel } from './dmx-mixer'
 import { midiToDmx } from './dmx-utils'
 import { startTimeline, stopTimeline, toggleTimeline, rewindTimeline, setTimelineTime } from './timeline-engine'
 import type { MidiMapping } from '@shared/types'
@@ -39,7 +40,7 @@ export function initMidiRouting(): void {
         if (!entry) break
         const channels = patchStore.getFixtureChannels(entry)
         const ch = channels.find(c => c.name === target.parameter)
-        if (ch) useDmxStore.getState().setChannel(entry.universe, ch.absoluteChannel, 0)
+        if (ch) setProgrammerChannel(entry.universe, ch.absoluteChannel, 0)
         break
       }
       case 'master':
@@ -148,7 +149,7 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
         } else {
           dmxValue = resolveValue(mapping, rawValue)
         }
-        useDmxStore.getState().setChannel(entry.universe, ch.absoluteChannel, dmxValue)
+        setProgrammerChannel(entry.universe, ch.absoluteChannel, dmxValue)
       }
       break
     }

@@ -5,6 +5,7 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { HSlider } from '../common/HSlider'
 import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
+import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
 import type { MountingLocation } from '@shared/types'
 
 export function VisualizerView() {
@@ -18,7 +19,8 @@ export function VisualizerView() {
   } = useVisualizerStore()
 
   const { patch, fixtures, selectedFixtureIds, getFixtureChannels, groups, selectGroup, clearSelection, selectAll } = usePatchStore()
-  const { values, setChannel } = useDmxStore()
+  const { values } = useDmxStore()
+  const setChannel = setProgrammerChannel
   const [showControls, setShowControls] = useState(true)
 
   const selectedEntries = patch.filter(p => selectedFixtureIds.includes(p.id))

@@ -6,11 +6,13 @@ import { useVisualizerStore } from '../../stores/visualizer-store'
 import { Fader } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
+import { setProgrammerChannel } from '../../lib/dmx-mixer'
 
 export function PatchPanel() {
   const { patch, fixtures, selectedFixtureIds, selectFixture, clearSelection, getFixtureChannels } = usePatchStore()
   const vizSelectFixture = useVisualizerStore(s => s.selectFixture)
-  const { values, setChannel } = useDmxStore()
+  const { values } = useDmxStore()
+  const setChannel = setProgrammerChannel
   const { setActiveTab } = useUiStore()
   const [universeFilter, setUniverseFilter] = useState<number | null>(null)
 

@@ -8,6 +8,7 @@ import { create } from 'zustand'
 import { gamepadManager, XBOX_BUTTONS, XBOX_AXES, type GamepadState } from '@renderer/lib/gamepad-manager'
 import { usePatchStore } from './patch-store'
 import { useDmxStore } from './dmx-store'
+import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
 import { useVisualizerStore } from './visualizer-store'
 import { resolveChannels } from '@renderer/lib/dmx-channel-resolver'
 
@@ -214,7 +215,7 @@ export const useFollowStore = create<FollowState>((set, get) => ({
       if (!entry) continue
       const channels = patchStore.getFixtureChannels(entry)
       const dimCh = channels.find(c => c.name.toLowerCase() === 'dimmer' || c.name.toLowerCase() === 'intensity')
-      if (dimCh) dmxStore.setChannel(entry.universe, dimCh.absoluteChannel, 0)
+      if (dimCh) setProgrammerChannel(entry.universe, dimCh.absoluteChannel, 0)
     }
 
     set({ active: false })
@@ -271,11 +272,11 @@ function applyFollowDmx(state: FollowState) {
 
     // Write DMX
     console.log(`[Follow] ${entry.name}: pan=${panDeg.toFixed(1)}° tilt=${tiltDeg.toFixed(1)}° → DMX pan=${panDmx.coarse}/${panDmx.fine} tilt=${tiltDmx.coarse}/${tiltDmx.fine} pos3D=${pos ? `${pos.x},${pos.y},${pos.z}` : 'NONE'} target=${state.targetX.toFixed(2)},${state.targetY.toFixed(2)},${state.targetZ.toFixed(2)} panCh=${panCh?.absoluteChannel} tiltCh=${tiltCh?.absoluteChannel}`)
-    if (panCh) dmxStore.setChannel(entry.universe, panCh.absoluteChannel, panDmx.coarse)
-    if (panFineCh) dmxStore.setChannel(entry.universe, panFineCh.absoluteChannel, panDmx.fine)
-    if (tiltCh) dmxStore.setChannel(entry.universe, tiltCh.absoluteChannel, tiltDmx.coarse)
-    if (tiltFineCh) dmxStore.setChannel(entry.universe, tiltFineCh.absoluteChannel, tiltDmx.fine)
-    if (dimCh) dmxStore.setChannel(entry.universe, dimCh.absoluteChannel, state.followDimmer)
+    if (panCh) setProgrammerChannel(entry.universe, panCh.absoluteChannel, panDmx.coarse)
+    if (panFineCh) setProgrammerChannel(entry.universe, panFineCh.absoluteChannel, panDmx.fine)
+    if (tiltCh) setProgrammerChannel(entry.universe, tiltCh.absoluteChannel, tiltDmx.coarse)
+    if (tiltFineCh) setProgrammerChannel(entry.universe, tiltFineCh.absoluteChannel, tiltDmx.fine)
+    if (dimCh) setProgrammerChannel(entry.universe, dimCh.absoluteChannel, state.followDimmer)
   }
 }
 

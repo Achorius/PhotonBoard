@@ -6,6 +6,7 @@ import { useMidiStore } from '../../stores/midi-store'
 import { Fader, FADER_WIDTH, FADER_GAP } from '../common/Fader'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
+import { setProgrammerChannel } from '../../lib/dmx-mixer'
 import type { MidiTargetType } from '@shared/types'
 
 // Context menu for MIDI Learn
@@ -43,7 +44,8 @@ function MidiContextMenu({ x, y, items, onClose }: {
 }
 
 export function FadersView() {
-  const { values, setChannel } = useDmxStore()
+  const { values } = useDmxStore()
+  const setChannel = setProgrammerChannel
   const { patch, fixtures, groups, selectedFixtureIds, selectFixture, clearSelection, addToGroup, getFixtureChannels } = usePatchStore()
   const { selectedUniverse, setSelectedUniverse } = useUiStore()
 

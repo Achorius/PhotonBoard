@@ -6,7 +6,7 @@
 
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
-import { useDmxStore } from '../stores/dmx-store'
+import { setLayer, removeLayer } from './dmx-mixer'
 import { startEffect, stopEffect, stopAllEffects } from './effect-engine'
 import { stopAllFades } from './cue-engine'
 import type { TimelineClip } from '@shared/types'
@@ -45,7 +45,7 @@ function triggerClip(clip: TimelineClip) {
   if (!cuelist || cuelist.cues.length === 0) return
 
   const patchStore = usePatchStore.getState()
-  const dmxStore = useDmxStore.getState()
+  const layerChannels = new Map<number, Map<number, number>>()
 
   for (const cue of cuelist.cues) {
     for (const cv of cue.values) {
@@ -53,9 +53,14 @@ function triggerClip(clip: TimelineClip) {
       if (!entry) continue
       const channels = patchStore.getFixtureChannels(entry)
       const ch = channels.find((c: any) => c.name === cv.channelName)
-      if (ch) dmxStore.setChannel(entry.universe, ch.absoluteChannel, cv.value)
+      if (ch) {
+        let uniMap = layerChannels.get(entry.universe)
+        if (!uniMap) { uniMap = new Map(); layerChannels.set(entry.universe, uniMap) }
+        uniMap.set(ch.absoluteChannel, cv.value)
+      }
     }
   }
+  setLayer(`timeline_${clip.id}`, layerChannels, 50)
 
   if (cuelist.effectSnapshots) {
     for (const fx of cuelist.effectSnapshots) {
@@ -76,18 +81,8 @@ function releaseClip(clip: TimelineClip) {
     }
   }
 
-  // Reset DMX channels that were set by this clip back to 0
-  const patchStore = usePatchStore.getState()
-  const dmxStore = useDmxStore.getState()
-  for (const cue of cuelist.cues) {
-    for (const cv of cue.values) {
-      const entry = patchStore.patch.find(p => p.id === cv.fixtureId)
-      if (!entry) continue
-      const channels = patchStore.getFixtureChannels(entry)
-      const ch = channels.find((c: any) => c.name === cv.channelName)
-      if (ch) dmxStore.setChannel(entry.universe, ch.absoluteChannel, 0)
-    }
-  }
+  // Remove mixer layer — released channels auto-zeroed by mixer
+  removeLayer(`timeline_${clip.id}`)
 }
 
 function tick() {

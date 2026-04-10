@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
+import { setProgrammerChannel } from '../../lib/dmx-mixer'
 import { useEffectsStore } from '../../stores/effects-store'
 import { usePlaybackStore } from '../../stores/playback-store'
 import { getWaveformValue } from '../../lib/effect-engine'
@@ -469,7 +470,7 @@ export function EffectsView() {
           const absChannel = entry.address - 1 + dimmerIdx
           const currentVal = dmxStore.values[entry.universe]?.[absChannel] ?? 0
           if (currentVal === 0) {
-            dmxStore.setChannel(entry.universe, absChannel, 255)
+            setProgrammerChannel(entry.universe, absChannel, 255)
           }
         }
       }
