@@ -5,8 +5,7 @@ import type { ArtNetConfig, UsbDmxConfig, UsbDmxDriver, SerialPortInfo } from '@
 const USB_DRIVERS: { value: UsbDmxDriver; label: string }[] = [
   { value: 'enttec-open-dmx', label: 'ENTTEC Open DMX USB' },
   { value: 'enttec-pro', label: 'ENTTEC DMX USB Pro' },
-  { value: 'eurolite', label: 'Eurolite USB-DMX512 (Open)' },
-  { value: 'eurolite-pro', label: 'Eurolite USB-DMX512 Pro' },
+  { value: 'eurolite', label: 'Eurolite USB-DMX512 / Pro' },
   { value: 'showtec', label: 'Showtec Quick DMX' },
   { value: 'beamz', label: 'Beamz DMX60 / DMX70' },
   { value: 'velleman', label: 'Velleman VM116 / K8062' },
