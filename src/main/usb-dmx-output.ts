@@ -138,15 +138,19 @@ export class UsbDmxOutput {
           reject(err)
           return
         }
-        console.log(`[USB-DMX] Open DMX connected on ${config.portPath} (250kbaud, 8N2)`)
-        const buffer = Buffer.alloc(513) // Start code (0x00) + 512 channels
-        buffer[0] = 0x00 // DMX start code
-        resolve({
-          config,
-          port,
-          connected: true,
-          buffer,
-          sending: false
+        // Enable RS-485 transceiver output by asserting RTS + DTR
+        port.set({ rts: true, dtr: true, brk: false }, (setErr: Error | null) => {
+          if (setErr) console.warn(`[USB-DMX] Warning: failed to set RTS/DTR:`, setErr.message)
+          console.log(`[USB-DMX] Open DMX connected on ${config.portPath} (250kbaud, 8N2, RTS+DTR asserted)`)
+          const buffer = Buffer.alloc(513) // Start code (0x00) + 512 channels
+          buffer[0] = 0x00 // DMX start code
+          resolve({
+            config,
+            port,
+            connected: true,
+            buffer,
+            sending: false
+          })
         })
       })
     })
@@ -172,15 +176,19 @@ export class UsbDmxOutput {
           reject(err)
           return
         }
-        console.log(`[USB-DMX] ENTTEC Pro connected on ${config.portPath} (57600 baud)`)
-        // Pro frame: header(1) + label(1) + length(2) + start_code(1) + 512ch + footer(1) = 518
-        const buffer = Buffer.alloc(518)
-        resolve({
-          config,
-          port,
-          connected: true,
-          buffer,
-          sending: false
+        // Assert RTS/DTR to enable RS-485 transceiver
+        port.set({ rts: true, dtr: true }, (setErr: Error | null) => {
+          if (setErr) console.warn(`[USB-DMX] Warning: failed to set RTS/DTR:`, setErr.message)
+          console.log(`[USB-DMX] ENTTEC Pro connected on ${config.portPath} (57600 baud, RTS+DTR asserted)`)
+          // Pro frame: header(1) + label(1) + length(2) + start_code(1) + 512ch + footer(1) = 518
+          const buffer = Buffer.alloc(518)
+          resolve({
+            config,
+            port,
+            connected: true,
+            buffer,
+            sending: false
+          })
         })
       })
     })
@@ -216,8 +224,11 @@ export class UsbDmxOutput {
 
   /**
    * Send raw DMX frame (Open DMX / FTDI style)
-   * Uses the serial BREAK signal (port.set brk) for proper DMX512 BREAK timing.
-   * Frame: BREAK (≥88µs) + MAB (≥8µs) + START_CODE(0x00) + 512 channel bytes
+   * BREAK generated via baud-rate switching (most reliable on macOS):
+   *   1. Switch to 100000 baud → send 0x00 → produces ~100µs BREAK on wire
+   *   2. Switch back to 250000 baud → send START_CODE + 512 channel bytes
+   *
+   * This is the same approach used by node-dmx and QLC+.
    */
   private sendOpenDmx(instance: UsbDmxInstance, data: Uint8Array): void {
     try {
@@ -233,34 +244,46 @@ export class UsbDmxOutput {
         instance.buffer[i + 1] = data[i]
       }
 
-      // 1. Assert BREAK on the DMX line
-      instance.port.set({ brk: true, rts: false }, (err: Error | null) => {
+      // Step 1: Switch to low baud rate for BREAK generation
+      // At 100000 baud, a 0x00 byte = 10 bits × 10µs = 100µs low = valid BREAK (≥88µs)
+      instance.port.update({ baudRate: 100000 }, (err: Error | null) => {
         if (err || !instance.connected) {
-          console.error(`[USB-DMX] BREAK set error:`, err?.message)
+          if (err) console.error(`[USB-DMX] Baud switch to 100k error:`, err.message)
           instance.sending = false
           return
         }
-        // 2. Hold BREAK for ~1ms (DMX spec requires ≥88µs)
-        setTimeout(() => {
-          // 3. Release BREAK (start Mark After Break)
-          instance.port.set({ brk: false, rts: false }, (err2: Error | null) => {
-            if (err2 || !instance.connected) {
-              console.error(`[USB-DMX] BREAK release error:`, err2?.message)
+        // Send the BREAK byte (0x00 at low baud = long low signal)
+        instance.port.write(Buffer.from([0x00]), (err2: Error | null) => {
+          if (err2 || !instance.connected) {
+            if (err2) console.error(`[USB-DMX] BREAK write error:`, err2.message)
+            instance.sending = false
+            return
+          }
+          instance.port.drain((err3: Error | null) => {
+            if (err3 || !instance.connected) {
               instance.sending = false
               return
             }
-            // 4. Send DMX frame (start code + 512 channels)
-            instance.port.write(instance.buffer, (err3: Error | null) => {
-              if (err3) {
-                console.error(`[USB-DMX] Write error:`, err3.message)
-                instance.connected = false
-              }
-              instance.port.drain(() => {
+            // Step 2: Switch back to DMX baud rate and send frame
+            instance.port.update({ baudRate: 250000 }, (err4: Error | null) => {
+              if (err4 || !instance.connected) {
+                if (err4) console.error(`[USB-DMX] Baud switch to 250k error:`, err4.message)
                 instance.sending = false
+                return
+              }
+              // Send DMX frame: start code (0x00) + 512 channels
+              instance.port.write(instance.buffer, (err5: Error | null) => {
+                if (err5) {
+                  console.error(`[USB-DMX] Frame write error:`, err5.message)
+                  instance.connected = false
+                }
+                instance.port.drain(() => {
+                  instance.sending = false
+                })
               })
             })
           })
-        }, 1)
+        })
       })
     } catch (e) {
       console.error(`[USB-DMX] Send error (${instance.config.driver}):`, (e as Error).message)
