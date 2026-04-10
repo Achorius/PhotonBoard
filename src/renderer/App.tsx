@@ -13,6 +13,7 @@ import { StatusBar } from './components/layout/StatusBar'
 import { PatchPanel } from './components/layout/PatchPanel'
 import { PatchView } from './components/patch/PatchView'
 import { FixtureControlView } from './components/fixtures/FixtureControlView'
+import { FixtureSheet } from './components/fixtures/FixtureSheet'
 import { PlaybackView } from './components/playback/PlaybackView'
 import { EffectsView } from './components/effects/EffectsView'
 import { MidiView } from './components/midi/MidiView'
@@ -23,7 +24,7 @@ import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
 import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
-import { startMixer, stopMixer } from './lib/dmx-mixer'
+import { startMixer, stopMixer, clearProgrammer } from './lib/dmx-mixer'
 
 const DEFAULT_ARTNET_CONFIG = [
   { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
@@ -40,9 +41,10 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'effects',       label: 'Effects',      shortcut: '4' },
   { id: 'playback',      label: 'Scenes',       shortcut: '5' },
   { id: 'fixtures',      label: 'Fixtures',     shortcut: '6' },
-  { id: 'patch',         label: 'Patch',        shortcut: '7' },
-  { id: 'midi',          label: 'MIDI',         shortcut: '8' },
-  { id: 'follow',        label: 'Follow',       shortcut: '9' },
+  { id: 'fixture-sheet', label: 'Sheet',        shortcut: '7' },
+  { id: 'patch',         label: 'Patch',        shortcut: '8' },
+  { id: 'midi',          label: 'MIDI',         shortcut: '9' },
+  { id: 'follow',        label: 'Follow',       shortcut: '' },
   { id: 'settings',      label: 'Settings',     shortcut: '0' },
 ]
 
@@ -289,6 +291,11 @@ export default function App() {
         useDmxStore.getState().toggleBlackout()
       }
 
+      if (e.key === 'Backspace') {
+        clearProgrammer()
+        e.preventDefault()
+      }
+
       if (e.key === ' ' && activeTab === 'playback') {
         const cuelists = usePlaybackStore.getState().cuelists
         if (cuelists.length > 0) {
@@ -304,8 +311,9 @@ export default function App() {
   const renderView = () => {
     switch (activeTab) {
       case 'patch':      return <PatchView />
-      case 'fixtures':   return <FixtureControlView />
-      case 'faders':     return <FixtureControlView /> // legacy: redirect to unified view
+      case 'fixtures':      return <FixtureControlView />
+      case 'fixture-sheet': return <FixtureSheet />
+      case 'faders':        return <FixtureControlView /> // legacy: redirect to unified view
       case 'playback':   return <PlaybackView />
       case 'effects':    return <EffectsView />
       case 'midi':       return <MidiView />

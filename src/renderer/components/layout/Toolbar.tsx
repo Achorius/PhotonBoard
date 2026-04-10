@@ -5,20 +5,22 @@ import { useMidiStore } from '../../stores/midi-store'
 import { useFollowStore } from '../../stores/follow-store'
 import { HSlider } from '../common/HSlider'
 import { toggleTimeline, getTimelineState } from '../../lib/timeline-engine'
+import { clearProgrammer, isProgrammerActive } from '../../lib/dmx-mixer'
 import type { MidiTargetType } from '@shared/types'
 
 export function Toolbar() {
   const { showName, activeTab, setActiveTab } = useUiStore()
-  const { grandMaster, setGrandMaster, blackout, toggleBlackout, blinder, toggleBlinder, strobe, toggleStrobe, resetAll } = useDmxStore()
+  const { grandMaster, setGrandMaster, blackout, toggleBlackout, blinder, toggleBlinder, strobe, toggleStrobe } = useDmxStore()
   const followActive = useFollowStore(s => s.active)
   const { mappings, isLearning, learnTarget, cancelLearn, startLearn } = useMidiStore()
 
   const [timelinePlaying, setTimelinePlaying] = useState(false)
+  const [progActive, setProgActive] = useState(false)
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const state = getTimelineState()
-      setTimelinePlaying(state.isPlaying)
+      setTimelinePlaying(getTimelineState().isPlaying)
+      setProgActive(isProgrammerActive())
     }, 200)
     return () => clearInterval(interval)
   }, [])
@@ -106,14 +108,18 @@ export function Toolbar() {
         Live
       </button>
 
-      {/* Reset */}
+      {/* Clear Programmer */}
       <button
-        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('reset')} bg-surface-3 text-gray-400 hover:bg-yellow-700/40 hover:text-yellow-300`}
-        onClick={resetAll}
-        onContextMenu={(e) => handleMidiLearn(e, 'reset', 'Reset')}
-        title="Reset all channels to zero, GM to 100% — Right-click: MIDI Learn"
+        className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${
+          progActive
+            ? 'bg-orange-600/80 text-white hover:bg-orange-500'
+            : 'bg-surface-3 text-gray-500 cursor-default'
+        }`}
+        onClick={() => { clearProgrammer(); setProgActive(false) }}
+        disabled={!progActive}
+        title="Clear Programmer — release all manual values (Backspace)"
       >
-        Reset
+        Clear
       </button>
 
       {/* Blinder */}
