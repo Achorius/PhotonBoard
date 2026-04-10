@@ -329,6 +329,12 @@ export interface ChaseStep {
 
 export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random' | 'pulse' | 'bounce' | 'step' | 'custom'
 
+/** Spatial mode for 3D-aware effects */
+export type SpatialMode = 'index' | 'spatial'
+
+/** Axis along which spatial effects propagate */
+export type SpatialAxis = 'x' | 'y' | 'z' | 'radial'
+
 /** Keyframe point for custom waveform curves (Avolites-style) */
 export interface WaveformKeyframe {
   x: number  // 0-1 phase position
@@ -358,6 +364,8 @@ export interface Effect {
   channels?: EffectChannel[] // compound multi-channel effects (overrides channelType)
   oneShot?: boolean          // trigger once then auto-stop
   keyframes?: WaveformKeyframe[] // custom waveform curve points (used when waveform === 'custom')
+  spatialMode?: SpatialMode  // 'index' = fixture order, 'spatial' = 3D position (default: 'index')
+  spatialAxis?: SpatialAxis  // axis for spatial phase spread (default: 'x' = left→right)
 }
 
 // --- Timeline ---

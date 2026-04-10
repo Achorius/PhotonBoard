@@ -4,7 +4,7 @@
 // Supports compound multi-channel effects and one-shot mode.
 // ============================================================
 
-import type { Effect, EffectChannel, WaveformType, WaveformKeyframe } from '@shared/types'
+import type { Effect, EffectChannel, WaveformType, WaveformKeyframe, SpatialAxis, Position3D, PatchEntry } from '@shared/types'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from './dmx-channel-resolver'
@@ -41,6 +41,60 @@ const CHANNEL_TYPE_TO_NAME: Record<string, string> = {
 
 // Position channels oscillate around center (128) instead of 0
 const POSITION_CHANNELS = new Set(['pan', 'tilt'])
+
+/**
+ * Get the spatial coordinate of a fixture along a given axis.
+ * Returns the projection of the fixture's 3D position onto the chosen axis.
+ */
+function getSpatialCoord(pos: Position3D, axis: SpatialAxis): number {
+  switch (axis) {
+    case 'x': return pos.x   // left → right
+    case 'y': return pos.y   // floor → ceiling
+    case 'z': return pos.z   // downstage → upstage
+    case 'radial': return Math.sqrt(pos.x * pos.x + pos.z * pos.z) // center → outside
+  }
+}
+
+/**
+ * Pre-compute normalized spatial phase offsets for all fixtures in an effect.
+ * Returns a Map<fixtureId, normalizedPosition> where 0 = min position, 1 = max position.
+ * Fixtures without position3D fall back to their index-based position.
+ */
+function computeSpatialPhases(
+  fixtureIds: string[],
+  patch: PatchEntry[],
+  axis: SpatialAxis
+): Map<string, number> {
+  const result = new Map<string, number>()
+  const coords: { id: string; value: number }[] = []
+
+  for (let i = 0; i < fixtureIds.length; i++) {
+    const fid = fixtureIds[i]
+    const entry = patch.find(p => p.id === fid)
+    const pos = entry?.position3D
+    if (pos) {
+      coords.push({ id: fid, value: getSpatialCoord(pos, axis) })
+    } else {
+      // Fallback: use index-based position
+      coords.push({ id: fid, value: i })
+    }
+  }
+
+  if (coords.length <= 1) {
+    for (const c of coords) result.set(c.id, 0)
+    return result
+  }
+
+  const min = Math.min(...coords.map(c => c.value))
+  const max = Math.max(...coords.map(c => c.value))
+  const range = max - min
+
+  for (const c of coords) {
+    result.set(c.id, range > 0 ? (c.value - min) / range : 0)
+  }
+
+  return result
+}
 
 function isPositionChannel(channelType: string): boolean {
   return POSITION_CHANNELS.has(channelType.toLowerCase())
@@ -171,6 +225,12 @@ function updateEffects(): void {
       ? effect.channels
       : [{ channelType: effect.channelType, phaseOffset: 0, depth: effect.depth, frequencyMultiplier: 1 }]
 
+    // Pre-compute spatial phases if spatial mode is active
+    const useSpatial = effect.spatialMode === 'spatial'
+    const spatialPhases = useSpatial
+      ? computeSpatialPhases(effect.fixtureIds, patchStore.patch, effect.spatialAxis ?? 'x')
+      : null
+
     for (let i = 0; i < fixtureCount; i++) {
       const fixtureId = effect.fixtureIds[i]
       const entry = patchStore.patch.find(p => p.id === fixtureId)
@@ -182,10 +242,11 @@ function updateEffects(): void {
       const mode = def.modes.find(m => m.name === entry.modeName)
       if (!mode) continue
 
-      // Phase offset per fixture (fan/spread effect)
-      const fixturePhaseOffset = fixtureCount > 1
-        ? (effect.fan / 360) * (i / (fixtureCount - 1))
-        : 0
+      // Phase offset per fixture: spatial (3D position) or index-based
+      const normalizedPos = spatialPhases
+        ? (spatialPhases.get(fixtureId) ?? 0)
+        : (fixtureCount > 1 ? i / (fixtureCount - 1) : 0)
+      const fixturePhaseOffset = (effect.fan / 360) * normalizedPos
       const baseOffset = effect.offset / 360
 
       // Process each channel in the effect

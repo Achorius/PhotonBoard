@@ -6,7 +6,7 @@ import { usePlaybackStore } from '../../stores/playback-store'
 import { getWaveformValue } from '../../lib/effect-engine'
 import { HSlider } from '../common/HSlider'
 import { CurveEditor } from './CurveEditor'
-import type { WaveformType, EffectChannel, CueChannelValue, PatchEntry, FixtureDefinition } from '@shared/types'
+import type { WaveformType, EffectChannel, CueChannelValue, PatchEntry, FixtureDefinition, SpatialMode, SpatialAxis } from '@shared/types'
 
 // ============================================================
 // Fixture Capability Detection
@@ -83,7 +83,7 @@ interface EffectTemplate {
   id: string
   label: string
   icon: string
-  category: 'movement' | 'color' | 'intensity' | 'beam'
+  category: 'movement' | 'color' | 'intensity' | 'beam' | 'spatial'
   description: string
   waveform: WaveformType
   defaultSpeed: number    // BPM
@@ -94,6 +94,9 @@ interface EffectTemplate {
   channels?: string[]
   // Compound multi-channel mode (preferred)
   compound?: EffectChannel[]
+  // Spatial 3D mode
+  spatialMode?: SpatialMode
+  spatialAxis?: SpatialAxis
 }
 
 const EFFECT_TEMPLATES: EffectTemplate[] = [
@@ -236,6 +239,72 @@ const EFFECT_TEMPLATES: EffectTemplate[] = [
   { id: 'frost-fade', label: 'Frost Fade', icon: '❄', category: 'beam',
     description: 'Fade frost in and out',
     channels: ['Frost'], waveform: 'sine', defaultSpeed: 8, defaultSize: 80, defaultSpread: 0 },
+
+  // ────────────── Spatial 3D ──────────────
+  { id: 'spatial-color-lr', label: 'Color Sweep L→R', icon: '→', category: 'spatial',
+    description: 'RGB color wave sweeping left to right across the venue',
+    waveform: 'sine', defaultSpeed: 15, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'x',
+    compound: [
+      { channelType: 'Red', phaseOffset: 0, depth: 255 },
+      { channelType: 'Green', phaseOffset: 120, depth: 255 },
+      { channelType: 'Blue', phaseOffset: 240, depth: 255 },
+    ] },
+  { id: 'spatial-color-fb', label: 'Color Sweep F→B', icon: '↓', category: 'spatial',
+    description: 'RGB color wave sweeping front to back',
+    waveform: 'sine', defaultSpeed: 15, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'z',
+    compound: [
+      { channelType: 'Red', phaseOffset: 0, depth: 255 },
+      { channelType: 'Green', phaseOffset: 120, depth: 255 },
+      { channelType: 'Blue', phaseOffset: 240, depth: 255 },
+    ] },
+  { id: 'spatial-color-radial', label: 'Color Radial', icon: '◎', category: 'spatial',
+    description: 'RGB colors radiate from center outward',
+    waveform: 'sine', defaultSpeed: 12, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'radial',
+    compound: [
+      { channelType: 'Red', phaseOffset: 0, depth: 255 },
+      { channelType: 'Green', phaseOffset: 120, depth: 255 },
+      { channelType: 'Blue', phaseOffset: 240, depth: 255 },
+    ] },
+  { id: 'spatial-dim-lr', label: 'Dim Wave L→R', icon: '〰', category: 'spatial',
+    description: 'Intensity wave sweeping left to right',
+    channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'x' },
+  { id: 'spatial-dim-fb', label: 'Dim Wave F→B', icon: '〰', category: 'spatial',
+    description: 'Intensity wave sweeping front to back',
+    channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'z' },
+  { id: 'spatial-dim-radial', label: 'Dim Radial', icon: '●', category: 'spatial',
+    description: 'Intensity pulse radiating from center',
+    channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 20, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'radial' },
+  { id: 'spatial-strobe-lr', label: 'Strobe Sweep L→R', icon: '⚡', category: 'spatial',
+    description: 'Strobe effect sweeping left to right',
+    channels: ['Dimmer'], waveform: 'square', defaultSpeed: 240, defaultSize: 100, defaultSpread: 180,
+    spatialMode: 'spatial', spatialAxis: 'x' },
+  { id: 'spatial-strobe-radial', label: 'Strobe Radial', icon: '💥', category: 'spatial',
+    description: 'Strobe burst radiating from center',
+    channels: ['Dimmer'], waveform: 'square', defaultSpeed: 240, defaultSize: 100, defaultSpread: 180,
+    spatialMode: 'spatial', spatialAxis: 'radial' },
+  { id: 'spatial-color-height', label: 'Color Height', icon: '↕', category: 'spatial',
+    description: 'RGB colors shift by fixture height',
+    waveform: 'sine', defaultSpeed: 10, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'y',
+    compound: [
+      { channelType: 'Red', phaseOffset: 0, depth: 255 },
+      { channelType: 'Green', phaseOffset: 120, depth: 255 },
+      { channelType: 'Blue', phaseOffset: 240, depth: 255 },
+    ] },
+  { id: 'spatial-chase-lr', label: 'Chase L→R', icon: '►', category: 'spatial',
+    description: 'Sharp intensity chase left to right',
+    channels: ['Dimmer'], waveform: 'pulse', defaultSpeed: 60, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'x' },
+  { id: 'spatial-white-wave', label: 'White Wave', icon: '○', category: 'spatial',
+    description: 'White color wave sweeping across venue',
+    channels: ['White'], waveform: 'sine', defaultSpeed: 20, defaultSize: 100, defaultSpread: 360,
+    spatialMode: 'spatial', spatialAxis: 'x' },
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -243,6 +312,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   color: '🎨 Color',
   intensity: '💡 Intensity',
   beam: '🔦 Beam',
+  spatial: '🌐 Spatial 3D',
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -250,6 +320,14 @@ const CATEGORY_COLORS: Record<string, string> = {
   color: '#ec4899',
   intensity: '#e85d04',
   beam: '#22d3ee',
+  spatial: '#a855f7',
+}
+
+const SPATIAL_AXIS_LABELS: Record<SpatialAxis, string> = {
+  x: 'L↔R',
+  y: '↕ Height',
+  z: 'F↔B',
+  radial: '◎ Radial',
 }
 
 const WAVEFORM_LABELS: Record<WaveformType, string> = {
@@ -419,6 +497,8 @@ export function EffectsView() {
           fan: template.defaultSpread,
           isRunning: true,
           oneShot: template.oneShot,
+          spatialMode: template.spatialMode,
+          spatialAxis: template.spatialAxis,
         })
       }
       return
@@ -449,13 +529,15 @@ export function EffectsView() {
           fan: template.defaultSpread,
           isRunning: true,
           oneShot: template.oneShot,
+          spatialMode: template.spatialMode,
+          spatialAxis: template.spatialAxis,
         })
       }
     }
   }, [hasSelection, selectedFixtureIds, patch, addEffect, updateEffect])
 
   const categorizedTemplates = useMemo(() => {
-    const cats: Record<string, EffectTemplate[]> = { movement: [], color: [], intensity: [], beam: [] }
+    const cats: Record<string, EffectTemplate[]> = { movement: [], color: [], intensity: [], beam: [], spatial: [] }
     for (const t of EFFECT_TEMPLATES) cats[t.category].push(t)
     return cats
   }, [])
@@ -667,6 +749,9 @@ export function EffectsView() {
                                 {template.compound && (
                                   <span className="text-[9px] bg-indigo-600/30 text-indigo-400 px-1 rounded">multi</span>
                                 )}
+                                {template.spatialMode === 'spatial' && (
+                                  <span className="text-[9px] bg-purple-600/30 text-purple-400 px-1 rounded">3D</span>
+                                )}
                                 {compat === 'partial' && (
                                   <span className="text-[9px] bg-amber-600/30 text-amber-400 px-1 rounded" title="Some selected fixtures don't support this effect">
                                     ⚠
@@ -700,7 +785,7 @@ export function EffectsView() {
                 const sizePercent = Math.round((effect.depth / 255) * 100)
                 const isRunning = effect.isRunning
                 const isCompound = effect.channels && effect.channels.length > 0
-                const categoryColor = getCategoryColor(effect.channelType)
+                const categoryColor = effect.spatialMode === 'spatial' ? '#a855f7' : getCategoryColor(effect.channelType)
 
                 return (
                   <div
@@ -737,6 +822,11 @@ export function EffectsView() {
                           {isCompound && (
                             <span className="text-[9px] bg-indigo-600/30 text-indigo-400 px-1 rounded shrink-0">
                               {effect.channels!.map(c => c.channelType).join('+')}
+                            </span>
+                          )}
+                          {effect.spatialMode === 'spatial' && (
+                            <span className="text-[9px] bg-purple-600/30 text-purple-400 px-1 rounded shrink-0">
+                              3D {SPATIAL_AXIS_LABELS[effect.spatialAxis ?? 'x']}
                             </span>
                           )}
                         </div>
@@ -837,16 +927,44 @@ export function EffectsView() {
                       </div>
                     </div>
 
-                    {/* One-shot toggle */}
-                    <div className="flex items-center gap-3 pt-1">
+                    {/* Spatial + One-shot controls */}
+                    <div className="flex items-center gap-4 pt-1">
                       <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={effect.spatialMode === 'spatial'}
+                          onChange={e => updateEffect(effect.id, {
+                            spatialMode: e.target.checked ? 'spatial' : 'index'
+                          })}
+                          className="accent-purple-500"
+                        />
+                        <span className="text-[10px] text-gray-400">Spatial 3D</span>
+                      </label>
+                      {effect.spatialMode === 'spatial' && (
+                        <div className="flex items-center gap-1">
+                          {(['x', 'z', 'y', 'radial'] as SpatialAxis[]).map(axis => (
+                            <button
+                              key={axis}
+                              className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                                (effect.spatialAxis ?? 'x') === axis
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-surface-3 text-gray-500 hover:text-gray-300'
+                              }`}
+                              onClick={() => updateEffect(effect.id, { spatialAxis: axis })}
+                            >
+                              {SPATIAL_AXIS_LABELS[axis]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <label className="flex items-center gap-1.5 cursor-pointer ml-auto">
                         <input
                           type="checkbox"
                           checked={effect.oneShot ?? false}
                           onChange={e => updateEffect(effect.id, { oneShot: e.target.checked })}
                           className="accent-accent"
                         />
-                        <span className="text-[10px] text-gray-400">One-shot (trigger once)</span>
+                        <span className="text-[10px] text-gray-400">One-shot</span>
                       </label>
                     </div>
 
