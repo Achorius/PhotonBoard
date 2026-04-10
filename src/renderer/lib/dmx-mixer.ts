@@ -54,6 +54,8 @@ let prevWrittenChannels = new Map<number, Set<number>>() // universe → set of 
 
 // Cache for channel precedence lookups (rebuilt when patch changes)
 let precedenceCache = new Map<string, ChannelPrecedence>() // "universe:channel" → HTP|LTP
+// Default/neutral values per channel (0 for most, 128 for pan/tilt)
+let defaultValueCache = new Map<string, number>() // "universe:channel" → default value
 let lastPatchVersion = -1
 
 // --------------- Public API ---------------
@@ -193,6 +195,7 @@ function ensurePrecedenceCache(): void {
   lastPatchVersion = version
 
   precedenceCache = new Map()
+  defaultValueCache = new Map()
   const { patch, fixtures } = patchStore
 
   for (const entry of patch) {
@@ -214,6 +217,12 @@ function ensurePrecedenceCache(): void {
         const prec = inferPrecedence(chDef?.type, chName)
         precedenceCache.set(key, prec)
       }
+
+      // Default/neutral value: 128 for pan/tilt (center), 0 for everything else
+      const defaultVal = inferDefaultValue(chDef?.type, chName, chDef?.defaultValue)
+      if (defaultVal !== 0) {
+        defaultValueCache.set(key, defaultVal)
+      }
     })
   }
 }
@@ -224,6 +233,18 @@ function inferPrecedence(type: string | undefined, name: string): ChannelPrecede
   if (t === 'intensity' || t.includes('dimmer') || t.includes('master')) return 'HTP'
   // Everything else is LTP (position, color, gobo, effects, etc.)
   return 'LTP'
+}
+
+function inferDefaultValue(type: string | undefined, name: string, explicitDefault?: number): number {
+  if (explicitDefault !== undefined) return explicitDefault
+  const t = (type || name).toLowerCase()
+  // Pan/tilt center at 128
+  if (t.includes('pan') || t.includes('tilt')) return 128
+  return 0
+}
+
+function getChannelDefault(universe: number, channel: number): number {
+  return defaultValueCache.get(`${universe}:${channel}`) ?? 0
 }
 
 function getChannelPrecedence(universe: number, channel: number): ChannelPrecedence {
@@ -288,13 +309,13 @@ function mixerTick(): void {
       }
     }
 
-    // Zero out channels that were active in the previous frame but are no longer
-    // in any layer (e.g. an effect or cuelist was stopped/removed).
+    // Reset released channels to their default value (0 for most, 128 for pan/tilt)
+    // when no layer provides them anymore (e.g. an effect or cuelist was stopped).
     const prevSet = prevWrittenChannels.get(u)
     if (prevSet) {
       for (const ch of prevSet) {
         if (!writtenSet.has(ch)) {
-          merged[ch] = 0
+          merged[ch] = getChannelDefault(u, ch)
           hasChanges = true
         }
       }
