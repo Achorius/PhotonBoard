@@ -3,6 +3,7 @@ import { useDmxStore } from '../../stores/dmx-store'
 import { usePatchStore } from '../../stores/patch-store'
 import { useMidiStore } from '../../stores/midi-store'
 import { useUiStore } from '../../stores/ui-store'
+import { CommandLine } from './CommandLine'
 
 export function StatusBar() {
   const { blackout, grandMaster } = useDmxStore()
@@ -65,6 +66,9 @@ export function StatusBar() {
           [{lastMessage.type.toUpperCase()} ch{lastMessage.channel} #{lastMessage.number} v{lastMessage.value}]
         </span>
       )}
+
+      <div className="w-px h-3 bg-surface-3" />
+      <CommandLine />
 
       <div className="flex-1" />
 

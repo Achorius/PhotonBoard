@@ -16,6 +16,9 @@ export interface FadeState {
   delay: number
   progress: number // 0-1
   complete: boolean
+  tracking: boolean // true = tracked channels persist, false = fade to 0
+  /** Accumulated tracked values from all previous cues in this cuelist */
+  trackedValues: Map<string, number>
 }
 
 const activeFades: Map<string, FadeState> = new Map()
@@ -34,8 +37,20 @@ export function setFadeCompleteCallback(cb: (cuelistId: string) => void): void {
 export function startFade(
   cuelistId: string,
   fromCue: Cue | null,
-  toCue: Cue
+  toCue: Cue,
+  tracking: boolean = true
 ): void {
+  // Carry over tracked values from previous fade (accumulated state)
+  const prevFade = activeFades.get(cuelistId)
+  const trackedValues = prevFade ? new Map(prevFade.trackedValues) : new Map<string, number>()
+
+  // Merge fromCue values into tracked state
+  if (fromCue) {
+    for (const cv of fromCue.values) {
+      trackedValues.set(`${cv.fixtureId}:${cv.channelName}`, cv.value)
+    }
+  }
+
   activeFades.set(cuelistId, {
     cuelistId,
     fromCue,
@@ -45,7 +60,9 @@ export function startFade(
     fadeOut: toCue.fadeOut * 1000,
     delay: toCue.delay * 1000,
     progress: 0,
-    complete: false
+    complete: false,
+    tracking,
+    trackedValues
   })
 
   if (!animationFrame) {
@@ -116,11 +133,25 @@ function updateFades(): void {
       fromMap.delete(key)
     }
 
-    // Fade out channels that are in "from" but not in "to"
+    // Channels in "from" but not in "to": tracking keeps them, non-tracking fades to 0
     for (const [key, fromVal] of fromMap) {
-      const fadeOutProgress = Math.min(1, delayedElapsed / Math.max(fade.fadeOut, 1))
-      const t = fadeOutProgress * fadeOutProgress * (3 - 2 * fadeOutProgress)
-      vals.set(key, Math.round(fromVal * (1 - t)))
+      if (fade.tracking) {
+        // Tracking: value persists unchanged
+        vals.set(key, fromVal)
+      } else {
+        const fadeOutProgress = Math.min(1, delayedElapsed / Math.max(fade.fadeOut, 1))
+        const t = fadeOutProgress * fadeOutProgress * (3 - 2 * fadeOutProgress)
+        vals.set(key, Math.round(fromVal * (1 - t)))
+      }
+    }
+
+    // Also include accumulated tracked values not in current from/to
+    if (fade.tracking) {
+      for (const [key, val] of fade.trackedValues) {
+        if (!vals.has(key)) {
+          vals.set(key, val)
+        }
+      }
     }
 
     allValues.set(id, vals)
@@ -149,8 +180,16 @@ export function getActiveFades(): Map<string, FadeState> {
 }
 
 export function snapToCue(cuelistId: string, cue: Cue): Map<string, number> {
+  // Preserve tracked values before deleting the fade
+  const prevFade = activeFades.get(cuelistId)
+  const trackedValues = prevFade ? new Map(prevFade.trackedValues) : new Map<string, number>()
   activeFades.delete(cuelistId)
+
   const vals = new Map<string, number>()
+  // Include tracked values first, then overlay current cue
+  for (const [key, val] of trackedValues) {
+    vals.set(key, val)
+  }
   for (const cv of cue.values) {
     vals.set(`${cv.fixtureId}:${cv.channelName}`, cv.value)
   }
