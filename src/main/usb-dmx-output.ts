@@ -184,6 +184,8 @@ export class UsbDmxOutput {
     })
   }
 
+  private sendCount = 0
+
   /**
    * Send DMX data to all connected USB adapters
    */
@@ -191,9 +193,16 @@ export class UsbDmxOutput {
     for (const [universeIdx, instance] of this.instances) {
       if (!instance.connected || universeIdx >= universes.length) continue
       // Skip if previous frame is still being sent
-      if (instance.sending) continue
+      if (instance.sending) return
 
       const data = universes[universeIdx]
+
+      // Diagnostic: log every 200th frame + any non-zero channel 40 (Fuzzix at addr 041)
+      this.sendCount++
+      if (this.sendCount % 200 === 1) {
+        const nonZero = Array.from(data).filter(v => v > 0).length
+        console.log(`[USB-DMX] Frame #${this.sendCount} → ${instance.config.driver} U${universeIdx} | ${nonZero} non-zero ch | ch40-47: [${data[40]},${data[41]},${data[42]},${data[43]},${data[44]},${data[45]},${data[46]},${data[47]}] | connected=${instance.connected} sending=${instance.sending}`)
+      }
 
       if (this.isProProtocol(instance.config.driver)) {
         this.sendEnttecPro(instance, data)
@@ -205,7 +214,8 @@ export class UsbDmxOutput {
 
   /**
    * Send raw DMX frame (Open DMX / FTDI style)
-   * The FTDI chip handles the BREAK signal via baud rate switching
+   * Uses the serial BREAK signal (port.set brk) for proper DMX512 BREAK timing.
+   * Frame: BREAK (≥88µs) + MAB (≥8µs) + START_CODE(0x00) + 512 channel bytes
    */
   private sendOpenDmx(instance: UsbDmxInstance, data: Uint8Array): void {
     try {
@@ -221,28 +231,34 @@ export class UsbDmxOutput {
         instance.buffer[i + 1] = data[i]
       }
 
-      // Send BREAK by setting baud to low rate momentarily
-      instance.port.update({ baudRate: 76800 }, (err: Error | null) => {
-        if (err || !instance.connected) { instance.sending = false; instance.connected = false; return }
-        // Send break byte at low baud (appears as BREAK on the wire)
-        const breakBuf = Buffer.from([0x00])
-        instance.port.write(breakBuf, (err2: Error | null) => {
-          if (err2 || !instance.connected) { instance.sending = false; instance.connected = false; return }
-          instance.port.drain((err3: Error | null) => {
-            if (err3 || !instance.connected) { instance.sending = false; instance.connected = false; return }
-            // Restore DMX baud rate and send the full frame
-            instance.port.update({ baudRate: 250000 }, (err4: Error | null) => {
-              if (err4 || !instance.connected) { instance.sending = false; instance.connected = false; return }
-              instance.port.write(instance.buffer, (err5: Error | null) => {
-                if (err5) {
-                  console.error(`[USB-DMX] Write error on ${instance.config.portPath}:`, err5.message)
-                  instance.connected = false
-                }
+      // 1. Assert BREAK on the DMX line
+      instance.port.set({ brk: true, rts: false }, (err: Error | null) => {
+        if (err || !instance.connected) {
+          console.error(`[USB-DMX] BREAK set error:`, err?.message)
+          instance.sending = false
+          return
+        }
+        // 2. Hold BREAK for ~1ms (DMX spec requires ≥88µs)
+        setTimeout(() => {
+          // 3. Release BREAK (start Mark After Break)
+          instance.port.set({ brk: false, rts: false }, (err2: Error | null) => {
+            if (err2 || !instance.connected) {
+              console.error(`[USB-DMX] BREAK release error:`, err2?.message)
+              instance.sending = false
+              return
+            }
+            // 4. Send DMX frame (start code + 512 channels)
+            instance.port.write(instance.buffer, (err3: Error | null) => {
+              if (err3) {
+                console.error(`[USB-DMX] Write error:`, err3.message)
+                instance.connected = false
+              }
+              instance.port.drain(() => {
                 instance.sending = false
               })
             })
           })
-        })
+        }, 1)
       })
     } catch (e) {
       console.error(`[USB-DMX] Send error (${instance.config.driver}):`, (e as Error).message)
