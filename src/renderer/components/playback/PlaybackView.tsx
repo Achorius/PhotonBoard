@@ -7,6 +7,8 @@ import { useUiStore } from '../../stores/ui-store'
 import { useMidiStore } from '../../stores/midi-store'
 import { Fader } from '../common/Fader'
 import { HSlider } from '../common/HSlider'
+import { recordFromProgrammer, getProgrammerSummary } from '../../lib/programmer-utils'
+import { clearProgrammer, isProgrammerActive } from '../../lib/dmx-mixer'
 import type { CueChannelValue, Effect } from '@shared/types'
 
 // ============================================================
@@ -41,6 +43,13 @@ export function PlaybackView() {
   // Capture current DMX + running effects
   // -------------------------------------------------------------------
   const captureDmxValues = useCallback(() => {
+    // Prefer programmer values when available (only user-touched channels)
+    const progValues = recordFromProgrammer()
+    if (progValues.length > 0) {
+      const targetIds = selectedFixtureIds.length > 0 ? new Set(selectedFixtureIds) : null
+      return targetIds ? progValues.filter(v => targetIds.has(v.fixtureId)) : progValues
+    }
+    // Fallback: capture full DMX output (legacy behaviour)
     const targetIds = selectedFixtureIds.length > 0 ? selectedFixtureIds : patch.map(p => p.id)
     const cueValues: CueChannelValue[] = []
     for (const id of targetIds) {
@@ -145,18 +154,51 @@ export function PlaybackView() {
     }))
   }, [])
 
+  const [progSummary, setProgSummary] = useState('')
+  useEffect(() => {
+    const interval = setInterval(() => setProgSummary(getProgrammerSummary()), 300)
+    return () => clearInterval(interval)
+  }, [])
+  const progHasValues = progSummary !== 'Empty'
+
+  const recordAndClear = useCallback(() => {
+    recordScene()
+    clearProgrammer()
+  }, [recordScene])
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="panel-header flex items-center justify-between">
-        <span>Scenes</span>
-        <button
-          className="px-4 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center gap-1.5"
-          onClick={recordScene}
-          title="Record current state as a new scene"
-        >
-          <span className="text-sm">●</span> REC New Scene
-        </button>
+        <div className="flex items-center gap-2">
+          <span>Scenes</span>
+          {progHasValues && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-900/40 text-orange-300">
+              Prog: {progSummary}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            className="px-4 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center gap-1.5"
+            onClick={recordScene}
+            title="Record current state as a new scene"
+          >
+            <span className="text-sm">●</span> REC
+          </button>
+          <button
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ${
+              progHasValues
+                ? 'bg-orange-600 text-white hover:bg-orange-500'
+                : 'bg-surface-3 text-gray-500 cursor-default'
+            }`}
+            onClick={recordAndClear}
+            disabled={!progHasValues}
+            title="Record from Programmer + Clear (pro workflow)"
+          >
+            <span className="text-sm">●</span> REC + Clear
+          </button>
+        </div>
       </div>
 
       {/* How it works */}
