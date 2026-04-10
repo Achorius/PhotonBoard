@@ -6,6 +6,11 @@ import {
   setTimelineTime, setTimelineLooping, setTimelineTotalDuration,
   getTimelineState, setTimelineUpdateCallback, getActiveClipIds
 } from '../../lib/timeline-engine'
+import {
+  enableTimecode, isTimecodeEnabled, isTimecodeReceiving,
+  getTimecodeFramerate, setTimecodeFramerate, formatSecondsAsTimecode,
+  FRAMERATES, type TimecodeFramerate
+} from '../../lib/timecode-engine'
 import { stopAllEffects } from '../../lib/effect-engine'
 import { useUiStore } from '../../stores/ui-store'
 import type { TimelineClip, TimelineMarker, TimelineZone, MidiTargetType } from '@shared/types'
@@ -49,6 +54,9 @@ export function LiveView() {
   const [currentTime, setCurrentTime] = useState(0)
   const [isLooping, setIsLooping] = useState(false)
   const [totalDuration, setTotalDuration] = useState(120)
+  const [tcEnabled, setTcEnabled] = useState(isTimecodeEnabled())
+  const [tcReceiving, setTcReceiving] = useState(false)
+  const [tcFramerate, setTcFramerate] = useState<TimecodeFramerate>(getTimecodeFramerate())
 
   // Drag state
   const [dragClip, setDragClip] = useState<{ clipId: string; offsetX: number; offsetTrack: number } | null>(null)
@@ -101,6 +109,13 @@ export function LiveView() {
 
   // Sync loop and duration to engine
   useEffect(() => { setTimelineLooping(isLooping) }, [isLooping])
+
+  // Poll TC receiving status
+  useEffect(() => {
+    if (!tcEnabled) return
+    const interval = setInterval(() => setTcReceiving(isTimecodeReceiving()), 250)
+    return () => clearInterval(interval)
+  }, [tcEnabled])
   useEffect(() => { setTimelineTotalDuration(totalDuration) }, [totalDuration])
 
   const handlePlayStop = useCallback(() => toggleTimeline(), [])
@@ -664,7 +679,45 @@ export function LiveView() {
           >↻</button>
 
           <div className="w-px h-5 bg-surface-3" />
-          <div className="font-mono text-sm text-gray-300 min-w-[60px]">{formatTime(currentTime)}</div>
+          <div className="font-mono text-sm text-gray-300 min-w-[60px]">
+            {tcEnabled ? formatSecondsAsTimecode(currentTime, tcFramerate) : formatTime(currentTime)}
+          </div>
+
+          {/* Timecode sync */}
+          <div className="w-px h-5 bg-surface-3" />
+          <button
+            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+              tcEnabled
+                ? tcReceiving
+                  ? 'bg-green-600 text-white'
+                  : 'bg-yellow-600/80 text-white animate-pulse'
+                : 'bg-surface-3 text-gray-500 hover:bg-surface-4'
+            }`}
+            onClick={() => {
+              const next = !tcEnabled
+              setTcEnabled(next)
+              enableTimecode(next)
+            }}
+            title={tcEnabled ? (tcReceiving ? 'MTC receiving — click to disable' : 'MTC enabled, waiting for signal…') : 'Enable MTC timecode sync'}
+          >
+            TC {tcEnabled ? (tcReceiving ? '●' : '○') : 'OFF'}
+          </button>
+          {tcEnabled && (
+            <select
+              className="bg-surface-3 border border-surface-4 rounded px-1 py-0.5 text-[10px] text-gray-300"
+              value={tcFramerate}
+              onChange={(e) => {
+                const fps = parseFloat(e.target.value) as TimecodeFramerate
+                setTcFramerate(fps)
+                setTimecodeFramerate(fps)
+              }}
+            >
+              {FRAMERATES.map(fps => (
+                <option key={fps} value={fps}>{fps} fps</option>
+              ))}
+            </select>
+          )}
+
           <div className="flex-1" />
 
           <span className="text-[10px] text-gray-500">Zoom</span>

@@ -78,8 +78,16 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
         // Listen for MIDI messages (reassigning is safe, replaces previous handler)
         input.onmidimessage = (event: MIDIMessageEvent) => {
-          if (!event.data || event.data.length < 2) return
+          if (!event.data || event.data.length < 1) return
           const [status, data1, data2] = event.data
+
+          // Route system messages (MTC quarter frame 0xF1) to timecode engine
+          if (status >= 0xf0) {
+            if (timecodeProcessor) timecodeProcessor(status, data1 || 0, data2 || 0)
+            return
+          }
+
+          if (event.data.length < 2) return
           const type = status & 0xf0
           const channel = (status & 0x0f) + 1
 
@@ -242,6 +250,9 @@ let currentMidiAccess: MIDIAccess | null = null
 // External MIDI routing function — will be connected to the cue/chase/dmx engines
 let midiRouter: ((type: string, channel: number, number: number, value: number) => void) | null = null
 
+// Timecode processor — routes system messages (0xF1 quarter frame) to timecode engine
+let timecodeProcessor: ((status: number, data1: number, data2: number) => void) | null = null
+
 // Callback to reset a mapping's target when it's removed
 let mappingResetFn: ((mapping: MidiMapping) => void) | null = null
 // Callback to clean up module-level state (toggleStates, relativeValues) when mapping removed
@@ -249,6 +260,10 @@ let mappingCleanupFn: ((mappingId: string) => void) | null = null
 
 export function setMidiRouter(fn: (type: string, channel: number, number: number, value: number) => void): void {
   midiRouter = fn
+}
+
+export function setTimecodeProcessor(fn: (status: number, data1: number, data2: number) => void): void {
+  timecodeProcessor = fn
 }
 
 export function setMappingResetFn(fn: (mapping: MidiMapping) => void): void {

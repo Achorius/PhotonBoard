@@ -1,10 +1,11 @@
-import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn } from '../stores/midi-store'
+import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn, setTimecodeProcessor } from '../stores/midi-store'
 import { useDmxStore } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
 import { setProgrammerChannel } from './dmx-mixer'
 import { midiToDmx } from './dmx-utils'
 import { startTimeline, stopTimeline, toggleTimeline, rewindTimeline, setTimelineTime } from './timeline-engine'
+import { processMidiForTimecode } from './timecode-engine'
 import type { MidiMapping } from '@shared/types'
 
 let tapTempoTimes: number[] = []
@@ -17,6 +18,11 @@ const relativeValues: Record<string, number> = {}
 const toggleStates: Record<string, boolean> = {}
 
 export function initMidiRouting(): void {
+  // Wire MTC quarter-frame messages to timecode engine
+  setTimecodeProcessor((status, data1, data2) => {
+    processMidiForTimecode(status, data1, data2)
+  })
+
   setMidiRouter((type, channel, number, value) => {
     const mappings = useMidiStore.getState().mappings
 
