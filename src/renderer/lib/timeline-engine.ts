@@ -151,7 +151,13 @@ export function stopTimeline() {
     cancelAnimationFrame(raf)
     raf = null
   }
+
+  // Release all active clip layers so fixtures return to defaults
+  for (const clipId of activeClipIds) {
+    removeLayer(`timeline_${clipId}`)
+  }
   activeClipIds.clear()
+
   stopAllEffects()
   stopAllFades()
   _onUpdate?.(_currentTime, _isPlaying)
@@ -164,6 +170,9 @@ export function toggleTimeline() {
 
 export function rewindTimeline() {
   _currentTime = 0
+  for (const clipId of activeClipIds) {
+    removeLayer(`timeline_${clipId}`)
+  }
   activeClipIds.clear()
   stopAllEffects()
   _onUpdate?.(_currentTime, _isPlaying)
