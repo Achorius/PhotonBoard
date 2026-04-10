@@ -34,14 +34,64 @@ export interface FixtureObjects {
 const bodyMaterial = () =>
   new THREE.MeshBasicMaterial({ color: BODY_COLOR })
 
+/**
+ * Volumetric beam shader — gradient falloff along beam + Fresnel edge softness.
+ * Replaces the flat-opacity MeshBasicMaterial for realistic QLC+-style beams.
+ */
+const BEAM_VERTEX = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vViewDir;
+
+void main() {
+  vUv = uv;
+  vNormal = normalize(normalMatrix * normal);
+  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+  vViewDir = normalize(-mvPos.xyz);
+  gl_Position = projectionMatrix * mvPos;
+}
+`
+
+const BEAM_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+uniform float uOpacity;
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vViewDir;
+
+void main() {
+  // vUv.y = 1.0 at fixture lens (cone tip), 0.0 at far end (cone base)
+  float t = 1.0 - vUv.y; // 0 = fixture, 1 = far end
+
+  // Exponential decay along beam length — bright near source, fades out
+  float axialFade = exp(-t * 3.0);
+
+  // Soft cutoff before the very end to avoid hard circular edge
+  float endFade = smoothstep(1.0, 0.75, t);
+
+  // Fresnel edge softness — makes beam edges translucent, center brighter
+  // When looking through the cone from the side, center has more material overlap
+  float fresnel = abs(dot(normalize(vNormal), normalize(vViewDir)));
+  float edgeSoft = pow(fresnel, 0.6);
+
+  float alpha = uOpacity * axialFade * endFade * edgeSoft;
+
+  gl_FragColor = vec4(uColor, alpha);
+}
+`
+
 const coneMaterial = () =>
-  new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+  new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(1, 1, 1) },
+      uOpacity: { value: 0.0 }
+    },
+    vertexShader: BEAM_VERTEX,
+    fragmentShader: BEAM_FRAGMENT,
     transparent: true,
-    opacity: 0.0,
-    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    depthWrite: false
+    depthWrite: false,
+    side: THREE.DoubleSide
   })
 
 const lensMaterial = () =>

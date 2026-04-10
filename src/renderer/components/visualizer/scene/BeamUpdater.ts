@@ -45,7 +45,7 @@ export function updateFixtureObjects(
 
   const col = new THREE.Color(r, g, b)
 
-  const coneMat = objects.coneMesh.material as THREE.MeshBasicMaterial
+  const coneMat = objects.coneMesh.material as THREE.ShaderMaterial
   const lensMat = objects.lensMesh.material as THREE.MeshBasicMaterial
 
   const hasBeam = r > 0 || g > 0 || b > 0
@@ -55,8 +55,8 @@ export function updateFixtureObjects(
   const goboFactor = goboActive ? 0.65 : 1.0
 
   if (showBeams) {
-    coneMat.color.copy(col)
-    coneMat.opacity = effectiveDim * 0.35 * goboFactor
+    coneMat.uniforms.uColor.value.copy(col)
+    coneMat.uniforms.uOpacity.value = effectiveDim * 0.55 * goboFactor
     objects.coneMesh.visible = effectiveDim > 0.005 && hasBeam
   } else {
     objects.coneMesh.visible = false
@@ -121,7 +121,7 @@ export function updateFixtureObjects(
     const strobeRate = strobeValue / 255
     const strobeOn = Math.sin(performance.now() * strobeRate * 0.05) > 0
     if (!strobeOn) {
-      coneMat.opacity = 0
+      coneMat.uniforms.uOpacity.value = 0
       objects.coneMesh.visible = false
       objects.spotLight.intensity = 0
       if (objects.hazeMesh) objects.hazeMesh.visible = false
@@ -152,9 +152,9 @@ export function updateFixtureObjects(
 
       // Cell cone
       if (showBeams) {
-        const cellConeMat = cellCones[i].material as THREE.MeshBasicMaterial
-        cellConeMat.color.copy(cellCol)
-        cellConeMat.opacity = cellDim * 0.25
+        const cellConeMat = cellCones[i].material as THREE.ShaderMaterial
+        cellConeMat.uniforms.uColor.value.copy(cellCol)
+        cellConeMat.uniforms.uOpacity.value = cellDim * 0.4
         cellCones[i].visible = cellDim > 0.005 && (cc.r > 0 || cc.g > 0 || cc.b > 0)
       } else {
         cellCones[i].visible = false
