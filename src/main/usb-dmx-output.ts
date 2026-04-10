@@ -98,11 +98,13 @@ export class UsbDmxOutput {
 
   /**
    * Determine which protocol to use based on driver type.
-   * Only genuine ENTTEC DMX USB Pro (and true clones) use the Pro protocol.
-   * All Eurolite, Showtec, etc. FTDI-based adapters use Open DMX.
+   * ENTTEC Pro protocol: message framing at 57600 baud, microcontroller handles DMX BREAK.
+   * Open DMX protocol: raw frames at 250kbaud, host must generate BREAK via serial.
+   *
+   * Eurolite USB-DMX512 Pro has an internal microcontroller → uses Pro protocol.
    */
   private isProProtocol(driver: string): boolean {
-    return driver === 'enttec-pro'
+    return driver === 'enttec-pro' || driver === 'eurolite-pro'
   }
 
   private async openPort(config: UsbDmxConfig): Promise<UsbDmxInstance | null> {
@@ -270,6 +272,7 @@ export class UsbDmxOutput {
   /**
    * Send ENTTEC Pro message frame
    * Label 6 = "Send DMX Packet"
+   * The Pro hardware handles BREAK/MAB timing internally.
    */
   private sendEnttecPro(instance: UsbDmxInstance, data: Uint8Array): void {
     try {
@@ -298,13 +301,15 @@ export class UsbDmxOutput {
 
       instance.port.write(buf, (err: Error | null) => {
         if (err) {
-          console.error(`[USB-DMX] Write error on ${instance.config.portPath}:`, err.message)
+          console.error(`[USB-DMX] Pro write error on ${instance.config.portPath}:`, err.message)
           instance.connected = false
         }
-        instance.sending = false
+        instance.port.drain(() => {
+          instance.sending = false
+        })
       })
     } catch (e) {
-      console.error(`[USB-DMX] Send error (${instance.config.driver}):`, (e as Error).message)
+      console.error(`[USB-DMX] Pro send error (${instance.config.driver}):`, (e as Error).message)
       instance.connected = false
       instance.sending = false
     }
