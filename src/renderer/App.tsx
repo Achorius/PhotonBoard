@@ -23,6 +23,7 @@ import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
 import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
+import { startMixer, stopMixer } from './lib/dmx-mixer'
 
 const DEFAULT_ARTNET_CONFIG = [
   { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
@@ -51,6 +52,12 @@ export default function App() {
   const { initMidi } = useMidiStore()
 
   usePlaybackController()
+
+  // Start the central DMX mixer (merges all sources: programmer, cues, chases, effects)
+  useEffect(() => {
+    startMixer()
+    return () => stopMixer()
+  }, [])
 
   // ---- Save / Load helpers ----
   const collectShowData = useCallback((): ShowFile => {

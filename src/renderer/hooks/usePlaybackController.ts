@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
-import { useDmxStore } from '../stores/dmx-store'
 import { startFade, setFadeUpdateCallback, setFadeCompleteCallback, stopFade } from '../lib/cue-engine'
+import { setLayer, removeLayer } from '../lib/dmx-mixer'
 import type { Effect } from '@shared/types'
 import { startChase, stopChase } from '../lib/chase-engine'
 import { startEffect, stopEffect } from '../lib/effect-engine'
@@ -23,13 +23,14 @@ export function usePlaybackController(): void {
   const activeSceneEffects = useRef<Map<string, string[]>>(new Map())
 
   useEffect(() => {
-    // Wire fade engine output → DMX store
+    // Wire fade engine output → mixer layers (one layer per cuelist)
     setFadeUpdateCallback((allValues) => {
-      const dmx = useDmxStore.getState()
       const patch = usePatchStore.getState().patch
       const fixtures = usePatchStore.getState().fixtures
 
-      for (const [, channelMap] of allValues) {
+      for (const [cuelistId, channelMap] of allValues) {
+        const layerChannels = new Map<number, Map<number, number>>()
+
         for (const [key, value] of channelMap) {
           const [fixtureId, channelName] = key.split(':')
           const entry = patch.find(p => p.id === fixtureId)
@@ -48,9 +49,16 @@ export function usePlaybackController(): void {
 
           const absChannel = entry.address - 1 + chIndex
           if (absChannel >= 0 && absChannel < 512) {
-            dmx.setChannel(entry.universe, absChannel, value)
+            let uniMap = layerChannels.get(entry.universe)
+            if (!uniMap) {
+              uniMap = new Map()
+              layerChannels.set(entry.universe, uniMap)
+            }
+            uniMap.set(absChannel, value)
           }
         }
+
+        setLayer(`cuelist_${cuelistId}`, layerChannels, 50)
       }
     })
 
@@ -143,38 +151,8 @@ export function usePlaybackController(): void {
         if (!cl.isPlaying && prev.playing) {
           stopFade(cl.id)
           stopSceneEffects(cl.id)
-
-          // Reset all DMX channels used by this scene to 0 (lights off, neutral position)
-          const dmx = useDmxStore.getState()
-          const patch = usePatchStore.getState().patch
-          const fixtures = usePatchStore.getState().fixtures
-          const resetChannels = new Set<string>()
-
-          // Collect all channels from all cues in this scene
-          for (const cue of cl.cues) {
-            for (const cv of cue.values) {
-              resetChannels.add(`${cv.fixtureId}:${cv.channelName}`)
-            }
-          }
-
-          // Zero them all out
-          for (const key of resetChannels) {
-            const [fixtureId, channelName] = key.split(':')
-            const entry = patch.find(p => p.id === fixtureId)
-            if (!entry) continue
-            const def = fixtures.find(f => f.id === entry.fixtureDefId)
-            if (!def) continue
-            const mode = def.modes.find(m => m.name === entry.modeName)
-            if (!mode) continue
-            const chIndex = mode.channels.findIndex(
-              ch => ch.toLowerCase() === channelName.toLowerCase()
-            )
-            if (chIndex === -1) continue
-            const absChannel = entry.address - 1 + chIndex
-            if (absChannel >= 0 && absChannel < 512) {
-              dmx.setChannel(entry.universe, absChannel, 0)
-            }
-          }
+          // Remove mixer layer — released channels auto-zeroed by mixer
+          removeLayer(`cuelist_${cl.id}`)
 
           // Clear any pending auto-advance timer
           const timer = followTimers.current.get(cl.id)

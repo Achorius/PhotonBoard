@@ -5,9 +5,9 @@
 // ============================================================
 
 import type { Chase, CueChannelValue } from '@shared/types'
-import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
+import { setLayer, removeLayer } from './dmx-mixer'
 
 // --------------- Types ---------------
 
@@ -44,6 +44,7 @@ export function startChase(chase: Chase): void {
 
 export function stopChase(id: string): void {
   runningChases.delete(id)
+  removeLayer(`chase_${id}`)
   if (runningChases.size === 0 && rafId) {
     cancelAnimationFrame(rafId)
     rafId = null
@@ -51,6 +52,9 @@ export function stopChase(id: string): void {
 }
 
 export function stopAllChases(): void {
+  for (const [id] of runningChases) {
+    removeLayer(`chase_${id}`)
+  }
   runningChases.clear()
   if (rafId) {
     cancelAnimationFrame(rafId)
@@ -63,13 +67,13 @@ export function stopAllChases(): void {
 function updateChases(): void {
   const now = performance.now()
   const playbackStore = usePlaybackStore.getState()
-  const dmxStore = useDmxStore.getState()
   const patchStore = usePatchStore.getState()
 
   for (const [id, running] of runningChases) {
     const chase = playbackStore.chases.find(c => c.id === id)
     if (!chase || !chase.isPlaying || chase.steps.length === 0) {
       runningChases.delete(id)
+      removeLayer(`chase_${id}`)
       continue
     }
 
@@ -120,6 +124,9 @@ function updateChases(): void {
     const currentStepData = chase.steps[stepIndex]
     if (!currentStepData) continue
 
+    // Build mixer layer for this chase
+    const layerChannels = new Map<number, Map<number, number>>()
+
     // Get next step for crossfade
     const nextStepIndex = getNextStepIndex(stepIndex, stepCount, chase.direction)
     const nextStepData = chase.steps[nextStepIndex]
@@ -129,11 +136,13 @@ function updateChases(): void {
       const fadeProgress = (progress - (1 - fadeRatio)) / fadeRatio
       const t = fadeProgress * fadeProgress * (3 - 2 * fadeProgress) // smooth step
 
-      applyStepValues(currentStepData.values, 1 - t, patchStore, dmxStore, chase.faderLevel)
-      applyStepValues(nextStepData.values, t, patchStore, dmxStore, chase.faderLevel)
+      applyStepValues(currentStepData.values, 1 - t, patchStore, layerChannels, chase.faderLevel)
+      applyStepValues(nextStepData.values, t, patchStore, layerChannels, chase.faderLevel)
     } else {
-      applyStepValues(currentStepData.values, 1, patchStore, dmxStore, chase.faderLevel)
+      applyStepValues(currentStepData.values, 1, patchStore, layerChannels, chase.faderLevel)
     }
+
+    setLayer(`chase_${chase.id}`, layerChannels, chase.priority ?? 40)
 
     // Update store's currentStepIndex for UI
     if (chase.currentStepIndex !== stepIndex) {
@@ -162,7 +171,7 @@ function applyStepValues(
   values: CueChannelValue[],
   weight: number,
   patchStore: any,
-  dmxStore: any,
+  layerChannels: Map<number, Map<number, number>>,
   faderLevel: number
 ): void {
   const masterScale = faderLevel / 255
@@ -186,6 +195,13 @@ function applyStepValues(
     if (absChannel < 0 || absChannel >= 512) continue
 
     const scaledValue = Math.round(cv.value * weight * masterScale)
-    dmxStore.setChannel(entry.universe, absChannel, scaledValue)
+    // Additive: crossfade blending accumulates weighted values from both steps
+    let uniMap = layerChannels.get(entry.universe)
+    if (!uniMap) {
+      uniMap = new Map()
+      layerChannels.set(entry.universe, uniMap)
+    }
+    const existing = uniMap.get(absChannel) ?? 0
+    uniMap.set(absChannel, Math.min(255, existing + scaledValue))
   }
 }

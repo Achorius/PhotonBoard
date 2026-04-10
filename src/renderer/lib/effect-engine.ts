@@ -5,8 +5,8 @@
 // ============================================================
 
 import type { Effect, EffectChannel, WaveformType, WaveformKeyframe, SpatialAxis, Position3D, PatchEntry } from '@shared/types'
-import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
+import { setLayer, removeLayer } from './dmx-mixer'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX, rgbToColorWheelDmx } from './dmx-channel-resolver'
 
 // RGB channel types used for Color Wheel fallback detection
@@ -44,6 +44,20 @@ const CHANNEL_TYPE_TO_NAME: Record<string, string> = {
 
 // Position channels oscillate around center (128) instead of 0
 const POSITION_CHANNELS = new Set(['pan', 'tilt'])
+
+const EFFECT_LAYER_PRIORITY = 20
+
+/** Add a value to a mixer layer channel map */
+function addToLayerMap(map: Map<number, Map<number, number>>, universe: number, channel: number, value: number): void {
+  let uniMap = map.get(universe)
+  if (!uniMap) {
+    uniMap = new Map()
+    map.set(universe, uniMap)
+  }
+  // Additive: allows chase-style crossfade blending within a single layer
+  const existing = uniMap.get(channel) ?? 0
+  uniMap.set(channel, Math.min(255, existing + value))
+}
 
 /**
  * Get the spatial coordinate of a fixture along a given axis.
@@ -121,12 +135,9 @@ export function startEffect(effect: Effect): void {
 }
 
 export function stopEffect(id: string): void {
-  const running = activeEffects.get(id)
-  if (running) {
-    // Reset all DMX channels this effect was controlling back to 0
-    resetEffectChannels(running.effect)
-    activeEffects.delete(id)
-  }
+  activeEffects.delete(id)
+  // Remove the mixer layer — the mixer will zero out released channels automatically
+  removeLayer(`effect_${id}`)
   if (activeEffects.size === 0 && animationFrame) {
     cancelAnimationFrame(animationFrame)
     animationFrame = null
@@ -134,60 +145,13 @@ export function stopEffect(id: string): void {
 }
 
 export function stopAllEffects(): void {
-  // Reset all channels before clearing
-  for (const [, running] of activeEffects) {
-    resetEffectChannels(running.effect)
+  for (const [id] of activeEffects) {
+    removeLayer(`effect_${id}`)
   }
   activeEffects.clear()
   if (animationFrame) {
     cancelAnimationFrame(animationFrame)
     animationFrame = null
-  }
-}
-
-/** Reset all DMX channels controlled by an effect back to their neutral value (0, or 128 for pan/tilt) */
-function resetEffectChannels(effect: Effect): void {
-  const dmxStore = useDmxStore.getState()
-  const patchStore = usePatchStore.getState()
-
-  const effectChannels: EffectChannel[] = effect.channels && effect.channels.length > 0
-    ? effect.channels
-    : [{ channelType: effect.channelType, phaseOffset: 0, depth: effect.depth, frequencyMultiplier: 1 }]
-
-  for (const fixtureId of effect.fixtureIds) {
-    const entry = patchStore.patch.find(p => p.id === fixtureId)
-    if (!entry) continue
-
-    const def = patchStore.fixtures.find(f => f.id === entry.fixtureDefId)
-    if (!def) continue
-
-    const mode = def.modes.find(m => m.name === entry.modeName)
-    if (!mode) continue
-
-    for (const ech of effectChannels) {
-      const targetName = CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType.toLowerCase()
-      const neutralValue = isPositionChannel(ech.channelType) ? 128 : 0
-
-      const pixelLayout = mode.pixelLayout
-      if (pixelLayout && pixelLayout.cellCount > 1) {
-        for (let cellIdx = 0; cellIdx < pixelLayout.cellCount; cellIdx++) {
-          const cell = pixelLayout.cells[cellIdx]
-          const cellChIndex = cell.channelNames.findIndex(ch => ch.toLowerCase().includes(targetName))
-          if (cellChIndex === -1) continue
-          const absChannel = entry.address - 1 + cell.channelOffset + cellChIndex
-          if (absChannel >= 0 && absChannel < 512) {
-            dmxStore.setChannel(entry.universe, absChannel, neutralValue)
-          }
-        }
-      } else {
-        const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
-        if (chIndex === -1) continue
-        const absChannel = entry.address - 1 + chIndex
-        if (absChannel >= 0 && absChannel < 512) {
-          dmxStore.setChannel(entry.universe, absChannel, neutralValue)
-        }
-      }
-    }
   }
 }
 
@@ -206,7 +170,6 @@ export function consumeOneShotCompleted(): string[] {
 
 function updateEffects(): void {
   const now = performance.now()
-  const dmxStore = useDmxStore.getState()
   const patchStore = usePatchStore.getState()
 
   for (const [, running] of activeEffects) {
@@ -222,6 +185,9 @@ function updateEffects(): void {
     }
 
     const fixtureCount = effect.fixtureIds.length
+
+    // Build mixer layer for this effect
+    const layerChannels = new Map<number, Map<number, number>>()
 
     // Determine channels to process
     const effectChannels: EffectChannel[] = effect.channels && effect.channels.length > 0
@@ -270,7 +236,6 @@ function updateEffects(): void {
       // If effect uses RGB but fixture only has Color Wheel → compute RGB values,
       // convert to nearest color wheel position
       if (effectHasRgb && !fixtureHasRgb && fixtureHasColorWheel) {
-        // Compute RGB waveform values at this fixture's phase
         const rgbValues: Record<string, number> = { red: 0, green: 0, blue: 0 }
         for (const ech of effectChannels) {
           const chName = (CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType).toLowerCase()
@@ -282,11 +247,10 @@ function updateEffects(): void {
           const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
           rgbValues[chName] = Math.round(((waveValue + 1) / 2) * (ech.depth))
         }
-        // Map computed RGB to color wheel position
         const cwDmx = rgbToColorWheelDmx(rgbValues.red, rgbValues.green, rgbValues.blue)
         const absChannel = entry.address - 1 + colorWheelIdx
         if (absChannel >= 0 && absChannel < 512) {
-          dmxStore.setChannel(entry.universe, absChannel, cwDmx)
+          addToLayerMap(layerChannels, entry.universe, absChannel, cwDmx)
         }
       } else {
         // Normal channel-by-channel processing
@@ -321,7 +285,7 @@ function updateEffects(): void {
               const value = waveToValue(waveValue, maxValue, isPositionChannel(ech.channelType))
 
               if (absChannel >= 0 && absChannel < 512) {
-                dmxStore.setChannel(entry.universe, absChannel, value)
+                addToLayerMap(layerChannels, entry.universe, absChannel, value)
               }
             }
           } else {
@@ -338,20 +302,23 @@ function updateEffects(): void {
 
             const absChannel = entry.address - 1 + chIndex
             if (absChannel >= 0 && absChannel < 512) {
-              dmxStore.setChannel(entry.universe, absChannel, value)
+              addToLayerMap(layerChannels, entry.universe, absChannel, value)
             }
           }
         }
       }
     }
+
+    // Push this effect's values to the mixer as a layer
+    setLayer(`effect_${effect.id}`, layerChannels, EFFECT_LAYER_PRIORITY)
   }
 
   // Handle one-shot completed effects
   if (oneShotCompleted.size > 0) {
     for (const id of oneShotCompleted) {
+      removeLayer(`effect_${id}`)
       activeEffects.delete(id)
     }
-    // The store will be notified via consumeOneShotCompleted()
   }
 
   if (activeEffects.size > 0) {

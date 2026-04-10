@@ -48,6 +48,10 @@ const PROGRAMMER_PRIORITY = 100
 let rafId: number | null = null
 let running = false
 
+// Track channels written in the previous frame — used to zero out
+// channels that were active but are no longer in any layer (e.g. effect stopped)
+let prevWrittenChannels = new Map<number, Set<number>>() // universe → set of channel indices
+
 // Cache for channel precedence lookups (rebuilt when patch changes)
 let precedenceCache = new Map<string, ChannelPrecedence>() // "universe:channel" → HTP|LTP
 let lastPatchVersion = -1
@@ -245,16 +249,14 @@ function mixerTick(): void {
       return b.activatedAt - a.activatedAt
     })
 
-  if (sortedLayers.length === 0) {
-    rafId = requestAnimationFrame(mixerTick)
-    return
-  }
+  const currentWritten = new Map<number, Set<number>>()
 
   // For each universe, merge all layers
   for (let u = 0; u < universeCount; u++) {
     const merged: Record<number, number> = {}
     // Track which LTP channels have already been claimed by a higher-priority layer
     const ltpClaimed = new Set<number>()
+    const writtenSet = new Set<number>()
     let hasChanges = false
 
     for (const layer of sortedLayers) {
@@ -282,15 +284,29 @@ function mixerTick(): void {
             hasChanges = true
           }
         }
+        writtenSet.add(ch)
       }
     }
 
+    // Zero out channels that were active in the previous frame but are no longer
+    // in any layer (e.g. an effect or cuelist was stopped/removed).
+    const prevSet = prevWrittenChannels.get(u)
+    if (prevSet) {
+      for (const ch of prevSet) {
+        if (!writtenSet.has(ch)) {
+          merged[ch] = 0
+          hasChanges = true
+        }
+      }
+    }
+
+    currentWritten.set(u, writtenSet)
+
     if (hasChanges) {
-      // Write merged values to the DMX store
-      // We bypass the store's setChannel to do a batch update
       dmxStore.setChannels(u, merged)
     }
   }
 
+  prevWrittenChannels = currentWritten
   rafId = requestAnimationFrame(mixerTick)
 }
