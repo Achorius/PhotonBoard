@@ -33,6 +33,7 @@ export class UsbDmxOutput {
       const sp = require('serialport')
       this.SerialPort = sp.SerialPort
       this.available = true
+      console.log('[USB-DMX] serialport module loaded successfully')
     } catch (e) {
       console.warn('[USB-DMX] serialport not available:', (e as Error).message)
       this.available = false
@@ -65,21 +66,28 @@ export class UsbDmxOutput {
    * Configure USB DMX outputs
    */
   async configure(configs: UsbDmxConfig[]): Promise<void> {
+    console.log(`[USB-DMX] Configuring ${configs.length} output(s)...`)
     // Close existing connections
     await this.destroyAll()
 
-    if (!this.available) return
+    if (!this.available) {
+      console.warn('[USB-DMX] serialport module not available — cannot configure')
+      return
+    }
 
     for (const config of configs) {
       try {
+        console.log(`[USB-DMX] Opening ${config.driver} on ${config.portPath} (universe ${config.universe})...`)
         const instance = await this.openPort(config)
         if (instance) {
           this.instances.set(config.universe, instance)
+          console.log(`[USB-DMX] ✓ ${config.driver} on ${config.portPath} ready (universe ${config.universe})`)
         }
       } catch (e) {
-        console.error(`[USB-DMX] Failed to open ${config.driver} on ${config.portPath}:`, e)
+        console.error(`[USB-DMX] ✗ Failed to open ${config.driver} on ${config.portPath}:`, e)
       }
     }
+    console.log(`[USB-DMX] Configuration complete: ${this.instances.size} output(s) active`)
   }
 
   private async openPort(config: UsbDmxConfig): Promise<UsbDmxInstance | null> {
@@ -87,6 +95,7 @@ export class UsbDmxOutput {
 
     switch (config.driver) {
       case 'enttec-pro':
+      case 'eurolite-pro': // Eurolite USB-DMX512 Pro = ENTTEC Pro clone
         return this.openEnttecPro(SerialPort, config)
       // All FTDI-based adapters use the same Open DMX protocol
       case 'enttec-open-dmx':
@@ -178,7 +187,7 @@ export class UsbDmxOutput {
       if (!instance.connected || universeIdx >= universes.length) continue
       const data = universes[universeIdx]
 
-      if (instance.config.driver === 'enttec-pro') {
+      if (instance.config.driver === 'enttec-pro' || instance.config.driver === 'eurolite-pro') {
         this.sendEnttecPro(instance, data)
       } else {
         // All other drivers use FTDI/Open DMX protocol
@@ -193,26 +202,40 @@ export class UsbDmxOutput {
    */
   private sendOpenDmx(instance: UsbDmxInstance, data: Uint8Array): void {
     try {
+      if (!instance.port || !instance.port.isOpen) {
+        instance.connected = false
+        return
+      }
+
       // Copy channel data after start code
       for (let i = 0; i < 512; i++) {
         instance.buffer[i + 1] = data[i]
       }
 
       // Send BREAK by setting baud to low rate momentarily
-      instance.port.update({ baudRate: 76800 }, () => {
+      instance.port.update({ baudRate: 76800 }, (err: Error | null) => {
+        if (err) { instance.connected = false; return }
         // Send break byte
         const breakBuf = Buffer.from([0x00])
-        instance.port.write(breakBuf, () => {
-          instance.port.drain(() => {
+        instance.port.write(breakBuf, (err2: Error | null) => {
+          if (err2) { instance.connected = false; return }
+          instance.port.drain((err3: Error | null) => {
+            if (err3) { instance.connected = false; return }
             // Restore DMX baud rate and send data
-            instance.port.update({ baudRate: 250000 }, () => {
-              instance.port.write(instance.buffer)
+            instance.port.update({ baudRate: 250000 }, (err4: Error | null) => {
+              if (err4) { instance.connected = false; return }
+              instance.port.write(instance.buffer, (err5: Error | null) => {
+                if (err5) {
+                  console.error(`[USB-DMX] Write error on ${instance.config.portPath}:`, err5.message)
+                  instance.connected = false
+                }
+              })
             })
           })
         })
       })
     } catch (e) {
-      // Port may have disconnected
+      console.error(`[USB-DMX] Send error (${instance.config.driver}):`, (e as Error).message)
       instance.connected = false
     }
   }
@@ -223,6 +246,11 @@ export class UsbDmxOutput {
    */
   private sendEnttecPro(instance: UsbDmxInstance, data: Uint8Array): void {
     try {
+      if (!instance.port || !instance.port.isOpen) {
+        instance.connected = false
+        return
+      }
+
       const dataLength = 513 // start code + 512 channels
       const buf = instance.buffer
 
@@ -239,8 +267,14 @@ export class UsbDmxOutput {
 
       buf[517] = 0xE7       // End delimiter
 
-      instance.port.write(buf)
+      instance.port.write(buf, (err: Error | null) => {
+        if (err) {
+          console.error(`[USB-DMX] Write error on ${instance.config.portPath}:`, err.message)
+          instance.connected = false
+        }
+      })
     } catch (e) {
+      console.error(`[USB-DMX] Send error (${instance.config.driver}):`, (e as Error).message)
       instance.connected = false
     }
   }
