@@ -1694,4 +1694,31 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
     ],
     physical: { lens: { degreesMinMax: [17, 17] }, power: 78 }
   },
+
+  // ================================================================
+  // FUZZIX
+  // ================================================================
+
+  // --- Fuzzix Orion Party Wall Bar RGBW (153.203) — 9x6W RGBW LED bar ---
+  {
+    id: 'fuzzix/orion-party-wall-bar',
+    name: 'Orion Party Wall Bar RGBW',
+    manufacturer: 'Fuzzix',
+    categories: ['Batten', 'Color Changer'],
+    channels: chs(
+      dimmerCh(),
+      colorCh('Red', '#ff0000'),
+      colorCh('Green', '#00ff00'),
+      colorCh('Blue', '#0000ff'),
+      colorCh('White', '#ffffff'),
+      strobeCh(),
+      genericCh('Program'),
+      speedCh()
+    ),
+    modes: [
+      { name: '4ch', channels: ['Red', 'Green', 'Blue', 'White'], channelCount: 4 },
+      { name: '8ch', channels: ['Dimmer', 'Red', 'Green', 'Blue', 'White', 'Strobe', 'Program', 'Speed'], channelCount: 8 }
+    ],
+    physical: { lens: { degreesMinMax: [24, 24] }, power: 54, dimensions: { width: 400, height: 60, depth: 60 }, weight: 0.6 }
+  },
 ]
