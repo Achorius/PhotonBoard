@@ -7,7 +7,10 @@
 import type { Effect, EffectChannel, WaveformType, WaveformKeyframe, SpatialAxis, Position3D, PatchEntry } from '@shared/types'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
-import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from './dmx-channel-resolver'
+import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX, rgbToColorWheelDmx } from './dmx-channel-resolver'
+
+// RGB channel types used for Color Wheel fallback detection
+const RGB_CHANNEL_TYPES = new Set(['red', 'green', 'blue'])
 
 const activeEffects: Map<string, RunningEffect> = new Map()
 let animationFrame: number | null = null
@@ -249,56 +252,94 @@ function updateEffects(): void {
       const fixturePhaseOffset = (effect.fan / 360) * normalizedPos
       const baseOffset = effect.offset / 360
 
-      // Process each channel in the effect
-      for (const ech of effectChannels) {
-        const targetName = CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType.toLowerCase()
-        const channelPhaseOffset = ech.phaseOffset / 360
-        const freqMul = ech.frequencyMultiplier ?? 1
-        const channelWaveform = ech.waveform ?? effect.waveform
-        const channelDepth = ech.depth
+      // Check if this effect has RGB channels (for Color Wheel fallback)
+      const effectHasRgb = effectChannels.some(ech =>
+        RGB_CHANNEL_TYPES.has((CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType).toLowerCase())
+      )
+      // Check if this fixture has RGB channels
+      const modeChLower = mode.channels.map(ch => ch.toLowerCase())
+      const fixtureHasRgb = modeChLower.some(ch => ch.includes('red')) &&
+                            modeChLower.some(ch => ch.includes('green')) &&
+                            modeChLower.some(ch => ch.includes('blue'))
+      // Check if fixture has a Color Wheel
+      const colorWheelIdx = modeChLower.findIndex(ch =>
+        ch === 'color wheel' || ch === 'color' || ch === 'colour wheel'
+      )
+      const fixtureHasColorWheel = colorWheelIdx !== -1
 
-        // Multi-cell support
-        const pixelLayout = mode.pixelLayout
-        if (pixelLayout && pixelLayout.cellCount > 1) {
-          for (let cellIdx = 0; cellIdx < pixelLayout.cellCount; cellIdx++) {
-            const cell = pixelLayout.cells[cellIdx]
-            const effectiveCellIdx = entry.pixelInvert
-              ? (pixelLayout.cellCount - 1 - cellIdx)
-              : cellIdx
-            const cellPhaseOffset = pixelLayout.cellCount > 1
-              ? (effect.fan / 360) * (effectiveCellIdx / (pixelLayout.cellCount - 1))
-              : 0
+      // If effect uses RGB but fixture only has Color Wheel → compute RGB values,
+      // convert to nearest color wheel position
+      if (effectHasRgb && !fixtureHasRgb && fixtureHasColorWheel) {
+        // Compute RGB waveform values at this fixture's phase
+        const rgbValues: Record<string, number> = { red: 0, green: 0, blue: 0 }
+        for (const ech of effectChannels) {
+          const chName = (CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType).toLowerCase()
+          if (!RGB_CHANNEL_TYPES.has(chName)) continue
+          const channelPhaseOffset = ech.phaseOffset / 360
+          const freqMul = ech.frequencyMultiplier ?? 1
+          const channelWaveform = ech.waveform ?? effect.waveform
+          const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + channelPhaseOffset) % 1
+          const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
+          rgbValues[chName] = Math.round(((waveValue + 1) / 2) * (ech.depth))
+        }
+        // Map computed RGB to color wheel position
+        const cwDmx = rgbToColorWheelDmx(rgbValues.red, rgbValues.green, rgbValues.blue)
+        const absChannel = entry.address - 1 + colorWheelIdx
+        if (absChannel >= 0 && absChannel < 512) {
+          dmxStore.setChannel(entry.universe, absChannel, cwDmx)
+        }
+      } else {
+        // Normal channel-by-channel processing
+        for (const ech of effectChannels) {
+          const targetName = CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType.toLowerCase()
+          const channelPhaseOffset = ech.phaseOffset / 360
+          const freqMul = ech.frequencyMultiplier ?? 1
+          const channelWaveform = ech.waveform ?? effect.waveform
+          const channelDepth = ech.depth
 
-            const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + cellPhaseOffset + channelPhaseOffset) % 1
+          // Multi-cell support
+          const pixelLayout = mode.pixelLayout
+          if (pixelLayout && pixelLayout.cellCount > 1) {
+            for (let cellIdx = 0; cellIdx < pixelLayout.cellCount; cellIdx++) {
+              const cell = pixelLayout.cells[cellIdx]
+              const effectiveCellIdx = entry.pixelInvert
+                ? (pixelLayout.cellCount - 1 - cellIdx)
+                : cellIdx
+              const cellPhaseOffset = pixelLayout.cellCount > 1
+                ? (effect.fan / 360) * (effectiveCellIdx / (pixelLayout.cellCount - 1))
+                : 0
+
+              const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + cellPhaseOffset + channelPhaseOffset) % 1
+              const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
+
+              const cellChIndex = cell.channelNames.findIndex(ch => ch.toLowerCase().includes(targetName))
+              if (cellChIndex === -1) continue
+
+              const absChannel = entry.address - 1 + cell.channelOffset + cellChIndex
+              const channelName = cell.channelNames[cellChIndex]
+              const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : channelDepth
+              const value = waveToValue(waveValue, maxValue, isPositionChannel(ech.channelType))
+
+              if (absChannel >= 0 && absChannel < 512) {
+                dmxStore.setChannel(entry.universe, absChannel, value)
+              }
+            }
+          } else {
+            // Single-cell fixture
+            const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + channelPhaseOffset) % 1
             const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
 
-            const cellChIndex = cell.channelNames.findIndex(ch => ch.toLowerCase().includes(targetName))
-            if (cellChIndex === -1) continue
+            const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
+            if (chIndex === -1) continue
 
-            const absChannel = entry.address - 1 + cell.channelOffset + cellChIndex
-            const channelName = cell.channelNames[cellChIndex]
+            const channelName = mode.channels[chIndex]
             const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : channelDepth
             const value = waveToValue(waveValue, maxValue, isPositionChannel(ech.channelType))
 
+            const absChannel = entry.address - 1 + chIndex
             if (absChannel >= 0 && absChannel < 512) {
               dmxStore.setChannel(entry.universe, absChannel, value)
             }
-          }
-        } else {
-          // Single-cell fixture
-          const phase = (elapsed * effect.speed * freqMul + baseOffset + fixturePhaseOffset + channelPhaseOffset) % 1
-          const waveValue = getWaveformValue(channelWaveform, phase, effect.keyframes)
-
-          const chIndex = mode.channels.findIndex(ch => ch.toLowerCase().includes(targetName))
-          if (chIndex === -1) continue
-
-          const channelName = mode.channels[chIndex]
-          const maxValue = isColorWheelChannel(channelName) ? COLOR_WHEEL_MAX_DMX : channelDepth
-          const value = waveToValue(waveValue, maxValue, isPositionChannel(ech.channelType))
-
-          const absChannel = entry.address - 1 + chIndex
-          if (absChannel >= 0 && absChannel < 512) {
-            dmxStore.setChannel(entry.universe, absChannel, value)
           }
         }
       }

@@ -452,8 +452,8 @@ export function EffectsView() {
     const { fixtures } = usePatchStore.getState()
     const dmxStore = useDmxStore.getState()
 
-    // For color and intensity effects, ensure dimmers are on for target fixtures
-    if (template.category === 'color' || template.category === 'intensity') {
+    // For color, intensity, and spatial effects, ensure dimmers are on for target fixtures
+    if (template.category === 'color' || template.category === 'intensity' || template.category === 'spatial') {
       for (const fxId of targetIds) {
         const entry = patch.find(p => p.id === fxId)
         if (!entry) continue
@@ -620,21 +620,44 @@ export function EffectsView() {
           >
             All Fixtures ({patch.length})
           </button>
-          {groups.map(g => (
-            <button
-              key={g.id}
-              className={`w-full text-left text-xs px-2 py-1 rounded mb-0.5 flex items-center gap-1.5 transition-colors ${
-                g.fixtureIds.every(id => selectedIds.has(id)) && g.fixtureIds.length > 0
-                  ? 'bg-accent text-white'
-                  : 'text-gray-400 hover:bg-surface-3'
-              }`}
-              onClick={() => selectGroup(g.id)}
-            >
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
-              <span className="truncate">{g.name}</span>
-              <span className="ml-auto text-[10px] text-gray-500">{g.fixtureIds.length}</span>
-            </button>
-          ))}
+          {groups.map(g => {
+            const allSelected = g.fixtureIds.length > 0 && g.fixtureIds.every(id => selectedIds.has(id))
+            const someSelected = !allSelected && g.fixtureIds.some(id => selectedIds.has(id))
+            return (
+              <button
+                key={g.id}
+                className={`w-full text-left text-xs px-2 py-1 rounded mb-0.5 flex items-center gap-1.5 transition-colors ${
+                  allSelected
+                    ? 'bg-accent text-white'
+                    : someSelected
+                      ? 'bg-accent/30 text-accent'
+                      : 'text-gray-400 hover:bg-surface-3'
+                }`}
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    // Shift+click: toggle this group's fixtures into/out of selection
+                    if (allSelected) {
+                      // Deselect all fixtures from this group
+                      for (const fid of g.fixtureIds) {
+                        if (selectedIds.has(fid)) selectFixture(fid, true)
+                      }
+                    } else {
+                      // Add all fixtures from this group
+                      for (const fid of g.fixtureIds) {
+                        if (!selectedIds.has(fid)) selectFixture(fid, true)
+                      }
+                    }
+                  } else {
+                    selectGroup(g.id)
+                  }
+                }}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                <span className="truncate">{g.name}</span>
+                <span className="ml-auto text-[10px] text-gray-500">{g.fixtureIds.length}</span>
+              </button>
+            )
+          })}
         </div>
 
         <div className="p-2 border-b border-surface-3">
