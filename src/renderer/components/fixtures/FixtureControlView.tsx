@@ -9,6 +9,7 @@ import { XYPad } from '../common/XYPad'
 import { getChannelTypeColor, getChannelShortLabel } from '../../lib/fixture-library'
 import { isColorWheelChannel, COLOR_WHEEL_MAX_DMX } from '../../lib/dmx-channel-resolver'
 import { setProgrammerChannel } from '../../lib/dmx-mixer'
+import { FixtureSheet } from './FixtureSheet'
 import type { MidiTargetType } from '@shared/types'
 
 // Context menu for MIDI Learn
@@ -52,6 +53,7 @@ export function FixtureControlView() {
   const { selectedUniverse, setSelectedUniverse } = useUiStore()
   const { startLearn } = useMidiStore()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null)
+  const [sheetMode, setSheetMode] = useState(false)
 
   const hasPatch = patch.length > 0
 
@@ -127,6 +129,16 @@ export function FixtureControlView() {
           </button>
         ))}
         <div className="w-px h-4 bg-surface-3 mx-1" />
+        <button
+          className={`px-2 py-0.5 text-xs rounded ${
+            sheetMode ? 'bg-accent text-white' : 'bg-surface-3 text-gray-400 hover:bg-surface-4'
+          }`}
+          onClick={() => setSheetMode(!sheetMode)}
+          title="Toggle spreadsheet view"
+        >
+          Sheet
+        </button>
+        <div className="w-px h-4 bg-surface-3 mx-1" />
         {selectedFixtureIds.length > 0 && (
           <span className="text-[10px] text-accent">{selectedFixtureIds.length} selected</span>
         )}
@@ -137,6 +149,9 @@ export function FixtureControlView() {
         </div>
       </div>
 
+      {sheetMode ? (
+        <FixtureSheet />
+      ) : (
       <div className="flex-1 overflow-hidden flex">
         {/* ---- Left: Groups ---- */}
         <div className="w-28 shrink-0 border-r border-surface-3 flex flex-col bg-surface-1">
@@ -279,6 +294,8 @@ export function FixtureControlView() {
           </div>
         )}
       </div>
+
+      )}
 
       {contextMenu && (
         <MidiContextMenu

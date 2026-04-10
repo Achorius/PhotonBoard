@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'fixture-sheet' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
+export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
 
 interface UiState {
   activeTab: ViewTab

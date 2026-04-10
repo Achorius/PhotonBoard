@@ -185,6 +185,33 @@ export function clearProgrammer(): void {
   if (layer) layer.channels.clear()
 }
 
+/**
+ * Get a snapshot of all programmer channels.
+ * Returns Map<universe, Map<channel, value>> (empty if no programmer values).
+ */
+export function getProgrammerChannels(): Map<number, Map<number, number>> {
+  const layer = layers.get(PROGRAMMER_LAYER_ID)
+  if (!layer) return new Map()
+  // Return a deep copy so callers can't mutate internal state
+  const copy = new Map<number, Map<number, number>>()
+  for (const [u, chMap] of layer.channels) {
+    copy.set(u, new Map(chMap))
+  }
+  return copy
+}
+
+/**
+ * Check if the programmer has any active values.
+ */
+export function isProgrammerActive(): boolean {
+  const layer = layers.get(PROGRAMMER_LAYER_ID)
+  if (!layer) return false
+  for (const [, chMap] of layer.channels) {
+    if (chMap.size > 0) return true
+  }
+  return false
+}
+
 // --------------- Precedence Cache ---------------
 
 function ensurePrecedenceCache(): void {
@@ -285,17 +312,25 @@ function mixerTick(): void {
       if (!uniMap) continue
 
       const masterScale = layer.master / 255
+      const isProgrammer = layer.id === PROGRAMMER_LAYER_ID
 
       for (const [ch, rawValue] of uniMap) {
         const scaledValue = Math.round(rawValue * masterScale)
         const prec = getChannelPrecedence(u, ch)
 
-        if (prec === 'HTP') {
-          // Highest Takes Precedence — take max across all layers
-          const current = merged[ch]
-          if (current === undefined || scaledValue > current) {
-            merged[ch] = scaledValue
-            hasChanges = true
+        if (isProgrammer) {
+          // Programmer ALWAYS wins (LTP override) — like a real console
+          merged[ch] = scaledValue
+          ltpClaimed.add(ch)
+          hasChanges = true
+        } else if (prec === 'HTP') {
+          // Highest Takes Precedence — take max across non-programmer layers
+          if (!ltpClaimed.has(ch)) {
+            const current = merged[ch]
+            if (current === undefined || scaledValue > current) {
+              merged[ch] = scaledValue
+              hasChanges = true
+            }
           }
         } else {
           // LTP — first layer to claim it wins (layers are sorted by priority desc)

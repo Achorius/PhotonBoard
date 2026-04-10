@@ -91,7 +91,6 @@ export function FixtureSheet() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="panel-header">Fixture Sheet</div>
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse text-[11px]">
           <thead className="sticky top-0 z-10 bg-surface-1">
