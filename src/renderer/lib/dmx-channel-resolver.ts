@@ -91,6 +91,7 @@ export function resolveChannels(
     }
   }
 
+
   // Match aliases
   let dimmerFound = false
   for (const [key, aliases] of Object.entries(CHANNEL_ALIASES) as [NumericChannelKey, string[]][]) {

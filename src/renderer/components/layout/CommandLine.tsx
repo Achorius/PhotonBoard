@@ -142,6 +142,20 @@ function executeCommand(input: string): CommandResult {
     return { ok: true, message: `${selectedIds.length} fixture(s) at Zero` }
   }
 
+  // ---- Channel <name> <value> — set any channel by name (e.g. Gobo 30, Color 50) ----
+  const channelNames = ['gobo', 'color', 'pan', 'tilt', 'zoom', 'focus', 'shutter', 'strobe', 'prism', 'red', 'green', 'blue', 'white', 'amber']
+  if (channelNames.includes(tokens[0])) {
+    const channelName = tokens[0]
+    const selectedIds = usePatchStore.getState().selectedFixtureIds
+    // If no selection, apply to all patched fixtures
+    const targetIds = selectedIds.length > 0 ? selectedIds : patch.map(p => p.id)
+    const rawVal = parseInt(tokens[1])
+    if (isNaN(rawVal)) return { ok: false, message: `${channelName} <0-255>` }
+    const dmxVal = Math.min(255, Math.max(0, rawVal))
+    const count = applyChannelByName(targetIds, channelName, dmxVal, patch, getFixtureChannels)
+    return { ok: true, message: `${count} fixture(s) ${channelName} = ${dmxVal}` }
+  }
+
   return { ok: false, message: `Unknown command: ${tokens[0]}` }
 }
 
@@ -219,6 +233,29 @@ function applyToFixtures(
       setProgrammerChannel(entry.universe, dimmer.absoluteChannel, value)
     }
   }
+}
+
+function applyChannelByName(
+  fixtureIds: string[],
+  channelName: string,
+  value: number,
+  patch: any[],
+  getFixtureChannels: (entry: any) => { name: string; absoluteChannel: number; type: string }[]
+): number {
+  const target = channelName.toLowerCase()
+  let count = 0
+  for (const id of fixtureIds) {
+    const entry = patch.find((p: any) => p.id === id)
+    if (!entry) continue
+    const channels = getFixtureChannels(entry)
+    // Match by name containing the target (e.g. "gobo" matches "Gobo", "Gobo Wheel")
+    const ch = channels.find(c => c.name.toLowerCase().includes(target))
+    if (ch) {
+      setProgrammerChannel(entry.universe, ch.absoluteChannel, value)
+      count++
+    }
+  }
+  return count
 }
 
 // ---- Component ----

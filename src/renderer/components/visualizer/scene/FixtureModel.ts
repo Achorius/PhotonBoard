@@ -101,7 +101,7 @@ void main() {
 
     goboUV = clamp(goboUV, 0.0, 1.0);
     vec4 goboSample = texture2D(uGoboTex, goboUV);
-    goboAlpha = goboSample.a;
+    goboAlpha = goboSample.r;
   }
 
   float alpha = uOpacity * axialFade * endFade * edgeSoft * goboAlpha;
