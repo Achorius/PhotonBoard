@@ -296,8 +296,13 @@ export function LayoutEditor2D() {
     return () => { unsub(); if (rafId) cancelAnimationFrame(rafId) }
   }, [])
 
-  // Re-fit when room dimensions change
+  // Re-fit when room dimensions change (skip initial mount if we restored a saved view)
+  const roomFitMountRef = useRef(true)
   useEffect(() => {
+    if (roomFitMountRef.current) {
+      roomFitMountRef.current = false
+      if (savedViewRef.current) { drawRef.current(); return }
+    }
     fitToView()
     drawRef.current()
   }, [roomConfig.width, roomConfig.depth, fitToView])
