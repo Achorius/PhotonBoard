@@ -231,6 +231,26 @@
   /* ─── Print helpers ────────────────────────────────────── */
   .no-break { page-break-inside: avoid; }
   .page-break { page-break-before: always; }
+
+  /* ─── UI Layout diagram ────────────────────────────────── */
+  .ui-diagram {
+    background: #1a1a2e; color: #ccc; border-radius: 12px;
+    border: 2px solid #333; padding: 0; margin: 1.2em 0;
+    font-family: 'SF Mono', monospace; font-size: 8.5pt;
+    overflow: hidden; page-break-inside: avoid;
+  }
+  .ui-toolbar { background: #252540; padding: 6px 12px; border-bottom: 1px solid #333; color: #aaa; display: flex; justify-content: space-between; }
+  .ui-body { display: flex; min-height: 180px; }
+  .ui-sidebar { width: 100px; background: #1e1e32; border-right: 1px solid #333; padding: 8px 6px; }
+  .ui-main { flex: 1; padding: 8px 12px; }
+  .ui-tabs { background: #252540; padding: 4px 8px; border-bottom: 1px solid #333; color: #aaa; font-size: 7.5pt; }
+  .ui-executor { background: #1e1e32; border-top: 2px solid #333; padding: 6px 8px; display: flex; gap: 4px; }
+  .ui-executor-col { flex: 1; background: #2a2a44; border-radius: 3px; height: 40px; }
+  .ui-statusbar { background: #252540; padding: 3px 8px; font-size: 7pt; color: #666; border-top: 1px solid #333; }
+  .ui-badge { display: inline-block; background: #e85d04; color: white; font-size: 7pt; padding: 1px 5px; border-radius: 3px; }
+  .ui-badge-green { background: #22c55e; }
+  .ui-badge-purple { background: #a855f7; }
+  .ui-badge-red { background: #ef4444; }
 </style>
 </head>
 <body>
@@ -247,7 +267,7 @@
   </div>
   <div class="version-info">
     Version 0.1.0<br>
-    Documentation mise à jour : avril 2026
+    Avril 2026
   </div>
 </div>
 
@@ -255,912 +275,875 @@
      TABLE OF CONTENTS
      ═══════════════════════════════════════════════════════════ -->
 <div class="toc">
-  <h2>Table des matières</h2>
+  <h2>Sommaire</h2>
 
   <div class="toc-section main"><span>1. Introduction</span></div>
-  <div class="toc-section sub"><span>1.1 Présentation</span></div>
+  <div class="toc-section sub"><span>1.1 Qu'est-ce que PhotonBoard ?</span></div>
   <div class="toc-section sub"><span>1.2 Configuration requise</span></div>
   <div class="toc-section sub"><span>1.3 Installation</span></div>
 
-  <div class="toc-section main"><span>2. Prise en main rapide</span></div>
-  <div class="toc-section sub"><span>2.1 Premier lancement</span></div>
-  <div class="toc-section sub"><span>2.2 L'interface principale</span></div>
-  <div class="toc-section sub"><span>2.3 Barre d'outils supérieure</span></div>
-  <div class="toc-section sub"><span>2.4 Barre de statut</span></div>
+  <div class="toc-section main"><span>2. Vue d'ensemble de l'interface</span></div>
+  <div class="toc-section sub"><span>2.1 Barre d'outils (Toolbar)</span></div>
+  <div class="toc-section sub"><span>2.2 Panneau Patch (sidebar gauche)</span></div>
+  <div class="toc-section sub"><span>2.3 Onglets de travail</span></div>
+  <div class="toc-section sub"><span>2.4 Barre d'ex&eacute;cuteurs (Executor Bar)</span></div>
+  <div class="toc-section sub"><span>2.5 Barre de statut (Status Bar)</span></div>
 
-  <div class="toc-section main"><span>3. Patch — Adressage DMX</span></div>
-  <div class="toc-section sub"><span>3.1 Ajouter des projecteurs</span></div>
-  <div class="toc-section sub"><span>3.2 Bibliothèque de fixtures</span></div>
-  <div class="toc-section sub"><span>3.3 Recherche en ligne (OFL)</span></div>
-  <div class="toc-section sub"><span>3.4 Importer des fichiers fixtures</span></div>
-  <div class="toc-section sub"><span>3.5 Créer / éditer une fixture</span></div>
-  <div class="toc-section sub"><span>3.6 Groupes</span></div>
+  <div class="toc-section main"><span>3. Onglet 3D View</span></div>
+  <div class="toc-section main"><span>4. Onglet Stage Layout</span></div>
+  <div class="toc-section main"><span>5. Onglet Timeline</span></div>
+  <div class="toc-section main"><span>6. Onglet Effects</span></div>
+  <div class="toc-section main"><span>7. Onglet Scenes</span></div>
+  <div class="toc-section main"><span>8. Onglet Fixtures</span></div>
+  <div class="toc-section main"><span>9. Onglet Patch</span></div>
+  <div class="toc-section main"><span>10. Onglet MIDI</span></div>
+  <div class="toc-section main"><span>11. Onglet Follow</span></div>
+  <div class="toc-section main"><span>12. Onglet Settings</span></div>
 
-  <div class="toc-section main"><span>4. Faders — Commande manuelle</span></div>
-  <div class="toc-section sub"><span>4.1 Vue d'ensemble</span></div>
-  <div class="toc-section sub"><span>4.2 Le Programmer</span></div>
-
-  <div class="toc-section main"><span>5. Fixtures — Contrôle individuel</span></div>
-  <div class="toc-section sub"><span>5.1 Sélection de fixtures</span></div>
-  <div class="toc-section sub"><span>5.2 Picker couleur</span></div>
-  <div class="toc-section sub"><span>5.3 Pad XY (Pan/Tilt)</span></div>
-
-  <div class="toc-section main"><span>6. Playback — Scènes et Cuelists</span></div>
-  <div class="toc-section sub"><span>6.1 Créer une cuelist</span></div>
-  <div class="toc-section sub"><span>6.2 Enregistrer des mémoires (cues)</span></div>
-  <div class="toc-section sub"><span>6.3 Restitution et fondus</span></div>
-  <div class="toc-section sub"><span>6.4 Chases</span></div>
-
-  <div class="toc-section main"><span>7. Effects — Moteur d'effets LFO</span></div>
-  <div class="toc-section sub"><span>7.1 Créer un effet</span></div>
-  <div class="toc-section sub"><span>7.2 Formes d'ondes</span></div>
-  <div class="toc-section sub"><span>7.3 Mode spatial</span></div>
-
-  <div class="toc-section main"><span>8. MIDI — Contrôle externe</span></div>
-  <div class="toc-section sub"><span>8.1 Connexion d'un contrôleur</span></div>
-  <div class="toc-section sub"><span>8.2 MIDI Learn</span></div>
-  <div class="toc-section sub"><span>8.3 Cibles assignables</span></div>
-
-  <div class="toc-section main"><span>9. Stage Layout — Éditeur 2D</span></div>
-
-  <div class="toc-section main"><span>10. Visualizer — Prévisualisation 3D</span></div>
-  <div class="toc-section sub"><span>10.1 Scène 3D</span></div>
-  <div class="toc-section sub"><span>10.2 Configuration de la salle</span></div>
-  <div class="toc-section sub"><span>10.3 Propriétés des projecteurs</span></div>
-
-  <div class="toc-section main"><span>11. Follow — Mode poursuite</span></div>
-
-  <div class="toc-section main"><span>12. Live — Timeline DAW</span></div>
-  <div class="toc-section sub"><span>12.1 Pistes et clips</span></div>
-  <div class="toc-section sub"><span>12.2 Marqueurs et zones</span></div>
-  <div class="toc-section sub"><span>12.3 Timecode</span></div>
-
-  <div class="toc-section main"><span>13. Settings — Paramètres</span></div>
-  <div class="toc-section sub"><span>13.1 Sorties ArtNet</span></div>
-  <div class="toc-section sub"><span>13.2 Sorties USB DMX</span></div>
-
-  <div class="toc-section main"><span>14. Gestion des fichiers show</span></div>
-
-  <div class="toc-section main"><span>15. Raccourcis clavier</span></div>
-
-  <div class="toc-section main"><span>16. Formats de fichier supportés</span></div>
-
+  <div class="toc-section main"><span>13. Raccourcis clavier</span></div>
+  <div class="toc-section main"><span>14. Gestion des fichiers Show</span></div>
+  <div class="toc-section main"><span>15. Formats de fixtures support&eacute;s</span></div>
+  <div class="toc-section main"><span>16. Sortie DMX : ArtNet &amp; USB</span></div>
   <div class="toc-section main"><span>17. Glossaire</span></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
      CHAPTER 1 — INTRODUCTION
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch1">
+<div class="chapter">
 <h1>1. Introduction</h1>
 
-<h2>1.1 Présentation</h2>
-<p><strong>PhotonBoard</strong> est un logiciel professionnel de commande d'éclairage DMX512 conçu pour le spectacle vivant, l'architecture lumineuse, les events et les installations scéniques. Il fonctionne sur <strong>macOS</strong>, <strong>Windows</strong> et <strong>Linux</strong>.</p>
+<h2>1.1 Qu'est-ce que PhotonBoard ?</h2>
+<p>
+  PhotonBoard est un logiciel professionnel de commande DMX512 pour Mac et Linux. Il permet de piloter des projecteurs intelligents (lyres, scanners, PARs, barres LED, etc.) via les protocoles <strong>ArtNet</strong> et <strong>USB DMX</strong>.
+</p>
+<p>
+  L'application offre une interface moderne et intuitive, pensee pour les eclairagistes, les regisseurs et les techniciens du spectacle. Elle integre un visualiseur 3D en temps reel, un systeme de timeline de type DAW, un moteur d'effets parametriques, le mapping MIDI, et le suivi de poursuite par manette.
+</p>
 
 <div class="features-grid">
   <div class="feature-card">
-    <h4>Multi-univers DMX</h4>
-    <p>Jusqu'à 16 univers DMX simultanés, avec sortie ArtNet et USB DMX.</p>
+    <h4>3 univers DMX</h4>
+    <p>Pilotez jusqu'a 1536 canaux DMX simultanement via ArtNet ou adaptateur USB.</p>
   </div>
   <div class="feature-card">
-    <h4>Bibliothèque de 20 000+ fixtures</h4>
-    <p>127 fixtures intégrées, accès en ligne à l'Open Fixture Library, import GDTF, QLC+, Avolites, GrandMA, CSV.</p>
+    <h4>Visualiseur 3D temps reel</h4>
+    <p>Visualisez vos faisceaux, couleurs et mouvements dans un espace 3D WebGL.</p>
   </div>
   <div class="feature-card">
-    <h4>Moteur d'effets LFO</h4>
-    <p>9 formes d'ondes, mode spatial 3D, effets composés multi-canaux.</p>
+    <h4>Timeline type DAW</h4>
+    <p>Programmez vos sequences avec des clips sur une timeline multi-piste.</p>
   </div>
   <div class="feature-card">
-    <h4>Timeline DAW</h4>
-    <p>Éditeur temporel avec clips, marqueurs, zones, support timecode.</p>
+    <h4>Moteur d'effets</h4>
+    <p>Cercle, sinus, rainbow, strobe et plus. Choisissez la forme d'onde, la vitesse, le spread.</p>
   </div>
   <div class="feature-card">
-    <h4>Visualisation 3D</h4>
-    <p>Prévisualisation en temps réel des faisceaux, positions et couleurs.</p>
+    <h4>MIDI natif</h4>
+    <p>Mappez chaque fader, bouton et scene a un controleur MIDI (APC, Launch Control, etc.).</p>
   </div>
   <div class="feature-card">
-    <h4>Contrôle MIDI complet</h4>
-    <p>MIDI Learn sur tous les contrôles, support encodeurs et faders.</p>
-  </div>
-  <div class="feature-card">
-    <h4>Mode poursuite</h4>
-    <p>Suivi de cible avec manette de jeu, convergence automatique des faisceaux.</p>
-  </div>
-  <div class="feature-card">
-    <h4>Éditeur de fixtures</h4>
-    <p>Créez vos propres définitions pour les projecteurs chinois, LED bars, etc.</p>
+    <h4>Import universel de fixtures</h4>
+    <p>OFL, GDTF, QLC+, Avolites, GrandMA, CSV/TSV — importez depuis n'importe quelle source.</p>
   </div>
 </div>
 
 <h2>1.2 Configuration requise</h2>
 <table>
-  <tr><th>Composant</th><th>Minimum</th><th>Recommandé</th></tr>
-  <tr><td>Système</td><td>macOS 11+, Windows 10+, Linux (Ubuntu 20.04+)</td><td>macOS 14+, Windows 11</td></tr>
+  <tr><th>Composant</th><th>Minimum</th><th>Recommande</th></tr>
+  <tr><td>Systeme</td><td>macOS 12+ / Ubuntu 20.04+</td><td>macOS 14+ / Ubuntu 22.04+</td></tr>
+  <tr><td>Processeur</td><td>Intel i5 / Apple M1</td><td>Apple M2+ / Intel i7</td></tr>
   <tr><td>RAM</td><td>4 Go</td><td>8 Go+</td></tr>
-  <tr><td>Écran</td><td>1280 × 720</td><td>1920 × 1080+</td></tr>
-  <tr><td>GPU</td><td>Intégré (pour la 3D)</td><td>GPU dédié</td></tr>
-  <tr><td>Réseau</td><td>Ethernet (pour ArtNet)</td><td>Ethernet Gigabit</td></tr>
-  <tr><td>USB</td><td>—</td><td>Port USB pour interface DMX</td></tr>
+  <tr><td>GPU</td><td>Metal ou OpenGL 3.2</td><td>GPU dedie / Apple M-series</td></tr>
+  <tr><td>Sortie DMX</td><td>Interface ArtNet (reseau)</td><td>ArtNet + adaptateur USB DMX</td></tr>
 </table>
 
 <h2>1.3 Installation</h2>
-
 <h3>macOS</h3>
 <div class="steps">
-  <div class="step"><div class="step-content">Téléchargez le fichier <code>.dmg</code> depuis la page de téléchargement.</div></div>
-  <div class="step"><div class="step-content">Double-cliquez sur le <code>.dmg</code> et glissez <strong>PhotonBoard</strong> dans le dossier Applications.</div></div>
-  <div class="step"><div class="step-content">Au premier lancement, macOS peut bloquer l'application. Allez dans <strong>Réglages Système → Confidentialité et sécurité</strong>, puis cliquez « Ouvrir quand même ».</div></div>
-</div>
-
-<h3>Windows</h3>
-<div class="steps">
-  <div class="step"><div class="step-content">Lancez l'installeur <code>.exe</code> téléchargé.</div></div>
-  <div class="step"><div class="step-content">Suivez les étapes de l'assistant d'installation.</div></div>
-  <div class="step"><div class="step-content">PhotonBoard se trouve ensuite dans le menu Démarrer.</div></div>
+  <div class="step"><div class="step-content">Telechargez le fichier <code>.dmg</code> depuis le site officiel ou la page GitHub.</div></div>
+  <div class="step"><div class="step-content">Ouvrez le <code>.dmg</code> et glissez <strong>PhotonBoard</strong> dans le dossier <strong>Applications</strong>.</div></div>
+  <div class="step"><div class="step-content">Au premier lancement, faites clic droit > Ouvrir si macOS bloque l'application non signee.</div></div>
 </div>
 
 <h3>Linux</h3>
 <div class="steps">
-  <div class="step"><div class="step-content">Téléchargez le fichier <code>.AppImage</code> ou <code>.deb</code>.</div></div>
-  <div class="step"><div class="step-content">Pour AppImage : rendez le fichier exécutable (<code>chmod +x PhotonBoard.AppImage</code>) puis lancez-le.</div></div>
+  <div class="step"><div class="step-content">Telechargez le fichier <code>.AppImage</code> ou <code>.deb</code>.</div></div>
+  <div class="step"><div class="step-content">Pour AppImage : <code>chmod +x PhotonBoard.AppImage && ./PhotonBoard.AppImage</code></div></div>
+  <div class="step"><div class="step-content">Pour Debian/Ubuntu : <code>sudo dpkg -i photonboard_*.deb</code></div></div>
+</div>
+
+<div class="note">
+  Pour la sortie USB DMX sur Linux, installez <code>libusb-1.0-0</code> : <code>sudo apt install libusb-1.0-0</code>
 </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 2 — QUICK START
+     CHAPTER 2 — VUE D'ENSEMBLE DE L'INTERFACE
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch2">
-<h1>2. Prise en main rapide</h1>
+<div class="chapter">
+<h1>2. Vue d'ensemble de l'interface</h1>
 
-<h2>2.1 Premier lancement</h2>
-<p>Au premier lancement, PhotonBoard crée automatiquement un nouveau show vide. Le dossier de sauvegarde par défaut est :</p>
+<p>L'interface de PhotonBoard est organisee en <strong>5 zones</strong> permanentes :</p>
+
+<!-- ASCII-style UI diagram -->
+<div class="ui-diagram">
+  <div class="ui-toolbar">
+    <span>Show Name</span>
+    <span><span class="ui-badge">GM</span> &nbsp; <span class="ui-badge-purple">MIDI Learn</span> &nbsp; <span class="ui-badge-green">Live</span> &nbsp; Clear &nbsp; Blinder &nbsp; Strobe &nbsp; <span class="ui-badge-red">Blackout</span></span>
+  </div>
+  <div style="display:flex">
+    <div class="ui-sidebar">
+      <div style="color:#e85d04;font-size:7pt;margin-bottom:4px">PATCH (27)</div>
+      <div style="font-size:7pt;color:#999">All | U1 | U2 | U3</div>
+      <div style="margin-top:6px;font-size:7pt;color:#aaa">Fixture 1<br>Fixture 2<br>Fixture 3<br>...</div>
+      <div style="margin-top:8px;font-size:6.5pt;color:#666">Mini Faders</div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column">
+      <div class="ui-tabs">3D View &nbsp; Stage Layout &nbsp; <span style="color:white;background:#e85d04;padding:1px 4px;border-radius:3px">Timeline</span> &nbsp; Effects &nbsp; Scenes &nbsp; Fixtures &nbsp; Patch &nbsp; MIDI &nbsp; Follow &nbsp; Settings</div>
+      <div class="ui-main" style="color:#888;font-size:8pt;display:flex;align-items:center;justify-content:center">Zone de contenu de l'onglet actif</div>
+    </div>
+  </div>
+  <div class="ui-executor">
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+    <div class="ui-executor-col"></div>
+  </div>
+  <div class="ui-statusbar">ArtNet OK &nbsp;&nbsp; 27 fixtures patched &nbsp;&nbsp; MIDI: APC Key 25 &nbsp;&nbsp; | Command Line &nbsp;&nbsp; | file.pbshow</div>
+</div>
+
+<h2>2.1 Barre d'outils (Toolbar)</h2>
+<p>Barre horizontale en haut de la fenetre, toujours visible. Elle contient :</p>
+
+<table>
+  <tr><th>Element</th><th>Description</th></tr>
+  <tr><td><strong>Nom du show</strong></td><td>Affiche le nom du show en cours, centre dans la barre.</td></tr>
+  <tr><td><strong>GM (Grand Master)</strong></td><td>Curseur horizontal orange. Controle le niveau general de sortie (0-100%). Affecte tous les univers DMX.</td></tr>
+  <tr><td><strong>MIDI Learn</strong></td><td>Bouton violet. Active le mode d'apprentissage MIDI. Par defaut, mappe le Grand Master. Lorsqu'actif, il clignote en violet.</td></tr>
+  <tr><td><strong>Live</strong></td><td>Bouton vert. Demarre/arrete la lecture de la Timeline. Clignote quand la timeline est en cours.</td></tr>
+  <tr><td><strong>Clear</strong></td><td>Bouton orange. Efface le Programmeur (valeurs manuelles). Devient actif uniquement quand des valeurs ont ete touchees manuellement. Raccourci : <kbd>Backspace</kbd>.</td></tr>
+  <tr><td><strong>Blinder</strong></td><td>Bouton jaune. <em>Maintenez enfonce</em> pour envoyer un flash blanc sur toutes les fixtures. Relacher = arret.</td></tr>
+  <tr><td><strong>Strobe</strong></td><td>Bouton cyan. <em>Maintenez enfonce</em> pour activer un effet stroboscope sur les fixtures actives.</td></tr>
+  <tr><td><strong>FOLLOW</strong></td><td>Indicateur vert, apparait uniquement quand le suivi de poursuite est actif. Cliquer dessus ouvre l'onglet Follow.</td></tr>
+  <tr><td><strong>Blackout</strong></td><td>Bouton rouge. Coupe toute sortie DMX. Clignote en rouge quand actif. Raccourci : <kbd>Esc</kbd>.</td></tr>
+</table>
+
+<div class="tip">
+  Clic droit sur <strong>Live</strong>, <strong>Blinder</strong>, <strong>Strobe</strong> ou <strong>Blackout</strong> ouvre le MIDI Learn pour mapper ce bouton specifique a un controleur MIDI.
+</div>
+
+<h2>2.2 Panneau Patch (sidebar gauche)</h2>
+<p>Sidebar permanente a gauche (largeur fixe 192px). Elle affiche la liste de toutes les fixtures patchees.</p>
+
+<h3>Contenu du panneau</h3>
 <ul>
-  <li><strong>macOS / Linux :</strong> <code>~/Documents/PhotonBoard/</code></li>
-  <li><strong>Windows :</strong> <code>C:\Users\[Nom]\Documents\PhotonBoard\</code></li>
+  <li><strong>En-tete "PATCH"</strong> avec le nombre de fixtures entre parentheses et un bouton <strong>+</strong> pour ouvrir l'editeur de Patch.</li>
+  <li><strong>Filtre par univers</strong> : 4 boutons — <kbd>All</kbd>, <kbd>U1</kbd>, <kbd>U2</kbd>, <kbd>U3</kbd> — pour filtrer l'affichage par univers.</li>
+  <li><strong>Liste des fixtures</strong> : chaque fixture affiche son nom, son adresse (ex: U1.001) et son type. Un clic selectionne la fixture. <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + clic pour la multi-selection.</li>
+  <li><strong>Mini faders</strong> : lorsqu'une seule fixture est selectionnee, des faders compacts apparaissent en bas, affichant les canaux de la fixture (Dimmer, Pan, Tilt, Red, Green, Blue, etc.) avec un code couleur par type.</li>
 </ul>
-<p>Les fichiers show utilisent l'extension <code>.pbshow</code> (format JSON).</p>
 
-<div class="tip">Si un show précédent a été sauvegardé, PhotonBoard le recharge automatiquement au démarrage.</div>
+<div class="tip">
+  La selection dans le panneau Patch est synchronisee avec le visualiseur 3D et le Stage Layout. Selectionner une fixture ici la met en surbrillance partout.
+</div>
 
-<h2>2.2 L'interface principale</h2>
-<p>L'interface est organisée en <strong>onglets</strong> accessibles depuis la barre de navigation à gauche :</p>
-
-<table>
-  <tr><th>Onglet</th><th>Fonction</th></tr>
-  <tr><td><strong>Faders</strong></td><td>Contrôle manuel des canaux DMX avec des faders verticaux</td></tr>
-  <tr><td><strong>Patch</strong></td><td>Adressage des projecteurs, gestion de la bibliothèque, groupes</td></tr>
-  <tr><td><strong>Fixtures</strong></td><td>Contrôle individuel avec picker couleur, pad XY Pan/Tilt</td></tr>
-  <tr><td><strong>Playback</strong></td><td>Création et restitution de scènes (cuelists), chases</td></tr>
-  <tr><td><strong>Effects</strong></td><td>Moteur d'effets LFO (sinus, carré, dent de scie, etc.)</td></tr>
-  <tr><td><strong>MIDI</strong></td><td>Configuration du contrôle MIDI, MIDI Learn</td></tr>
-  <tr><td><strong>Stage</strong></td><td>Éditeur de plan de scène 2D (vue de dessus)</td></tr>
-  <tr><td><strong>Visualizer</strong></td><td>Prévisualisation 3D temps réel de la scène</td></tr>
-  <tr><td><strong>Follow</strong></td><td>Mode poursuite (gamepad) pour les lyres</td></tr>
-  <tr><td><strong>Live</strong></td><td>Timeline de type DAW avec clips, marqueurs et timecode</td></tr>
-  <tr><td><strong>Settings</strong></td><td>Configuration des sorties DMX (ArtNet, USB)</td></tr>
-</table>
-
-<h2>2.3 Barre d'outils supérieure</h2>
-<p>La barre d'outils en haut de l'écran contient les commandes globales :</p>
+<h2>2.3 Onglets de travail</h2>
+<p>Les 10 onglets sont accessibles par la barre d'onglets sous la Toolbar, ou par les raccourcis clavier <kbd>1</kbd> a <kbd>9</kbd> et <kbd>0</kbd>.</p>
 
 <table>
-  <tr><th>Contrôle</th><th>Fonction</th></tr>
-  <tr><td><strong>Grand Master</strong></td><td>Fader horizontal contrôlant le niveau global de sortie DMX (0–100 %). Par défaut à 100 %.</td></tr>
-  <tr><td><strong>MIDI Learn</strong></td><td>Active le mode d'apprentissage MIDI. Bougez un contrôle MIDI pour l'assigner.</td></tr>
-  <tr><td><strong>Live</strong></td><td>Lance/arrête la lecture de la timeline.</td></tr>
-  <tr><td><strong>Blackout</strong></td><td>Force tous les canaux DMX à zéro. Raccourci : <kbd>Ctrl</kbd> + <kbd>B</kbd></td></tr>
-  <tr><td><strong>Blinder</strong></td><td>Force tous les canaux à 255 (plein feux d'urgence).</td></tr>
-  <tr><td><strong>Strobe</strong></td><td>Active un effet stroboscopique global. Le curseur règle la fréquence (1–25 Hz).</td></tr>
-  <tr><td><strong>Nom du show</strong></td><td>Affiche le nom du show courant (centré).</td></tr>
+  <tr><th>#</th><th>Onglet</th><th>Raccourci</th><th>Fonction</th></tr>
+  <tr><td>1</td><td><strong>3D View</strong></td><td><kbd>1</kbd></td><td>Visualiseur 3D temps reel avec faisceaux</td></tr>
+  <tr><td>2</td><td><strong>Stage Layout</strong></td><td><kbd>2</kbd></td><td>Plan 2D de la scene (vue dessus + vue cote)</td></tr>
+  <tr><td>3</td><td><strong>Timeline</strong></td><td><kbd>3</kbd></td><td>Timeline DAW multi-piste avec clips, marqueurs et zones</td></tr>
+  <tr><td>4</td><td><strong>Effects</strong></td><td><kbd>4</kbd></td><td>Moteur d'effets parametriques (sinus, cercle, rainbow...)</td></tr>
+  <tr><td>5</td><td><strong>Scenes</strong></td><td><kbd>5</kbd></td><td>Creation/lecture de scenes avec enregistrement live</td></tr>
+  <tr><td>6</td><td><strong>Fixtures</strong></td><td><kbd>6</kbd></td><td>Controle detaille des fixtures (faders, color picker, XY pad)</td></tr>
+  <tr><td>7</td><td><strong>Patch</strong></td><td><kbd>7</kbd></td><td>Configuration DMX : ajout, import, adresses, groupes</td></tr>
+  <tr><td>8</td><td><strong>MIDI</strong></td><td><kbd>8</kbd></td><td>Peripheriques MIDI, mappings et moniteur</td></tr>
+  <tr><td>9</td><td><strong>Follow</strong></td><td><kbd>9</kbd></td><td>Poursuite par manette (gamepad) pour lyres</td></tr>
+  <tr><td>10</td><td><strong>Settings</strong></td><td><kbd>0</kbd></td><td>Configuration show, ArtNet, USB DMX</td></tr>
 </table>
 
-<div class="note">Tous les boutons de la barre d'outils sont assignables en MIDI (clic droit → MIDI Learn).</div>
+<h2>2.4 Barre d'executeurs (Executor Bar)</h2>
+<p>Barre permanente en bas de l'interface, composee de <strong>8 colonnes</strong> avec <strong>4 emplacements</strong> chacune (32 slots au total).</p>
 
-<h2>2.4 Barre de statut</h2>
-<p>Située en bas de l'écran, la barre de statut affiche :</p>
+<h3>Fonctionnalites</h3>
 <ul>
-  <li><strong>État ArtNet</strong> — connecté/déconnecté + nombre d'univers actifs</li>
-  <li><strong>Nombre de fixtures</strong> — total de projecteurs patchés</li>
-  <li><strong>Appareils MIDI</strong> — liste des contrôleurs connectés</li>
-  <li><strong>Dernier message MIDI</strong> — type, canal, numéro, valeur</li>
-  <li><strong>Ligne de commande</strong> — saisie textuelle style GrandMA (ex. <code>fixture 1 at 100%</code>)</li>
+  <li><strong>Colonnes colorees</strong> : chaque colonne a une couleur personnalisable. Cliquer sur le <strong>point colore</strong> dans l'en-tete ouvre une palette de 12 couleurs.</li>
+  <li><strong>Titre de colonne</strong> : double-cliquer sur le titre pour le renommer.</li>
+  <li><strong>Scenes</strong> : les scenes enregistrees dans l'onglet Scenes apparaissent automatiquement dans les slots. Cliquer sur une scene = GO/STOP.</li>
+  <li><strong>Double-clic</strong> sur le nom d'une scene pour la renommer.</li>
+  <li><strong>Drag &amp; drop</strong> : deplacez les scenes d'un slot a un autre par glisser-deposer.</li>
+  <li><strong>Modes</strong> : chaque cellule a un mode (cliquer sur le badge a droite pour cycler) :</li>
 </ul>
 
-<h3>Ligne de commande</h3>
-<p>Commandes supportées :</p>
 <table>
-  <tr><th>Commande</th><th>Effet</th></tr>
-  <tr><td><code>fixture 1 at 100%</code></td><td>Sélectionne la fixture 1 et monte à 100 %</td></tr>
-  <tr><td><code>group 2 at 50</code></td><td>Monte le groupe 2 à 50 %</td></tr>
-  <tr><td><code>go [1]</code></td><td>Lance la cuelist 1</td></tr>
-  <tr><td><code>stop [1]</code></td><td>Stoppe la cuelist 1</td></tr>
-  <tr><td><code>clear</code></td><td>Vide le programmer</td></tr>
-  <tr><td><code>blackout</code></td><td>Bascule le blackout</td></tr>
-</table>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 3 — PATCH
-     ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch3">
-<h1>3. Patch — Adressage DMX</h1>
-<p>L'onglet <strong>Patch</strong> permet de configurer l'adressage DMX de chaque projecteur, gérer la bibliothèque de fixtures et organiser les projecteurs en groupes.</p>
-
-<h2>3.1 Ajouter des projecteurs</h2>
-<div class="steps">
-  <div class="step"><div class="step-content">Cliquez sur le bouton <strong>Add Fixture</strong> en haut du panneau Patch.</div></div>
-  <div class="step"><div class="step-content">Dans la fenêtre modale, parcourez la <strong>bibliothèque locale</strong> (onglet « Local Library ») ou recherchez en ligne (onglet « Online (OFL) »).</div></div>
-  <div class="step"><div class="step-content">Sélectionnez le fabricant puis le modèle de projecteur souhaité.</div></div>
-  <div class="step"><div class="step-content">Choisissez le <strong>mode DMX</strong> (ex. « 16 Channel », « 22 Channel »).</div></div>
-  <div class="step"><div class="step-content">Définissez l'<strong>univers</strong> et l'<strong>adresse de départ</strong>.</div></div>
-  <div class="step"><div class="step-content">Indiquez la <strong>quantité</strong> si vous ajoutez plusieurs projecteurs identiques (les adresses s'incrémentent automatiquement).</div></div>
-  <div class="step"><div class="step-content">Cliquez <strong>Add</strong> pour ajouter au patch.</div></div>
-</div>
-
-<div class="tip">Les adresses DMX se calculent automatiquement : si un projecteur en mode 16 canaux commence à l'adresse 1, le suivant commencera à l'adresse 17.</div>
-
-<h2>3.2 Bibliothèque de fixtures</h2>
-<p>PhotonBoard inclut <strong>127 définitions intégrées</strong> de projecteurs professionnels couvrant les principales marques :</p>
-
-<div class="features-grid">
-  <div class="feature-card"><h4>Generics</h4><p>Dimmer, RGB, RGBW, RGBWAU, Moving Head Wash/Spot/Beam, LED Bar, Fog Machine, Hazer, Strobe, Sunstrip, Fresnel, Blinder, Wall Washer</p></div>
-  <div class="feature-card"><h4>Marques professionnelles</h4><p>ADJ, Astera, Ayrton, Cameo, Chauvet DJ/Pro, Clay Paky, Elation, ETC, GLP, High End Systems, Martin, Robe, Robert Juliat, SGM, Vari-Lite</p></div>
-  <div class="feature-card"><h4>Marques événementielles</h4><p>BriteQ, Eurolite, Fuzzix, Showtec, Stairville, TMB</p></div>
-  <div class="feature-card"><h4>Fixtures personnalisées</h4><p>Créez vos propres définitions via l'éditeur intégré pour les projecteurs non référencés</p></div>
-</div>
-
-<h2>3.3 Recherche en ligne (OFL)</h2>
-<p>L'onglet <strong>Online (OFL)</strong> dans la fenêtre d'ajout permet de rechercher parmi plus de <strong>20 000 fixtures</strong> de l'Open Fixture Library.</p>
-
-<div class="steps">
-  <div class="step"><div class="step-content">Cliquez l'onglet « Online (OFL) » dans la modale d'ajout.</div></div>
-  <div class="step"><div class="step-content">Tapez le nom du fabricant ou du modèle dans le champ de recherche (ex. « Robe Robin »).</div></div>
-  <div class="step"><div class="step-content">La recherche s'effectue automatiquement après 400 ms. Les résultats affichent le fabricant, le modèle et les catégories.</div></div>
-  <div class="step"><div class="step-content">Cliquez <strong>Download</strong> à côté du modèle souhaité. La fixture est téléchargée, convertie au format natif et ajoutée à votre bibliothèque locale.</div></div>
-</div>
-
-<div class="warn">La recherche en ligne nécessite une connexion Internet. Pour un usage hors-ligne, pré-téléchargez vos fixtures ou importez-les depuis une clé USB (voir section 3.4).</div>
-
-<h2>3.4 Importer des fichiers fixtures</h2>
-<p>PhotonBoard peut importer des fichiers fixtures dans <strong>tous les formats professionnels courants</strong>. C'est particulièrement utile pour un usage hors-ligne (clé USB avec les fixtures téléchargées en amont).</p>
-
-<table>
-  <tr><th>Format</th><th>Extension</th><th>Source habituelle</th></tr>
-  <tr><td>Open Fixture Library (OFL)</td><td><code>.json</code></td><td>open-fixture-library.org</td></tr>
-  <tr><td>GDTF</td><td><code>.gdtf</code></td><td>gdtf-share.com — standard DIN SPEC 15800</td></tr>
-  <tr><td>QLC+</td><td><code>.qxf</code></td><td>qlcplus.org</td></tr>
-  <tr><td>Avolites Personality</td><td><code>.d4</code>, <code>.r20</code></td><td>personalities.avolites.com</td></tr>
-  <tr><td>GrandMA2/3</td><td><code>.xml</code></td><td>Export depuis GrandMA ou bibliothèques tierces</td></tr>
-  <tr><td>CSV / TSV</td><td><code>.csv</code>, <code>.tsv</code></td><td>Tableurs (Excel, Google Sheets) — export personnalisé</td></tr>
-  <tr><td>PhotonBoard natif</td><td><code>.json</code></td><td>Partage entre utilisateurs PhotonBoard</td></tr>
+  <tr><th>Mode</th><th>Comportement</th></tr>
+  <tr><td><code>TOG</code> (Toggle)</td><td>GO / STOP alternes. Un clic demarre, un deuxieme arrete.</td></tr>
+  <tr><td><code>TRIG</code> (Trigger)</td><td>Joue tant que vous maintenez le bouton/la note MIDI.</td></tr>
+  <tr><td><code>FLASH</code></td><td>Plein fader (255) tant que vous appuyez.</td></tr>
 </table>
 
-<h3>Procédure d'import</h3>
-<div class="steps">
-  <div class="step"><div class="step-content">Depuis l'onglet Patch, cliquez <strong>Import Fixture</strong>.</div></div>
-  <div class="step"><div class="step-content">Sélectionnez un ou plusieurs fichiers. Le filtre affiche par défaut « All Fixture Formats » avec toutes les extensions supportées. Vous pouvez filtrer par format spécifique.</div></div>
-  <div class="step"><div class="step-content">PhotonBoard détecte automatiquement le format et convertit chaque fichier en définition native.</div></div>
-  <div class="step"><div class="step-content">Les fixtures importées apparaissent dans la bibliothèque locale avec un badge indiquant leur source.</div></div>
+<div class="tip">
+  Clic droit sur une scene dans l'Executor Bar ouvre le MIDI Learn pour cette scene specifique. Le mode de la cellule (TOG/TRIG/FLASH) est automatiquement applique au mapping MIDI.
 </div>
 
-<div class="tip">Vous pouvez sélectionner plusieurs fichiers simultanément (y compris de formats différents) lors de l'import.</div>
-
-<h3>Format CSV attendu</h3>
-<p>Pour les fixtures définies manuellement dans un tableur, utilisez les colonnes suivantes :</p>
-<table>
-  <tr><th>Colonne</th><th>Obligatoire</th><th>Description</th></tr>
-  <tr><td><code>Channel</code> ou <code>Name</code></td><td>Oui</td><td>Nom du canal DMX (ex. « Dimmer », « Red », « Pan »)</td></tr>
-  <tr><td><code>Type</code></td><td>Non</td><td>Type de canal (intensity, color, pan, tilt, gobo…). Détecté automatiquement si absent.</td></tr>
-  <tr><td><code>Default</code></td><td>Non</td><td>Valeur par défaut (0–255)</td></tr>
-</table>
-
-<h2>3.5 Créer / éditer une fixture</h2>
-<p>Pour les projecteurs non référencés (LED chinoises, matériel custom…), PhotonBoard intègre un <strong>éditeur de fixtures complet</strong>.</p>
-
-<div class="steps">
-  <div class="step"><div class="step-content">Cliquez <strong>Create Fixture</strong> dans l'onglet Patch.</div></div>
-  <div class="step"><div class="step-content">Renseignez le <strong>nom</strong>, le <strong>fabricant</strong> et la <strong>catégorie</strong>.</div></div>
-  <div class="step"><div class="step-content">Ajoutez les canaux DMX un par un, ou utilisez les <strong>préréglages rapides</strong> : Dimmer, RGB, RGBW, Pan/Tilt, Gobo, Shutter.</div></div>
-  <div class="step"><div class="step-content">Pour chaque canal, définissez le <strong>type</strong>, la <strong>valeur par défaut</strong> et la <strong>priorité</strong> (HTP ou LTP).</div></div>
-  <div class="step"><div class="step-content">Configurez les <strong>modes</strong> en activant/désactivant les canaux par mode (certains projecteurs ont plusieurs modes : 6ch, 12ch, 16ch…).</div></div>
-  <div class="step"><div class="step-content">(Optionnel) Remplissez les <strong>propriétés physiques</strong> : dimensions, poids, puissance, angle de faisceau.</div></div>
-  <div class="step"><div class="step-content">Cliquez <strong>Save</strong>. La fixture est ajoutée à la bibliothèque locale.</div></div>
-</div>
-
-<div class="note">Les fixtures créées par l'utilisateur sont stockées dans le dossier de données de l'application et peuvent être éditées ou supprimées. Les fixtures intégrées ne peuvent pas être supprimées.</div>
-
-<h2>3.6 Groupes</h2>
-<p>Les groupes permettent de sélectionner et contrôler rapidement un ensemble de projecteurs.</p>
+<h2>2.5 Barre de statut (Status Bar)</h2>
+<p>Barre fine tout en bas de la fenetre. Elle affiche en temps reel :</p>
 <ul>
-  <li><strong>Créer un groupe</strong> — Depuis l'onglet Patch ou Faders, créez un groupe et attribuez-lui une couleur.</li>
-  <li><strong>Ajouter des fixtures</strong> — Glissez des fixtures dans un groupe ou utilisez le menu d'édition du patch.</li>
-  <li><strong>Sélection rapide</strong> — Cliquez sur un groupe dans la barre latérale pour sélectionner toutes ses fixtures.</li>
-  <li><strong>Utilisation</strong> — Les groupes sont utilisables dans les Faders, Effects, Follow et la ligne de commande.</li>
+  <li><strong>ArtNet OK / Offline</strong> : etat de la connexion ArtNet avec le nombre d'univers actifs.</li>
+  <li><strong>Nombre de fixtures</strong> : ex. "27 fixtures patched".</li>
+  <li><strong>MIDI</strong> : nom du peripherique MIDI connecte ou "No device".</li>
+  <li><strong>Dernier message MIDI</strong> : affiche en temps reel le type, canal, numero et valeur du dernier message recu.</li>
+  <li><strong>Command Line</strong> : champ de saisie rapide pour des commandes textuelles.</li>
+  <li><strong>Fichier sauvegarde</strong> : nom du fichier <code>.pbshow</code> actuel. Cliquer dessus ouvre le dossier dans le Finder.</li>
+  <li><strong>Indicateurs GM/BO</strong> : affiche le niveau du Grand Master s'il est inferieur a 100%, et "BLACKOUT" en rouge clignotant si actif.</li>
 </ul>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 4 — FADERS
+     CHAPTER 3 — 3D VIEW
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch4">
-<h1>4. Faders — Commande manuelle</h1>
+<div class="chapter">
+<h1>3. Onglet 3D View <kbd>1</kbd></h1>
 
-<h2>4.1 Vue d'ensemble</h2>
-<p>L'onglet <strong>Faders</strong> offre un contrôle direct de chaque canal DMX via des faders verticaux, similaire aux consoles physiques.</p>
+<p>Le visualiseur 3D affiche une representation tridimensionnelle de votre scene avec les fixtures positionnees dans l'espace et leurs faisceaux lumineux en temps reel (WebGL/Three.js).</p>
 
-<h3>Organisation</h3>
-<ul>
-  <li><strong>Sélecteur d'univers</strong> — Menu déroulant pour basculer entre les univers (0–15).</li>
-  <li><strong>Sélecteur de groupe</strong> — Filtrage rapide par groupe ou « All » pour tout afficher.</li>
-  <li><strong>Affichage par fixture</strong> — Chaque fixture affiche son nom, son mode et ses canaux individuels.</li>
-</ul>
-
-<h3>Code couleur des faders</h3>
+<h2>3.1 Barre de controle</h2>
 <table>
-  <tr><th>Couleur</th><th>Type de canal</th></tr>
-  <tr><td style="color:#e17055; font-weight:700;">Orange</td><td>Intensity / Dimmer</td></tr>
-  <tr><td style="color:#00cec9; font-weight:700;">Cyan</td><td>Pan / Tilt (position)</td></tr>
-  <tr><td style="color:#e74c3c; font-weight:700;">Rouge / Vert / Bleu</td><td>Canaux couleur (RGB)</td></tr>
-  <tr><td style="color:#636e72; font-weight:700;">Gris</td><td>Canaux génériques</td></tr>
+  <tr><th>Controle</th><th>Fonction</th></tr>
+  <tr><td><strong>Room: W / D / H</strong></td><td>Dimensions de la salle en metres (largeur, profondeur, hauteur). Saisie numerique directe.</td></tr>
+  <tr><td><strong>Beams</strong></td><td>Active/desactive l'affichage des faisceaux lumineux.</td></tr>
+  <tr><td><strong>Room</strong></td><td>Active/desactive l'affichage des murs de la salle.</td></tr>
+  <tr><td><strong>Grid</strong></td><td>Active/desactive la grille au sol.</td></tr>
+  <tr><td><strong>Snap</strong></td><td>Active/desactive l'accrochage a la grille lors du deplacement des fixtures.</td></tr>
+  <tr><td><strong>Shadows</strong></td><td>Active/desactive les ombres portees (gourmand en GPU).</td></tr>
 </table>
 
-<h3>Interaction</h3>
+<h2>3.2 Navigation 3D</h2>
+<table>
+  <tr><th>Action</th><th>Controle</th></tr>
+  <tr><td>Orbiter (tourner autour)</td><td>Glisser avec le bouton gauche de la souris</td></tr>
+  <tr><td>Zoomer</td><td>Molette de la souris</td></tr>
+  <tr><td>Panoramique (deplacer)</td><td>Glisser avec le bouton droit de la souris</td></tr>
+</table>
+
+<h2>3.3 Panneau de proprietes (a droite)</h2>
+<p>Lorsqu'une fixture est selectionnee, un panneau de proprietes apparait en superposition a droite de la vue 3D :</p>
 <ul>
-  <li><strong>Glisser</strong> un fader pour changer la valeur (0–255).</li>
-  <li><strong>Clic droit</strong> sur un fader → menu contextuel avec <strong>MIDI Learn</strong>.</li>
-  <li>La valeur numérique est affichée sous chaque fader.</li>
+  <li><strong>Position X / Y / Z</strong> : curseurs pour deplacer la fixture dans l'espace (en metres).</li>
+  <li><strong>Aim (Tilt / Dir)</strong> : pour les fixtures statiques, orientez l'angle de projection et la direction.</li>
+  <li><strong>Pan/Tilt Invert</strong> : pour les lyres, inversez les axes Pan et Tilt si besoin.</li>
+  <li><strong>Beam</strong> : angle d'ouverture du faisceau (2 a 90 degres).</li>
+  <li><strong>Mount</strong> : type de montage — Ceiling, Floor, Wall Left, Wall Right, Wall Back.</li>
+  <li><strong>Boutons de placement rapide</strong> : "Ceiling", "4m", "Floor", "L Wall", "R Wall", "Back", "Reset".</li>
 </ul>
 
-<h2>4.2 Le Programmer</h2>
-<p>Le <strong>Programmer</strong> est une couche temporaire qui capture les modifications manuelles. C'est le cœur du workflow d'enregistrement :</p>
-<ol>
-  <li>Montez les faders ou utilisez le picker couleur → les valeurs entrent dans le Programmer.</li>
-  <li>Le Programmer a la <strong>priorité la plus haute</strong> dans le mixage DMX (au-dessus des cuelists et effets).</li>
-  <li><strong>Record</strong> : enregistre le contenu du Programmer dans une mémoire (cue).</li>
-  <li><strong>Clear</strong> : vide le Programmer (les valeurs reviennent aux niveaux des playbacks actifs).</li>
-</ol>
-
-<div class="tip">Règles de mixage : les canaux d'intensité (Dimmer) suivent la règle <strong>HTP</strong> (Highest Takes Precedence — la valeur la plus haute gagne). Tous les autres canaux suivent la règle <strong>LTP</strong> (Latest Takes Precedence — la dernière action gagne).</div>
+<h2>3.4 Controles DMX rapides</h2>
+<p>Lorsque des fixtures sont selectionnees, une zone de controle apparait sous la vue 3D :</p>
+<ul>
+  <li><strong>Selection de groupe</strong> : boutons pour selectionner rapidement un groupe (ex: "TRAD", "475"), "All" ou "None".</li>
+  <li><strong>Presets couleur</strong> : 9 pastilles de couleur (R, G, B, blanc, ambre, cyan, magenta, CTB, noir) pour appliquer une couleur en un clic.</li>
+  <li><strong>Sliders</strong> : curseurs horizontaux pour Dimmer, Pan, Tilt et Zoom (n'apparaissent que si la fixture les supporte).</li>
+</ul>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 5 — FIXTURES
+     CHAPTER 4 — STAGE LAYOUT
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch5">
-<h1>5. Fixtures — Contrôle individuel</h1>
+<div class="chapter">
+<h1>4. Onglet Stage Layout <kbd>2</kbd></h1>
 
-<h2>5.1 Sélection de fixtures</h2>
-<p>Le panneau gauche liste tous les projecteurs patchés. Cliquez pour sélectionner, <kbd>Shift</kbd>+clic pour une sélection multiple. Utilisez le sélecteur de groupe pour filtrer.</p>
+<p>Le Stage Layout offre une vue 2D en plan de votre installation, avec un editeur de placement par glisser-deposer.</p>
 
-<h2>5.2 Picker couleur</h2>
-<p>Pour les fixtures disposant de canaux couleur (RGB, RGBW, CMY…), un <strong>picker couleur</strong> graphique apparaît :</p>
+<h2>4.1 Zone principale : vue de dessus</h2>
+<p>Les fixtures sont representees par des icones sur un plan vu de dessus. Vous pouvez :</p>
 <ul>
-  <li><strong>Gradient 2D</strong> — Cliquez pour choisir la teinte et la saturation.</li>
-  <li><strong>Curseurs R, G, B</strong> — Ajustement fin de chaque composante (0–255).</li>
-  <li><strong>Curseur Dimmer</strong> — Intensité globale de la fixture.</li>
+  <li><strong>Cliquer</strong> sur une fixture pour la selectionner.</li>
+  <li><strong>Glisser</strong> une fixture pour la deplacer.</li>
+  <li>Les fixtures affichent en temps reel leur couleur DMX actuelle.</li>
 </ul>
 
-<h2>5.3 Pad XY (Pan/Tilt)</h2>
-<p>Pour les lyres (moving heads), un <strong>pad XY</strong> de type joystick permet de contrôler la position :</p>
+<h2>4.2 Vue de cote (Side View)</h2>
+<p>Sous la vue de dessus, une vue laterale montre la position en hauteur des fixtures. Le bouton <strong>Side</strong> dans le panneau Properties permet de l'afficher ou la masquer.</p>
+
+<h2>4.3 Panneau Properties (a droite)</h2>
+<p>Identique au panneau du 3D View : position, montage, angle, etc. Permet de modifier les proprietes de la fixture selectionnee.</p>
+
+<h2>4.4 Barre de controle</h2>
+<p>Memes controles que le 3D View (Room, Beams, Grid, Snap) avec en plus :</p>
 <ul>
-  <li><strong>Axe horizontal</strong> — Contrôle du Pan (panoramique).</li>
-  <li><strong>Axe vertical</strong> — Contrôle du Tilt (inclinaison).</li>
-  <li>Glissez le point pour positionner le faisceau.</li>
-  <li>Les valeurs en degrés sont affichées en temps réel.</li>
+  <li><strong>Export PDF</strong> : genere un plan de scene au format PDF avec le nom du show, les dimensions de la salle, et le placement de chaque fixture avec son adresse DMX et son groupe.</li>
 </ul>
 
-<div class="note">Le mode <strong>Sheet</strong> (feuille de calcul) affiche toutes les fixtures et tous leurs canaux dans une grille éditable, pratique pour modifier plusieurs valeurs simultanément.</div>
+<h2>4.5 Controles DMX rapides</h2>
+<p>Comme dans le 3D View : selection de groupe, presets couleur, sliders Dimmer/Pan/Tilt/Zoom.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 6 — PLAYBACK
+     CHAPTER 5 — TIMELINE
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch6">
-<h1>6. Playback — Scènes et Cuelists</h1>
-<p>Le système de <strong>Playback</strong> permet de créer, enregistrer et restituer des scènes lumineuses.</p>
+<div class="chapter">
+<h1>5. Onglet Timeline <kbd>3</kbd></h1>
 
-<h2>6.1 Créer une cuelist</h2>
+<p>La Timeline est un sequenceur multi-piste de type DAW (Digital Audio Workstation). Elle permet de programmer des enchainements de scenes dans le temps.</p>
+
+<h2>5.1 Barre de transport</h2>
+<table>
+  <tr><th>Bouton</th><th>Fonction</th></tr>
+  <tr><td><strong>Play / Stop</strong></td><td>Demarre ou arrete la lecture de la timeline.</td></tr>
+  <tr><td><strong>Compteur de temps</strong></td><td>Affiche la position actuelle (minutes:secondes ou timecode).</td></tr>
+  <tr><td><strong>TC OFF / TC ON</strong></td><td>Active la reception de timecode MIDI (MTC) pour synchroniser la timeline.</td></tr>
+  <tr><td><strong>Zoom</strong></td><td>Curseur pour ajuster le niveau de zoom horizontal.</td></tr>
+  <tr><td><strong>Duration</strong></td><td>Duree totale de la timeline (en secondes).</td></tr>
+</table>
+
+<h2>5.2 Sidebar des scenes</h2>
+<p>A gauche, la liste des scenes disponibles. Chaque scene indique son nom, sa couleur et le nombre de fixtures concernees. Vous pouvez glisser-deposer une scene depuis cette liste vers une piste pour creer un clip.</p>
+
+<h2>5.3 Pistes et clips</h2>
+<ul>
+  <li><strong>Pistes</strong> : la timeline peut comporter plusieurs pistes empilees verticalement. Clic droit sur une piste pour ajouter/supprimer des pistes ou renommer.</li>
+  <li><strong>Clips</strong> : chaque clip represente une scene placee a un moment donne avec une duree. Les clips sont colores selon la scene.</li>
+  <li><strong>Redimensionner</strong> : tirez les bords gauche/droit d'un clip pour changer sa duree.</li>
+  <li><strong>Deplacer</strong> : glissez un clip pour le deplacer dans le temps ou vers une autre piste.</li>
+  <li><strong>Clic droit sur un clip</strong> : menu contextuel pour supprimer, dupliquer ou modifier.</li>
+</ul>
+
+<h2>5.4 Marqueurs</h2>
+<p>Les marqueurs sont des reperes temporels affiches sous la regle. Ils permettent de marquer des moments cles (debut chorus, noir, etc.).</p>
+<ul>
+  <li><strong>Ajouter</strong> : clic droit sur la regle > "Add Marker".</li>
+  <li><strong>Deplacer</strong> : glissez un marqueur sur la regle.</li>
+  <li><strong>Renommer</strong> : double-clic dans la sidebar des marqueurs.</li>
+  <li><strong>Couleur</strong> : 6 couleurs disponibles (jaune, orange, rouge, vert, bleu, violet).</li>
+</ul>
+
+<h2>5.5 Zones</h2>
+<p>Les zones definissent des regions nommees sur la timeline (ex: "Intro", "Refrain", "Outro"). Elles apparaissent sous les marqueurs.</p>
+<ul>
+  <li><strong>Creer</strong> : glissez sur la barre de zones pour definir une region.</li>
+  <li><strong>Renommer</strong> : double-clic dans la sidebar des zones.</li>
+  <li><strong>Reordonner</strong> : glisser-deposer dans la sidebar.</li>
+  <li><strong>Navigation MIDI</strong> : les zones et marqueurs peuvent etre mappes a des notes MIDI pour sauter directement a un point de la timeline.</li>
+</ul>
+
+<div class="tip">
+  Le bouton <strong>Live</strong> dans la Toolbar et le raccourci dans l'Executor Bar controlent la meme timeline. Vous pouvez lancer la timeline depuis n'importe quel onglet.
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CHAPTER 6 — EFFECTS
+     ═══════════════════════════════════════════════════════════ -->
+<div class="chapter">
+<h1>6. Onglet Effects <kbd>4</kbd></h1>
+
+<p>Le moteur d'effets permet de generer des mouvements, changements de couleur et variations d'intensite parametriques en temps reel.</p>
+
+<h2>6.1 Selection des fixtures</h2>
+<p>La colonne de gauche liste les groupes et les fixtures. Selectionnez les fixtures ou le groupe cible <em>avant</em> de lancer un effet.</p>
+<ul>
+  <li>Les groupes sont affiches avec leur couleur et le nombre de fixtures.</li>
+  <li>Les fixtures sont listees en dessous.</li>
+  <li>Un indicateur de compatibilite montre si la fixture supporte les canaux requis par l'effet.</li>
+</ul>
+
+<h2>6.2 Templates d'effets</h2>
+<p>La zone centrale propose des boutons d'effets pre-configures, organises en categories :</p>
+
+<table>
+  <tr><th>Categorie</th><th>Effets disponibles</th></tr>
+  <tr><td><strong>Movement</strong></td><td>Circle, Figure-8, Line H, Line V, Square, Random, Wave, Spiral</td></tr>
+  <tr><td><strong>Color</strong></td><td>Rainbow, Color Fade, RGB Chase</td></tr>
+  <tr><td><strong>Intensity</strong></td><td>Sinus Dimmer, Strobe, Pulse, Buildup, Blackout Fade</td></tr>
+  <tr><td><strong>Beam</strong></td><td>Zoom Breathe, Iris Pulse, Focus Sweep</td></tr>
+  <tr><td><strong>Spatial</strong></td><td>Spatial Circle, Spatial Line, Spatial Wave</td></tr>
+</table>
+
+<h2>6.3 Parametres d'effet</h2>
+<p>Apres avoir lance un effet, vous pouvez ajuster en temps reel :</p>
+<ul>
+  <li><strong>Speed</strong> (BPM) : vitesse de l'effet.</li>
+  <li><strong>Size</strong> (%) : amplitude de l'effet (0-100%).</li>
+  <li><strong>Spread</strong> (degres) : decalage entre les fixtures (0-360). Permet de creer des vagues, des arcs, etc.</li>
+  <li><strong>Waveform</strong> : forme d'onde — Sine, Triangle, Square, Sawtooth, Random.</li>
+</ul>
+
+<h2>6.4 Editeur de courbe</h2>
+<p>Un editeur de courbe avance permet de dessiner des formes d'onde personnalisees pour un controle total sur l'animation.</p>
+
+<div class="note">
+  Les effets en cours sont automatiquement inclus dans les scenes enregistrees via l'onglet Scenes. Les scenes captureront a la fois les valeurs DMX et les effets actifs.
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CHAPTER 7 — SCENES
+     ═══════════════════════════════════════════════════════════ -->
+<div class="chapter">
+<h1>7. Onglet Scenes <kbd>5</kbd></h1>
+
+<p>L'onglet Scenes permet d'enregistrer, organiser et rejouer des etats lumineux complets.</p>
+
+<h2>7.1 Enregistrement d'une scene</h2>
 <div class="steps">
-  <div class="step"><div class="step-content">Depuis l'onglet Playback, cliquez <strong>+ New Cuelist</strong>.</div></div>
-  <div class="step"><div class="step-content">Nommez la cuelist (ex. « Opening », « Verse 1 », « Finale ») et attribuez une couleur.</div></div>
-  <div class="step"><div class="step-content">La cuelist apparaît dans la liste avec ses contrôles : GO, Stop, Back, Fader, Flash.</div></div>
+  <div class="step"><div class="step-content">Configurez l'etat lumineux souhaite en manipulant les faders (onglet Fixtures), les presets couleur (3D View) ou les effets.</div></div>
+  <div class="step"><div class="step-content">Cliquez sur le bouton <strong>REC</strong> (rouge) en haut a droite de l'onglet Scenes.</div></div>
+  <div class="step"><div class="step-content">Une nouvelle scene est creee avec les valeurs du Programmeur (valeurs touchees manuellement). Si aucune fixture n'est selectionnee, toutes les fixtures avec des valeurs non-nulles sont capturees.</div></div>
 </div>
 
-<h2>6.2 Enregistrer des mémoires (cues)</h2>
-<div class="steps">
-  <div class="step"><div class="step-content">Créez votre « look » en montant les faders, couleurs, positions dans le Programmer.</div></div>
-  <div class="step"><div class="step-content">Sélectionnez la cuelist cible.</div></div>
-  <div class="step"><div class="step-content">Cliquez <strong>Record</strong> — le contenu du Programmer est capturé comme nouvelle cue (mémoire).</div></div>
+<div class="tip">
+  <strong>REC + Clear</strong> : apres l'enregistrement, cliquez "Clear" (ou <kbd>Backspace</kbd>) pour vider le Programmeur et voir la scene "proprement" depuis le playback.
 </div>
 
-<h3>Paramètres de chaque cue</h3>
-<table>
-  <tr><th>Paramètre</th><th>Description</th></tr>
-  <tr><td><strong>Nom</strong></td><td>Libellé de la mémoire</td></tr>
-  <tr><td><strong>Fade In</strong></td><td>Temps de montée en secondes (0 = instantané)</td></tr>
-  <tr><td><strong>Fade Out</strong></td><td>Temps de descente en secondes</td></tr>
-  <tr><td><strong>Delay</strong></td><td>Délai avant le début du fondu</td></tr>
-  <tr><td><strong>Follow</strong></td><td>Temps en secondes avant auto-avance à la cue suivante (vide = attente du GO manuel)</td></tr>
-</table>
-
-<h2>6.3 Restitution et fondus</h2>
-<table>
-  <tr><th>Bouton</th><th>Action</th></tr>
-  <tr><td><strong>GO</strong></td><td>Lance la cue suivante (avec les fondus définis)</td></tr>
-  <tr><td><strong>Back</strong></td><td>Revient à la cue précédente</td></tr>
-  <tr><td><strong>Stop</strong></td><td>Arrête la cuelist (relâche les valeurs)</td></tr>
-  <tr><td><strong>Fader</strong></td><td>Master de la cuelist (0–100 %)</td></tr>
-  <tr><td><strong>Flash</strong></td><td>Plein feux tant que le bouton est maintenu</td></tr>
-</table>
-
-<p>Le <strong>tracking</strong> est actif par défaut : les valeurs persistent d'une cue à l'autre sauf si elles sont explicitement modifiées.</p>
-
-<h2>6.4 Chases</h2>
-<p>Les <strong>chases</strong> sont des séquences automatiques qui bouclent entre plusieurs pas.</p>
+<h2>7.2 Structure d'une scene</h2>
+<p>Chaque scene contient :</p>
 <ul>
-  <li><strong>BPM</strong> — Vitesse de défilement en battements par minute.</li>
-  <li><strong>Direction</strong> — Forward, Backward, Bounce, Random.</li>
-  <li><strong>Fondus</strong> — Temps de fondu entre chaque pas.</li>
-  <li><strong>Tap Tempo</strong> — Tapez le tempo en cliquant ou via MIDI.</li>
+  <li><strong>Nom</strong> : modifiable (double-clic ou fleche d'expansion).</li>
+  <li><strong>Nombre de fixtures</strong> : affiche entre parentheses.</li>
+  <li><strong>Steps (cues)</strong> : une scene peut contenir plusieurs steps. Expandre la scene pour les voir et les editer.</li>
+  <li><strong>Faders de duree</strong> : Fade In et Fade Out reglables pour chaque step.</li>
+  <li><strong>Effets snapshotes</strong> : si des effets etaient actifs a l'enregistrement, ils sont sauvegardes avec la scene.</li>
 </ul>
+
+<h2>7.3 Controles de scene</h2>
+<table>
+  <tr><th>Bouton</th><th>Fonction</th></tr>
+  <tr><td><strong>GO</strong> (vert)</td><td>Lance la scene. Le fader de la scene est monte progressivement.</td></tr>
+  <tr><td><strong>Stop</strong></td><td>Arrete la scene.</td></tr>
+  <tr><td><strong>Fader</strong></td><td>Curseur horizontal pour controler l'intensite de la scene (0-100%).</td></tr>
+  <tr><td><strong>MIDI indicator</strong></td><td>Badge violet indiquant un mapping MIDI. Ex: "M:32" = note MIDI #32.</td></tr>
+  <tr><td><strong>Fleches haut/bas</strong></td><td>Naviguer entre les steps d'une scene multi-step.</td></tr>
+</table>
+
+<h2>7.4 Ajouter un step</h2>
+<p>Expandre une scene existante, modifier l'etat lumineux, puis cliquer <strong>+ Add Step</strong>. Le nouveau step est ajoute a la suite.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 7 — EFFECTS
+     CHAPTER 8 — FIXTURES
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch7">
-<h1>7. Effects — Moteur d'effets LFO</h1>
-<p>Le moteur d'effets génère des oscillations automatiques sur les canaux DMX. Il est idéal pour les mouvements de lyres, les pulsations de couleur et les effets de balayage.</p>
+<div class="chapter">
+<h1>8. Onglet Fixtures <kbd>6</kbd></h1>
 
-<h2>7.1 Créer un effet</h2>
-<div class="steps">
-  <div class="step"><div class="step-content">Depuis l'onglet Effects, cliquez <strong>+ New Effect</strong> ou choisissez un <strong>modèle prédéfini</strong> (Dimmer Pulse, Pan Sweep, Color Pulse…).</div></div>
-  <div class="step"><div class="step-content">Sélectionnez les <strong>types de canaux</strong> affectés (Dimmer, Pan, Tilt, Red, Green, Blue…).</div></div>
-  <div class="step"><div class="step-content">Réglez les paramètres (vitesse, amplitude, forme d'onde, phase, fan).</div></div>
-  <div class="step"><div class="step-content">Cliquez <strong>Play</strong> pour activer l'effet.</div></div>
-</div>
+<p>L'onglet Fixtures offre un controle detaille de chaque fixture, avec des faders par canal, un color picker et un XY pad.</p>
 
-<h2>7.2 Formes d'ondes</h2>
-<table>
-  <tr><th>Forme d'onde</th><th>Description</th><th>Usage typique</th></tr>
-  <tr><td><strong>Sine</strong></td><td>Oscillation douce et fluide</td><td>Mouvements de lyre, respirations dimmer</td></tr>
-  <tr><td><strong>Square</strong></td><td>Alternance ON/OFF brutale</td><td>Stroboscope, flashs</td></tr>
-  <tr><td><strong>Sawtooth</strong></td><td>Montée progressive puis retour brusque</td><td>Balayage gobo, montée d'intensité</td></tr>
-  <tr><td><strong>Triangle</strong></td><td>Montée et descente linéaires</td><td>Balayage Pan/Tilt régulier</td></tr>
-  <tr><td><strong>Random</strong></td><td>Valeurs aléatoires</td><td>Effets organiques, flicker</td></tr>
-  <tr><td><strong>Pulse</strong></td><td>Impulsion brève suivie de silence</td><td>Flash ponctuel, hit</td></tr>
-  <tr><td><strong>Bounce</strong></td><td>Rebond avec amortissement</td><td>Impact visuel, drop</td></tr>
-  <tr><td><strong>Step</strong></td><td>Paliers discrets</td><td>Changements de couleur nets</td></tr>
-  <tr><td><strong>Custom</strong></td><td>Courbe personnalisée avec keyframes</td><td>Animations sur mesure</td></tr>
-</table>
+<h2>8.1 Selection d'univers</h2>
+<p>En haut a gauche, les boutons <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd> permettent de choisir l'univers affiche. Le bouton <strong>Sheet</strong> bascule vers une vue en tableau.</p>
 
-<h2>7.3 Paramètres d'effet</h2>
-<table>
-  <tr><th>Paramètre</th><th>Plage</th><th>Description</th></tr>
-  <tr><td><strong>Speed</strong></td><td>0.1–10 Hz</td><td>Fréquence de l'oscillation</td></tr>
-  <tr><td><strong>Depth</strong></td><td>0–255</td><td>Amplitude (hauteur de l'oscillation)</td></tr>
-  <tr><td><strong>Offset</strong></td><td>0–360°</td><td>Décalage de phase (retard de démarrage)</td></tr>
-  <tr><td><strong>Fan</strong></td><td>0–360°</td><td>Éventail de phase entre les fixtures (crée des vagues)</td></tr>
-</table>
-
-<h2 style="margin-top:1.5em;">7.4 Mode spatial</h2>
-<p>Le mode spatial utilise les positions 3D des projecteurs pour propager les effets de manière réaliste :</p>
+<h2>8.2 Groupes</h2>
+<p>La sidebar de gauche affiche les groupes de fixtures. Cliquez sur un groupe pour selectionner toutes ses fixtures. Les groupes disponibles incluent :</p>
 <ul>
-  <li><strong>Index</strong> — Phase répartie selon l'ordre de patch (par défaut).</li>
-  <li><strong>X (gauche–droite)</strong> — Propagation horizontale.</li>
-  <li><strong>Y (haut–bas)</strong> — Propagation verticale.</li>
-  <li><strong>Z (avant–arrière)</strong> — Propagation en profondeur.</li>
-  <li><strong>Radial</strong> — Propagation depuis le centre de la scène.</li>
+  <li>Groupes personnalises (TRAD, 475, Barre 3, Barre 4, Barre 5, PAR, Wall...)</li>
+  <li>Boutons <strong>All</strong> (tout selectionner) et <strong>None</strong> (deselectionner).</li>
 </ul>
 
-<div class="tip">Les effets peuvent être <strong>enregistrés dans les cues</strong> : lors de l'enregistrement d'une mémoire, les effets actifs sont capturés et relancés automatiquement lors de la restitution.</div>
+<h2>8.3 Vue Faders</h2>
+<p>Chaque fixture de l'univers selectionne est affichee avec ses faders verticaux. Chaque fader controle un canal DMX :</p>
+<ul>
+  <li>Les faders sont codes par couleur selon le type de canal (orange = dimmer, rouge = rouge, vert = vert, bleu = bleu, violet = pan/tilt, etc.).</li>
+  <li>Le nom du canal est affiche sous chaque fader (D, P, T, R, G, B, W, Z, etc.).</li>
+  <li>Des pastilles de couleur en bas representent la couleur courante de chaque fixture.</li>
+</ul>
+
+<h2>8.4 Vue Sheet</h2>
+<p>Le mode <strong>Sheet</strong> affiche les fixtures dans un tableau compact avec les valeurs de chaque canal. Ideal pour une vue d'ensemble rapide.</p>
+
+<h2>8.5 Color Picker</h2>
+<p>Lorsqu'une fixture RGB est selectionnee, un selecteur de couleur interactif apparait avec :</p>
+<ul>
+  <li><strong>Roue de couleur</strong> : selecteur circulaire teinte/saturation.</li>
+  <li><strong>Barre de luminosite</strong> : ajustez la luminosite de la couleur choisie.</li>
+  <li><strong>Presets couleur</strong> : raccourcis vers les couleurs courantes.</li>
+</ul>
+
+<h2>8.6 XY Pad</h2>
+<p>Pour les lyres (fixtures avec Pan/Tilt), un pad XY interactif permet de controler le Pan (axe X) et le Tilt (axe Y) en glissant avec la souris.</p>
+
+<div class="tip">
+  Clic droit sur un fader ouvre un menu avec l'option MIDI Learn pour mapper ce canal specifique a un controleur MIDI.
+</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 8 — MIDI
+     CHAPTER 9 — PATCH
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch8">
-<h1>8. MIDI — Contrôle externe</h1>
-<p>PhotonBoard supporte le contrôle MIDI complet via l'API Web MIDI, compatible avec tous les contrôleurs USB et Bluetooth MIDI.</p>
+<div class="chapter">
+<h1>9. Onglet Patch <kbd>7</kbd></h1>
 
-<h2>8.1 Connexion d'un contrôleur</h2>
-<div class="steps">
-  <div class="step"><div class="step-content">Branchez votre contrôleur MIDI USB (ou activez le Bluetooth MIDI).</div></div>
-  <div class="step"><div class="step-content">Ouvrez l'onglet <strong>MIDI</strong>. Le panneau gauche affiche la liste des appareils détectés avec un indicateur vert (en ligne) ou rouge (hors ligne).</div></div>
-  <div class="step"><div class="step-content">Le <strong>moniteur MIDI</strong> affiche en temps réel le dernier message reçu (type, canal, numéro CC, valeur).</div></div>
-</div>
+<p>L'onglet Patch est le coeur de la configuration DMX. C'est ici que vous ajoutez, supprimez et configurez vos fixtures.</p>
 
-<h2>8.2 MIDI Learn</h2>
-<p>L'assignation MIDI se fait de deux manières :</p>
-
-<h3>Méthode 1 — MIDI Learn global</h3>
-<div class="steps">
-  <div class="step"><div class="step-content">Cliquez le bouton <strong>MIDI Learn</strong> dans la barre d'outils.</div></div>
-  <div class="step"><div class="step-content">Cliquez sur le contrôle à assigner dans PhotonBoard (fader, bouton, etc.).</div></div>
-  <div class="step"><div class="step-content">Bougez le contrôle MIDI physique (fader, bouton, encodeur).</div></div>
-  <div class="step"><div class="step-content">L'assignation est créée automatiquement. Cliquez à nouveau « MIDI Learn » pour quitter le mode.</div></div>
-</div>
-
-<h3>Méthode 2 — Clic droit</h3>
-<p>Faites un <strong>clic droit</strong> sur n'importe quel fader ou bouton → sélectionnez <strong>MIDI Learn</strong> dans le menu contextuel → bougez le contrôle MIDI.</p>
-
-<h2>8.3 Cibles assignables</h2>
+<h2>9.1 Tableau de patch</h2>
+<p>Le tableau principal affiche toutes les fixtures avec les colonnes suivantes :</p>
 <table>
-  <tr><th>Catégorie</th><th>Cibles</th></tr>
-  <tr><td>Global</td><td>Grand Master, Blackout, Blinder, Strobe On/Off, Strobe Rate</td></tr>
-  <tr><td>Playback</td><td>Cuelist GO, Stop, Back, Flash, Fader (par cuelist)</td></tr>
-  <tr><td>Chase</td><td>BPM, Tap Tempo, Direction</td></tr>
-  <tr><td>Channels</td><td>Tout fader de canal DMX individuel</td></tr>
-  <tr><td>Effects</td><td>Effect On/Off, Speed, Depth</td></tr>
-  <tr><td>Timeline</td><td>Play/Stop, Goto Marker</td></tr>
-  <tr><td>Navigation</td><td>Changement d'onglet</td></tr>
+  <tr><th>Colonne</th><th>Description</th></tr>
+  <tr><td><strong>#</strong></td><td>Numero d'ordre</td></tr>
+  <tr><td><strong>Name</strong></td><td>Nom de la fixture (editable directement dans le tableau)</td></tr>
+  <tr><td><strong>Type</strong></td><td>Type/modele de la fixture (ex: BT-Theatre 200TW, Intimidator Spot 475Z)</td></tr>
+  <tr><td><strong>Mode</strong></td><td>Mode DMX selectionne (menu deroulant). Chaque mode definit un mapping de canaux different.</td></tr>
+  <tr><td><strong>Address</strong></td><td>Adresse DMX sous la forme U<em>n</em>.<em>xxx</em> (ex: U1.001)</td></tr>
+  <tr><td><strong>Ch</strong></td><td>Nombre de canaux occupes</td></tr>
+  <tr><td><strong>Groups</strong></td><td>Groupes auxquels la fixture appartient</td></tr>
+  <tr><td><strong>Del</strong></td><td>Bouton de suppression</td></tr>
 </table>
 
-<h3>Options avancées par mapping</h3>
-<table>
-  <tr><th>Option</th><th>Description</th></tr>
-  <tr><td><strong>Encoding</strong></td><td><em>Absolute</em> (fader 0–127) ou <em>Relative</em> (encodeur ±1)</td></tr>
-  <tr><td><strong>Behavior</strong></td><td><em>Direct</em> (valeur continue), <em>Toggle</em> (on/off), <em>Trigger</em> (impulsion), <em>Flash</em> (actif tant que pressé)</td></tr>
-  <tr><td><strong>Min / Max</strong></td><td>Plage de valeurs mappée (ex. 64–127 pour un demi-fader)</td></tr>
-  <tr><td><strong>Inverted</strong></td><td>Inverse le sens du contrôle</td></tr>
-</table>
+<h2>9.2 Ajouter une fixture</h2>
+<div class="steps">
+  <div class="step"><div class="step-content">Cliquez <strong>+ Add Fixture</strong> en haut a droite.</div></div>
+  <div class="step"><div class="step-content">Choisissez un type de fixture dans la liste (toutes les definitions importees sont affichees).</div></div>
+  <div class="step"><div class="step-content">Selectionnez le mode DMX, l'univers et l'adresse de depart.</div></div>
+  <div class="step"><div class="step-content">Choisissez le nombre d'exemplaires a ajouter. Les adresses sont auto-incrementees.</div></div>
+</div>
+
+<h2>9.3 Importer des fixtures</h2>
+<p>Cliquez <strong>Import Fixture</strong> pour ouvrir la boite de dialogue d'import. PhotonBoard supporte tous ces formats :</p>
+<ul>
+  <li><strong>OFL JSON</strong> — Open Fixture Library (format natif)</li>
+  <li><strong>GDTF</strong> — General Device Type Format (norme DIN SPEC 15800)</li>
+  <li><strong>QLC+ (.qxf)</strong> — Fichiers de la bibliotheque QLC+</li>
+  <li><strong>Avolites (.d4, .r20)</strong> — Personality files Avolites</li>
+  <li><strong>GrandMA (.xml)</strong> — Fichiers XML d'export GrandMA</li>
+  <li><strong>CSV / TSV</strong> — Tableaux avec colonnes standardisees</li>
+</ul>
+
+<div class="note">
+  Vous pouvez aussi telecharger des fixtures directement depuis la bibliotheque en ligne <strong>Open Fixture Library</strong> via le panneau de recherche OFL integre a la boite de dialogue "+ Add Fixture".
+</div>
+
+<h2>9.4 Groupes</h2>
+<p>Le panneau <strong>Groups</strong> a droite permet d'organiser les fixtures :</p>
+<ul>
+  <li><strong>+ Add</strong> : creer un nouveau groupe avec nom et couleur.</li>
+  <li><strong>Glisser-deposer</strong> : glissez une fixture (ou une selection) depuis le tableau vers un groupe.</li>
+  <li><strong>Sous-groupes</strong> : les groupes supportent la hierarchie (glisser un groupe dans un autre).</li>
+  <li>Chaque groupe affiche le nombre de fixtures entre parentheses.</li>
+</ul>
+
+<h2>9.5 Fixture Editor</h2>
+<p>L'editeur de fixture integre permet de creer ou modifier des definitions de fixtures personnalisees. Vous pouvez definir les canaux, les modes, et sauvegarder dans la bibliotheque locale.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 9 — STAGE LAYOUT 2D
+     CHAPTER 10 — MIDI
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch9">
-<h1>9. Stage Layout — Éditeur 2D</h1>
-<p>L'éditeur de plan de scène offre une <strong>vue de dessus</strong> interactive pour positionner les projecteurs.</p>
+<div class="chapter">
+<h1>10. Onglet MIDI <kbd>8</kbd></h1>
 
-<h3>Fonctionnalités</h3>
+<p>L'onglet MIDI gere les peripheriques MIDI connectes et tous les mappings entre votre controleur et PhotonBoard.</p>
+
+<h2>10.1 Peripheriques (colonne gauche)</h2>
+<h3>Inputs</h3>
+<p>Liste des peripheriques MIDI d'entree detectes, avec indicateur de connexion (vert = connecte, rouge = deconnecte). Bouton <strong>Rescan</strong> pour re-detecter.</p>
+
+<h3>Outputs</h3>
+<p>Liste des peripheriques de sortie MIDI.</p>
+
+<h3>Monitor</h3>
+<p>Affiche en temps reel le dernier message MIDI recu :</p>
 <ul>
-  <li><strong>Glisser-déposer</strong> — Déplacez les fixtures sur le plan pour refléter leur position réelle.</li>
-  <li><strong>Rotation</strong> — Utilisez la poignée de rotation pour orienter les projecteurs.</li>
-  <li><strong>Sélection multiple</strong> — <kbd>Shift</kbd>+clic pour sélectionner plusieurs fixtures.</li>
-  <li><strong>Grille</strong> — Taille configurable (0.5–5 m), accrochage magnétique activable.</li>
-  <li><strong>Zoom et panoramique</strong> — Molette pour zoomer, clic-glisser sur le fond pour panoramiquer.</li>
-  <li><strong>Image de fond</strong> — Importez un plan de salle ou une photo aérienne.</li>
+  <li><strong>Type</strong> : CC (Control Change) ou NOTE</li>
+  <li><strong>Channel</strong> : canal MIDI (1-16)</li>
+  <li><strong>CC# / Note</strong> : numero du controleur ou de la note</li>
+  <li><strong>Value</strong> : valeur (0-127)</li>
 </ul>
 
-<h3>Affichage des fixtures</h3>
-<p>Chaque fixture est représentée par un rectangle coloré selon son groupe, avec :</p>
-<ul>
-  <li>Le nom du projecteur</li>
-  <li>L'adresse DMX</li>
-  <li>Un indicateur de direction (angle de visée)</li>
-</ul>
+<h2>10.2 Mappings (partie principale)</h2>
+<p>Tableau listant tous les mappings MIDI actifs :</p>
+<table>
+  <tr><th>Colonne</th><th>Description</th></tr>
+  <tr><td><strong>Name</strong></td><td>Nom descriptif du mapping</td></tr>
+  <tr><td><strong>Source</strong></td><td>Message MIDI source (ex: CC Ch1 #48)</td></tr>
+  <tr><td><strong>Target</strong></td><td>Cible dans PhotonBoard (ex: channel > Dimmer, cuelist_go)</td></tr>
+  <tr><td><strong>Mode</strong></td><td>Comportement : Direct, Toggle, Trigger, Flash</td></tr>
+  <tr><td><strong>Range</strong></td><td>Plage de valeurs (0-255 par defaut)</td></tr>
+  <tr><td><strong>X</strong></td><td>Bouton de suppression du mapping</td></tr>
+</table>
 
-<h3>Dimensions de la salle</h3>
-<p>Configurez les dimensions dans le panneau latéral : <strong>Largeur</strong>, <strong>Profondeur</strong> et <strong>Hauteur</strong> en mètres. Ces dimensions sont partagées avec le Visualizer 3D.</p>
-
-<div class="tip">Le zoom et le panoramique sont conservés lorsque vous changez d'onglet et revenez au Stage Layout.</div>
+<h2>10.3 Quick Learn</h2>
+<p>Le bouton <strong>Quick Learn</strong> (en haut a droite) active le mode MIDI Learn global. Dans ce mode :</p>
+<div class="steps">
+  <div class="step"><div class="step-content">Cliquez sur Quick Learn — le bouton devient rouge et clignote.</div></div>
+  <div class="step"><div class="step-content">Bougez un fader ou appuyez sur un bouton de votre controleur MIDI.</div></div>
+  <div class="step"><div class="step-content">Le message est capture et un nouveau mapping est cree automatiquement.</div></div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 10 — VISUALIZER 3D
-     ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch10">
-<h1>10. Visualizer — Prévisualisation 3D</h1>
-
-<h2>10.1 Scène 3D</h2>
-<p>Le Visualizer affiche un rendu <strong>3D en temps réel</strong> de la scène, incluant :</p>
-<ul>
-  <li><strong>Modèles 3D de projecteurs</strong> adaptés au type (PAR, lyre, barre LED, etc.)</li>
-  <li><strong>Faisceaux lumineux</strong> avec couleur et intensité en temps réel selon les valeurs DMX</li>
-  <li><strong>Barres de structure (trusses)</strong> configurables en position et longueur</li>
-  <li><strong>Sol avec grille</strong> de référence</li>
-  <li><strong>Murs et plafond</strong> de la salle</li>
-</ul>
-
-<h3>Navigation caméra</h3>
+<h2>10.4 Modes de comportement</h2>
 <table>
-  <tr><th>Action</th><th>Commande</th></tr>
-  <tr><td>Rotation de la vue</td><td>Clic gauche + glisser</td></tr>
-  <tr><td>Zoom</td><td>Molette de la souris</td></tr>
-  <tr><td>Panoramique</td><td>Clic molette + glisser</td></tr>
+  <tr><th>Mode</th><th>Comportement</th></tr>
+  <tr><td><strong>Direct</strong></td><td>Continu / proportionnel. La valeur MIDI (0-127) est mappee sur la plage DMX (0-255).</td></tr>
+  <tr><td><strong>Toggle</strong></td><td>Appuyer = ON, appuyer a nouveau = OFF.</td></tr>
+  <tr><td><strong>Trigger</strong></td><td>ON tant que le bouton est maintenu, OFF au relachement.</td></tr>
+  <tr><td><strong>Flash</strong></td><td>Pleine valeur (255) tant que le bouton est maintenu.</td></tr>
 </table>
 
-<h2>10.2 Configuration de la salle</h2>
-<table>
-  <tr><th>Paramètre</th><th>Défaut</th><th>Description</th></tr>
-  <tr><td>Largeur</td><td>20 m</td><td>Dimension gauche-droite</td></tr>
-  <tr><td>Profondeur</td><td>15 m</td><td>Dimension avant-arrière</td></tr>
-  <tr><td>Hauteur</td><td>6 m</td><td>Hauteur sous plafond</td></tr>
-</table>
-
-<h3>Barres de structure (Trusses)</h3>
-<p>Ajoutez des trusses via le bouton <strong>+ Add Truss Bar</strong>. Chaque truss est configurable :</p>
-<ul>
-  <li><strong>Nom</strong> — Libellé (ex. « Bar 1 », « FOH Truss »)</li>
-  <li><strong>Position Z</strong> — Profondeur dans la salle (m)</li>
-  <li><strong>Hauteur Y</strong> — Hauteur d'accroche (m)</li>
-  <li><strong>Longueur</strong> — Largeur de la barre (m)</li>
-</ul>
-
-<h3>Options d'affichage</h3>
-<table>
-  <tr><th>Toggle</th><th>Effet</th></tr>
-  <tr><td>Show Beams</td><td>Affiche/masque les faisceaux lumineux</td></tr>
-  <tr><td>Show Room</td><td>Affiche/masque les murs et le plafond</td></tr>
-  <tr><td>Show Grid</td><td>Affiche/masque la grille au sol</td></tr>
-  <tr><td>Shadows</td><td>Active/désactive les ombres projetées</td></tr>
-  <tr><td>Ambient</td><td>Curseur d'intensité de la lumière ambiante (0–100 %)</td></tr>
-</table>
-
-<h2>10.3 Propriétés des projecteurs</h2>
-<p>Cliquez sur un projecteur dans la vue 3D pour afficher et éditer ses propriétés :</p>
-<table>
-  <tr><th>Propriété</th><th>Description</th></tr>
-  <tr><td>Position X, Y, Z</td><td>Coordonnées en mètres dans la salle</td></tr>
-  <tr><td>Rotation Pitch, Roll, Yaw</td><td>Orientation du corps du projecteur</td></tr>
-  <tr><td>Mounting</td><td>Type d'accroche : ceiling, floor, wall-left, wall-right, wall-back</td></tr>
-  <tr><td>Beam Angle</td><td>Angle d'ouverture du faisceau (override)</td></tr>
-  <tr><td>Pan/Tilt Invert</td><td>Inverse les axes Pan et/ou Tilt</td></tr>
-</table>
+<div class="tip">
+  Le moyen le plus rapide de mapper un element est le <strong>clic droit</strong> directement sur l'element (bouton Toolbar, fader dans Fixtures, scene dans Executor Bar), puis de bouger un controle MIDI.
+</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
      CHAPTER 11 — FOLLOW
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch11">
-<h1>11. Follow — Mode poursuite</h1>
-<p>Le mode <strong>Follow</strong> permet de faire converger les faisceaux de plusieurs lyres sur un point mobile de la scène, contrôlé par une <strong>manette de jeu</strong> (gamepad).</p>
+<div class="chapter">
+<h1>11. Onglet Follow <kbd>9</kbd></h1>
 
-<h3>Configuration</h3>
-<ul>
-  <li><strong>Sélection des fixtures</strong> — Choisissez les lyres (moving heads) qui participent à la poursuite.</li>
-  <li><strong>Sensibilité</strong> — Ajustez la vitesse de déplacement de la cible.</li>
-  <li><strong>Hauteur de la cible</strong> — Hauteur par défaut (1.5 m = tête d'une personne debout).</li>
-  <li><strong>Inversions</strong> — Inversez les axes X, Y ou Z selon votre configuration.</li>
-</ul>
+<p>Le mode Follow transforme un gamepad (manette Xbox, PlayStation, etc.) en controleur de poursuite pour piloter des lyres en temps reel.</p>
 
-<h3>Commandes gamepad</h3>
+<h2>11.1 Gamepad</h2>
+<p>L'indicateur en haut montre l'etat de connexion de la manette. Branchez un gamepad USB ou Bluetooth compatible.</p>
+
+<h2>11.2 Selection des fixtures</h2>
+<p>La section "Follow Fixtures" liste toutes les lyres patchees (fixtures de type Moving Head). Cochez les fixtures a inclure dans la poursuite.</p>
+
+<h2>11.3 Controles</h2>
 <table>
-  <tr><th>Contrôle</th><th>Action</th></tr>
-  <tr><td>Stick gauche</td><td>Déplacement de la cible gauche/droite et avant/arrière</td></tr>
-  <tr><td>Stick droit / Gâchettes</td><td>Réglage de la hauteur de la cible</td></tr>
-  <tr><td>Bouton d'activation</td><td>Active/désactive le suivi</td></tr>
+  <tr><th>Parametre</th><th>Description</th></tr>
+  <tr><td><strong>Trigger button</strong></td><td>Bouton de la manette qui active la poursuite. Cliquez <strong>LT</strong> pour changer (mode learn).</td></tr>
+  <tr><td><strong>Speed</strong></td><td>Vitesse de suivi (sensibilite du mouvement).</td></tr>
+  <tr><td><strong>Target height</strong></td><td>Hauteur de la cible au sol (en metres).</td></tr>
+  <tr><td><strong>Dimmer</strong></td><td>Niveau du dimmer des fixtures en poursuite (0-100%).</td></tr>
+  <tr><td><strong>Invert X / Z / Y</strong></td><td>Cases a cocher pour inverser les axes de controle si besoin.</td></tr>
 </table>
 
-<p>L'état du gamepad est affiché dans le panneau : nom, connexion, niveau de batterie et boutons actifs.</p>
-
-<div class="note">Le système calcule automatiquement les angles Pan/Tilt de chaque lyre par cinématique inverse, en tenant compte de la position 3D et de l'orientation de montage de chaque projecteur.</div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 12 — LIVE / TIMELINE
-     ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch12">
-<h1>12. Live — Timeline DAW</h1>
-<p>L'éditeur <strong>Live</strong> offre une timeline de type <strong>DAW</strong> (station de travail audio numérique) pour orchestrer un show complet de manière séquentielle et synchronisée.</p>
-
-<h2>12.1 Pistes et clips</h2>
-<ul>
-  <li><strong>Pistes multiples</strong> — Ajoutez autant de pistes que nécessaire pour organiser vos éléments.</li>
-  <li><strong>Clips</strong> — Chaque clip représente une cuelist placée à un instant précis. Glissez un clip pour le déplacer dans le temps.</li>
-  <li><strong>Durée</strong> — Ajustez la durée de chaque clip. Les fondus d'entrée et de sortie sont visibles graphiquement.</li>
-  <li><strong>Couleurs</strong> — Chaque clip peut être coloré pour une meilleure lisibilité.</li>
-</ul>
-
-<h2>12.2 Marqueurs et zones</h2>
-<h3>Marqueurs</h3>
-<p>Les marqueurs sont des repères temporels nommés et colorés (jaune, orange, rouge, vert, bleu, violet). Cliquez sur un marqueur dans la règle pour y naviguer instantanément.</p>
-
-<h3>Zones</h3>
-<p>Les zones définissent des sections nommées de la timeline (ex. « Intro », « Verse 1 », « Chorus », « Finale »). Elles sont réordonnables et colorées pour une navigation visuelle rapide.</p>
-
-<h2>12.3 Contrôles de lecture</h2>
-<table>
-  <tr><th>Contrôle</th><th>Fonction</th></tr>
-  <tr><td><strong>Play / Pause</strong></td><td>Démarre ou met en pause la lecture</td></tr>
-  <tr><td><strong>Stop</strong></td><td>Arrête et revient au début</td></tr>
-  <tr><td><strong>Loop</strong></td><td>Boucle la lecture (désactivable)</td></tr>
-  <tr><td><strong>Zoom</strong></td><td>5 %–400 % de zoom sur la timeline</td></tr>
-  <tr><td><strong>Scrub</strong></td><td>Cliquez sur la règle pour se positionner à un instant</td></tr>
-</table>
-
-<h2>12.4 Timecode</h2>
-<p>Le mode timecode permet de synchroniser la timeline avec une source externe :</p>
-<ul>
-  <li><strong>Formats</strong> — MM:SS ou HH:MM:SS:FF</li>
-  <li><strong>Cadences</strong> — 25, 29.97, 30, 48, 50, 59.94, 60 fps</li>
-  <li><strong>Activation</strong> — Toggle « Timecode » dans le panneau de contrôle</li>
-</ul>
-
-<div class="tip">Les contrôles Play/Stop de la timeline sont assignables en MIDI pour un déclenchement depuis une console physique.</div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 13 — SETTINGS
-     ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch13">
-<h1>13. Settings — Paramètres</h1>
-
-<h2>13.1 Sorties ArtNet</h2>
-<p><strong>ArtNet</strong> est le protocole standard pour transporter le DMX512 sur réseau Ethernet (Ethernet → nœud ArtNet → câble DMX → projecteurs).</p>
-
-<h3>Configuration</h3>
-<table>
-  <tr><th>Paramètre</th><th>Défaut</th><th>Description</th></tr>
-  <tr><td>IP de destination</td><td><code>255.255.255.255</code></td><td>Broadcast (tous les appareils) ou IP unicast spécifique</td></tr>
-  <tr><td>Port</td><td><code>6454</code></td><td>Port UDP standard ArtNet</td></tr>
-  <tr><td>Universe</td><td><code>0</code></td><td>Numéro d'univers ArtNet (0–15)</td></tr>
-  <tr><td>Subnet</td><td><code>0</code></td><td>Sous-réseau ArtNet (0–15)</td></tr>
-  <tr><td>Net</td><td><code>0</code></td><td>Réseau ArtNet (0–127)</td></tr>
-</table>
-
-<p>Vous pouvez configurer <strong>plusieurs sorties ArtNet</strong> pour envoyer sur différents univers ou adresses IP simultanément.</p>
-
-<div class="warn">Assurez-vous que votre ordinateur et vos nœuds ArtNet sont sur le même sous-réseau (typiquement <code>2.x.x.x</code> ou <code>10.x.x.x</code>). Le mode broadcast (<code>255.255.255.255</code>) fonctionne sur tous les réseaux mais génère plus de trafic.</div>
-
-<h2>13.2 Sorties USB DMX</h2>
-<p>PhotonBoard supporte un grand nombre d'interfaces USB-DMX :</p>
-
-<table>
-  <tr><th>Fabricant</th><th>Modèles supportés</th></tr>
-  <tr><td>ENTTEC</td><td>Open DMX USB, DMX USB Pro</td></tr>
-  <tr><td>Eurolite</td><td>USB-DMX512 (Open/Pro)</td></tr>
-  <tr><td>Showtec</td><td>Quick DMX</td></tr>
-  <tr><td>Beamz</td><td>DMX60, DMX70</td></tr>
-  <tr><td>Velleman</td><td>VM116, K8062</td></tr>
-  <tr><td>Stairville</td><td>USB-DMX</td></tr>
-  <tr><td>uDMX / Anyma</td><td>uDMX open-source</td></tr>
-  <tr><td>Générique</td><td>Tout appareil FTDI compatible</td></tr>
-</table>
-
-<h3>Ajout d'une sortie USB</h3>
+<h2>11.4 Utilisation</h2>
 <div class="steps">
-  <div class="step"><div class="step-content">Cliquez <strong>Scan USB</strong> pour détecter les interfaces connectées.</div></div>
-  <div class="step"><div class="step-content">Sélectionnez le <strong>driver</strong> correspondant à votre interface.</div></div>
-  <div class="step"><div class="step-content">Choisissez le <strong>port série</strong> détecté.</div></div>
-  <div class="step"><div class="step-content">Assignez un <strong>univers</strong> et un <strong>label</strong> descriptif.</div></div>
-  <div class="step"><div class="step-content">Cliquez <strong>Apply</strong> pour activer la sortie.</div></div>
+  <div class="step"><div class="step-content">Selectionnez les lyres dans la liste Follow Fixtures.</div></div>
+  <div class="step"><div class="step-content">Placez-les dans le Stage Layout (indispensable pour le calcul des angles).</div></div>
+  <div class="step"><div class="step-content">Maintenez <strong>LT</strong> sur la manette pour activer le suivi.</div></div>
+  <div class="step"><div class="step-content"><strong>Stick gauche</strong> : deplacer la cible en X/Z (position au sol).</div></div>
+  <div class="step"><div class="step-content"><strong>Stick droit Y</strong> : ajuster la hauteur de la cible.</div></div>
+  <div class="step"><div class="step-content">Relachez LT pour desactiver le suivi.</div></div>
 </div>
 
-<div class="note">ArtNet et USB DMX peuvent fonctionner simultanément. Chaque sortie est assignée à un univers spécifique.</div>
+<div class="warn">
+  Les fixtures doivent etre positionnees dans le Stage Layout pour que le calcul des angles Pan/Tilt fonctionne correctement.
+</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 14 — SHOW FILES
+     CHAPTER 12 — SETTINGS
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch14">
-<h1>14. Gestion des fichiers show</h1>
+<div class="chapter">
+<h1>12. Onglet Settings <kbd>0</kbd></h1>
 
-<h3>Opérations fichier</h3>
-<table>
-  <tr><th>Action</th><th>Raccourci</th><th>Description</th></tr>
-  <tr><td>Nouveau show</td><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Crée un show vierge</td></tr>
-  <tr><td>Ouvrir</td><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Ouvre un fichier <code>.pbshow</code></td></tr>
-  <tr><td>Enregistrer</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Sauvegarde le show en cours</td></tr>
-  <tr><td>Enregistrer sous</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Sauvegarde sous un nouveau nom/emplacement</td></tr>
-</table>
+<p>La page Settings permet de configurer le show, la sortie DMX et les peripheriques USB.</p>
 
-<h3>Contenu d'un fichier show</h3>
-<p>Le fichier <code>.pbshow</code> est un fichier JSON contenant :</p>
+<h2>12.1 Show</h2>
 <ul>
-  <li>Configuration ArtNet (adresses, ports, univers)</li>
-  <li>Patch complet (fixtures, adresses, groupes)</li>
-  <li>Toutes les cuelists et leurs mémoires (cues)</li>
-  <li>Chases et presets</li>
-  <li>Effets</li>
-  <li>Mappings MIDI</li>
-  <li>Configuration du Stage Layout</li>
-  <li>Configuration de la salle (Room Config)</li>
-  <li>Timeline (clips, marqueurs, zones)</li>
+  <li><strong>Show Name</strong> : nom du show courant (champ texte editable).</li>
+  <li><strong>Save Show</strong> : sauvegarde rapide (ecrase le fichier existant ou demande un chemin si premier enregistrement).</li>
+  <li><strong>Load Show</strong> : ouvre un fichier <code>.pbshow</code> existant.</li>
+  <li><strong>New Show</strong> : cree un show vide.</li>
 </ul>
 
-<h3>Fichiers récents</h3>
-<p>PhotonBoard garde en mémoire les 10 derniers shows ouverts. Au démarrage, le dernier show non vide est automatiquement rechargé.</p>
+<h2>12.2 USB DMX Output</h2>
+<p>Configuration des adaptateurs USB-DMX :</p>
+<ul>
+  <li><strong>Scan USB Ports</strong> : detecte les ports serie disponibles.</li>
+  <li><strong>+ Add USB DMX Output</strong> : ajoute un adaptateur avec les parametres :
+    <ul>
+      <li><strong>Adapter</strong> : type de dongle (ENTTEC Open DMX, ENTTEC Pro, Eurolite, Showtec, Beamz, Velleman, Stairville, uDMX, Generic FTDI).</li>
+      <li><strong>Port</strong> : port serie (selectionne ou saisi manuellement, ex: <code>/dev/tty.usbserial-XXX</code>).</li>
+      <li><strong>Universe</strong> : univers DMX a envoyer (0-15).</li>
+    </ul>
+  </li>
+  <li><strong>Apply USB Config</strong> : applique la configuration USB.</li>
+</ul>
 
-<h3>Emplacement des données</h3>
+<h2>12.3 ArtNet Output</h2>
+<p>Configuration des 3 univers ArtNet :</p>
 <table>
-  <tr><th>Données</th><th>Emplacement</th></tr>
-  <tr><td>Shows par défaut</td><td><code>~/Documents/PhotonBoard/</code></td></tr>
-  <tr><td>Fixtures utilisateur</td><td><code>[userData]/fixtures/</code></td></tr>
-  <tr><td>Configuration (récents)</td><td><code>[userData]/config/</code></td></tr>
+  <tr><th>Parametre</th><th>Description</th></tr>
+  <tr><td><strong>IP Address</strong></td><td>Adresse IP de destination. <code>255.255.255.255</code> = broadcast (defaut).</td></tr>
+  <tr><td><strong>Port</strong></td><td>Port UDP ArtNet (defaut: 6454).</td></tr>
+  <tr><td><strong>Subnet</strong></td><td>Sous-reseau ArtNet (0-15).</td></tr>
+  <tr><td><strong>Net</strong></td><td>Reseau ArtNet (0-127).</td></tr>
 </table>
+<p>Cliquez <strong>Apply ArtNet Config</strong> pour appliquer les changements. L'indicateur (vert = connecte, rouge = offline) se met a jour.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 15 — KEYBOARD SHORTCUTS
+     CHAPTER 13 — RACCOURCIS CLAVIER
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch15">
-<h1>15. Raccourcis clavier</h1>
+<div class="chapter">
+<h1>13. Raccourcis clavier</h1>
 
+<h2>13.1 Navigation</h2>
 <table>
   <tr><th>Raccourci</th><th>Action</th></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Nouveau show</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Ouvrir un show</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Enregistrer le show</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Enregistrer sous…</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Blackout (tout à zéro)</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Tout sélectionner (contextuel)</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Annuler</td></tr>
-  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Rétablir</td></tr>
-  <tr><td><kbd>F11</kbd></td><td>Plein écran</td></tr>
+  <tr><td><kbd>1</kbd></td><td>Onglet 3D View</td></tr>
+  <tr><td><kbd>2</kbd></td><td>Onglet Stage Layout</td></tr>
+  <tr><td><kbd>3</kbd></td><td>Onglet Timeline</td></tr>
+  <tr><td><kbd>4</kbd></td><td>Onglet Effects</td></tr>
+  <tr><td><kbd>5</kbd></td><td>Onglet Scenes</td></tr>
+  <tr><td><kbd>6</kbd></td><td>Onglet Fixtures</td></tr>
+  <tr><td><kbd>7</kbd></td><td>Onglet Patch</td></tr>
+  <tr><td><kbd>8</kbd></td><td>Onglet MIDI</td></tr>
+  <tr><td><kbd>9</kbd></td><td>Onglet Follow</td></tr>
+  <tr><td><kbd>0</kbd></td><td>Onglet Settings</td></tr>
 </table>
 
-<div class="note">Sur macOS, remplacez <kbd>Ctrl</kbd> par <kbd>Cmd</kbd> (⌘).</div>
+<h2>13.2 Actions globales</h2>
+<table>
+  <tr><th>Raccourci</th><th>Action</th></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Blackout (couper toute sortie DMX)</td></tr>
+  <tr><td><kbd>Backspace</kbd></td><td>Clear Programmer (effacer les valeurs manuelles)</td></tr>
+  <tr><td><kbd>Space</kbd></td><td>GO sur la premiere scene (onglet Scenes uniquement)</td></tr>
+</table>
+
+<h2>13.3 Fichiers (menu)</h2>
+<table>
+  <tr><th>Raccourci</th><th>Action</th></tr>
+  <tr><td><kbd>Cmd</kbd>+<kbd>N</kbd></td><td>Nouveau show</td></tr>
+  <tr><td><kbd>Cmd</kbd>+<kbd>O</kbd></td><td>Ouvrir un show</td></tr>
+  <tr><td><kbd>Cmd</kbd>+<kbd>S</kbd></td><td>Sauvegarder</td></tr>
+  <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Sauvegarder sous...</td></tr>
+</table>
+
+<div class="note">
+  Sur Linux, remplacez <kbd>Cmd</kbd> par <kbd>Ctrl</kbd>.
+</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 16 — FILE FORMATS
+     CHAPTER 14 — GESTION DES FICHIERS SHOW
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch16">
-<h1>16. Formats de fichier supportés</h1>
+<div class="chapter">
+<h1>14. Gestion des fichiers Show</h1>
 
-<h2>Format de show</h2>
-<table>
-  <tr><th>Extension</th><th>Format</th><th>Usage</th></tr>
-  <tr><td><code>.pbshow</code></td><td>JSON (PhotonBoard Show)</td><td>Sauvegarde et chargement de shows complets</td></tr>
-</table>
+<h2>14.1 Format de fichier</h2>
+<p>Les shows sont sauvegardes au format <code>.pbshow</code> (JSON compresse). Chaque fichier contient :</p>
+<ul>
+  <li>Le nom et les metadonnees du show</li>
+  <li>La configuration ArtNet</li>
+  <li>Le patch complet (fixtures, adresses, modes, groupes)</li>
+  <li>Toutes les scenes (cuelists) et leurs steps</li>
+  <li>Les chases</li>
+  <li>Les mappings MIDI</li>
+  <li>La configuration de la salle 3D (roomConfig)</li>
+  <li>La timeline complete (clips, marqueurs, zones, nombre de pistes)</li>
+</ul>
 
-<h2>Formats d'import de fixtures</h2>
-<table>
-  <tr><th>Extension</th><th>Format</th><th>Source</th><th>Notes</th></tr>
-  <tr><td><code>.json</code></td><td>OFL / PhotonBoard</td><td>open-fixture-library.org</td><td>Détection auto OFL vs natif</td></tr>
-  <tr><td><code>.gdtf</code></td><td>GDTF (DIN SPEC 15800)</td><td>gdtf-share.com</td><td>Archive ZIP contenant description.xml</td></tr>
-  <tr><td><code>.qxf</code></td><td>QLC+ Fixture</td><td>qlcplus.org</td><td>Format XML avec canaux, modes et capabilities</td></tr>
-  <tr><td><code>.d4</code> / <code>.r20</code></td><td>Avolites Personality</td><td>personalities.avolites.com</td><td>Format XML Avolites</td></tr>
-  <tr><td><code>.xml</code></td><td>GrandMA2/3 / Générique</td><td>Export console ou bibliothèques</td><td>Détection auto du format XML</td></tr>
-  <tr><td><code>.csv</code> / <code>.tsv</code></td><td>Tableur</td><td>Excel, Google Sheets</td><td>Colonnes : Channel/Name, Type, Default</td></tr>
-</table>
+<h2>14.2 Sauvegarde automatique</h2>
+<p>PhotonBoard charge automatiquement le dernier show sauvegarde a chaque lancement. Le chemin du fichier est affiche dans la barre de statut.</p>
 
-<h2>Protocoles de sortie</h2>
-<table>
-  <tr><th>Protocole</th><th>Transport</th><th>Standard</th></tr>
-  <tr><td>ArtNet</td><td>Ethernet UDP (port 6454)</td><td>Art-Net 4</td></tr>
-  <tr><td>DMX512</td><td>USB → Série RS-485</td><td>ANSI E1.11 / DMX512-A</td></tr>
-</table>
+<h2>14.3 Emplacement par defaut</h2>
+<p>Les fichiers sont stockes dans le dossier <code>~/Library/Application Support/PhotonBoard/shows/</code> (macOS) ou <code>~/.config/PhotonBoard/shows/</code> (Linux).</p>
+
+<p>Cliquer sur le nom du fichier dans la barre de statut ouvre le dossier contenant dans le Finder/gestionnaire de fichiers.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 17 — GLOSSARY
+     CHAPTER 15 — FORMATS DE FIXTURES
      ═══════════════════════════════════════════════════════════ -->
-<div class="chapter" id="ch17">
+<div class="chapter">
+<h1>15. Formats de fixtures supportes</h1>
+
+<p>PhotonBoard dispose d'un parseur universel capable de lire les formats de fichiers de fixtures suivants :</p>
+
+<table>
+  <tr><th>Format</th><th>Extension</th><th>Source</th><th>Description</th></tr>
+  <tr><td><strong>OFL JSON</strong></td><td><code>.json</code></td><td>Open Fixture Library</td><td>Format natif de PhotonBoard et d'OFL. Plus de 10 000 fixtures referencees en ligne.</td></tr>
+  <tr><td><strong>GDTF</strong></td><td><code>.gdtf</code></td><td>Norme DIN SPEC 15800</td><td>Archive ZIP contenant un fichier XML de description. Standard professionnel.</td></tr>
+  <tr><td><strong>QLC+</strong></td><td><code>.qxf</code></td><td>Q Light Controller+</td><td>Fichier XML de definition QLC+.</td></tr>
+  <tr><td><strong>Avolites</strong></td><td><code>.d4</code>, <code>.r20</code></td><td>Avolites Ltd</td><td>Personality files au format Avolites. Lecture du XML embarque.</td></tr>
+  <tr><td><strong>GrandMA</strong></td><td><code>.xml</code></td><td>MA Lighting</td><td>Export XML de fixture GrandMA / GrandMA2.</td></tr>
+  <tr><td><strong>CSV / TSV</strong></td><td><code>.csv</code>, <code>.tsv</code></td><td>Universel</td><td>Tableau avec en-tetes : name, channel, type (ou defaultValue). Separateur virgule ou tabulation.</td></tr>
+</table>
+
+<h2>15.1 Bibliotheque en ligne OFL</h2>
+<p>Depuis l'onglet Patch, la boite de dialogue "+ Add Fixture" integre un panneau de recherche OFL. Tapez le nom du fabricant ou du modele pour rechercher et telecharger des fixtures directement depuis <code>open-fixture-library.org</code>.</p>
+
+<h2>15.2 Fixtures utilisateur</h2>
+<p>Les fixtures importees sont sauvegardees localement dans <code>~/Library/Application Support/PhotonBoard/fixtures/</code>. Elles sont disponibles pour tous les shows.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CHAPTER 16 — SORTIE DMX
+     ═══════════════════════════════════════════════════════════ -->
+<div class="chapter">
+<h1>16. Sortie DMX : ArtNet &amp; USB</h1>
+
+<h2>16.1 Architecture de sortie</h2>
+<p>PhotonBoard genere les valeurs DMX a environ <strong>40 Hz</strong> (25 ms par trame). Les valeurs sont calculees par un mixer central qui fusionne les sources :</p>
+<ol>
+  <li><strong>Programmeur</strong> : valeurs manuelles (faders, presets couleur, XY pad) — priorite la plus haute.</li>
+  <li><strong>Scenes (cuelists)</strong> : valeurs enregistrees dans les scenes actives, avec fades.</li>
+  <li><strong>Effets</strong> : valeurs generees par le moteur d'effets.</li>
+  <li><strong>Timeline</strong> : clips actifs de la timeline.</li>
+</ol>
+<p>Le resultat est envoye simultanement a toutes les sorties configurees (ArtNet + USB).</p>
+
+<h2>16.2 ArtNet</h2>
+<p>Protocole reseau standard pour le DMX sur IP. PhotonBoard envoie des paquets <strong>ArtDMX</strong> via UDP.</p>
+<ul>
+  <li>3 univers simultanement.</li>
+  <li>Mode broadcast (255.255.255.255) par defaut.</li>
+  <li>Compatible avec les nodes ArtNet (ENTTEC ODE, Chauvet DMX-AN, etc.).</li>
+</ul>
+
+<h2>16.3 USB DMX</h2>
+<p>Support des adaptateurs USB-DMX les plus courants :</p>
+<ul>
+  <li>ENTTEC Open DMX USB / DMX USB Pro</li>
+  <li>Eurolite USB-DMX512 / USB-DMX512 PRO</li>
+  <li>Showtec Quick DMX</li>
+  <li>Beamz DMX60 / DMX70</li>
+  <li>Velleman VM116 / K8062</li>
+  <li>Stairville USB-DMX</li>
+  <li>uDMX / Anyma / Clone</li>
+  <li>Generic FTDI Adapter</li>
+</ul>
+
+<div class="note">
+  La sortie USB DMX necessite le module <code>serialport</code>. Sur Linux, assurez-vous que l'utilisateur a les droits d'acces au port serie (<code>sudo usermod -a -G dialout $USER</code>).
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CHAPTER 17 — GLOSSAIRE
+     ═══════════════════════════════════════════════════════════ -->
+<div class="chapter">
 <h1>17. Glossaire</h1>
 
 <table>
-  <tr><th>Terme</th><th>Définition</th></tr>
-  <tr><td><strong>ArtNet</strong></td><td>Protocole de transport du signal DMX512 sur réseau Ethernet IP.</td></tr>
-  <tr><td><strong>Blackout</strong></td><td>Extinction instantanée de toutes les sorties DMX (tous les canaux à 0).</td></tr>
-  <tr><td><strong>BPM</strong></td><td>Battements par minute — unité de vitesse pour les chases.</td></tr>
-  <tr><td><strong>Canal DMX</strong></td><td>Un des 512 canaux d'un univers DMX, valeur de 0 à 255.</td></tr>
-  <tr><td><strong>Chase</strong></td><td>Séquence de pas (steps) défilant automatiquement en boucle.</td></tr>
-  <tr><td><strong>Cue</strong></td><td>Mémoire lumineuse — un « look » enregistré avec ses valeurs DMX.</td></tr>
-  <tr><td><strong>Cuelist</strong></td><td>Liste ordonnée de cues (mémoires), exécutée séquentiellement.</td></tr>
-  <tr><td><strong>DMX512</strong></td><td>Standard de commande d'éclairage professionnel — 512 canaux par univers.</td></tr>
-  <tr><td><strong>Fade</strong></td><td>Transition progressive entre deux états lumineux sur une durée définie.</td></tr>
-  <tr><td><strong>Fan</strong></td><td>Étalement de phase dans un effet, créant un décalage entre les fixtures.</td></tr>
-  <tr><td><strong>Fixture</strong></td><td>Projecteur ou appareil d'éclairage DMX.</td></tr>
-  <tr><td><strong>GDTF</strong></td><td>General Device Type Format — standard ouvert de description de projecteurs (DIN SPEC 15800).</td></tr>
-  <tr><td><strong>Gobo</strong></td><td>Masque métallique ou de verre inséré dans le faisceau pour projeter un motif.</td></tr>
-  <tr><td><strong>Grand Master</strong></td><td>Fader de contrôle global qui atténue toutes les sorties DMX.</td></tr>
-  <tr><td><strong>HTP</strong></td><td>Highest Takes Precedence — la valeur la plus haute l'emporte (utilisé pour les dimmers).</td></tr>
-  <tr><td><strong>LFO</strong></td><td>Low Frequency Oscillator — oscillateur basse fréquence utilisé pour les effets.</td></tr>
-  <tr><td><strong>LTP</strong></td><td>Latest Takes Precedence — la dernière valeur écrite l'emporte (utilisé pour couleur, position…).</td></tr>
-  <tr><td><strong>Lyre</strong></td><td>Projecteur à tête mobile (moving head) offrant Pan et Tilt motorisés.</td></tr>
-  <tr><td><strong>OFL</strong></td><td>Open Fixture Library — base de données ouverte de 20 000+ fixtures.</td></tr>
-  <tr><td><strong>Pan</strong></td><td>Rotation horizontale de la tête d'une lyre (panoramique).</td></tr>
-  <tr><td><strong>Patch</strong></td><td>Assignation d'une adresse DMX à un projecteur.</td></tr>
-  <tr><td><strong>Programmer</strong></td><td>Couche temporaire de valeurs DMX utilisée pour l'édition et l'enregistrement.</td></tr>
-  <tr><td><strong>Tilt</strong></td><td>Rotation verticale de la tête d'une lyre (inclinaison).</td></tr>
-  <tr><td><strong>Timecode</strong></td><td>Signal de synchronisation temporelle (SMPTE/LTC) pour le séquençage.</td></tr>
-  <tr><td><strong>Tracking</strong></td><td>Mode où les valeurs DMX persistent d'une cue à la suivante sauf modification explicite.</td></tr>
-  <tr><td><strong>Truss</strong></td><td>Structure métallique (pont ou barre) servant à accrocher les projecteurs.</td></tr>
-  <tr><td><strong>Univers</strong></td><td>Un « bus » DMX512 de 512 canaux. Plusieurs univers permettent de contrôler plus de 512 canaux.</td></tr>
+  <tr><th>Terme</th><th>Definition</th></tr>
+  <tr><td><strong>ArtNet</strong></td><td>Protocole reseau pour transmettre des donnees DMX512 sur Ethernet/Wi-Fi (UDP port 6454).</td></tr>
+  <tr><td><strong>BPM</strong></td><td>Battements par minute. Unite de vitesse pour les effets.</td></tr>
+  <tr><td><strong>Canal DMX</strong></td><td>Un canal parmi les 512 d'un univers DMX, valeur de 0 a 255.</td></tr>
+  <tr><td><strong>Chase</strong></td><td>Sequence de scenes enchainee automatiquement.</td></tr>
+  <tr><td><strong>Cuelist</strong></td><td>Liste de "cues" (scenes). Dans PhotonBoard, synonyme de "Scene".</td></tr>
+  <tr><td><strong>DMX512</strong></td><td>Standard de controle d'eclairage. 512 canaux par univers, valeurs 0-255.</td></tr>
+  <tr><td><strong>Fade</strong></td><td>Transition progressive d'un etat lumineux a un autre (Fade In / Fade Out).</td></tr>
+  <tr><td><strong>Fixture</strong></td><td>Appareil d'eclairage (projecteur, lyre, barre LED, etc.).</td></tr>
+  <tr><td><strong>GDTF</strong></td><td>General Device Type Format. Norme standardisee pour decrire les fixtures.</td></tr>
+  <tr><td><strong>Grand Master</strong></td><td>Fader principal qui controle le niveau de sortie global.</td></tr>
+  <tr><td><strong>Lyre</strong></td><td>Projecteur motorise avec Pan et Tilt (Moving Head).</td></tr>
+  <tr><td><strong>MIDI</strong></td><td>Musical Instrument Digital Interface. Protocole de communication pour controleurs.</td></tr>
+  <tr><td><strong>MTC</strong></td><td>MIDI Time Code. Protocole de synchronisation temporelle via MIDI.</td></tr>
+  <tr><td><strong>OFL</strong></td><td>Open Fixture Library. Base de donnees open-source de definitions de fixtures.</td></tr>
+  <tr><td><strong>Pan</strong></td><td>Rotation horizontale d'une lyre (axe Y).</td></tr>
+  <tr><td><strong>Patch</strong></td><td>Configuration qui associe chaque fixture a une adresse DMX.</td></tr>
+  <tr><td><strong>Programmeur</strong></td><td>Couche de valeurs manuelles. Les valeurs touchees par l'utilisateur via les faders ont la priorite.</td></tr>
+  <tr><td><strong>Spread</strong></td><td>Decalage de phase entre les fixtures dans un effet (en degres).</td></tr>
+  <tr><td><strong>Tilt</strong></td><td>Rotation verticale d'une lyre (axe X).</td></tr>
+  <tr><td><strong>Timecode</strong></td><td>Reference temporelle pour synchroniser la timeline (MIDI Time Code).</td></tr>
+  <tr><td><strong>Univers</strong></td><td>Ensemble de 512 canaux DMX. PhotonBoard gere 3 univers (1536 canaux).</td></tr>
 </table>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     FOOTER
-     ═══════════════════════════════════════════════════════════ -->
-<div style="margin-top: 60px; padding-top: 20px; border-top: 2px solid var(--brand-light); text-align: center; color: var(--fg-light); font-size: 9pt;">
-  <p><strong>PhotonBoard</strong> — Logiciel professionnel de commande DMX</p>
-  <p>Version 0.1.0 — Documentation générée en avril 2026</p>
-  <p style="margin-top:8px; color:#b2bec3;">© 2026 PhotonBoard. Tous droits réservés.</p>
-</div>
+<!-- ═══════════════════════════════════════════════════════════ -->
+<hr>
+<p style="text-align:center; color:#999; font-size:9pt; margin-top:2em;">
+  PhotonBoard v0.1.0 — Documentation generee le 11 avril 2026.<br>
+  &copy; 2026 PhotonBoard. Tous droits reserves.
+</p>
 
 </body>
 </html>
