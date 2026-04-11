@@ -20,6 +20,7 @@ export function LayoutEditor2D() {
   const panningRef   = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; pointerId: number } | null>(null)
   const viewRef      = useRef({ panX: 0, panY: 0, zoom: 1 })
   const didFitRef    = useRef(false)
+  const drawRef      = useRef<() => void>(() => {})
 
   const { patch, fixtures, updateFixture } = usePatchStore()
   const {
@@ -249,6 +250,9 @@ export function LayoutEditor2D() {
     ctx.fillText(`${zoomPct}%`, W - 8, H - 8)
   }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, worldToCanvas, gridSize, snapToGrid])
 
+  // Keep drawRef in sync so stable effects can call the latest draw without re-subscribing
+  drawRef.current = draw
+
   // ── Initial fit + redraw on changes ────────────────────────────────
   useEffect(() => {
     if (!didFitRef.current && containerRef.current) {
@@ -269,30 +273,30 @@ export function LayoutEditor2D() {
       if (!rafId) {
         rafId = requestAnimationFrame(() => {
           rafId = 0
-          draw()
+          drawRef.current()
         })
       }
     })
     return () => { unsub(); if (rafId) cancelAnimationFrame(rafId) }
-  }, [draw])
+  }, [])
 
   // Re-fit when room dimensions change
   useEffect(() => {
     fitToView()
-    draw()
-  }, [roomConfig.width, roomConfig.depth])
+    drawRef.current()
+  }, [roomConfig.width, roomConfig.depth, fitToView])
 
-  // ResizeObserver — re-fit on container resize
+  // ResizeObserver — re-fit on container resize (stable: no dependency on draw)
   useEffect(() => {
     const ro = new ResizeObserver(() => {
       fitToView()
-      draw()
+      drawRef.current()
     })
     if (containerRef.current) ro.observe(containerRef.current)
     return () => ro.disconnect()
-  }, [draw, fitToView])
+  }, [fitToView])
 
-  // ── Wheel → zoom toward cursor ────────────────────────────────────
+  // ── Wheel → zoom toward cursor (stable: uses drawRef, never re-registers) ──
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -319,11 +323,11 @@ export function LayoutEditor2D() {
       viewRef.current.panX = mx - W / 2 - worldX * newScale
       viewRef.current.panY = my - H / 2 + worldZ * newScale
 
-      draw()
+      drawRef.current()
     }
     canvas.addEventListener('wheel', handleWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', handleWheel)
-  }, [draw])
+  }, [])
 
   // ── Interaction helpers ────────────────────────────────────────────
   const getCanvasPos = (e: React.MouseEvent) => {
@@ -436,7 +440,7 @@ export function LayoutEditor2D() {
       const dy = e.clientY - panningRef.current.startY
       viewRef.current.panX = panningRef.current.startPanX + dx
       viewRef.current.panY = panningRef.current.startPanY + dy
-      draw()
+      drawRef.current()
       return
     }
 
@@ -464,7 +468,7 @@ export function LayoutEditor2D() {
     const mount = entry?.mountingLocation ?? 'ceiling'
     const curY = entry?.position3D?.y ?? getDefaultY(mount, roomConfig.height)
     updateFixture(draggingRef.current.id, { position3D: { x: wx, y: curY, z: wz } })
-  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar, setRoomConfig, draw])
+  }, [patch, roomConfig, canvasToWorld, updateFixture, updateTrussBar, setRoomConfig])
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     panningRef.current = null
