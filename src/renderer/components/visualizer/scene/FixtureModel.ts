@@ -55,12 +55,68 @@ void main() {
 const BEAM_FRAGMENT = /* glsl */ `
 uniform vec3 uColor;
 uniform float uOpacity;
-uniform sampler2D uGoboTex;
-uniform float uGoboActive;
+uniform float uGoboIndex;
 uniform float uGoboRotation;
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
+
+// Procedural gobo pattern — returns 0.0 (blocked) to 1.0 (open)
+// angle: radians around beam cross-section, r: 0-1 normalized radius
+float goboPattern(float idx, float angle, float r) {
+  // Gobo 1: Ring (annulus)
+  if (idx < 1.5) {
+    return (r > 0.4 && r < 0.95) ? 1.0 : 0.0;
+  }
+  // Gobo 2: Three dots (triangle arrangement)
+  if (idx < 2.5) {
+    float best = 1.0;
+    for (int i = 0; i < 3; i++) {
+      float da = angle - (float(i) * 2.094 - 1.5708); // 120° spacing, offset -90°
+      float dx = cos(da) * r - 0.5;
+      float dy = sin(da) * r;
+      float d = sqrt(dx * dx + dy * dy);
+      best = min(best, d);
+    }
+    return best < 0.3 ? 1.0 : 0.0;
+  }
+  // Gobo 3: 4-point star
+  if (idx < 3.5) {
+    float star = cos(4.0 * angle);
+    float threshold = mix(-0.2, 0.7, r); // star gets thinner at edges
+    return star > threshold ? 1.0 : 0.0;
+  }
+  // Gobo 4: Spiral (3 arms)
+  if (idx < 4.5) {
+    float spiral = sin(3.0 * angle - r * 8.0);
+    return spiral > 0.0 ? 1.0 : 0.0;
+  }
+  // Gobo 5: Radial lines (8 segments, alternating)
+  if (idx < 5.5) {
+    float seg = sin(8.0 * angle);
+    return seg > 0.0 ? 1.0 : 0.0;
+  }
+  // Gobo 6: Dots grid
+  if (idx < 6.5) {
+    float gx = cos(angle) * r * 3.0;
+    float gy = sin(angle) * r * 3.0;
+    float dx = fract(gx + 0.5) - 0.5;
+    float dy = fract(gy + 0.5) - 0.5;
+    float d = sqrt(dx * dx + dy * dy);
+    return d < 0.25 ? 1.0 : 0.0;
+  }
+  // Gobo 7: Broken circle with center dot
+  if (idx < 7.5) {
+    float ring = (r > 0.55 && r < 0.8) ? 1.0 : 0.0;
+    // 4 gaps in ring
+    float gapMask = step(0.3, abs(sin(2.0 * angle)));
+    ring *= gapMask;
+    // Center dot
+    float center = r < 0.15 ? 1.0 : 0.0;
+    return max(ring, center);
+  }
+  return 1.0;
+}
 
 void main() {
   // vUv.y = 1.0 at fixture lens (cone tip), 0.0 at far end (cone base)
@@ -76,32 +132,19 @@ void main() {
   float fresnel = abs(dot(normalize(vNormal), normalize(vViewDir)));
   float edgeSoft = pow(fresnel, 0.6);
 
-  // Gobo pattern — project texture across beam cross-section
-  // ConeGeometry UV: x = 0→1 around circumference, y = 0 (base) → 1 (tip)
+  // Gobo pattern — procedural generation on cone cross-section
   float goboAlpha = 1.0;
-  if (uGoboActive > 0.5) {
-    // Convert circumference position to angle
-    float angle = vUv.x * 6.28318; // 2*PI
-
-    // Map to gobo texture coords (polar → cartesian)
-    // Same pattern projected at every height (like a real gobo)
-    vec2 goboUV = vec2(
-      0.5 + cos(angle) * 0.48,
-      0.5 + sin(angle) * 0.48
-    );
-
-    // Apply gobo rotation
-    if (abs(uGoboRotation) > 0.01) {
-      vec2 center = vec2(0.5, 0.5);
-      vec2 d = goboUV - center;
-      float cosA = cos(uGoboRotation);
-      float sinA = sin(uGoboRotation);
-      goboUV = center + vec2(d.x * cosA - d.y * sinA, d.x * sinA + d.y * cosA);
-    }
-
-    goboUV = clamp(goboUV, 0.0, 1.0);
-    vec4 goboSample = texture2D(uGoboTex, goboUV);
-    goboAlpha = goboSample.r;
+  if (uGoboIndex > 0.5) {
+    float angle = vUv.x * 6.28318 + uGoboRotation;
+    // Radius: 0 at lens (tip), 1 at beam base
+    float r = t;
+    float pattern = goboPattern(uGoboIndex, angle, r);
+    // Soft edges on pattern transitions
+    goboAlpha = mix(0.06, 1.0, pattern);
+    // Near the lens, blend to uniform (pattern too small to see)
+    goboAlpha = mix(1.0, goboAlpha, smoothstep(0.0, 0.15, t));
+    // Sharper edges when gobo is active
+    edgeSoft = pow(fresnel, 0.35);
   }
 
   float alpha = uOpacity * axialFade * endFade * edgeSoft * goboAlpha;
@@ -115,8 +158,7 @@ const coneMaterial = () =>
     uniforms: {
       uColor: { value: new THREE.Color(1, 1, 1) },
       uOpacity: { value: 0.0 },
-      uGoboTex: { value: new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat) },
-      uGoboActive: { value: 0.0 },
+      uGoboIndex: { value: 0.0 },
       uGoboRotation: { value: 0.0 }
     },
     vertexShader: BEAM_VERTEX,
@@ -208,7 +250,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     headGroup.add(lensMesh)
 
     // Beam cone (child of head, pointing toward -Z in local space)
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 18, 1, true)
+    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 32, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneGeo.rotateX(-Math.PI / 2)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
@@ -231,7 +273,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     group.add(bodyMesh)
 
     // Wide beam cone (overall glow)
-    const coneGeo = new THREE.ConeGeometry(0.8, coneHeight, 18, 1, true)
+    const coneGeo = new THREE.ConeGeometry(0.8, coneHeight, 32, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.04
@@ -281,7 +323,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     group.add(bodyMesh)
 
     // Cone
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 18, 1, true)
+    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 32, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.11
