@@ -42,11 +42,9 @@ const BEAM_VERTEX = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
-varying vec3 vLocalPos;
 
 void main() {
   vUv = uv;
-  vLocalPos = position;
   vNormal = normalize(normalMatrix * normal);
   vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
   vViewDir = normalize(-mvPos.xyz);
@@ -63,7 +61,6 @@ uniform float uGoboRotation;
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
-varying vec3 vLocalPos;
 
 void main() {
   // vUv.y = 1.0 at fixture lens (cone tip), 0.0 at far end (cone base)
@@ -80,27 +77,28 @@ void main() {
   float edgeSoft = pow(fresnel, 0.6);
 
   // Gobo pattern — project texture across beam cross-section
+  // ConeGeometry UV: x = 0→1 around circumference, y = 0 (base) → 1 (tip)
   float goboAlpha = 1.0;
   if (uGoboActive > 0.5) {
-    // Compute polar UV from local XZ position (cone cross-section)
-    // The cone opens along Y, so X and Z define the cross-section circle
-    float coneRadius = max(abs(vLocalPos.x), 0.001);
-    // Normalize to 0-1 range based on cone expansion at this height
-    float maxR = t * 0.5 + 0.001; // approximate cone radius at height t
+    // Convert circumference position to angle
+    float angle = vUv.x * 6.28318; // 2*PI
+
+    // Map to gobo texture coords (polar → cartesian)
+    // Same pattern projected at every height (like a real gobo)
     vec2 goboUV = vec2(
-      vLocalPos.x / (maxR * 2.0) + 0.5,
-      vLocalPos.z / (maxR * 2.0) + 0.5
+      0.5 + cos(angle) * 0.48,
+      0.5 + sin(angle) * 0.48
     );
-    // Apply rotation
-    if (uGoboRotation > 0.01) {
-      float angle = uGoboRotation;
+
+    // Apply gobo rotation
+    if (abs(uGoboRotation) > 0.01) {
       vec2 center = vec2(0.5, 0.5);
       vec2 d = goboUV - center;
-      float cosA = cos(angle);
-      float sinA = sin(angle);
+      float cosA = cos(uGoboRotation);
+      float sinA = sin(uGoboRotation);
       goboUV = center + vec2(d.x * cosA - d.y * sinA, d.x * sinA + d.y * cosA);
     }
-    // Clamp and sample
+
     goboUV = clamp(goboUV, 0.0, 1.0);
     vec4 goboSample = texture2D(uGoboTex, goboUV);
     goboAlpha = goboSample.a;

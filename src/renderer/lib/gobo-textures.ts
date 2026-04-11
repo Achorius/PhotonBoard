@@ -9,14 +9,17 @@ import * as THREE from 'three'
 const GOBO_SIZE = 256
 const GOBO_COUNT = 7
 
-let _cache: THREE.DataTexture[] | null = null
+let _cache: THREE.CanvasTexture[] | null = null
 
 /**
  * Get gobo texture by index (1-7). Returns null for 0 (open).
  */
-export function getGoboTexture(index: number): THREE.DataTexture | null {
+export function getGoboTexture(index: number): THREE.CanvasTexture | null {
   if (index <= 0 || index > GOBO_COUNT) return null
-  if (!_cache) _cache = generateAllGobos()
+  if (!_cache) {
+    _cache = generateAllGobos()
+    console.log(`[Gobo] Generated ${_cache.length} gobo textures`)
+  }
   return _cache[index - 1]
 }
 
@@ -45,7 +48,7 @@ export function isGoboRotating(dmxValue: number, goboRotation: number): boolean 
   return goboRotation > 0
 }
 
-function generateAllGobos(): THREE.DataTexture[] {
+function generateAllGobos(): THREE.CanvasTexture[] {
   return [
     generateGobo1(), // thick ring / breakup
     generateGobo2(), // tri-dots
@@ -57,8 +60,10 @@ function generateAllGobos(): THREE.DataTexture[] {
   ]
 }
 
-function createCanvas(): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D } {
-  const canvas = new OffscreenCanvas(GOBO_SIZE, GOBO_SIZE)
+function createCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  const canvas = document.createElement('canvas')
+  canvas.width = GOBO_SIZE
+  canvas.height = GOBO_SIZE
   const ctx = canvas.getContext('2d')!
   // Start black (blocked)
   ctx.fillStyle = '#000'
@@ -66,19 +71,8 @@ function createCanvas(): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderin
   return { canvas, ctx }
 }
 
-function canvasToTexture(canvas: OffscreenCanvas): THREE.DataTexture {
-  const ctx = canvas.getContext('2d')!
-  const imageData = ctx.getImageData(0, 0, GOBO_SIZE, GOBO_SIZE)
-  // Convert RGBA to single-channel (use red channel as alpha)
-  const data = new Uint8Array(GOBO_SIZE * GOBO_SIZE * 4)
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    const brightness = imageData.data[i] // red channel
-    data[i] = 255     // r
-    data[i + 1] = 255 // g
-    data[i + 2] = 255 // b
-    data[i + 3] = brightness // alpha = brightness
-  }
-  const tex = new THREE.DataTexture(data, GOBO_SIZE, GOBO_SIZE, THREE.RGBAFormat)
+function canvasToTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
+  const tex = new THREE.CanvasTexture(canvas)
   tex.needsUpdate = true
   tex.wrapS = THREE.ClampToEdgeWrapping
   tex.wrapT = THREE.ClampToEdgeWrapping
@@ -91,7 +85,7 @@ const C = GOBO_SIZE / 2
 const R = GOBO_SIZE / 2 - 8
 
 // ── Gobo 1: Thick ring (breakup) ──
-function generateGobo1(): THREE.DataTexture {
+function generateGobo1(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.fillStyle = '#fff'
   ctx.beginPath()
@@ -105,7 +99,7 @@ function generateGobo1(): THREE.DataTexture {
 }
 
 // ── Gobo 2: Triangle of 3 dots ──
-function generateGobo2(): THREE.DataTexture {
+function generateGobo2(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.fillStyle = '#fff'
   const dotR = R * 0.3
@@ -120,7 +114,7 @@ function generateGobo2(): THREE.DataTexture {
 }
 
 // ── Gobo 3: 4-point star ──
-function generateGobo3(): THREE.DataTexture {
+function generateGobo3(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.fillStyle = '#fff'
   ctx.beginPath()
@@ -141,7 +135,7 @@ function generateGobo3(): THREE.DataTexture {
 }
 
 // ── Gobo 4: Spiral/swirl ──
-function generateGobo4(): THREE.DataTexture {
+function generateGobo4(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.strokeStyle = '#fff'
   ctx.lineWidth = R * 0.18
@@ -164,7 +158,7 @@ function generateGobo4(): THREE.DataTexture {
 }
 
 // ── Gobo 5: Radial lines (fan) ──
-function generateGobo5(): THREE.DataTexture {
+function generateGobo5(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.fillStyle = '#fff'
   const lineCount = 8
@@ -181,7 +175,7 @@ function generateGobo5(): THREE.DataTexture {
 }
 
 // ── Gobo 6: Dots grid ──
-function generateGobo6(): THREE.DataTexture {
+function generateGobo6(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.fillStyle = '#fff'
   const gridSize = 5
@@ -203,7 +197,7 @@ function generateGobo6(): THREE.DataTexture {
 }
 
 // ── Gobo 7: Broken circle (gap ring) ──
-function generateGobo7(): THREE.DataTexture {
+function generateGobo7(): THREE.CanvasTexture {
   const { canvas, ctx } = createCanvas()
   ctx.strokeStyle = '#fff'
   ctx.lineWidth = R * 0.15
