@@ -94,6 +94,19 @@ const api = {
   app: {
     getVersion: (): Promise<string> =>
       ipcRenderer.invoke(IPC.APP_GET_VERSION)
+  },
+
+  // --- Stage Window ---
+  stage: {
+    open: () => ipcRenderer.send(IPC.STAGE_OPEN),
+    close: () => ipcRenderer.send(IPC.STAGE_CLOSE),
+    sendState: (state: any) => ipcRenderer.send(IPC.STAGE_SYNC, state),
+    onCommand: (callback: (command: any) => void) => {
+      ipcRenderer.on(IPC.STAGE_COMMAND, (_event, command) => callback(command))
+    },
+    onRequestState: (callback: () => void) => {
+      ipcRenderer.on('stage:request-state', () => callback())
+    }
   }
 }
 

@@ -24,6 +24,7 @@ import { ExecutorBar } from './components/layout/ExecutorBar'
 import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { startMixer, stopMixer, clearProgrammer } from './lib/dmx-mixer'
+import { getTimelineState, toggleTimeline } from './lib/timeline-engine'
 
 const DEFAULT_ARTNET_CONFIG = [
   { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
@@ -271,6 +272,91 @@ export default function App() {
     window.photonboard.onMenuEvent('menu:save-as', handleSaveAs)
     window.photonboard.onMenuEvent('menu:load', handleLoad)
   }, [handleNew, handleSave, handleSaveAs, handleLoad])
+
+  // ---- Stage Window state sync bridge ----
+  useEffect(() => {
+    // Respond to state requests from main process (for stage window sync)
+    window.photonboard.stage.onRequestState(() => {
+      const { grandMaster, blackout, blinder, strobe } = useDmxStore.getState()
+      const { cuelists } = usePlaybackStore.getState()
+      const { showName } = useUiStore.getState()
+      const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
+      const timelineState = getTimelineState()
+
+      window.photonboard.stage.sendState({
+        grandMaster,
+        blackout,
+        blinder,
+        strobe,
+        timelinePlaying: timelineState.isPlaying,
+        showName,
+        cuelists: cuelists.map(cl => ({
+          id: cl.id,
+          name: cl.name,
+          isPlaying: cl.isPlaying,
+          faderLevel: cl.faderLevel,
+          currentCueIndex: cl.currentCueIndex,
+          cueCount: cl.cues.length
+        })),
+        groups: groups.filter(g => !g.parentGroupId).map(g => ({
+          id: g.id,
+          name: g.name,
+          color: g.color,
+          fixtureCount: g.fixtureIds.length
+        })),
+        selectedFixtureIds,
+        fixtureCount: patch.length
+      })
+    })
+
+    // Handle commands from stage window
+    window.photonboard.stage.onCommand((command: { type: string; payload?: any }) => {
+      switch (command.type) {
+        case 'set-grand-master':
+          useDmxStore.getState().setGrandMaster(command.payload)
+          break
+        case 'toggle-blackout':
+          useDmxStore.getState().toggleBlackout()
+          break
+        case 'toggle-blinder':
+          useDmxStore.getState().toggleBlinder(command.payload)
+          break
+        case 'toggle-strobe':
+          useDmxStore.getState().toggleStrobe(command.payload)
+          break
+        case 'toggle-timeline':
+          toggleTimeline()
+          break
+        case 'go-cuelist':
+          usePlaybackStore.getState().goCuelist(command.payload)
+          break
+        case 'stop-cuelist':
+          usePlaybackStore.getState().stopCuelist(command.payload)
+          break
+        case 'set-cuelist-fader':
+          usePlaybackStore.getState().setCuelistFader(command.payload.id, command.payload.level)
+          break
+        case 'select-group': {
+          const { clearSelection, selectFixture } = usePatchStore.getState()
+          const group = usePatchStore.getState().groups.find(g => g.id === command.payload)
+          if (group) {
+            clearSelection()
+            for (const fid of group.fixtureIds) selectFixture(fid, true)
+          }
+          break
+        }
+        case 'select-all':
+          usePatchStore.getState().selectAll()
+          break
+        case 'clear-selection':
+          usePatchStore.getState().clearSelection()
+          break
+        case 'clear-programmer':
+          clearProgrammer()
+          break
+      }
+    })
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

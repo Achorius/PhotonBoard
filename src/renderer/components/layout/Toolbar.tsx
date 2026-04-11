@@ -163,6 +163,15 @@ export function Toolbar() {
         </span>
       )}
 
+      {/* Stage Window */}
+      <button
+        className="px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors bg-surface-3 text-gray-400 hover:bg-indigo-700/40 hover:text-indigo-300"
+        onClick={() => window.photonboard.stage.open()}
+        title="Open Stage Window on second monitor (Cmd+Shift+W)"
+      >
+        Stage
+      </button>
+
       {/* Blackout */}
       <button
         className={`px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors ${midiRing('blackout')} ${

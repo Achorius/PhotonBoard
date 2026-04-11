@@ -550,5 +550,11 @@ export const IPC = {
 
   // App
   APP_GET_VERSION: 'app:get-version',
-  APP_QUIT: 'app:quit'
+  APP_QUIT: 'app:quit',
+
+  // Stage Window
+  STAGE_OPEN: 'stage:open',
+  STAGE_CLOSE: 'stage:close',
+  STAGE_SYNC: 'stage:sync',
+  STAGE_COMMAND: 'stage:command'
 } as const

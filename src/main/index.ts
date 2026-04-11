@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, session, Menu, shell, screen } from 'electron'
 import { join } from 'path'
 import { DmxEngine } from './dmx-engine'
 import { DmxOutputManager } from './dmx-output-manager'
@@ -15,6 +15,8 @@ process.stdout?.on('error', () => { /* ignore EPIPE */ })
 process.stderr?.on('error', () => { /* ignore EPIPE */ })
 
 let mainWindow: BrowserWindow | null = null
+let stageWindow: BrowserWindow | null = null
+let stageSyncInterval: ReturnType<typeof setInterval> | null = null
 let dmxEngine: DmxEngine
 let outputManager: DmxOutputManager
 let showManager: ShowFileManager
@@ -95,6 +97,12 @@ function createMenu(): void {
       submenu: [
         { role: 'minimize' as const },
         { role: 'zoom' as const },
+        { type: 'separator' as const },
+        {
+          label: 'Stage Window',
+          accelerator: 'CmdOrCtrl+Shift+W',
+          click: () => toggleStageWindow()
+        },
         ...(isMac ? [
           { type: 'separator' as const },
           { role: 'front' as const }
@@ -159,6 +167,10 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    // Close stage window when main window closes
+    if (stageWindow && !stageWindow.isDestroyed()) {
+      stageWindow.close()
+    }
   })
 }
 
@@ -354,6 +366,108 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_GET_VERSION, () => {
     return app.getVersion()
   })
+
+  // --- Stage Window ---
+  ipcMain.on(IPC.STAGE_OPEN, () => {
+    createStageWindow()
+  })
+
+  ipcMain.on(IPC.STAGE_CLOSE, () => {
+    stageWindow?.close()
+  })
+
+  // Main renderer sends state snapshots for stage window
+  ipcMain.on(IPC.STAGE_SYNC, (_event, state: any) => {
+    if (stageWindow && !stageWindow.isDestroyed()) {
+      stageWindow.webContents.send(IPC.STAGE_SYNC, state)
+    }
+  })
+
+  // Stage window sends commands to main renderer
+  ipcMain.on(IPC.STAGE_COMMAND, (_event, command: any) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.STAGE_COMMAND, command)
+    }
+  })
+}
+
+// --- Stage Window ---
+
+function getStageDisplay(): Electron.Display {
+  const displays = screen.getAllDisplays()
+  const primary = screen.getPrimaryDisplay()
+  return displays.find(d => d.id !== primary.id) || primary
+}
+
+function createStageWindow(): void {
+  if (stageWindow) {
+    stageWindow.focus()
+    return
+  }
+
+  const display = getStageDisplay()
+  const { x, y, width, height } = display.bounds
+
+  stageWindow = new BrowserWindow({
+    x, y, width, height,
+    fullscreen: true,
+    frame: false,
+    backgroundColor: '#0a0a0f',
+    title: 'PhotonBoard — Stage',
+    webPreferences: {
+      preload: join(__dirname, '../preload/stage-preload.mjs'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  // Load the stage window renderer
+  if (process.env.ELECTRON_RENDERER_URL) {
+    stageWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}/stage-window/index.html`)
+  } else {
+    stageWindow.loadFile(join(__dirname, '../renderer/stage-window/index.html'))
+  }
+
+  // Disable zoom
+  stageWindow.webContents.setVisualZoomLevelLimits(1, 1)
+
+  stageWindow.on('closed', () => {
+    stageWindow = null
+    stopStageSync()
+  })
+
+  // Start syncing state to stage window
+  startStageSync()
+
+  console.log(`[Main] Stage window opened on display: ${display.label || display.id} (${width}x${height})`)
+}
+
+function toggleStageWindow(): void {
+  if (stageWindow) {
+    stageWindow.close()
+  } else {
+    createStageWindow()
+  }
+}
+
+function startStageSync(): void {
+  if (stageSyncInterval) return
+
+  // Sync state at ~30Hz
+  stageSyncInterval = setInterval(() => {
+    if (!stageWindow || !mainWindow) return
+
+    // Request state from main renderer
+    mainWindow.webContents.send('stage:request-state')
+  }, 33)
+}
+
+function stopStageSync(): void {
+  if (stageSyncInterval) {
+    clearInterval(stageSyncInterval)
+    stageSyncInterval = null
+  }
 }
 
 // --- App Lifecycle ---
