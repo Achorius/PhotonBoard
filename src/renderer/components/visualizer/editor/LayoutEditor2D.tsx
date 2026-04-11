@@ -18,10 +18,11 @@ export function LayoutEditor2D() {
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef  = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' | 'stage-edge' } | null>(null)
   const panningRef   = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; pointerId: number } | null>(null)
-  const viewRef      = useRef({ panX: 0, panY: 0, zoom: 1 })
-  const didFitRef    = useRef(false)
+  // Initialize view from store so zoom/pan survives tab switches
+  const storedView   = useVisualizerStore.getState().layoutView
+  const viewRef      = useRef(storedView.zoom > 0 ? { ...storedView } : { panX: 0, panY: 0, zoom: 1 })
+  const didFitRef    = useRef(storedView.zoom > 0)  // skip fitToView if we have a saved view
   const drawRef      = useRef<() => void>(() => {})
-  const savedViewRef = useRef(false)  // track if we restored from store
 
   const { patch, fixtures, updateFixture } = usePatchStore()
   const {
@@ -29,7 +30,7 @@ export function LayoutEditor2D() {
     selectedTrussId, selectTruss,
     addTrussBar, removeTrussBar, updateTrussBar,
     gridSize, snapToGrid,
-    layoutView, setLayoutView
+    setLayoutView
   } = useVisualizerStore()
   // Read DMX values imperatively inside draw() to avoid re-creating draw/event handlers
   // at 60Hz when effects are running (which would break zoom/pan interaction).
@@ -255,18 +256,9 @@ export function LayoutEditor2D() {
   // Keep drawRef in sync so stable effects can call the latest draw without re-subscribing
   drawRef.current = draw
 
-  // ── Restore view from store on mount, save on unmount ──────────────
+  // ── Save view to store on unmount (restore is done at ref init above) ──
   useEffect(() => {
-    if (layoutView.zoom > 0) {
-      // Restore saved pan/zoom
-      viewRef.current = { ...layoutView }
-      didFitRef.current = true
-      savedViewRef.current = true
-    }
-    return () => {
-      // Save current view to store on unmount
-      setLayoutView({ ...viewRef.current })
-    }
+    return () => { setLayoutView({ ...viewRef.current }) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initial fit + redraw on changes ────────────────────────────────
@@ -296,21 +288,20 @@ export function LayoutEditor2D() {
     return () => { unsub(); if (rafId) cancelAnimationFrame(rafId) }
   }, [])
 
-  // Re-fit when room dimensions change (skip initial mount if we restored a saved view)
-  const roomFitMountRef = useRef(true)
+  // Re-fit when room dimensions change (skip initial mount if we have a saved view)
+  const roomDimRef = useRef({ w: roomConfig.width, d: roomConfig.depth })
   useEffect(() => {
-    if (roomFitMountRef.current) {
-      roomFitMountRef.current = false
-      if (savedViewRef.current) { drawRef.current(); return }
+    // Only fitToView when dimensions actually change, not on first mount
+    if (roomDimRef.current.w !== roomConfig.width || roomDimRef.current.d !== roomConfig.depth) {
+      roomDimRef.current = { w: roomConfig.width, d: roomConfig.depth }
+      fitToView()
     }
-    fitToView()
     drawRef.current()
   }, [roomConfig.width, roomConfig.depth, fitToView])
 
-  // ResizeObserver — re-fit on container resize (stable: no dependency on draw)
-  // Skip the initial fire if we restored view from store
+  // ResizeObserver — re-fit on actual container resize, skip the initial fire on mount
   useEffect(() => {
-    let skipFirst = savedViewRef.current
+    let skipFirst = true
     const ro = new ResizeObserver(() => {
       if (skipFirst) { skipFirst = false; drawRef.current(); return }
       fitToView()
