@@ -289,7 +289,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.FIXTURES_IMPORT, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       filters: [
-        { name: 'Fixture Files', extensions: ['json'] },
+        { name: 'All Fixture Formats', extensions: ['json', 'gdtf', 'qxf', 'd4', 'r20', 'xml', 'csv', 'tsv'] },
+        { name: 'GDTF Files', extensions: ['gdtf'] },
+        { name: 'QLC+ Files', extensions: ['qxf'] },
+        { name: 'Avolites Personalities', extensions: ['d4', 'r20'] },
+        { name: 'XML Fixtures (GrandMA, etc.)', extensions: ['xml'] },
+        { name: 'JSON (OFL / PhotonBoard)', extensions: ['json'] },
+        { name: 'CSV / TSV', extensions: ['csv', 'tsv'] },
         { name: 'All Files', extensions: ['*'] }
       ],
       properties: ['openFile', 'multiSelections']

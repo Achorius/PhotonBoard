@@ -4,6 +4,7 @@ import { homedir } from 'os'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
 import { DEFAULT_ROOM_CONFIG } from '../shared/types'
 import { BUILTIN_FIXTURES } from './fixture-library'
+import { parseFixtureFile } from './fixture-parsers'
 
 export class ShowFileManager {
   private userDataPath: string
@@ -315,32 +316,11 @@ export class ShowFileManager {
 
   importFixtureFile(sourcePath: string): { success: boolean; fixture?: FixtureDefinition; error?: string } {
     try {
-      const raw = readFileSync(sourcePath, 'utf-8')
-      const data = JSON.parse(raw)
+      // Use universal parser — supports OFL, GDTF, QLC+, Avolites, GrandMA, CSV, native JSON
+      const fixture = parseFixtureFile(sourcePath)
 
-      // Support OFL format (has $schema or availableChannels) or PhotonBoard native
-      let fixture: FixtureDefinition
-
-      if (data.availableChannels || data.$schema) {
-        // OFL format — convert
-        const manufacturer = data.manufacturer || basename(sourcePath, '.json').split('/')[0] || 'Unknown'
-        fixture = this.convertOFLToNative(data, manufacturer)
-      } else if (data.name && data.channels) {
-        // Native PhotonBoard format
-        fixture = data as FixtureDefinition
-        if (!fixture.id) fixture.id = `imported/${fixture.name.toLowerCase().replace(/\s+/g, '-')}`
-        if (!fixture.manufacturer) fixture.manufacturer = 'Imported'
-        if (!fixture.categories) fixture.categories = ['Other']
-        if (!fixture.modes) {
-          fixture.modes = [{
-            name: 'Default',
-            channels: Object.keys(fixture.channels),
-            channelCount: Object.keys(fixture.channels).length
-          }]
-        }
-      } else {
-        return { success: false, error: 'Invalid fixture file format' }
-      }
+      // Ensure source is set
+      if (!fixture.source) fixture.source = 'user'
 
       // Save to user fixtures directory
       const destDir = this.getFixturesDir()
