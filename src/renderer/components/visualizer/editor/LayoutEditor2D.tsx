@@ -13,15 +13,16 @@ const MIN_ZOOM = 0.15
 const MAX_ZOOM = 8
 const FIT_PADDING = 60  // px padding when auto-fitting
 
+// Module-level — survives component mount/unmount cycles (tab switches)
+let _persistedView: { panX: number; panY: number; zoom: number } | null = null
+
 export function LayoutEditor2D() {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef  = useRef<{ id: string; offsetX: number; offsetZ: number; type: 'fixture' | 'truss' | 'stage-edge' } | null>(null)
   const panningRef   = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number; pointerId: number } | null>(null)
-  // Initialize view from store so zoom/pan survives tab switches
-  const storedView   = useVisualizerStore.getState().layoutView
-  const viewRef      = useRef(storedView.zoom > 0 ? { ...storedView } : { panX: 0, panY: 0, zoom: 1 })
-  const didFitRef    = useRef(storedView.zoom > 0)  // skip fitToView if we have a saved view
+  const viewRef      = useRef(_persistedView ? { ..._persistedView } : { panX: 0, panY: 0, zoom: 1 })
+  const didFitRef    = useRef(_persistedView !== null)
   const drawRef      = useRef<() => void>(() => {})
 
   const { patch, fixtures, updateFixture } = usePatchStore()
@@ -29,8 +30,7 @@ export function LayoutEditor2D() {
     roomConfig, setRoomConfig, selectedFixtureId, selectFixture,
     selectedTrussId, selectTruss,
     addTrussBar, removeTrussBar, updateTrussBar,
-    gridSize, snapToGrid,
-    setLayoutView
+    gridSize, snapToGrid
   } = useVisualizerStore()
   // Read DMX values imperatively inside draw() to avoid re-creating draw/event handlers
   // at 60Hz when effects are running (which would break zoom/pan interaction).
@@ -253,16 +253,20 @@ export function LayoutEditor2D() {
     ctx.fillText(`${zoomPct}%`, W - 8, H - 8)
   }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, worldToCanvas, gridSize, snapToGrid])
 
-  // Keep drawRef in sync so stable effects can call the latest draw without re-subscribing
+  // ── drawRef: always points to the latest draw function ──────────────
   drawRef.current = draw
 
-  // ── Save view to store on unmount (restore is done at ref init above) ──
+  // ── EFFECT 1: Persist view on unmount ──────────────────────────────
+  // Save to module-level var so next mount can restore it.
   useEffect(() => {
-    return () => { setLayoutView({ ...viewRef.current }) }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { _persistedView = { ...viewRef.current } }
+  }, [])
 
-  // ── Initial fit + redraw on changes ────────────────────────────────
+  // ── EFFECT 2: Redraw when structural state changes ─────────────────
+  // draw changes when patch/fixtures/roomConfig/selection/grid change.
+  // We just redraw — we never call fitToView here.
   useEffect(() => {
+    // On first mount only, if we have no persisted view, fit to room
     if (!didFitRef.current && containerRef.current) {
       const W = containerRef.current.clientWidth
       if (W > 0) {
@@ -273,41 +277,45 @@ export function LayoutEditor2D() {
     draw()
   }, [draw, fitToView])
 
-  // Subscribe to DMX store for beam glow updates — uses RAF to throttle redraws
-  // without re-creating draw/event handlers (which would break zoom/pan during effects)
+  // ── EFFECT 3: DMX live updates via subscription ────────────────────
+  // Stable (no deps) — uses drawRef to always call latest draw.
   useEffect(() => {
     let rafId = 0
     const unsub = useDmxStore.subscribe(() => {
       if (!rafId) {
-        rafId = requestAnimationFrame(() => {
-          rafId = 0
-          drawRef.current()
-        })
+        rafId = requestAnimationFrame(() => { rafId = 0; drawRef.current() })
       }
     })
     return () => { unsub(); if (rafId) cancelAnimationFrame(rafId) }
   }, [])
 
-  // Re-fit when room dimensions change (skip initial mount if we have a saved view)
-  const roomDimRef = useRef({ w: roomConfig.width, d: roomConfig.depth })
+  // ── EFFECT 4: Re-fit when room dimensions actually change ─────────
+  const prevDimsRef = useRef({ w: roomConfig.width, d: roomConfig.depth })
   useEffect(() => {
-    // Only fitToView when dimensions actually change, not on first mount
-    if (roomDimRef.current.w !== roomConfig.width || roomDimRef.current.d !== roomConfig.depth) {
-      roomDimRef.current = { w: roomConfig.width, d: roomConfig.depth }
+    if (prevDimsRef.current.w !== roomConfig.width || prevDimsRef.current.d !== roomConfig.depth) {
+      prevDimsRef.current = { w: roomConfig.width, d: roomConfig.depth }
       fitToView()
+      drawRef.current()
     }
-    drawRef.current()
   }, [roomConfig.width, roomConfig.depth, fitToView])
 
-  // ResizeObserver — re-fit on actual container resize, skip the initial fire on mount
+  // ── EFFECT 5: ResizeObserver — re-fit on actual container resize ───
+  // Track actual pixel dimensions to distinguish real resizes from
+  // re-observe initial fires.
   useEffect(() => {
-    let skipFirst = true
+    const container = containerRef.current
+    if (!container) return
+    let prevW = container.clientWidth
+    let prevH = container.clientHeight
     const ro = new ResizeObserver(() => {
-      if (skipFirst) { skipFirst = false; drawRef.current(); return }
+      const w = container.clientWidth
+      const h = container.clientHeight
+      if (w === prevW && h === prevH) { drawRef.current(); return }
+      prevW = w; prevH = h
       fitToView()
       drawRef.current()
     })
-    if (containerRef.current) ro.observe(containerRef.current)
+    ro.observe(container)
     return () => ro.disconnect()
   }, [fitToView])
 
