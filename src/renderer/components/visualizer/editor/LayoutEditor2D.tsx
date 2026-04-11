@@ -21,13 +21,15 @@ export function LayoutEditor2D() {
   const viewRef      = useRef({ panX: 0, panY: 0, zoom: 1 })
   const didFitRef    = useRef(false)
   const drawRef      = useRef<() => void>(() => {})
+  const savedViewRef = useRef(false)  // track if we restored from store
 
   const { patch, fixtures, updateFixture } = usePatchStore()
   const {
     roomConfig, setRoomConfig, selectedFixtureId, selectFixture,
     selectedTrussId, selectTruss,
     addTrussBar, removeTrussBar, updateTrussBar,
-    gridSize, snapToGrid
+    gridSize, snapToGrid,
+    layoutView, setLayoutView
   } = useVisualizerStore()
   // Read DMX values imperatively inside draw() to avoid re-creating draw/event handlers
   // at 60Hz when effects are running (which would break zoom/pan interaction).
@@ -253,6 +255,20 @@ export function LayoutEditor2D() {
   // Keep drawRef in sync so stable effects can call the latest draw without re-subscribing
   drawRef.current = draw
 
+  // ── Restore view from store on mount, save on unmount ──────────────
+  useEffect(() => {
+    if (layoutView.zoom > 0) {
+      // Restore saved pan/zoom
+      viewRef.current = { ...layoutView }
+      didFitRef.current = true
+      savedViewRef.current = true
+    }
+    return () => {
+      // Save current view to store on unmount
+      setLayoutView({ ...viewRef.current })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Initial fit + redraw on changes ────────────────────────────────
   useEffect(() => {
     if (!didFitRef.current && containerRef.current) {
@@ -287,8 +303,11 @@ export function LayoutEditor2D() {
   }, [roomConfig.width, roomConfig.depth, fitToView])
 
   // ResizeObserver — re-fit on container resize (stable: no dependency on draw)
+  // Skip the initial fire if we restored view from store
   useEffect(() => {
+    let skipFirst = savedViewRef.current
     const ro = new ResizeObserver(() => {
+      if (skipFirst) { skipFirst = false; drawRef.current(); return }
       fitToView()
       drawRef.current()
     })

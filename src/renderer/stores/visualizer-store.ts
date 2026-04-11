@@ -16,6 +16,7 @@ interface VisualizerState {
   // Layout editor
   gridSize: number  // metres
   snapToGrid: boolean
+  layoutView: { panX: number; panY: number; zoom: number }
 
   setSubTab: (tab: VisualizerSubTab) => void
   selectFixture: (id: string | null) => void
@@ -28,6 +29,7 @@ interface VisualizerState {
   setAmbientIntensity: (v: number) => void
   setGridSize: (v: number) => void
   setSnapToGrid: (v: boolean) => void
+  setLayoutView: (v: { panX: number; panY: number; zoom: number }) => void
   addTrussBar: () => void
   removeTrussBar: (id: string) => void
   updateTrussBar: (id: string, updates: Partial<TrussBar>) => void
@@ -45,6 +47,7 @@ export const useVisualizerStore = create<VisualizerState>((set) => ({
   ambientIntensity: 0.15,
   gridSize: 0.5,
   snapToGrid: true,
+  layoutView: { panX: 0, panY: 0, zoom: 0 },  // zoom=0 means "not yet set, do fitToView"
 
   setSubTab: (tab) => set({ subTab: tab }),
   selectFixture: (id) => set({ selectedFixtureId: id, selectedTrussId: null }),
@@ -57,6 +60,7 @@ export const useVisualizerStore = create<VisualizerState>((set) => ({
   setAmbientIntensity: (v) => set({ ambientIntensity: v }),
   setGridSize: (v) => set({ gridSize: v }),
   setSnapToGrid: (v) => set({ snapToGrid: v }),
+  setLayoutView: (v) => set({ layoutView: v }),
 
   addTrussBar: () => set((s) => {
     const { width, depth, height, trussBars } = s.roomConfig
