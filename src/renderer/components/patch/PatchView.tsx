@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react'
 import { usePatchStore } from '../../stores/patch-store'
 import { formatDmxAddress } from '../../lib/dmx-utils'
+import { OFLSearchPanel } from './OFLSearchPanel'
+import { FixtureEditor } from './FixtureEditor'
 
 export function PatchView() {
   const { patch, fixtures, groups, addFixture, removeFixture, updateFixture, addGroup, removeGroup, addToGroup, removeFromGroup, moveToGroup, moveSubgroup, selectedFixtureIds } = usePatchStore()
@@ -376,7 +378,7 @@ function GroupTree({
 }
 
 function AddFixtureModal({ onClose }: { onClose: () => void }) {
-  const { fixtures, patch, groups, addFixture } = usePatchStore()
+  const { fixtures, patch, groups, addFixture, loadFixtures } = usePatchStore()
   const [selectedDef, setSelectedDef] = useState<string>('')
   const [selectedMode, setSelectedMode] = useState<string>('')
   const [universe, setUniverse] = useState(0)
@@ -386,6 +388,9 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
   const [count, setCount] = useState(1)
   const [search, setSearch] = useState('')
   const [selectedGroupId, setSelectedGroupId] = useState<string>('')
+  const [tab, setTab] = useState<'local' | 'online'>('local')
+  const [showEditor, setShowEditor] = useState(false)
+  const [editFixture, setEditFixture] = useState<any>(null)
 
   const grouped = useMemo(() => {
     const source = search
@@ -460,54 +465,101 @@ function AddFixtureModal({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
+  if (showEditor) {
+    return (
+      <FixtureEditor
+        fixture={editFixture}
+        onSave={() => { loadFixtures(); setShowEditor(false); setEditFixture(null) }}
+        onClose={() => { setShowEditor(false); setEditFixture(null) }}
+      />
+    )
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-surface-1 border border-surface-3 rounded-lg w-[600px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface-1 border border-surface-3 rounded-lg w-[650px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="px-4 py-3 border-b border-surface-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Add Fixture</h2>
-          <button className="text-gray-500 hover:text-gray-300" onClick={onClose}>x</button>
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold">Add Fixture</h2>
+            <div className="flex gap-0.5 bg-surface-3 rounded p-0.5">
+              <button
+                className={`px-2 py-0.5 rounded text-[10px] transition-colors ${tab === 'local' ? 'bg-surface-1 text-accent' : 'text-gray-500 hover:text-gray-300'}`}
+                onClick={() => setTab('local')}
+              >Local Library</button>
+              <button
+                className={`px-2 py-0.5 rounded text-[10px] transition-colors ${tab === 'online' ? 'bg-surface-1 text-accent' : 'text-gray-500 hover:text-gray-300'}`}
+                onClick={() => setTab('online')}
+              >Online (OFL)</button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-2 py-0.5 rounded text-[10px] bg-accent/20 text-accent hover:bg-accent/30"
+              onClick={() => { setShowEditor(true); setEditFixture(null) }}
+            >+ Create Fixture</button>
+            <button className="text-gray-500 hover:text-gray-300" onClick={onClose}>x</button>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Fixture list */}
+          {/* Fixture list / OFL Search */}
           <div className="w-1/2 border-r border-surface-3 flex flex-col">
-            <div className="p-2">
-              <input
-                className="input w-full"
-                placeholder="Search fixtures..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="flex-1 overflow-auto">
-              {grouped.map(([mfr, mFixtures]) => (
-                <div key={mfr}>
-                  <div className="px-3 py-1 text-[9px] text-gray-500 uppercase tracking-wide bg-surface-0 sticky top-0">
-                    {mfr}
-                  </div>
-                  {mFixtures.map(f => (
-                    <button
-                      key={f.id}
-                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-2 ${
-                        selectedDef === f.id ? 'bg-surface-2 text-accent' : 'text-gray-300'
-                      }`}
-                      onClick={() => {
-                        if (selectedDef !== f.id) {
-                          setSelectedDef(f.id)
-                          setSelectedMode(f.modes[0]?.name || '')
-                          setName(f.name)
-                          setAddressManuallySet(false)
-                        }
-                      }}
-                    >
-                      <div className="font-medium">{f.name}</div>
-                      <div className="text-[10px] text-gray-500">{f.categories.join(', ')}</div>
-                    </button>
+            {tab === 'local' ? (
+              <>
+                <div className="p-2">
+                  <input
+                    className="input w-full"
+                    placeholder="Search local fixtures..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="flex-1 overflow-auto">
+                  {grouped.map(([mfr, mFixtures]) => (
+                    <div key={mfr}>
+                      <div className="px-3 py-1 text-[9px] text-gray-500 uppercase tracking-wide bg-surface-0 sticky top-0">
+                        {mfr}
+                      </div>
+                      {mFixtures.map(f => {
+                        const isUser = (f as any).source === 'user'
+                        return (
+                          <button
+                            key={f.id}
+                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-2 group/fix ${
+                              selectedDef === f.id ? 'bg-surface-2 text-accent' : 'text-gray-300'
+                            }`}
+                            onClick={() => {
+                              if (selectedDef !== f.id) {
+                                setSelectedDef(f.id)
+                                setSelectedMode(f.modes[0]?.name || '')
+                                setName(f.name)
+                                setAddressManuallySet(false)
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium flex-1">{f.name}</span>
+                              {isUser && (
+                                <span
+                                  className="text-[8px] text-gray-500 hover:text-accent opacity-0 group-hover/fix:opacity-100 cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); setEditFixture(f); setShowEditor(true) }}
+                                  title="Edit fixture definition"
+                                >edit</span>
+                              )}
+                              {(f as any).source === 'ofl' && <span className="text-[8px] text-green-600">OFL</span>}
+                            </div>
+                            <div className="text-[10px] text-gray-500">{f.categories.join(', ')}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
                   ))}
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+              <OFLSearchPanel onFixtureDownloaded={() => loadFixtures()} />
+            )}
           </div>
 
           {/* Config */}

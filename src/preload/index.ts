@@ -73,7 +73,15 @@ const api = {
       return JSON.parse(json)
     },
     import: (): Promise<any[] | null> =>
-      ipcRenderer.invoke(IPC.FIXTURES_IMPORT)
+      ipcRenderer.invoke(IPC.FIXTURES_IMPORT),
+    oflSearch: (query: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC.FIXTURES_OFL_SEARCH, query),
+    oflDownload: (manufacturerKey: string, fixtureKey: string): Promise<any> =>
+      ipcRenderer.invoke(IPC.FIXTURES_OFL_DOWNLOAD, manufacturerKey, fixtureKey),
+    save: (fixture: any): Promise<any> =>
+      ipcRenderer.invoke(IPC.FIXTURES_SAVE, JSON.stringify(fixture)),
+    delete: (fixtureId: string): Promise<any> =>
+      ipcRenderer.invoke(IPC.FIXTURES_DELETE, fixtureId)
   },
 
   // --- Menu event listeners (replaces handler, guarantees single callback) ---

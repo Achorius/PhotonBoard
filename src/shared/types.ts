@@ -73,6 +73,9 @@ export interface FixtureChannel {
   fineChannelAliases?: string[]
   capabilities?: FixtureCapability[]
   precedence?: 'HTP' | 'LTP'
+  dmxBreak?: number
+  physicalFrom?: number
+  physicalTo?: number
 }
 
 export interface FixtureMode {
@@ -96,6 +99,28 @@ export interface FixturePhysical {
   lens?: {
     degreesMinMax?: [number, number]
   }
+  panRange?: number  // degrees
+  tiltRange?: number // degrees
+}
+
+export interface FixtureWheelSlot {
+  type: 'Color' | 'Gobo' | 'Prism' | 'Animation' | 'Open'
+  name: string
+  color?: string
+  imageFile?: string
+}
+
+export interface FixtureWheel {
+  name: string
+  slots: FixtureWheelSlot[]
+}
+
+export interface OFLSearchResult {
+  name: string
+  manufacturer: string
+  manufacturerKey: string
+  fixtureKey: string
+  categories: string[]
 }
 
 export interface FixtureDefinition {
@@ -106,6 +131,10 @@ export interface FixtureDefinition {
   channels: Record<string, FixtureChannel>
   modes: FixtureMode[]
   physical?: FixturePhysical
+  wheels?: FixtureWheel[]
+  source?: 'builtin' | 'ofl' | 'user' | 'gdtf'
+  sourceUrl?: string
+  lastModified?: string
 }
 
 // --- 3D Visualizer ---
@@ -509,6 +538,10 @@ export const IPC = {
   FIXTURES_SCAN: 'fixtures:scan',
   FIXTURES_GET_ALL: 'fixtures:get-all',
   FIXTURES_IMPORT: 'fixtures:import',
+  FIXTURES_OFL_SEARCH: 'fixtures:ofl-search',
+  FIXTURES_OFL_DOWNLOAD: 'fixtures:ofl-download',
+  FIXTURES_SAVE: 'fixtures:save',
+  FIXTURES_DELETE: 'fixtures:delete',
 
   // Show helpers
   SHOW_GET_PATH: 'show:get-path',

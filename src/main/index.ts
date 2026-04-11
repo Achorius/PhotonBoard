@@ -3,6 +3,7 @@ import { join } from 'path'
 import { DmxEngine } from './dmx-engine'
 import { DmxOutputManager } from './dmx-output-manager'
 import { ShowFileManager } from './show-file'
+import { OFLService } from './ofl-service'
 import { IPC, type ArtNetConfig, type DmxOutputConfig, type ShowFile } from '../shared/types'
 
 // Prevent EPIPE crashes when stdout pipe is closed (e.g. terminal closed during dev)
@@ -17,6 +18,7 @@ let mainWindow: BrowserWindow | null = null
 let dmxEngine: DmxEngine
 let outputManager: DmxOutputManager
 let showManager: ShowFileManager
+let oflService: OFLService
 
 function createMenu(): void {
   const isMac = process.platform === 'darwin'
@@ -300,6 +302,27 @@ function registerIpcHandlers(): void {
     return results
   })
 
+  // --- OFL Online Library ---
+  ipcMain.handle(IPC.FIXTURES_OFL_SEARCH, async (_e, query: string) => {
+    return oflService.search(query)
+  })
+
+  ipcMain.handle(IPC.FIXTURES_OFL_DOWNLOAD, async (_e, manufacturerKey: string, fixtureKey: string) => {
+    const fixture = await oflService.download(manufacturerKey, fixtureKey)
+    // Save to user fixtures dir
+    showManager.saveUserFixture(fixture)
+    return fixture
+  })
+
+  ipcMain.handle(IPC.FIXTURES_SAVE, async (_e, fixtureJson: string) => {
+    const fixture = JSON.parse(fixtureJson)
+    return showManager.saveUserFixture(fixture)
+  })
+
+  ipcMain.handle(IPC.FIXTURES_DELETE, async (_e, fixtureId: string) => {
+    return showManager.deleteUserFixture(fixtureId)
+  })
+
   // --- Show helpers ---
   ipcMain.handle(IPC.SHOW_GET_PATH, () => {
     return showManager.getCurrentPath()
@@ -330,6 +353,7 @@ function registerIpcHandlers(): void {
 // --- App Lifecycle ---
 app.whenReady().then(() => {
   showManager = new ShowFileManager(app.getPath('userData'))
+  oflService = new OFLService()
   initDmxEngine()
   registerIpcHandlers()
   createMenu()

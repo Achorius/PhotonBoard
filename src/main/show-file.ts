@@ -93,7 +93,7 @@ export class ShowFileManager {
 
   private loadBuiltinFixtures(): void {
     for (const fixture of BUILTIN_FIXTURES) {
-      this.fixtureCache.set(fixture.id, fixture)
+      this.fixtureCache.set(fixture.id, { ...fixture, source: 'builtin' as const })
     }
   }
 
@@ -277,6 +277,40 @@ export class ShowFileManager {
 
   getFixturesDir(): string {
     return join(this.userDataPath, 'fixtures')
+  }
+
+  saveUserFixture(fixture: FixtureDefinition): { success: boolean; error?: string } {
+    try {
+      if (!fixture.source) fixture.source = 'user'
+      fixture.lastModified = new Date().toISOString()
+      const destDir = join(this.userDataPath, 'fixtures')
+      const destPath = join(destDir, `${fixture.id.replace(/\//g, '_')}.json`)
+      writeFileSync(destPath, JSON.stringify(fixture, null, 2), 'utf-8')
+      this.fixtureCache.set(fixture.id, fixture)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+  }
+
+  deleteUserFixture(fixtureId: string): { success: boolean; error?: string } {
+    try {
+      const fixture = this.fixtureCache.get(fixtureId)
+      if (!fixture) return { success: false, error: 'Fixture not found' }
+      // Don't allow deleting built-in fixtures
+      if (fixture.source === 'builtin' || !fixture.source) {
+        return { success: false, error: 'Cannot delete built-in fixtures' }
+      }
+      const destPath = join(this.userDataPath, 'fixtures', `${fixtureId.replace(/\//g, '_')}.json`)
+      if (existsSync(destPath)) {
+        const { unlinkSync } = require('fs')
+        unlinkSync(destPath)
+      }
+      this.fixtureCache.delete(fixtureId)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
   }
 
   importFixtureFile(sourcePath: string): { success: boolean; fixture?: FixtureDefinition; error?: string } {
