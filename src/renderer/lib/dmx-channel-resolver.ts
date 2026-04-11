@@ -21,6 +21,7 @@ export interface ResolvedChannels {
   zoom: number
   focus: number
   gobo: number
+  goboRotation: number
   strobe: number
 }
 
@@ -30,7 +31,7 @@ const EMPTY: ResolvedChannels = {
   amber: 0, uv: 0, cyan: 0, magenta: 0, yellow: 0,
   colorWheel: -1,
   pan: 128, panFine: 0, tilt: 128, tiltFine: 0,
-  shutter: 255, zoom: 128, focus: 128, gobo: 0, strobe: 0
+  shutter: 255, zoom: 128, focus: 128, gobo: 0, goboRotation: 0, strobe: 0
 }
 
 // Numeric channel keys (excludes hasDimmerChannel which is boolean)
@@ -57,6 +58,7 @@ const CHANNEL_ALIASES: Record<NumericChannelKey, string[]> = {
   zoom:      ['zoom'],
   focus:     ['focus'],
   gobo:      ['gobo', 'gobo wheel', 'gobo 1', 'gobo selection'],
+  goboRotation: ['gobo rotation', 'gobo rot', 'gobo spin', 'prism rotation'],
   strobe:    ['strobe']
 }
 

@@ -48,7 +48,18 @@ function focusCh(): FixtureChannel {
   return { name: 'Focus', type: 'generic', defaultValue: 128, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'Focus', label: 'Focus' }] }
 }
 function goboCh(label = 'Gobo Wheel'): FixtureChannel {
-  return { name: 'Gobo', type: 'gobo', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'WheelSlot', label }] }
+  return { name: 'Gobo', type: 'gobo', defaultValue: 0, precedence: 'LTP', capabilities: [
+    { dmxRange: [0, 7],    type: 'WheelSlot', label: 'Open' },
+    { dmxRange: [8, 15],   type: 'WheelSlot', label: 'Gobo 1' },
+    { dmxRange: [16, 23],  type: 'WheelSlot', label: 'Gobo 2' },
+    { dmxRange: [24, 31],  type: 'WheelSlot', label: 'Gobo 3' },
+    { dmxRange: [32, 39],  type: 'WheelSlot', label: 'Gobo 4' },
+    { dmxRange: [40, 47],  type: 'WheelSlot', label: 'Gobo 5' },
+    { dmxRange: [48, 55],  type: 'WheelSlot', label: 'Gobo 6' },
+    { dmxRange: [56, 63],  type: 'WheelSlot', label: 'Gobo 7' },
+    { dmxRange: [64, 127], type: 'WheelSlotRotation', label: 'Gobo Shake' },
+    { dmxRange: [128, 255], type: 'WheelSlotRotation', label: 'Gobo Scroll' }
+  ] }
 }
 function goboRotCh(): FixtureChannel {
   return { name: 'Gobo Rotation', type: 'gobo', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'WheelSlotRotation', label: 'Rotation' }] }

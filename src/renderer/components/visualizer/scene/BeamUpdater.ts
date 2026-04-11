@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { FixtureObjects } from './FixtureModel'
 import type { ResolvedChannels } from '@renderer/lib/dmx-channel-resolver'
 import { dmxToPanDeg, dmxToTiltDeg, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
+import { getGoboTexture, dmxToGoboIndex } from '@renderer/lib/gobo-textures'
 
 export interface CellColor {
   r: number  // 0-1
@@ -50,13 +51,34 @@ export function updateFixtureObjects(
 
   const hasBeam = r > 0 || g > 0 || b > 0
 
-  // --- Gobo: slightly reduce opacity ---
-  const goboActive = channels.gobo > 10
-  const goboFactor = goboActive ? 0.65 : 1.0
+  // --- Gobo: select texture and apply to beam ---
+  const goboIndex = dmxToGoboIndex(channels.gobo)
+  const goboActive = goboIndex > 0
+  const goboFactor = goboActive ? 0.7 : 1.0
 
   if (showBeams) {
     coneMat.uniforms.uColor.value.copy(col)
     coneMat.uniforms.uOpacity.value = effectiveDim * 0.55 * goboFactor
+
+    // Apply gobo texture to beam shader
+    if (goboActive) {
+      const goboTex = getGoboTexture(goboIndex)
+      if (goboTex) {
+        coneMat.uniforms.uGoboTex.value = goboTex
+        coneMat.uniforms.uGoboActive.value = 1.0
+        // Gobo rotation: continuous spin based on goboRotation channel
+        const goboRot = channels.goboRotation ?? 0
+        if (goboRot > 0) {
+          const speed = (goboRot / 255) * 4.0 // radians per second scale
+          coneMat.uniforms.uGoboRotation.value = (performance.now() / 1000) * speed
+        } else {
+          coneMat.uniforms.uGoboRotation.value = 0.0
+        }
+      }
+    } else {
+      coneMat.uniforms.uGoboActive.value = 0.0
+    }
+
     objects.coneMesh.visible = effectiveDim > 0.005 && hasBeam
   } else {
     objects.coneMesh.visible = false

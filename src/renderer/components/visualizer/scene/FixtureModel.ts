@@ -42,9 +42,11 @@ const BEAM_VERTEX = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
+varying vec3 vLocalPos;
 
 void main() {
   vUv = uv;
+  vLocalPos = position;
   vNormal = normalize(normalMatrix * normal);
   vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
   vViewDir = normalize(-mvPos.xyz);
@@ -55,9 +57,13 @@ void main() {
 const BEAM_FRAGMENT = /* glsl */ `
 uniform vec3 uColor;
 uniform float uOpacity;
+uniform sampler2D uGoboTex;
+uniform float uGoboActive;
+uniform float uGoboRotation;
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
+varying vec3 vLocalPos;
 
 void main() {
   // vUv.y = 1.0 at fixture lens (cone tip), 0.0 at far end (cone base)
@@ -70,11 +76,37 @@ void main() {
   float endFade = smoothstep(1.0, 0.75, t);
 
   // Fresnel edge softness — makes beam edges translucent, center brighter
-  // When looking through the cone from the side, center has more material overlap
   float fresnel = abs(dot(normalize(vNormal), normalize(vViewDir)));
   float edgeSoft = pow(fresnel, 0.6);
 
-  float alpha = uOpacity * axialFade * endFade * edgeSoft;
+  // Gobo pattern — project texture across beam cross-section
+  float goboAlpha = 1.0;
+  if (uGoboActive > 0.5) {
+    // Compute polar UV from local XZ position (cone cross-section)
+    // The cone opens along Y, so X and Z define the cross-section circle
+    float coneRadius = max(abs(vLocalPos.x), 0.001);
+    // Normalize to 0-1 range based on cone expansion at this height
+    float maxR = t * 0.5 + 0.001; // approximate cone radius at height t
+    vec2 goboUV = vec2(
+      vLocalPos.x / (maxR * 2.0) + 0.5,
+      vLocalPos.z / (maxR * 2.0) + 0.5
+    );
+    // Apply rotation
+    if (uGoboRotation > 0.01) {
+      float angle = uGoboRotation;
+      vec2 center = vec2(0.5, 0.5);
+      vec2 d = goboUV - center;
+      float cosA = cos(angle);
+      float sinA = sin(angle);
+      goboUV = center + vec2(d.x * cosA - d.y * sinA, d.x * sinA + d.y * cosA);
+    }
+    // Clamp and sample
+    goboUV = clamp(goboUV, 0.0, 1.0);
+    vec4 goboSample = texture2D(uGoboTex, goboUV);
+    goboAlpha = goboSample.a;
+  }
+
+  float alpha = uOpacity * axialFade * endFade * edgeSoft * goboAlpha;
 
   gl_FragColor = vec4(uColor, alpha);
 }
@@ -84,7 +116,10 @@ const coneMaterial = () =>
   new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(1, 1, 1) },
-      uOpacity: { value: 0.0 }
+      uOpacity: { value: 0.0 },
+      uGoboTex: { value: new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat) },
+      uGoboActive: { value: 0.0 },
+      uGoboRotation: { value: 0.0 }
     },
     vertexShader: BEAM_VERTEX,
     fragmentShader: BEAM_FRAGMENT,
