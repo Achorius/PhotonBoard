@@ -28,7 +28,8 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     // ---- Renderer ----
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.shadowMap.enabled = false
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.toneMapping = THREE.NoToneMapping
     renderer.setClearColor(0x07070d, 1)
     container.appendChild(renderer.domElement)

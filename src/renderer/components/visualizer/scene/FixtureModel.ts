@@ -61,59 +61,55 @@ varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
 
-// Procedural gobo pattern — returns 0.0 (blocked) to 1.0 (open)
-// angle: radians around beam cross-section, r: 0-1 normalized radius
-float goboPattern(float idx, float angle, float r) {
-  // Gobo 1: Ring (annulus)
+// Procedural gobo pattern on cone surface.
+// The cone surface is the SHELL of the beam — every fragment is at the beam edge.
+// 'angle' is the angular position around the beam (0–2π from vUv.x).
+// For patterns that need radial info, we fake an interior view by treating
+// the cone surface as a 2D projection of the gobo disc.
+// Returns 0.0 (blocked) to 1.0 (open).
+float goboPattern(float idx, float angle, float t) {
+  // Convert to 2D cartesian on unit disc for patterns that need it
+  // Use vUv.x as angle, and a fixed radius of ~0.7 to represent beam edge view
+  float px = cos(angle);
+  float py = sin(angle);
+
+  // Gobo 1: Radial stripes (6 segments) — classic slot pattern
   if (idx < 1.5) {
-    return (r > 0.4 && r < 0.95) ? 1.0 : 0.0;
+    float seg = sin(6.0 * angle);
+    return smoothstep(-0.1, 0.2, seg);
   }
-  // Gobo 2: Three dots (triangle arrangement)
+  // Gobo 2: Three-segment (tri pattern)
   if (idx < 2.5) {
-    float best = 1.0;
-    for (int i = 0; i < 3; i++) {
-      float da = angle - (float(i) * 2.094 - 1.5708); // 120° spacing, offset -90°
-      float dx = cos(da) * r - 0.5;
-      float dy = sin(da) * r;
-      float d = sqrt(dx * dx + dy * dy);
-      best = min(best, d);
-    }
-    return best < 0.3 ? 1.0 : 0.0;
+    float seg = sin(3.0 * angle);
+    return smoothstep(-0.05, 0.3, seg);
   }
-  // Gobo 3: 4-point star
+  // Gobo 3: 4-point star — four bright lobes
   if (idx < 3.5) {
     float star = cos(4.0 * angle);
-    float threshold = mix(-0.2, 0.7, r); // star gets thinner at edges
-    return star > threshold ? 1.0 : 0.0;
+    return smoothstep(-0.1, 0.3, star);
   }
-  // Gobo 4: Spiral (3 arms)
+  // Gobo 4: Spiral (3 arms winding along beam)
   if (idx < 4.5) {
-    float spiral = sin(3.0 * angle - r * 8.0);
-    return spiral > 0.0 ? 1.0 : 0.0;
+    float spiral = sin(3.0 * angle - t * 12.0);
+    return smoothstep(-0.15, 0.25, spiral);
   }
-  // Gobo 5: Radial lines (8 segments, alternating)
+  // Gobo 5: 8 radial lines (narrow bright spokes)
   if (idx < 5.5) {
-    float seg = sin(8.0 * angle);
-    return seg > 0.0 ? 1.0 : 0.0;
+    float seg = cos(8.0 * angle);
+    return smoothstep(0.2, 0.5, seg);
   }
-  // Gobo 6: Dots grid
+  // Gobo 6: Alternating bands (angular checkerboard effect)
   if (idx < 6.5) {
-    float gx = cos(angle) * r * 3.0;
-    float gy = sin(angle) * r * 3.0;
-    float dx = fract(gx + 0.5) - 0.5;
-    float dy = fract(gy + 0.5) - 0.5;
-    float d = sqrt(dx * dx + dy * dy);
-    return d < 0.25 ? 1.0 : 0.0;
+    float ang = sin(5.0 * angle);
+    float axial = sin(t * 15.0);
+    float checker = ang * axial;
+    return smoothstep(-0.1, 0.2, checker);
   }
-  // Gobo 7: Broken circle with center dot
+  // Gobo 7: Broken segments with gaps
   if (idx < 7.5) {
-    float ring = (r > 0.55 && r < 0.8) ? 1.0 : 0.0;
-    // 4 gaps in ring
-    float gapMask = step(0.3, abs(sin(2.0 * angle)));
-    ring *= gapMask;
-    // Center dot
-    float center = r < 0.15 ? 1.0 : 0.0;
-    return max(ring, center);
+    float seg = sin(4.0 * angle);
+    float gap = smoothstep(0.8, 0.9, abs(cos(2.0 * angle)));
+    return smoothstep(-0.1, 0.3, seg) * (1.0 - gap);
   }
   return 1.0;
 }
@@ -132,18 +128,16 @@ void main() {
   float fresnel = abs(dot(normalize(vNormal), normalize(vViewDir)));
   float edgeSoft = pow(fresnel, 0.6);
 
-  // Gobo pattern — procedural generation on cone cross-section
+  // Gobo pattern — procedural generation on cone surface
   float goboAlpha = 1.0;
   if (uGoboIndex > 0.5) {
     float angle = vUv.x * 6.28318 + uGoboRotation;
-    // Radius: 0 at lens (tip), 1 at beam base
-    float r = t;
-    float pattern = goboPattern(uGoboIndex, angle, r);
-    // Soft edges on pattern transitions
-    goboAlpha = mix(0.06, 1.0, pattern);
-    // Near the lens, blend to uniform (pattern too small to see)
-    goboAlpha = mix(1.0, goboAlpha, smoothstep(0.0, 0.15, t));
-    // Sharper edges when gobo is active
+    float pattern = goboPattern(uGoboIndex, angle, t);
+    // Strong contrast: blocked areas go very dark, open areas stay full
+    goboAlpha = mix(0.02, 1.0, pattern);
+    // Near the lens tip, blend to uniform (pattern too small to resolve)
+    goboAlpha = mix(1.0, goboAlpha, smoothstep(0.0, 0.08, t));
+    // Softer Fresnel when gobo active so pattern shows better at grazing angles
     edgeSoft = pow(fresnel, 0.35);
   }
 
@@ -250,7 +244,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     headGroup.add(lensMesh)
 
     // Beam cone (child of head, pointing toward -Z in local space)
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 32, 1, true)
+    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 48, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneGeo.rotateX(-Math.PI / 2)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
@@ -273,7 +267,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     group.add(bodyMesh)
 
     // Wide beam cone (overall glow)
-    const coneGeo = new THREE.ConeGeometry(0.8, coneHeight, 32, 1, true)
+    const coneGeo = new THREE.ConeGeometry(0.8, coneHeight, 48, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.04
@@ -323,7 +317,7 @@ export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtur
     group.add(bodyMesh)
 
     // Cone
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 32, 1, true)
+    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 48, 1, true)
     coneGeo.translate(0, -coneHeight / 2, 0)
     coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
     coneMesh.position.y = -0.11

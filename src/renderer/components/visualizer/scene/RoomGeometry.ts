@@ -10,11 +10,13 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   const group = new THREE.Group()
   group.name = 'room'
 
-  // ---- Floor ----
+  // ---- Floor ---- (StandardMaterial so SpotLight.map gobo projections appear)
   const floorGeo = new THREE.PlaneGeometry(width, depth)
   floorGeo.rotateX(-Math.PI / 2)
-  const floorMat = new THREE.MeshBasicMaterial({
+  const floorMat = new THREE.MeshStandardMaterial({
     color: 0x181822,
+    roughness: 0.85,
+    metalness: 0.0,
     side: THREE.FrontSide
   })
   const floor = new THREE.Mesh(floorGeo, floorMat)
@@ -30,8 +32,10 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   // ---- Ceiling ----
   const ceilGeo = new THREE.PlaneGeometry(width, depth)
   ceilGeo.rotateX(Math.PI / 2)
-  const ceilMat = new THREE.MeshBasicMaterial({
+  const ceilMat = new THREE.MeshStandardMaterial({
     color: 0x141420,
+    roughness: 0.9,
+    metalness: 0.0,
     side: THREE.FrontSide
   })
   const ceiling = new THREE.Mesh(ceilGeo, ceilMat)
@@ -41,7 +45,7 @@ export function buildRoom(config: RoomConfig): THREE.Group {
   group.add(ceiling)
 
   // ---- Back wall (upstage, +Z) ----
-  const wallMat = new THREE.MeshBasicMaterial({ color: 0x1c1c28, side: THREE.FrontSide })
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c1c28, roughness: 0.9, metalness: 0.0, side: THREE.FrontSide })
   const backGeo = new THREE.PlaneGeometry(width, height)
   const backWall = new THREE.Mesh(backGeo, wallMat)
   backWall.position.set(0, height / 2, depth / 2)

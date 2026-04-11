@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { FixtureObjects } from './FixtureModel'
 import type { ResolvedChannels } from '@renderer/lib/dmx-channel-resolver'
 import { dmxToPanDeg, dmxToTiltDeg, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
-import { dmxToGoboIndex } from '@renderer/lib/gobo-textures'
+import { dmxToGoboIndex, getGoboTexture } from '@renderer/lib/gobo-textures'
 
 export interface CellColor {
   r: number  // 0-1
@@ -60,10 +60,10 @@ export function updateFixtureObjects(
     coneMat.uniforms.uColor.value.copy(col)
     coneMat.uniforms.uOpacity.value = effectiveDim * 0.55 * goboFactor
 
-    // Apply gobo to beam shader (procedural patterns)
+    // Apply gobo: procedural pattern on beam cone + texture projection on floor
     if (goboActive) {
       coneMat.uniforms.uGoboIndex.value = goboIndex
-      // Gobo rotation: continuous spin based on goboRotation channel
+      // Gobo rotation
       const goboRot = channels.goboRotation ?? 0
       if (goboRot > 0) {
         const speed = (goboRot / 255) * 4.0
@@ -71,8 +71,20 @@ export function updateFixtureObjects(
       } else {
         coneMat.uniforms.uGoboRotation.value = 0.0
       }
+      // Floor projection via SpotLight.map
+      const goboTex = getGoboTexture(goboIndex)
+      if (goboTex && !objects.spotLight.map) {
+        objects.spotLight.map = goboTex
+        objects.spotLight.castShadow = true
+        objects.spotLight.shadow.mapSize.set(512, 512)
+        objects.spotLight.shadow.needsUpdate = true
+      }
     } else {
       coneMat.uniforms.uGoboIndex.value = 0.0
+      if (objects.spotLight.map) {
+        objects.spotLight.map = null
+        objects.spotLight.castShadow = false
+      }
     }
 
     objects.coneMesh.visible = effectiveDim > 0.005 && hasBeam
