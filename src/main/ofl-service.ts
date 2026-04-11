@@ -15,34 +15,50 @@ export class OFLService {
   private indexLoadPromise: Promise<void> | null = null
 
   // Fetch and cache the full fixture index from OFL
+  // Step 1: get manufacturer keys, Step 2: fetch each manufacturer's fixture list in parallel
   private async ensureIndex(): Promise<void> {
     if (this.fixtureIndex) return
     if (this.indexLoadPromise) { await this.indexLoadPromise; return }
 
     this.indexLoadPromise = (async () => {
       try {
-        // Fetch manufacturers
+        // Step 1: Get all manufacturer keys
         const mfrRes = await fetch('https://open-fixture-library.org/api/v1/manufacturers', { signal: AbortSignal.timeout(15000) })
         if (!mfrRes.ok) throw new Error(`OFL API error: ${mfrRes.status}`)
-        const mfrData = await mfrRes.json() as Record<string, OFLManufacturer & { fixtures?: string[] }>
+        const mfrData = await mfrRes.json() as Record<string, { name: string; fixtureCount?: number }>
 
+        const mfrKeys = Object.keys(mfrData).filter(k => !k.startsWith('$'))
+        console.log(`[OFL] Found ${mfrKeys.length} manufacturers, loading fixture lists...`)
+
+        // Step 2: Fetch each manufacturer's fixture list in parallel (batches of 20)
         this.fixtureIndex = []
-        for (const [mfrKey, mfrInfo] of Object.entries(mfrData)) {
-          if (mfrKey.startsWith('$')) continue // skip $schema etc
-          const fixtures = (mfrInfo as any).fixtures || []
-          for (const fixtureKey of fixtures) {
-            // We don't have fixture names/categories from the manufacturers endpoint
-            // We'll populate them lazily or use the key as name
-            this.fixtureIndex.push({
-              manufacturer: mfrInfo.name || mfrKey,
-              manufacturerKey: mfrKey,
-              fixtureKey,
-              name: fixtureKey.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-              categories: []
+        const BATCH_SIZE = 20
+        for (let i = 0; i < mfrKeys.length; i += BATCH_SIZE) {
+          const batch = mfrKeys.slice(i, i + BATCH_SIZE)
+          const results = await Promise.allSettled(
+            batch.map(async (mfrKey) => {
+              const res = await fetch(`https://open-fixture-library.org/api/v1/manufacturers/${mfrKey}`, { signal: AbortSignal.timeout(10000) })
+              if (!res.ok) return null
+              return { mfrKey, data: await res.json() }
             })
+          )
+          for (const result of results) {
+            if (result.status !== 'fulfilled' || !result.value) continue
+            const { mfrKey, data } = result.value
+            const mfrName = data.name || mfrData[mfrKey]?.name || mfrKey
+            const fixtures = data.fixtures || []
+            for (const fix of fixtures) {
+              this.fixtureIndex.push({
+                manufacturer: mfrName,
+                manufacturerKey: mfrKey,
+                fixtureKey: fix.key || fix,
+                name: fix.name || (typeof fix === 'string' ? fix : fix.key || '').replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+                categories: fix.categories || []
+              })
+            }
           }
         }
-        console.log(`[OFL] Index loaded: ${this.fixtureIndex.length} fixtures from ${Object.keys(mfrData).length} manufacturers`)
+        console.log(`[OFL] Index loaded: ${this.fixtureIndex.length} fixtures from ${mfrKeys.length} manufacturers`)
       } catch (e) {
         console.error('[OFL] Failed to load index:', (e as Error).message)
         this.fixtureIndex = []
