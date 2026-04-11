@@ -28,7 +28,8 @@ export function LayoutEditor2D() {
     addTrussBar, removeTrussBar, updateTrussBar,
     gridSize, snapToGrid
   } = useVisualizerStore()
-  const { values, blinder, strobe, _strobePhase } = useDmxStore()
+  // Read DMX values imperatively inside draw() to avoid re-creating draw/event handlers
+  // at 60Hz when effects are running (which would break zoom/pan interaction).
 
   const [trussNameInput, setTrussNameInput] = useState('')
   const selectedTruss = roomConfig.trussBars.find(t => t.id === selectedTrussId)
@@ -170,16 +171,18 @@ export function LayoutEditor2D() {
       // Skip fixtures completely off-screen (perf)
       if (cxs < -40 || cxs > W + 40 || cys < -40 || cys > H + 40) continue
 
-      // Beam glow — apply blinder/strobe overrides
-      const ch = resolveChannels(entry, def, values)
-      const col = blinder
+      // Beam glow — read DMX state imperatively (not via React state) to avoid
+      // re-creating draw() at 60Hz when effects run, which would break zoom/pan
+      const dmxState = useDmxStore.getState()
+      const ch = resolveChannels(entry, def, dmxState.values)
+      const col = dmxState.blinder
         ? { r: 1, g: 1, b: 1 }
-        : (strobe && !_strobePhase)
+        : (dmxState.strobe && !dmxState._strobePhase)
           ? { r: 0, g: 0, b: 0 }
           : getEffectiveColor(ch)
       const dim = (col.r + col.g + col.b) / 3
-      const glowAlpha = blinder ? 0.8 : 0.4
-      const glowRadius = blinder ? 30 : 20
+      const glowAlpha = dmxState.blinder ? 0.8 : 0.4
+      const glowRadius = dmxState.blinder ? 30 : 20
       if (dim > 0.02 && isFinite(cxs) && isFinite(cys)) {
         const grad = ctx.createRadialGradient(cxs, cys, 0, cxs, cys, glowRadius)
         const hex = `rgba(${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)}`
@@ -244,7 +247,7 @@ export function LayoutEditor2D() {
     ctx.font = '9px sans-serif'
     ctx.textAlign = 'right'
     ctx.fillText(`${zoomPct}%`, W - 8, H - 8)
-  }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, values, blinder, strobe, _strobePhase, worldToCanvas, gridSize, snapToGrid])
+  }, [patch, fixtures, roomConfig, selectedFixtureId, selectedTrussId, worldToCanvas, gridSize, snapToGrid])
 
   // ── Initial fit + redraw on changes ────────────────────────────────
   useEffect(() => {
@@ -257,6 +260,21 @@ export function LayoutEditor2D() {
     }
     draw()
   }, [draw, fitToView])
+
+  // Subscribe to DMX store for beam glow updates — uses RAF to throttle redraws
+  // without re-creating draw/event handlers (which would break zoom/pan during effects)
+  useEffect(() => {
+    let rafId = 0
+    const unsub = useDmxStore.subscribe(() => {
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          rafId = 0
+          draw()
+        })
+      }
+    })
+    return () => { unsub(); if (rafId) cancelAnimationFrame(rafId) }
+  }, [draw])
 
   // Re-fit when room dimensions change
   useEffect(() => {
