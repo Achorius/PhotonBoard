@@ -122,9 +122,13 @@ LOG="/var/log/photonboard-first-boot.log"
 exec > "$LOG" 2>&1
 echo "$(date) — PhotonBoard first boot..."
 
-# Ensure SSH works
+# Ensure SSH works (regenerate host keys if missing)
+if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
+  echo "Regenerating SSH host keys..."
+  ssh-keygen -A
+fi
 systemctl enable ssh 2>/dev/null || true
-systemctl start ssh 2>/dev/null || true
+systemctl restart ssh 2>/dev/null || true
 
 # Create directories for all users
 for H in /home/*/; do
