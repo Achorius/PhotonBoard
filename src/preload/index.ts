@@ -107,6 +107,14 @@ const api = {
     onRequestState: (callback: () => void) => {
       ipcRenderer.on('stage:request-state', () => callback())
     }
+  },
+
+  // --- API (WebSocket server for Companion / external controllers) ---
+  api: {
+    sendState: (state: any) => ipcRenderer.send('api:state', state),
+    onRequestState: (callback: () => void) => {
+      ipcRenderer.on('api:request-state', () => callback())
+    }
   }
 }
 

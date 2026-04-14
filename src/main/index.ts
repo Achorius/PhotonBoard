@@ -5,6 +5,7 @@ import { DmxOutputManager } from './dmx-output-manager'
 import { ShowFileManager } from './show-file'
 import { OFLService } from './ofl-service'
 import { IPC, type ArtNetConfig, type DmxOutputConfig, type ShowFile } from '../shared/types'
+import { startApiServer, stopApiServer, broadcastState } from './api-server'
 
 // Prevent EPIPE crashes when stdout pipe is closed (e.g. terminal closed during dev)
 process.on('uncaughtException', (err) => {
@@ -123,14 +124,18 @@ function createWindow(): void {
   })
   session.defaultSession.setPermissionCheckHandler(() => true)
 
+  const isLinux = process.platform === 'linux'
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
     backgroundColor: '#0a0a0f',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 15 },
+    fullscreen: isLinux,
+    titleBarStyle: isLinux ? 'default' : 'hiddenInset',
+    trafficLightPosition: isLinux ? undefined : { x: 15, y: 15 },
+    autoHideMenuBar: isLinux,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -389,6 +394,11 @@ function registerIpcHandlers(): void {
       mainWindow.webContents.send(IPC.STAGE_COMMAND, command)
     }
   })
+
+  // API: renderer sends state for WebSocket broadcast
+  ipcMain.on('api:state', (_event, state: any) => {
+    broadcastState(state)
+  })
 }
 
 // --- Stage Window ---
@@ -478,9 +488,12 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createMenu()
   createWindow()
+  // Start WebSocket API for Companion / external controllers
+  if (mainWindow) startApiServer(mainWindow)
 })
 
 app.on('window-all-closed', () => {
+  stopApiServer()
   dmxEngine?.stop()
   outputManager?.destroy()
   if (process.platform !== 'darwin') {

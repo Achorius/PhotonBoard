@@ -273,40 +273,50 @@ export default function App() {
     window.photonboard.onMenuEvent('menu:load', handleLoad)
   }, [handleNew, handleSave, handleSaveAs, handleLoad])
 
+  // ---- Collect state snapshot (shared by stage window + API) ----
+  const collectState = () => {
+    const { grandMaster, blackout, blinder, strobe } = useDmxStore.getState()
+    const { cuelists } = usePlaybackStore.getState()
+    const { showName } = useUiStore.getState()
+    const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
+    const timelineState = getTimelineState()
+
+    return {
+      grandMaster,
+      blackout,
+      blinder,
+      strobe,
+      timelinePlaying: timelineState.isPlaying,
+      showName,
+      cuelists: cuelists.map(cl => ({
+        id: cl.id,
+        name: cl.name,
+        isPlaying: cl.isPlaying,
+        faderLevel: cl.faderLevel,
+        currentCueIndex: cl.currentCueIndex,
+        cueCount: cl.cues.length
+      })),
+      groups: groups.filter(g => !g.parentGroupId).map(g => ({
+        id: g.id,
+        name: g.name,
+        color: g.color,
+        fixtureCount: g.fixtureIds.length
+      })),
+      selectedFixtureIds,
+      fixtureCount: patch.length
+    }
+  }
+
   // ---- Stage Window state sync bridge ----
   useEffect(() => {
     // Respond to state requests from main process (for stage window sync)
     window.photonboard.stage.onRequestState(() => {
-      const { grandMaster, blackout, blinder, strobe } = useDmxStore.getState()
-      const { cuelists } = usePlaybackStore.getState()
-      const { showName } = useUiStore.getState()
-      const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
-      const timelineState = getTimelineState()
+      window.photonboard.stage.sendState(collectState())
+    })
 
-      window.photonboard.stage.sendState({
-        grandMaster,
-        blackout,
-        blinder,
-        strobe,
-        timelinePlaying: timelineState.isPlaying,
-        showName,
-        cuelists: cuelists.map(cl => ({
-          id: cl.id,
-          name: cl.name,
-          isPlaying: cl.isPlaying,
-          faderLevel: cl.faderLevel,
-          currentCueIndex: cl.currentCueIndex,
-          cueCount: cl.cues.length
-        })),
-        groups: groups.filter(g => !g.parentGroupId).map(g => ({
-          id: g.id,
-          name: g.name,
-          color: g.color,
-          fixtureCount: g.fixtureIds.length
-        })),
-        selectedFixtureIds,
-        fixtureCount: patch.length
-      })
+    // Respond to API state requests (for Companion / external controllers)
+    window.photonboard.api.onRequestState(() => {
+      window.photonboard.api.sendState(collectState())
     })
 
     // Handle commands from stage window
