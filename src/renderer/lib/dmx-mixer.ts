@@ -11,6 +11,7 @@
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
+import { getDeviceProfile } from './device-detect'
 
 // --------------- Types ---------------
 
@@ -46,6 +47,7 @@ export const PROGRAMMER_LAYER_ID = '__programmer__'
 const PROGRAMMER_PRIORITY = 100
 
 let rafId: number | null = null
+let intervalId: ReturnType<typeof setInterval> | null = null
 let running = false
 
 // Track channels written in the previous frame — used to zero out
@@ -67,7 +69,14 @@ export function startMixer(): void {
   if (running) return
   running = true
   ensurePrecedenceCache()
-  rafId = requestAnimationFrame(mixerTick)
+  const { mixerIntervalMs } = getDeviceProfile()
+  if (mixerIntervalMs > 0) {
+    // Low-end devices: use setInterval at reduced frequency (e.g. 30Hz)
+    intervalId = setInterval(mixerTick, mixerIntervalMs)
+  } else {
+    // Desktop: full-speed rAF (~60Hz)
+    rafId = requestAnimationFrame(mixerTick)
+  }
 }
 
 /**
@@ -78,6 +87,10 @@ export function stopMixer(): void {
   if (rafId !== null) {
     cancelAnimationFrame(rafId)
     rafId = null
+  }
+  if (intervalId !== null) {
+    clearInterval(intervalId)
+    intervalId = null
   }
 }
 
@@ -364,5 +377,8 @@ function mixerTick(): void {
   }
 
   prevWrittenChannels = currentWritten
-  rafId = requestAnimationFrame(mixerTick)
+  // setInterval mode (low-end) handles its own scheduling
+  if (intervalId === null) {
+    rafId = requestAnimationFrame(mixerTick)
+  }
 }

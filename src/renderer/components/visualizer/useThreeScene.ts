@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { buildRoom, setGridVisible } from './scene/RoomGeometry'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { getDeviceProfile } from '@renderer/lib/device-detect'
 
 export interface ThreeRefs {
   sceneRef: React.MutableRefObject<THREE.Scene | null>
@@ -25,10 +26,15 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     const container = containerRef.current
     if (!container) return
 
-    // ---- Renderer ----
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.shadowMap.enabled = true
+    // ---- Renderer (adapt to device capabilities) ----
+    const device = getDeviceProfile()
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !device.isLowEnd,
+      alpha: false,
+      powerPreference: device.isLowEnd ? 'low-power' : 'high-performance'
+    })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, device.maxPixelRatio))
+    renderer.shadowMap.enabled = !device.isLowEnd
     renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.toneMapping = THREE.NoToneMapping
     renderer.setClearColor(0x07070d, 1)

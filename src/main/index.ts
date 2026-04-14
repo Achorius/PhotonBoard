@@ -454,7 +454,7 @@ function toggleStageWindow(): void {
 function startStageSync(): void {
   if (stageSyncInterval) return
 
-  // Sync state at ~30Hz
+  // 30Hz sync — Pi 5 handles this fine
   stageSyncInterval = setInterval(() => {
     if (!stageWindow || !mainWindow) return
 

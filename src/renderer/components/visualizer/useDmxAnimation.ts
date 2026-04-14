@@ -5,11 +5,12 @@ import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { resolveChannels } from '@renderer/lib/dmx-channel-resolver'
 import { updateFixtureObjects } from './scene/BeamUpdater'
+import { getDeviceProfile } from '@renderer/lib/device-detect'
 import type { CellColor } from './scene/BeamUpdater'
 import type { FixtureObjectMap } from './useFixtureObjects'
 import type { PatchEntry, FixtureDefinition } from '@shared/types'
 
-const TARGET_FPS = 40
+const TARGET_FPS = getDeviceProfile().visualizerFps
 const FRAME_MS = 1000 / TARGET_FPS
 
 export function useDmxAnimation(
