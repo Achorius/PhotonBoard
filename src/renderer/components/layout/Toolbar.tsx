@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useUiStore } from '../../stores/ui-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { useMidiStore } from '../../stores/midi-store'
+import { usePatchStore } from '../../stores/patch-store'
+import { usePlaybackStore } from '../../stores/playback-store'
+import { useVisualizerStore } from '../../stores/visualizer-store'
 import { useFollowStore } from '../../stores/follow-store'
 import { HSlider } from '../common/HSlider'
 import { toggleTimeline, getTimelineState } from '../../lib/timeline-engine'
 import { clearProgrammer, isProgrammerActive } from '../../lib/dmx-mixer'
+import { isRemote } from '../../hooks/useRemoteSync'
 import type { MidiTargetType } from '@shared/types'
 
 export function Toolbar() {
@@ -16,6 +20,64 @@ export function Toolbar() {
 
   const [timelinePlaying, setTimelinePlaying] = useState(false)
   const [progActive, setProgActive] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUploadShow = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = '' // Reset so same file can be re-selected
+
+    setUploading(true)
+    useUiStore.getState().showStatus('Uploading show…', 'info', 0)
+
+    try {
+      const text = await file.text()
+      const result = await (window.photonboard as any).show.upload(text, file.name)
+
+      if (result?.success && result.show) {
+        // Apply show data to local (Mac) stores
+        usePatchStore.getState().setPatch(result.show.patch || [])
+        usePatchStore.getState().setGroups(result.show.groups || [])
+        usePlaybackStore.getState().setCuelists(result.show.cuelists || [])
+        usePlaybackStore.getState().setChases(result.show.chases || [])
+        const name = result.show.name || file.name.replace(/\.pbshow$/i, '')
+        useUiStore.getState().setShowName(name)
+        if (result.show.midiMappings?.length > 0) {
+          useMidiStore.getState().setMappings(result.show.midiMappings)
+        }
+        if (result.show.roomConfig) {
+          useVisualizerStore.getState().setRoomConfig(result.show.roomConfig)
+        }
+        if (result.show.timeline) {
+          usePlaybackStore.getState().setTimelineClips(result.show.timeline.clips || [])
+          usePlaybackStore.getState().setTimelineMarkers(result.show.timeline.markers || [])
+          usePlaybackStore.getState().setTimelineZones(result.show.timeline.zones || [])
+          if (result.show.timeline.trackCount) {
+            usePlaybackStore.getState().setTimelineTrackCount(result.show.timeline.trackCount)
+          }
+        }
+        usePatchStore.getState().clearSelection()
+
+        // Reload fixture definitions
+        await usePatchStore.getState().loadFixtures()
+        usePatchStore.getState().initMovingHeadDefaults()
+
+        useUiStore.getState().showStatus(`Show loaded ✓ ${name}`, 'success', 3000)
+      } else {
+        useUiStore.getState().showStatus(`Upload failed: ${result?.error || 'Unknown error'}`, 'error', 4000)
+      }
+    } catch (err: any) {
+      console.error('[Upload] Error:', err)
+      useUiStore.getState().showStatus(`Upload error: ${err.message}`, 'error', 4000)
+    } finally {
+      setUploading(false)
+    }
+  }, [])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -54,10 +116,33 @@ export function Toolbar() {
       <div className="w-16 shrink-0" />
 
       {/* Show name — centered between left margin and GM */}
-      <div className="flex-1 flex items-center justify-center min-w-0">
+      <div className="flex-1 flex items-center justify-center min-w-0 gap-2">
         <span className="text-sm text-gray-200 font-medium truncate max-w-64 titlebar-drag">
           {showName}
         </span>
+        {isRemote() && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pbshow"
+              onChange={handleFileSelected}
+              className="hidden"
+            />
+            <button
+              className={`px-2 py-0.5 text-[11px] font-medium rounded titlebar-no-drag transition-colors ${
+                uploading
+                  ? 'bg-blue-600 text-white animate-pulse cursor-wait'
+                  : 'bg-blue-700/30 text-blue-400 border border-blue-600/40 hover:bg-blue-700/50 hover:text-blue-200'
+              }`}
+              onClick={handleUploadShow}
+              disabled={uploading}
+              title="Upload a .pbshow file from this computer to the Pi"
+            >
+              {uploading ? 'Uploading…' : '↑ Upload Show'}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Grand Master */}

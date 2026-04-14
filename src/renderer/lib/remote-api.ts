@@ -167,7 +167,10 @@ export function createRemoteAPI() {
       getPath: (): Promise<string | null> =>
         invoke('show:get-path'),
       reveal: (): Promise<boolean> =>
-        invoke('show:reveal')
+        invoke('show:reveal'),
+      /** Upload a .pbshow file from the browser to the Pi */
+      upload: (content: string, filename: string): Promise<{ success: boolean; show?: any; path?: string; error?: string }> =>
+        invoke('remote:upload-show', content, filename)
     },
 
     fixtures: {

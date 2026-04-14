@@ -266,6 +266,54 @@ async function handleInvoke(channel: string, args: any[]): Promise<any> {
       return showManagerRef!.load(args[0])
     }
 
+    // Remote-specific: upload a .pbshow file from the browser
+    case 'remote:upload-show': {
+      try {
+        const fileContent = args[0] as string   // JSON text
+        const fileName = (args[1] as string) || 'Uploaded Show.pbshow'
+
+        // Validate JSON
+        let show: any
+        try {
+          show = JSON.parse(fileContent)
+        } catch {
+          return { success: false, error: 'Invalid JSON in show file' }
+        }
+
+        // Basic validation
+        if (!show.version || !Array.isArray(show.patch)) {
+          return { success: false, error: 'Not a valid .pbshow file' }
+        }
+
+        // Sanitize filename (keep accents/spaces, remove only filesystem-unsafe chars)
+        const safeName = fileName
+          .replace(/\.pbshow$/i, '')
+          .replace(/[/\\:*?"<>|]/g, '_')
+          .trim() || 'Uploaded Show'
+        const destPath = join(showManagerRef!.getDefaultShowsDir(), `${safeName}.pbshow`)
+
+        // Save to disk
+        const saveResult = showManagerRef!.saveAs(show, destPath)
+        if (!saveResult.success) {
+          return { success: false, error: saveResult.error || 'Failed to save file' }
+        }
+
+        // Load to set as current show (updates recent files, currentFilePath)
+        const loadResult = showManagerRef!.load(destPath)
+        if (!loadResult.success) {
+          return { success: false, error: loadResult.error || 'Saved but failed to load' }
+        }
+
+        // Tell Pi renderer to apply the uploaded show
+        relayToRenderer(IPC.STAGE_COMMAND, { type: 'apply-show', payload: loadResult.show })
+
+        console.log(`[Web] Show uploaded: ${safeName} (${destPath})`)
+        return { success: true, show: loadResult.show, path: destPath }
+      } catch (e: any) {
+        return { success: false, error: e.message }
+      }
+    }
+
     default:
       console.warn('[Web] Unknown invoke channel:', channel)
       return null

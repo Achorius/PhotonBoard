@@ -61,7 +61,11 @@ const api = {
     getPath: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC.SHOW_GET_PATH),
     reveal: (): Promise<boolean> =>
-      ipcRenderer.invoke(IPC.SHOW_REVEAL)
+      ipcRenderer.invoke(IPC.SHOW_REVEAL),
+    upload: async (_content: string, _filename: string): Promise<{ success: boolean; error?: string }> => {
+      // In Electron desktop mode, use File > Open instead
+      return { success: false, error: 'Use File > Open in desktop mode' }
+    }
   },
 
   // --- Fixtures ---

@@ -395,6 +395,18 @@ export default function App() {
         case 'clear-programmer':
           clearProgrammer()
           break
+        case 'apply-show': {
+          // Remote uploaded a show — apply it to all stores
+          const uploaded = command.payload
+          if (uploaded) {
+            applyShowData(uploaded)
+            usePatchStore.getState().loadFixtures().then(() => {
+              usePatchStore.getState().initMovingHeadDefaults()
+            })
+            useUiStore.getState().showStatus(`Show loaded: ${uploaded.name || 'Uploaded'}`, 'success', 3000)
+          }
+          break
+        }
       }
     })
 
