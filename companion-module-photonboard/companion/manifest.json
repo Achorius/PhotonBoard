@@ -1,23 +1,26 @@
 {
   "id": "photonboard",
-  "name": "PhotonBoard",
+  "name": "photonboard",
+  "type": "connection",
   "shortname": "PhotonBoard",
   "description": "Control PhotonBoard DMX lighting software — scenes, faders, blackout, grand master",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "license": "MIT",
-  "repository": "https://github.com/Achorius/PhotonBoard",
+  "repository": "git+https://github.com/Achorius/PhotonBoard.git",
   "bugs": "https://github.com/Achorius/PhotonBoard/issues",
   "maintainers": [
     {
-      "name": "PhotonBoard"
+      "name": "Achorius"
     }
   ],
-  "manufacturer": "PhotonBoard",
-  "products": ["PhotonBoard DMX Controller"],
-  "keywords": ["dmx", "lighting", "photonboard"],
+  "legacyIds": [],
   "runtime": {
+    "type": "node22",
     "api": "nodejs-ipc",
     "apiVersion": "0.0.0",
     "entrypoint": "../src/index.js"
-  }
+  },
+  "manufacturer": "PhotonBoard",
+  "products": ["PhotonBoard DMX Controller"],
+  "keywords": ["dmx", "lighting", "photonboard"]
 }
