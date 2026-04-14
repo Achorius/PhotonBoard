@@ -18,6 +18,9 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectionReady: Promise<void>
 let resolveReady: () => void
 
+// State listeners for remote sync (Pi → Mac)
+let stateListeners: Set<(data: any) => void> = new Set()
+
 function resetReadyPromise(): void {
   connectionReady = new Promise(r => { resolveReady = r })
 }
@@ -54,6 +57,10 @@ function connect(): void {
         }
       } else if (msg.type === 'event') {
         // Server-pushed event
+        if (msg.channel === 'state') {
+          // Notify all state listeners (for remote sync)
+          for (const cb of stateListeners) cb(msg.data)
+        }
         const handlers = eventHandlers.get(msg.channel)
         if (handlers) {
           for (const h of handlers) h(msg.data)
@@ -103,6 +110,14 @@ function send(channel: string, ...args: any[]): void {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'send', channel, args }))
   }
+}
+
+/**
+ * Send a high-level command to the Pi's renderer.
+ * Same protocol as stage window commands (go-cuelist, stop-cuelist, etc.)
+ */
+function sendCommand(type: string, payload?: any): void {
+  send('stage:command', { type, payload })
 }
 
 // ---- Build the same API shape as the Electron preload ----
@@ -201,6 +216,19 @@ export function createRemoteAPI() {
       onRequestState: (callback: () => void) => {
         on('request-state', callback)
       }
+    },
+
+    // ---- Remote-specific extensions ----
+    remote: {
+      /** Send a command to the Pi's renderer (go-cuelist, stop-cuelist, etc.) */
+      sendCommand,
+      /** Register a listener for Pi state broadcasts */
+      onState: (callback: (data: any) => void) => {
+        stateListeners.add(callback)
+        return () => { stateListeners.delete(callback) }
+      },
+      /** True when running in remote/browser mode */
+      isRemote: true
     }
   }
 }

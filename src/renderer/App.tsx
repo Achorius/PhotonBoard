@@ -30,6 +30,7 @@ import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { startMixer, stopMixer, clearProgrammer } from './lib/dmx-mixer'
 import { getTimelineState, toggleTimeline } from './lib/timeline-engine'
+import { useRemoteSync, isRemote } from './hooks/useRemoteSync'
 
 const DEFAULT_ARTNET_CONFIG = [
   { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
@@ -58,9 +59,12 @@ export default function App() {
   const { initMidi } = useMidiStore()
 
   usePlaybackController()
+  useRemoteSync()
 
   // Start the central DMX mixer (merges all sources: programmer, cues, chases, effects)
+  // In remote mode, DMX values come from the Pi — no local mixer needed.
   useEffect(() => {
+    if (isRemote()) return
     startMixer()
     return () => stopMixer()
   }, [])
@@ -295,7 +299,7 @@ export default function App() {
 
   // ---- Collect state snapshot (shared by stage window + API) ----
   const collectState = () => {
-    const { grandMaster, blackout, blinder, strobe } = useDmxStore.getState()
+    const { grandMaster, blackout, blinder, strobe, values: dmxValues } = useDmxStore.getState()
     const { cuelists } = usePlaybackStore.getState()
     const { showName } = useUiStore.getState()
     const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
@@ -306,6 +310,7 @@ export default function App() {
       blackout,
       blinder,
       strobe,
+      dmxValues, // Raw DMX universes for remote 3D preview
       timelinePlaying: timelineState.isPlaying,
       showName,
       cuelists: cuelists.map(cl => ({
@@ -348,6 +353,12 @@ export default function App() {
         case 'toggle-blackout':
           useDmxStore.getState().toggleBlackout()
           break
+        case 'set-blackout':
+          // Remote sync sends explicit value (not toggle) to avoid ping-pong
+          if (useDmxStore.getState().blackout !== command.payload) {
+            useDmxStore.getState().toggleBlackout()
+          }
+          break
         case 'toggle-blinder':
           useDmxStore.getState().toggleBlinder(command.payload)
           break
@@ -386,6 +397,27 @@ export default function App() {
           break
       }
     })
+
+    // ---- Auto-broadcast state to web clients on every change ----
+    // This ensures Pi → Mac sync works even without a stage window.
+    // Throttled to ~30Hz to avoid flooding the WebSocket.
+    let broadcastTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleBroadcast = () => {
+      if (broadcastTimer) return
+      broadcastTimer = setTimeout(() => {
+        broadcastTimer = null
+        window.photonboard.api.sendState(collectState())
+      }, 33)
+    }
+
+    const unsubPlayback = usePlaybackStore.subscribe(scheduleBroadcast)
+    const unsubDmx = useDmxStore.subscribe(scheduleBroadcast)
+
+    return () => {
+      unsubPlayback()
+      unsubDmx()
+      if (broadcastTimer) clearTimeout(broadcastTimer)
+    }
   }, [])
 
   useEffect(() => {
