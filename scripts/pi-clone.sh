@@ -117,25 +117,33 @@ clone_from_remote() {
   run_ssh_sudo '
     cat > /opt/photonboard-first-boot.sh << "FBEOF"
 #!/bin/bash
-# PhotonBoard — First Boot (runs once, regenerates keys, configures hostname)
+# PhotonBoard — First Boot (runs once on new install)
 LOG="/var/log/photonboard-first-boot.log"
 exec > "$LOG" 2>&1
 echo "$(date) — PhotonBoard first boot..."
 
-# Regenerate SSH host keys
-if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
-  ssh-keygen -A
-  systemctl restart ssh 2>/dev/null || true
-fi
+# Ensure SSH works
+systemctl enable ssh 2>/dev/null || true
+systemctl start ssh 2>/dev/null || true
 
 # Create directories for all users
 for H in /home/*/; do
   U=$(basename "$H")
   mkdir -p "$H/.config/photonboard/config" "$H/Documents/PhotonBoard"
   chown -R "$U:$U" "$H/.config/photonboard" "$H/Documents/PhotonBoard"
+  # Ensure kiosk config exists for each user
+  if [ ! -f "$H/.xinitrc" ] && [ -f /etc/skel/.xinitrc ]; then
+    cp /etc/skel/.xinitrc "$H/.xinitrc"
+    chmod +x "$H/.xinitrc"
+    chown "$U:$U" "$H/.xinitrc"
+  fi
+  if [ ! -f "$H/.bash_profile" ] && [ -f /etc/skel/.bash_profile ]; then
+    cp /etc/skel/.bash_profile "$H/.bash_profile"
+    chown "$U:$U" "$H/.bash_profile"
+  fi
 done
 
-# Refresh mDNS
+# Refresh mDNS with current hostname
 systemctl restart avahi-daemon 2>/dev/null || true
 
 echo "$(date) — First boot done!"
@@ -146,8 +154,8 @@ FBEOF
     cat > /etc/systemd/system/photonboard-first-boot.service << "SVCEOF"
 [Unit]
 Description=PhotonBoard First Boot
-After=network-online.target ssh.service
-Wants=network-online.target
+After=local-fs.target
+Before=getty@tty1.service
 
 [Service]
 Type=oneshot
@@ -160,10 +168,19 @@ SVCEOF
     systemctl daemon-reload
     systemctl enable photonboard-first-boot.service
 
-    # Remove SSH host keys (regenerated on first boot)
-    rm -f /etc/ssh/ssh_host_*
+    # Copy .xinitrc and .bash_profile to /etc/skel so new users get them
+    for F in .xinitrc .bash_profile; do
+      ORIG=$(find /home -maxdepth 2 -name "$F" -type f 2>/dev/null | head -1)
+      if [ -n "$ORIG" ]; then
+        cp "$ORIG" "/etc/skel/$F"
+      fi
+    done
 
-    # Remove saved WiFi (user sets their own via Pi Imager)
+    # KEEP SSH host keys and service enabled — Pi Imager custom images
+    # do not offer a customization dialog, so SSH must work out of the box.
+    systemctl enable ssh 2>/dev/null || true
+
+    # Remove saved WiFi (user connects via Ethernet or configures manually)
     rm -f /etc/NetworkManager/system-connections/*.nmconnection 2>/dev/null
     rm -f /etc/wpa_supplicant/wpa_supplicant*.conf 2>/dev/null
 
