@@ -38,6 +38,22 @@ export class ShowFileManager {
     return this.documentsShowsPath
   }
 
+  /** List all available .pbshow files (for remote UI without file dialogs) */
+  listShows(): { name: string; path: string }[] {
+    const results: { name: string; path: string }[] = []
+    const dirs = [this.documentsShowsPath, join(this.userDataPath, 'shows')]
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue
+      try {
+        const files = readdirSync(dir).filter(f => f.endsWith('.pbshow'))
+        for (const file of files) {
+          results.push({ name: basename(file, '.pbshow'), path: join(dir, file) })
+        }
+      } catch { /* skip */ }
+    }
+    return results
+  }
+
   /** Try to load the most recent show file at startup */
   loadLastShow(): { success: boolean; show?: ShowFile; path?: string } {
     // Try recent files first

@@ -6,6 +6,7 @@ import { ShowFileManager } from './show-file'
 import { OFLService } from './ofl-service'
 import { IPC, type ArtNetConfig, type DmxOutputConfig, type ShowFile } from '../shared/types'
 import { startApiServer, stopApiServer, broadcastState } from './api-server'
+import { startWebServer, stopWebServer, broadcastToWeb } from './web-server'
 
 // Prevent EPIPE crashes when stdout pipe is closed (e.g. terminal closed during dev)
 process.on('uncaughtException', (err) => {
@@ -398,6 +399,7 @@ function registerIpcHandlers(): void {
   // API: renderer sends state for WebSocket broadcast
   ipcMain.on('api:state', (_event, state: any) => {
     broadcastState(state)
+    broadcastToWeb(state)
   })
 }
 
@@ -490,10 +492,13 @@ app.whenReady().then(() => {
   createWindow()
   // Start WebSocket API for Companion / external controllers
   if (mainWindow) startApiServer(mainWindow)
+  // Start web server for remote editing from Mac
+  if (mainWindow) startWebServer(mainWindow, dmxEngine, outputManager, showManager, oflService)
 })
 
 app.on('window-all-closed', () => {
   stopApiServer()
+  stopWebServer()
   dmxEngine?.stop()
   outputManager?.destroy()
   if (process.platform !== 'darwin') {
