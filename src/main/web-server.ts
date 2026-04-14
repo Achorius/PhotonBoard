@@ -60,11 +60,9 @@ export function startWebServer(
   oflServiceRef = oflService
 
   // ---- Renderer build path ----
-  // In production: resources/app.asar/out/renderer
-  // In dev: out/renderer
-  const rendererPath = app.isPackaged
-    ? join(process.resourcesPath, 'app.asar', 'out', 'renderer')
-    : join(app.getAppPath(), 'out', 'renderer')
+  // app.getAppPath() returns the correct base whether packaged (asar or unpacked app/)
+  // or in dev mode. Renderer is always at <appPath>/out/renderer.
+  const rendererPath = join(app.getAppPath(), 'out', 'renderer')
 
   // ---- HTTP server: serve static renderer files ----
   server = http.createServer((req, res) => {
