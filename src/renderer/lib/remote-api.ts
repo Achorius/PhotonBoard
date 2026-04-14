@@ -89,7 +89,7 @@ function on(channel: string, callback: (...args: any[]) => void): () => void {
 async function invoke(channel: string, ...args: any[]): Promise<any> {
   await connectionReady
   return new Promise((resolve, reject) => {
-    const id = crypto.randomUUID()
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
     const timer = setTimeout(() => {
       pending.delete(id)
       reject(new Error(`[Remote] Timeout: ${channel}`))

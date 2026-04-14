@@ -245,15 +245,27 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      await loadFixtures()
-      initMidi()
-      initMidiRouting()
-      startFollowGamepadLoop()  // Gamepad follow loop runs globally (not tied to Follow tab)
-      window.photonboard.artnet.configure(DEFAULT_ARTNET_CONFIG)
+      try {
+        console.log('[Init] Loading fixtures…')
+        await loadFixtures()
+        console.log('[Init] Fixtures loaded:', usePatchStore.getState().fixtures.length)
+      } catch (e) {
+        console.error('[Init] loadFixtures failed:', e)
+      }
+
+      try { initMidi() } catch (e) { console.warn('[Init] MIDI init skipped:', e) }
+      try { initMidiRouting() } catch (e) { console.warn('[Init] MIDI routing skipped:', e) }
+      try { startFollowGamepadLoop() } catch (e) { console.warn('[Init] Gamepad init skipped:', e) }
+
+      try {
+        window.photonboard.artnet.configure(DEFAULT_ARTNET_CONFIG)
+      } catch (e) { console.warn('[Init] ArtNet config skipped:', e) }
 
       // Auto-load the last saved show
       try {
+        console.log('[Init] Loading last show…')
         const result = await window.photonboard.show.loadLast()
+        console.log('[Init] loadLast result:', result?.success, 'patch:', result?.show?.patch?.length, 'cuelists:', result?.show?.cuelists?.length)
         if (result && result.success && result.show) {
           // Use filename as show name
           if (result.path) {
@@ -262,6 +274,9 @@ export default function App() {
           }
           applyShowData(result.show as ShowFile)
           usePatchStore.getState().initMovingHeadDefaults()
+          console.log('[Init] Show applied:', result.show.name)
+        } else {
+          console.warn('[Init] No show to load, result:', result)
         }
       } catch (e) {
         console.error('[PhotonBoard] Auto-load failed:', e)
