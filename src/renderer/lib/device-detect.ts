@@ -1,13 +1,17 @@
 // ============================================================
 // PhotonBoard — Device Detection
 // Detects hardware capabilities to adjust performance settings.
-// Pi 5 (VideoCore VII, 8-16GB) is capable — only truly weak
-// GPUs (Mali-400, software renderers) get throttled.
+// Three tiers:
+//   - Desktop (Intel/AMD/NVIDIA): full quality
+//   - ARM capable (Pi 5 VideoCore VII): reduced 3D, full UI
+//   - Low-end (Mali-400, software renderers): heavily throttled
 // ============================================================
 
 interface DeviceProfile {
   /** True only on genuinely weak GPUs (Mali-400, llvmpipe, swiftshader) */
   isLowEnd: boolean
+  /** True on ARM GPUs that work but can't handle desktop-grade 3D */
+  isMidRange: boolean
   /** True on any ARM architecture (Pi 5 included) */
   isArm: boolean
   /** Recommended max pixel ratio */
@@ -32,7 +36,8 @@ export function getDeviceProfile(): DeviceProfile {
   const isArm = platform.includes('arm') ||
     platform.includes('aarch64') ||
     ua.includes('aarch64') ||
-    ua.includes('armv')
+    ua.includes('armv') ||
+    platform.includes('linux') && ua.includes('linux')
 
   // Detect GPU via WebGL renderer string
   let gpuRenderer = ''
@@ -47,37 +52,42 @@ export function getDeviceProfile(): DeviceProfile {
     }
   } catch { /* ignore */ }
 
-  // Only truly weak GPUs are "low-end":
-  // - Mali-400 (Pi 3 and older)
-  // - llvmpipe / swiftshader (software rendering fallbacks)
-  // Pi 5's VideoCore VII is NOT in this list — it handles antialias and shadows fine.
+  // Truly weak GPUs — heavily throttled
   const isLowEnd =
     gpuRenderer.includes('mali-4') ||
     gpuRenderer.includes('mali-t') ||
     gpuRenderer.includes('llvmpipe') ||
-    gpuRenderer.includes('swiftshader') ||
     gpuRenderer.includes('software')
+
+  // Mid-range: ARM GPUs that work but aren't desktop-grade
+  // Pi 5 VideoCore VII (v3d), SwiftShader on ARM, or any ARM + Linux combo
+  const isMidRange = !isLowEnd && (
+    gpuRenderer.includes('v3d') ||
+    gpuRenderer.includes('videocore') ||
+    gpuRenderer.includes('swiftshader') ||
+    (isArm && gpuRenderer.includes('angle')) ||
+    (isArm && process.platform === 'linux')
+  )
+
+  // Desktop: everything else (Intel, AMD, NVIDIA, Apple Silicon)
+  const isDesktop = !isLowEnd && !isMidRange
 
   cached = {
     isLowEnd,
+    isMidRange,
     isArm,
-    maxPixelRatio: isLowEnd ? 1 : 2,
-    visualizerFps: isLowEnd ? 20 : 40,
-    mixerIntervalMs: isLowEnd ? 33 : 0,  // 30Hz on weak GPU, rAF (~60Hz) elsewhere
-    stageSyncMs: isLowEnd ? 50 : 33,      // 20Hz on weak GPU, 30Hz elsewhere
+    maxPixelRatio: isDesktop ? 2 : 1,
+    visualizerFps: isLowEnd ? 15 : isMidRange ? 24 : 40,
+    mixerIntervalMs: isLowEnd ? 33 : 0,
+    stageSyncMs: isLowEnd ? 50 : 33,
   }
 
-  if (isLowEnd) {
-    console.log('[Device] Low-end GPU detected — throttling enabled:', {
-      platform,
-      gpu: gpuRenderer || 'unknown',
-      profile: cached
-    })
-  } else if (isArm) {
-    console.log('[Device] ARM device with capable GPU — running at full quality:', {
-      gpu: gpuRenderer || 'unknown'
-    })
-  }
+  const tier = isLowEnd ? 'low-end' : isMidRange ? 'mid-range (ARM)' : 'desktop'
+  console.log(`[Device] ${tier} GPU detected:`, {
+    platform,
+    gpu: gpuRenderer || 'unknown',
+    profile: cached
+  })
 
   return cached
 }

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { getDeviceProfile } from '@renderer/lib/device-detect'
 
 export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
 
@@ -33,7 +34,7 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  activeTab: 'visualizer',
+  activeTab: getDeviceProfile().isMidRange ? 'playback' : 'visualizer',
   showName: 'New Show',
   isDirty: false,
   selectedUniverse: 0,

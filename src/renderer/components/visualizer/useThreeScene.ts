@@ -28,13 +28,14 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
 
     // ---- Renderer (adapt to device capabilities) ----
     const device = getDeviceProfile()
+    const needsPerf = device.isLowEnd || device.isMidRange
     const renderer = new THREE.WebGLRenderer({
-      antialias: !device.isLowEnd,
+      antialias: !needsPerf,
       alpha: false,
-      powerPreference: device.isLowEnd ? 'low-power' : 'high-performance'
+      powerPreference: needsPerf ? 'low-power' : 'high-performance'
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, device.maxPixelRatio))
-    renderer.shadowMap.enabled = !device.isLowEnd
+    renderer.shadowMap.enabled = !needsPerf
     renderer.shadowMap.type = THREE.BasicShadowMap
     renderer.toneMapping = THREE.NoToneMapping
     renderer.setClearColor(0x07070d, 1)

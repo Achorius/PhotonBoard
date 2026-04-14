@@ -16,8 +16,13 @@ import { FixtureControlView } from './components/fixtures/FixtureControlView'
 import { PlaybackView } from './components/playback/PlaybackView'
 import { EffectsView } from './components/effects/EffectsView'
 import { MidiView } from './components/midi/MidiView'
-import { VisualizerView } from './components/visualizer/VisualizerView'
 import { StageLayoutView } from './components/visualizer/StageLayoutView'
+import { getDeviceProfile } from './lib/device-detect'
+
+// Lazy-load 3D visualizer — never imported on ARM/mid-range devices
+const VisualizerView = React.lazy(() =>
+  import('./components/visualizer/VisualizerView').then(m => ({ default: m.VisualizerView }))
+)
 import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
@@ -410,12 +415,20 @@ export default function App() {
       case 'playback':   return <PlaybackView />
       case 'effects':    return <EffectsView />
       case 'midi':       return <MidiView />
-      case 'visualizer':    return <VisualizerView />
+      case 'visualizer': {
+        const dev = getDeviceProfile()
+        if (dev.isMidRange || dev.isLowEnd) return <StageLayoutView />
+        return (
+          <React.Suspense fallback={<div className="w-full h-full bg-surface-0" />}>
+            <VisualizerView />
+          </React.Suspense>
+        )
+      }
       case 'stage-layout': return <StageLayoutView />
       case 'live':         return <LiveView />
       case 'follow':       return <FollowPanel />
       case 'settings':   return <SettingsView />
-      default:           return <VisualizerView />
+      default:           return <StageLayoutView />
     }
   }
 
