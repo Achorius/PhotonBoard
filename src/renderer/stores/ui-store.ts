@@ -1,28 +1,40 @@
 import { create } from 'zustand'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 
-/** Detect mobile/tablet (Android, iOS, iPadOS) */
-export function isMobileDevice(): boolean {
-  const ua = navigator.userAgent.toLowerCase()
-  // Check for mobile/tablet user agents
-  if (/android|iphone|ipad|ipod/.test(ua)) return true
-  // iPadOS 13+ reports as Mac — detect via touch + Mac combo
-  if (ua.includes('macintosh') && navigator.maxTouchPoints > 1) return true
-  // Small screen with touch = probably mobile
-  if ('ontouchstart' in window && window.innerWidth < 1024) return true
+// ---- Device type detection ----
+
+const _ua = navigator.userAgent.toLowerCase()
+const _isElectron = !!(window as any).__ELECTRON__ || !!(window as any).photonboard?.stage?.open
+
+/** True on phones (small screen, no room for full app) */
+export function isPhone(): boolean {
+  if (_isElectron) return false
+  // iPhone / iPod
+  if (/iphone|ipod/.test(_ua)) return true
+  // Android phone (no "tablet" hint, small screen)
+  if (/android/.test(_ua) && !/tablet/.test(_ua) && window.innerWidth < 800) return true
+  // Small touch screen
+  if ('ontouchstart' in window && window.innerWidth < 600) return true
+  return false
+}
+
+/** True on tablets (medium screen, can show full app if wanted) */
+export function isTablet(): boolean {
+  if (_isElectron) return false
+  // iPad
+  if (/ipad/.test(_ua)) return true
+  // iPadOS 13+ reports as Mac but has touch
+  if (_ua.includes('macintosh') && navigator.maxTouchPoints > 1) return true
+  // Android tablet (large screen)
+  if (/android/.test(_ua) && (window.innerWidth >= 800 || /tablet/.test(_ua))) return true
+  // Touch device with medium screen
+  if ('ontouchstart' in window && window.innerWidth >= 600 && window.innerWidth < 1024) return true
   return false
 }
 
 function getDefaultTab(): ViewTab {
-  const isElectron = !!(window as any).__ELECTRON__ || !!(window as any).photonboard?.stage?.open
-  // Mobile/tablet in browser: default to Stage view
-  if (!isElectron && isMobileDevice()) {
-    return 'stage'
-  }
-  // Remote browser (desktop): default to Scenes
-  if (!isElectron) {
-    return 'playback'
-  }
+  // Remote browser: default to Scenes
+  if (!_isElectron) return 'playback'
   // Pi (ARM / mid-range): default to Scenes
   if (getDeviceProfile().isMidRange) return 'playback'
   // Desktop: default to 3D
@@ -36,6 +48,8 @@ interface UiState {
   showName: string
   isDirty: boolean
   selectedUniverse: number
+  // Stage mode (browser only): show full-screen stage view
+  stageMode: boolean
   // Bottom panel
   bottomPanelTab: 'cuelists' | 'chases' | 'presets'
   bottomPanelOpen: boolean
@@ -54,6 +68,7 @@ interface UiState {
   setShowName: (name: string) => void
   setDirty: (dirty: boolean) => void
   setSelectedUniverse: (u: number) => void
+  setStageMode: (on: boolean) => void
   setBottomPanelTab: (tab: 'cuelists' | 'chases' | 'presets') => void
   toggleBottomPanel: () => void
   openModal: (modal: string, data?: any) => void
@@ -63,6 +78,8 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   activeTab: getDefaultTab(),
+  // Phone/tablet: start in stage mode. Desktop browser: start in app mode.
+  stageMode: !_isElectron && (isPhone() || isTablet()),
   showName: 'New Show',
   isDirty: false,
   selectedUniverse: 0,
@@ -75,6 +92,7 @@ export const useUiStore = create<UiState>((set) => ({
   pendingCuelistId: null,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setStageMode: (on) => set({ stageMode: on }),
   navigateToCuelist: (cuelistId) => set({ activeTab: 'playback', pendingCuelistId: cuelistId }),
   setShowName: (name) => set({ showName: name }),
   setDirty: (dirty) => set({ isDirty: dirty }),

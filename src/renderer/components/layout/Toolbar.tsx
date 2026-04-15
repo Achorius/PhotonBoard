@@ -248,11 +248,19 @@ export function Toolbar() {
         </span>
       )}
 
-      {/* Stage Window */}
+      {/* Stage Window / Stage Mode */}
       <button
         className="px-2 py-1 text-[11px] font-bold rounded titlebar-no-drag transition-colors bg-surface-3 text-gray-400 hover:bg-indigo-700/40 hover:text-indigo-300"
-        onClick={() => window.photonboard.stage.open()}
-        title="Open Stage Window on second monitor (Cmd+Shift+W)"
+        onClick={() => {
+          if (isRemote()) {
+            // Browser: switch to full-screen stage mode
+            useUiStore.getState().setStageMode(true)
+          } else {
+            // Electron: open stage window on second monitor
+            window.photonboard.stage.open()
+          }
+        }}
+        title={isRemote() ? 'Switch to Stage view' : 'Open Stage Window on second monitor (Cmd+Shift+W)'}
       >
         Stage
       </button>
