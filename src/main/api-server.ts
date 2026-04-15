@@ -107,7 +107,7 @@ export function startApiServer(mainWindow: BrowserWindow): void {
     })
   })
 
-  // Start state broadcast at ~10Hz (enough for button feedback)
+  // Start state broadcast at ~4Hz (enough for button feedback, gentle on WiFi)
   startStateBroadcast()
 }
 
@@ -130,12 +130,19 @@ export function stopApiServer(): void {
 /**
  * Called by the IPC relay when renderer sends state.
  * Caches the state and broadcasts to all connected WebSocket clients.
+ * Throttled: only sends if state JSON has changed since last broadcast.
  */
+let lastBroadcastJson = ''
+
 export function broadcastState(state: any): void {
   lastState = state
   if (!wss || wss.clients.size === 0) return
 
   const msg = JSON.stringify({ type: 'state', data: state })
+  // Skip if identical to last broadcast (avoids flooding unchanged state)
+  if (msg === lastBroadcastJson) return
+  lastBroadcastJson = msg
+
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg)
@@ -155,7 +162,7 @@ function startStateBroadcast(): void {
     if (wss && wss.clients.size > 0) {
       mainWindowRef.webContents.send('api:request-state')
     }
-  }, 100) // 10Hz
+  }, 250) // 4Hz — enough for button feedback, gentle on WiFi
 }
 
 /**

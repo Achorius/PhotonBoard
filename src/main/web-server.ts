@@ -194,11 +194,18 @@ export function stopWebServer(): void {
 
 /**
  * Called when renderer sends state — forward to remote web clients.
+ * Throttled: only sends if state has changed since last broadcast.
  */
+let lastWebBroadcastJson = ''
+
 export function broadcastToWeb(state: any): void {
   lastState = state
   if (!wss || wss.clients.size === 0) return
   const msg = JSON.stringify({ type: 'event', channel: 'state', data: state })
+  // Skip if identical to last broadcast
+  if (msg === lastWebBroadcastJson) return
+  lastWebBroadcastJson = msg
+
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg)

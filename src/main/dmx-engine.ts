@@ -25,10 +25,10 @@ export class DmxEngine {
   start(): void {
     if (this.timer) return
     this.timer = setInterval(() => {
-      if (this.frameCallback) {
+      if (this.frameCallback && this.dirty) {
         this.frameCallback(this.universes)
+        this.dirty = false
       }
-      this.dirty = false
     }, this.refreshRate)
   }
 

@@ -10,6 +10,8 @@ export class ArtNetOutput {
   private senders: Map<number, SenderInstance> = new Map()
   private configs: ArtNetConfig[] = []
   private connected = false
+  // Track previous values per universe to avoid sending unchanged frames
+  private prevData: Map<number, Uint8Array> = new Map()
 
   constructor() {
     try {
@@ -58,8 +60,22 @@ export class ArtNetOutput {
     for (let i = 0; i < universes.length; i++) {
       const senderEntry = this.senders.get(i)
       if (senderEntry) {
-        const { sender } = senderEntry
         const data = universes[i]
+
+        // Skip transmission if data hasn't changed since last send
+        // (dmxnet's base_refresh_interval handles keepalive automatically)
+        const prev = this.prevData.get(i)
+        if (prev && prev.length === data.length) {
+          let same = true
+          for (let ch = 0; ch < data.length; ch++) {
+            if (prev[ch] !== data[ch]) { same = false; break }
+          }
+          if (same) continue
+        }
+
+        // Data changed — update cache and transmit
+        this.prevData.set(i, new Uint8Array(data))
+        const { sender } = senderEntry
         for (let ch = 0; ch < data.length; ch++) {
           sender.prepChannel(ch, data[ch])
         }
