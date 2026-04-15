@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, resolve } from 'path'
 import { homedir } from 'os'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
 import { DEFAULT_ROOM_CONFIG } from '../shared/types'
@@ -301,7 +301,12 @@ export class ShowFileManager {
       if (!fixture.source) fixture.source = 'user'
       fixture.lastModified = new Date().toISOString()
       const destDir = join(this.userDataPath, 'fixtures')
-      const destPath = join(destDir, `${fixture.id.replace(/\//g, '_')}.json`)
+      // Security: sanitize ID and verify path stays inside fixtures directory
+      const safeId = fixture.id.replace(/\//g, '_').replace(/\.\./g, '_').replace(/\0/g, '')
+      const destPath = resolve(join(destDir, `${safeId}.json`))
+      if (!destPath.startsWith(resolve(destDir) + '/')) {
+        return { success: false, error: 'Invalid fixture ID' }
+      }
       writeFileSync(destPath, JSON.stringify(fixture, null, 2), 'utf-8')
       this.fixtureCache.set(fixture.id, fixture)
       return { success: true }
@@ -312,13 +317,22 @@ export class ShowFileManager {
 
   deleteUserFixture(fixtureId: string): { success: boolean; error?: string } {
     try {
+      // Security: validate fixture ID
+      if (!fixtureId || typeof fixtureId !== 'string' || fixtureId.includes('..') || fixtureId.includes('\0')) {
+        return { success: false, error: 'Invalid fixture ID' }
+      }
       const fixture = this.fixtureCache.get(fixtureId)
       if (!fixture) return { success: false, error: 'Fixture not found' }
       // Don't allow deleting built-in fixtures
       if (fixture.source === 'builtin' || !fixture.source) {
         return { success: false, error: 'Cannot delete built-in fixtures' }
       }
-      const destPath = join(this.userDataPath, 'fixtures', `${fixtureId.replace(/\//g, '_')}.json`)
+      const destDir = resolve(join(this.userDataPath, 'fixtures'))
+      const destPath = resolve(join(destDir, `${fixtureId.replace(/\//g, '_')}.json`))
+      // Security: verify resolved path is inside fixtures directory
+      if (!destPath.startsWith(destDir + '/')) {
+        return { success: false, error: 'Invalid fixture path' }
+      }
       if (existsSync(destPath)) {
         const { unlinkSync } = require('fs')
         unlinkSync(destPath)

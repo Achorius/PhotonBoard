@@ -119,11 +119,17 @@ function createMenu(): void {
 }
 
 function createWindow(): void {
-  // Grant MIDI permissions BEFORE creating the window (required for Web MIDI in Electron 33+)
+  // Grant only MIDI permissions (required for Web MIDI in Electron 33+)
+  // All other permissions are denied for security
+  const ALLOWED_PERMISSIONS = new Set(['midi', 'midiSysex'])
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(true) // Grant all permissions (midi, midiSysex, etc.)
+    const granted = ALLOWED_PERMISSIONS.has(permission)
+    if (!granted) console.log(`[Security] Denied permission: ${permission}`)
+    callback(granted)
   })
-  session.defaultSession.setPermissionCheckHandler(() => true)
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return ALLOWED_PERMISSIONS.has(permission)
+  })
 
   const isLinux = process.platform === 'linux'
 

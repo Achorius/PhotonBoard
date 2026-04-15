@@ -5,10 +5,23 @@
  *           GrandMA2/3 (.xml), CSV, PhotonBoard native JSON
  */
 
-import { readFileSync } from 'fs'
+import { readFileSync, statSync } from 'fs'
 import { XMLParser } from 'fast-xml-parser'
 import AdmZip from 'adm-zip'
 import type { FixtureDefinition, FixtureChannel, FixtureMode, FixtureCapability, FixturePhysical } from '../shared/types'
+
+// Security: max file sizes to prevent denial-of-service
+const MAX_FIXTURE_FILE_SIZE = 10 * 1024 * 1024  // 10 MB max fixture file
+const MAX_GDTF_EXTRACTED_SIZE = 20 * 1024 * 1024 // 20 MB max extracted GDTF content
+
+// Secure XML parser options — disable entity processing to prevent XXE attacks
+const SAFE_XML_OPTIONS = {
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  processEntities: false,     // Disable entity processing (prevents XXE)
+  htmlEntities: false,         // Disable HTML entity decoding
+  allowBooleanAttributes: true,
+} as const
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -169,12 +182,23 @@ export function parseOFL(data: any, manufacturer?: string): FixtureDefinition {
 // ── Parser: GDTF (.gdtf = ZIP containing description.xml) ───────────
 
 export function parseGDTF(filePath: string): FixtureDefinition {
+  // Security: check file size before processing
+  const fileStats = statSync(filePath)
+  if (fileStats.size > MAX_FIXTURE_FILE_SIZE) {
+    throw new Error(`GDTF file too large: ${(fileStats.size / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
+  }
+
   const zip = new AdmZip(filePath)
   const descEntry = zip.getEntry('description.xml')
   if (!descEntry) throw new Error('Invalid GDTF file: missing description.xml')
 
+  // Security: check extracted size (ZIP bomb protection)
+  if (descEntry.header.size > MAX_GDTF_EXTRACTED_SIZE) {
+    throw new Error(`GDTF description.xml too large when extracted: ${(descEntry.header.size / 1024 / 1024).toFixed(1)} MB`)
+  }
+
   const xml = descEntry.getData().toString('utf-8')
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+  const parser = new XMLParser(SAFE_XML_OPTIONS)
   const doc = parser.parse(xml)
 
   const ftNode = doc.GDTF?.FixtureType || doc.FixtureType || {}
@@ -324,7 +348,7 @@ function gdtfAttributeToName(attr: string): string {
 // ── Parser: QLC+ (.qxf) ─────────────────────────────────────────────
 
 export function parseQLCPlus(content: string): FixtureDefinition {
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+  const parser = new XMLParser(SAFE_XML_OPTIONS)
   const doc = parser.parse(content)
   const fd = doc.FixtureDefinition || {}
 
@@ -426,7 +450,7 @@ function qlcGroupToType(group: string, name: string): FixtureChannel['type'] {
 // ── Parser: Avolites Personality (.d4) ───────────────────────────────
 
 export function parseAvolites(content: string): FixtureDefinition {
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+  const parser = new XMLParser(SAFE_XML_OPTIONS)
   const doc = parser.parse(content)
 
   // Avolites .d4 files have various structures
@@ -483,7 +507,7 @@ export function parseAvolites(content: string): FixtureDefinition {
 // ── Parser: GrandMA2/3 XML ───────────────────────────────────────────
 
 export function parseGrandMA(content: string): FixtureDefinition {
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+  const parser = new XMLParser(SAFE_XML_OPTIONS)
   const doc = parser.parse(content)
 
   // GrandMA fixture XML can have various root elements
@@ -619,6 +643,12 @@ function guessCategories(name: string, channels: Record<string, FixtureChannel>)
 export function parseFixtureFile(filePath: string): FixtureDefinition {
   const ext = filePath.toLowerCase().split('.').pop() || ''
   const fileName = filePath.split(/[/\\]/).pop() || ''
+
+  // Security: check file size before reading
+  const fileStats = statSync(filePath)
+  if (fileStats.size > MAX_FIXTURE_FILE_SIZE) {
+    throw new Error(`Fixture file too large: ${(fileStats.size / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
+  }
 
   // GDTF is binary (ZIP), handle separately
   if (ext === 'gdtf') {

@@ -42,7 +42,7 @@ export function useRemoteSync(): void {
 
       _applyingRemoteState = true
       try {
-        // Sync cuelist play/fader states
+        // Sync cuelist play/fader states (with type validation)
         const piCuelists = data.cuelists
         if (piCuelists && Array.isArray(piCuelists)) {
           const local = usePlaybackStore.getState().cuelists
@@ -50,32 +50,41 @@ export function useRemoteSync(): void {
           const updated = local.map(cl => {
             const pi = piCuelists.find((p: any) => p.id === cl.id)
             if (!pi) return cl
-            if (cl.isPlaying !== pi.isPlaying || cl.faderLevel !== pi.faderLevel) {
+            // Validate types before applying
+            const isPlaying = typeof pi.isPlaying === 'boolean' ? pi.isPlaying : cl.isPlaying
+            const faderLevel = typeof pi.faderLevel === 'number'
+              ? Math.max(0, Math.min(255, Math.round(pi.faderLevel)))
+              : cl.faderLevel
+            if (cl.isPlaying !== isPlaying || cl.faderLevel !== faderLevel) {
               changed = true
-              return { ...cl, isPlaying: pi.isPlaying, faderLevel: pi.faderLevel }
+              return { ...cl, isPlaying, faderLevel }
             }
             return cl
           })
           if (changed) usePlaybackStore.setState({ cuelists: updated })
         }
 
-        // Sync grand master
-        if (data.grandMaster !== undefined) {
-          if (useDmxStore.getState().grandMaster !== data.grandMaster) {
-            useDmxStore.setState({ grandMaster: data.grandMaster })
+        // Sync grand master (with clamping)
+        if (data.grandMaster !== undefined && typeof data.grandMaster === 'number') {
+          const clampedGM = Math.max(0, Math.min(255, Math.round(data.grandMaster)))
+          if (useDmxStore.getState().grandMaster !== clampedGM) {
+            useDmxStore.setState({ grandMaster: clampedGM })
           }
         }
 
-        // Sync blackout
-        if (data.blackout !== undefined) {
+        // Sync blackout (with type validation)
+        if (data.blackout !== undefined && typeof data.blackout === 'boolean') {
           if (useDmxStore.getState().blackout !== data.blackout) {
             useDmxStore.setState({ blackout: data.blackout })
           }
         }
 
-        // Sync DMX values (for 3D visualizer on Mac)
+        // Sync DMX values (for 3D visualizer on Mac) — clamp all values to 0-255
         if (data.dmxValues && Array.isArray(data.dmxValues)) {
-          useDmxStore.setState({ values: data.dmxValues })
+          const clamped = data.dmxValues.map((v: any) =>
+            typeof v === 'number' ? Math.max(0, Math.min(255, Math.round(v))) : 0
+          )
+          useDmxStore.setState({ values: clamped })
         }
       } finally {
         _applyingRemoteState = false

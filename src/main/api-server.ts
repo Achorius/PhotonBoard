@@ -13,6 +13,8 @@ import { WebSocketServer, WebSocket } from 'ws'
 import type { BrowserWindow } from 'electron'
 
 const API_PORT = 9090
+const MAX_API_MESSAGE_SIZE = 64 * 1024 // 64 KB max for API messages
+const API_RATE_LIMIT = 100 // max messages per second per client
 
 let wss: WebSocketServer | null = null
 let syncInterval: ReturnType<typeof setInterval> | null = null
@@ -43,7 +45,7 @@ export function startApiServer(mainWindow: BrowserWindow): void {
   if (wss) return
   mainWindowRef = mainWindow
 
-  wss = new WebSocketServer({ port: API_PORT, host: '0.0.0.0' })
+  wss = new WebSocketServer({ port: API_PORT, host: '0.0.0.0', maxPayload: MAX_API_MESSAGE_SIZE })
 
   wss.on('listening', () => {
     console.log(`[API] WebSocket server listening on port ${API_PORT}`)
@@ -55,6 +57,10 @@ export function startApiServer(mainWindow: BrowserWindow): void {
 
   wss.on('connection', (ws) => {
     console.log('[API] Client connected')
+
+    // Rate limiting state per client
+    let messageCount = 0
+    const rateLimitResetTimer = setInterval(() => { messageCount = 0 }, 1000)
 
     // Send available commands on connect
     ws.send(JSON.stringify({
@@ -69,13 +75,26 @@ export function startApiServer(mainWindow: BrowserWindow): void {
 
     // Handle incoming commands
     ws.on('message', (raw) => {
+      // Rate limiting
+      messageCount++
+      if (messageCount > API_RATE_LIMIT) return
+
       try {
         const msg = JSON.parse(raw.toString())
-        if (msg.type === 'command' && msg.command) {
-          // Relay to main renderer (same path as stage window commands)
-          if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-            mainWindowRef.webContents.send('stage:command', msg.command)
-          }
+
+        // Validate message structure
+        if (!msg || typeof msg !== 'object' || msg.type !== 'command' || !msg.command) return
+
+        // Validate command type is in whitelist
+        const commandType = msg.command?.type
+        if (typeof commandType !== 'string' || !AVAILABLE_COMMANDS.includes(commandType)) {
+          console.warn('[API] Rejected unknown command:', commandType)
+          return
+        }
+
+        // Relay to main renderer (same path as stage window commands)
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.webContents.send('stage:command', msg.command)
         }
       } catch (e) {
         console.error('[API] Invalid message:', e)
@@ -83,6 +102,7 @@ export function startApiServer(mainWindow: BrowserWindow): void {
     })
 
     ws.on('close', () => {
+      clearInterval(rateLimitResetTimer)
       console.log('[API] Client disconnected')
     })
   })
