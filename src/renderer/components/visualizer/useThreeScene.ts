@@ -29,11 +29,31 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): Th
     // ---- Renderer (adapt to device capabilities) ----
     const device = getDeviceProfile()
     const needsPerf = device.isLowEnd || device.isMidRange
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !needsPerf,
-      alpha: false,
-      powerPreference: needsPerf ? 'low-power' : 'high-performance'
-    })
+
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: !needsPerf,
+        alpha: false,
+        powerPreference: needsPerf ? 'low-power' : 'high-performance',
+        failIfMajorPerformanceCaveat: false  // Accept software renderers (Safari fallback)
+      })
+    } catch (err) {
+      console.error('[3D] WebGL unavailable:', err)
+      // Show fallback message in container
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#888;font-size:14px;text-align:center;padding:20px;">3D non disponible sur ce navigateur.<br>Utilisez l\'onglet Stage Layout.</div>'
+      return () => {}
+    }
+
+    // Verify WebGL context was actually created
+    const gl = renderer.getContext()
+    if (!gl) {
+      console.error('[3D] WebGL context is null')
+      renderer.dispose()
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#888;font-size:14px;text-align:center;padding:20px;">3D non disponible.<br>Utilisez l\'onglet Stage Layout.</div>'
+      return () => {}
+    }
+
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, device.maxPixelRatio))
     renderer.shadowMap.enabled = !needsPerf
     renderer.shadowMap.type = THREE.BasicShadowMap

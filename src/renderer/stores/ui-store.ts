@@ -1,9 +1,26 @@
 import { create } from 'zustand'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 
+/** Detect mobile/tablet (Android, iOS, iPadOS) */
+export function isMobileDevice(): boolean {
+  const ua = navigator.userAgent.toLowerCase()
+  // Check for mobile/tablet user agents
+  if (/android|iphone|ipad|ipod/.test(ua)) return true
+  // iPadOS 13+ reports as Mac — detect via touch + Mac combo
+  if (ua.includes('macintosh') && navigator.maxTouchPoints > 1) return true
+  // Small screen with touch = probably mobile
+  if ('ontouchstart' in window && window.innerWidth < 1024) return true
+  return false
+}
+
 function getDefaultTab(): ViewTab {
-  // Remote browser: default to Scenes (3D may not work)
-  if (!(window as any).__ELECTRON__ && !(window as any).photonboard?.stage?.open) {
+  const isElectron = !!(window as any).__ELECTRON__ || !!(window as any).photonboard?.stage?.open
+  // Mobile/tablet in browser: default to Stage view
+  if (!isElectron && isMobileDevice()) {
+    return 'stage'
+  }
+  // Remote browser (desktop): default to Scenes
+  if (!isElectron) {
     return 'playback'
   }
   // Pi (ARM / mid-range): default to Scenes

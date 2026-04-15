@@ -8,6 +8,31 @@ import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
 import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
 import type { MountingLocation } from '@shared/types'
 
+/** Error boundary: catch WebGL crashes and show fallback instead of blank screen */
+class WebGLErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: string }
+> {
+  state = { hasError: false, error: undefined as string | undefined }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-surface-0 text-gray-500">
+          <div className="text-center p-6">
+            <div className="text-lg mb-2">3D non disponible</div>
+            <div className="text-xs text-gray-600 mb-4">{this.state.error}</div>
+            <div className="text-xs">Utilisez l'onglet Stage Layout</div>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export function VisualizerView() {
   const {
     roomConfig, setRoomConfig,
@@ -119,7 +144,9 @@ export function VisualizerView() {
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="flex-1 overflow-hidden">
           <div className="relative w-full h-full flex">
-            <ThreeCanvas />
+            <WebGLErrorBoundary>
+              <ThreeCanvas />
+            </WebGLErrorBoundary>
             <FixtureProps3D />
           </div>
         </div>

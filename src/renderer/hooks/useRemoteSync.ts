@@ -80,10 +80,17 @@ export function useRemoteSync(): void {
         }
 
         // Sync DMX values (for 3D visualizer on Mac) — clamp all values to 0-255
+        // dmxValues is a 2D array: number[][] (one array per universe)
         if (data.dmxValues && Array.isArray(data.dmxValues)) {
-          const clamped = data.dmxValues.map((v: any) =>
-            typeof v === 'number' ? Math.max(0, Math.min(255, Math.round(v))) : 0
-          )
+          const clamped = data.dmxValues.map((universe: any) => {
+            if (Array.isArray(universe)) {
+              return universe.map((v: any) =>
+                typeof v === 'number' ? Math.max(0, Math.min(255, Math.round(v))) : 0
+              )
+            }
+            // Fallback: if somehow a flat value, create empty universe
+            return new Array(512).fill(0)
+          })
           useDmxStore.setState({ values: clamped })
         }
       } finally {

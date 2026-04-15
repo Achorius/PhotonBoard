@@ -17,6 +17,7 @@ import { PlaybackView } from './components/playback/PlaybackView'
 import { EffectsView } from './components/effects/EffectsView'
 import { MidiView } from './components/midi/MidiView'
 import { StageLayoutView } from './components/visualizer/StageLayoutView'
+import { RemoteStageView } from './components/stage/RemoteStageView'
 import { getDeviceProfile } from './lib/device-detect'
 
 // Lazy-load 3D visualizer — never imported on ARM/mid-range devices
@@ -38,9 +39,10 @@ const DEFAULT_ARTNET_CONFIG = [
   { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 },
 ]
 
-type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
+type WorkspaceTab = { id: ViewTab; label: string; shortcut: string; remoteOnly?: boolean }
 
 const WORKSPACE_TABS: WorkspaceTab[] = [
+  { id: 'stage',         label: 'Stage',        shortcut: '`', remoteOnly: true },
   { id: 'visualizer',    label: '3D View',      shortcut: '1' },
   { id: 'stage-layout',  label: 'Stage Layout', shortcut: '2' },
   { id: 'live',          label: 'Timeline',     shortcut: '3' },
@@ -483,6 +485,7 @@ export default function App() {
           </React.Suspense>
         )
       }
+      case 'stage':        return <RemoteStageView />
       case 'stage-layout': return <StageLayoutView />
       case 'live':         return <LiveView />
       case 'follow':       return <FollowPanel />
@@ -495,17 +498,19 @@ export default function App() {
     <div className="flex flex-col h-screen bg-surface-0 text-gray-200 select-none">
       <Toolbar />
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: persistent patch panel */}
-        <PatchPanel />
+        {/* Left: persistent patch panel (hidden in Stage view) */}
+        {activeTab !== 'stage' && <PatchPanel />}
 
         {/* Center: workspace */}
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* Workspace tab bar */}
-          <div className="flex items-center gap-0.5 px-2 py-1 border-b border-surface-3 bg-surface-1 shrink-0">
-            {WORKSPACE_TABS.map(({ id, label, shortcut }) => (
+          <div className="flex items-center gap-0.5 px-2 py-1 border-b border-surface-3 bg-surface-1 shrink-0 overflow-x-auto">
+            {WORKSPACE_TABS
+              .filter(t => !t.remoteOnly || isRemote())
+              .map(({ id, label, shortcut }) => (
               <button
                 key={id}
-                className={`px-2.5 py-0.5 text-xs rounded transition-colors ${
+                className={`px-2.5 py-0.5 text-xs rounded transition-colors whitespace-nowrap ${
                   activeTab === id
                     ? 'bg-accent text-white'
                     : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'
