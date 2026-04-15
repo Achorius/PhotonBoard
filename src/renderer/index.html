@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>PhotonBoard</title>
   <style>
+    * { touch-action: none; -webkit-user-select: none; user-select: none; }
     body {
       margin: 0;
       padding: 0;
       background: #0a0a0f;
       color: #e0e0e0;
       overflow: hidden;
+      cursor: default;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     }
     /* Electron drag region */

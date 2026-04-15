@@ -15,16 +15,23 @@ let ws: WebSocket | null = null
 let pending: Map<string, PendingRequest> = new Map()
 let eventHandlers: Map<string, Set<(...args: any[]) => void>> = new Map()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-let connectionReady: Promise<void>
-let resolveReady: () => void
 
 // State listeners for remote sync (Pi → Mac)
 let stateListeners: Set<(data: any) => void> = new Set()
 
-function resetReadyPromise(): void {
-  connectionReady = new Promise(r => { resolveReady = r })
+// Connection waiters — all resolved when WebSocket opens
+let connectionWaiters: (() => void)[] = []
+
+function waitForConnection(): Promise<void> {
+  if (ws?.readyState === WebSocket.OPEN) return Promise.resolve()
+  return new Promise(resolve => { connectionWaiters.push(resolve) })
 }
-resetReadyPromise()
+
+function resolveAllWaiters(): void {
+  const waiters = connectionWaiters
+  connectionWaiters = []
+  for (const r of waiters) r()
+}
 
 function getWsUrl(): string {
   const host = window.location.hostname || '127.0.0.1'
@@ -34,13 +41,12 @@ function getWsUrl(): string {
 
 function connect(): void {
   if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) return
-  resetReadyPromise()
 
   ws = new WebSocket(getWsUrl())
 
   ws.onopen = () => {
     console.log('[Remote] Connected to PhotonBoard')
-    resolveReady()
+    resolveAllWaiters()
   }
 
   ws.onmessage = (event) => {
@@ -84,7 +90,7 @@ function scheduleReconnect(): void {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
     connect()
-  }, 3000)
+  }, 2000)
 }
 
 function on(channel: string, callback: (...args: any[]) => void): () => void {
@@ -94,7 +100,7 @@ function on(channel: string, callback: (...args: any[]) => void): () => void {
 }
 
 async function invoke(channel: string, ...args: any[]): Promise<any> {
-  await connectionReady
+  await waitForConnection()
   return new Promise((resolve, reject) => {
     const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
     const timer = setTimeout(() => {

@@ -86,7 +86,8 @@ export function Fader({
         style={{
           width: vertical ? 6 : 180,
           ...(vertical ? {} : { height: 6 }),
-          backgroundColor: '#0d0d14'
+          backgroundColor: '#0d0d14',
+          touchAction: 'none'
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

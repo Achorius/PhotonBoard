@@ -61,12 +61,13 @@ export function getDeviceProfile(): DeviceProfile {
 
   // Mid-range: ARM GPUs that work but aren't desktop-grade
   // Pi 5 VideoCore VII (v3d), SwiftShader on ARM, or any ARM + Linux combo
+  const isLinux = platform.includes('linux') || ua.includes('linux')
   const isMidRange = !isLowEnd && (
     gpuRenderer.includes('v3d') ||
     gpuRenderer.includes('videocore') ||
     gpuRenderer.includes('swiftshader') ||
     (isArm && gpuRenderer.includes('angle')) ||
-    (isArm && process.platform === 'linux')
+    (isArm && isLinux)
   )
 
   // Desktop: everything else (Intel, AMD, NVIDIA, Apple Silicon)

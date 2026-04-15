@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 
+function getDefaultTab(): ViewTab {
+  // Remote browser: default to Scenes (3D may not work)
+  if (!(window as any).__ELECTRON__ && !(window as any).photonboard?.stage?.open) {
+    return 'playback'
+  }
+  // Pi (ARM / mid-range): default to Scenes
+  if (getDeviceProfile().isMidRange) return 'playback'
+  // Desktop: default to 3D
+  return 'visualizer'
+}
+
 export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
 
 interface UiState {
@@ -34,7 +45,7 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  activeTab: getDeviceProfile().isMidRange ? 'playback' : 'visualizer',
+  activeTab: getDefaultTab(),
   showName: 'New Show',
   isDirty: false,
   selectedUniverse: 0,

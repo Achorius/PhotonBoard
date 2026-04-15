@@ -5,6 +5,8 @@
 @layer base {
   * {
     box-sizing: border-box;
+    touch-action: none;
+    -webkit-user-select: none;
   }
 
   html, body, #root {

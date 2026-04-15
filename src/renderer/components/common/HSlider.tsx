@@ -69,7 +69,7 @@ export function HSlider({
     <div
       ref={trackRef}
       className={`relative rounded-full cursor-pointer ${className}`}
-      style={{ height: 6, backgroundColor: '#3a3a4a' }}
+      style={{ height: 6, backgroundColor: '#3a3a4a', touchAction: 'none' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
