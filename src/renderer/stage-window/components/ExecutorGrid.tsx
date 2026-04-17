@@ -50,35 +50,35 @@ function SceneCell({ cuelist, onGo, onStop, onFader }: {
   const isActive = cuelist.isPlaying
 
   return (
-    <div className={`flex flex-col rounded-xl overflow-hidden border-2 transition-all ${
+    <div className={`flex flex-col rounded-md overflow-hidden border transition-all min-h-0 ${
       isActive
-        ? 'border-green-500/60 bg-surface-2 shadow-[0_0_16px_rgba(34,197,94,0.15)]'
+        ? 'border-green-500/60 bg-surface-2 shadow-[0_0_10px_rgba(34,197,94,0.15)]'
         : 'border-surface-3 bg-surface-1'
     }`}>
       {/* Scene name */}
-      <div className="px-2 py-2 text-center border-b border-surface-3 shrink-0">
-        <div className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-gray-400'}`}>
+      <div className="px-1 py-1 text-center border-b border-surface-3 shrink-0">
+        <div className={`text-[11px] font-bold truncate leading-tight ${isActive ? 'text-white' : 'text-gray-400'}`}>
           {cuelist.name}
         </div>
         {cuelist.cueCount > 1 && (
-          <div className="text-[9px] text-gray-600 mt-0.5">
-            Step {cuelist.currentCueIndex + 1}/{cuelist.cueCount}
+          <div className="text-[8px] text-gray-600 leading-none">
+            {cuelist.currentCueIndex + 1}/{cuelist.cueCount}
           </div>
         )}
       </div>
 
       {/* Fader */}
-      <div className="flex-1 flex items-stretch px-3 py-2 min-h-0">
+      <div className="flex-1 flex items-stretch px-1 py-1 min-h-0">
         <div
           ref={trackRef}
-          className="w-10 mx-auto rounded-md relative cursor-pointer overflow-hidden"
+          className="w-6 mx-auto rounded relative cursor-pointer overflow-hidden touch-none"
           style={{ background: '#0f0f18', border: '1px solid #333' }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
         >
           <div
-            className="absolute bottom-0 left-0 right-0 rounded-b-sm transition-[height] duration-75"
+            className="absolute bottom-0 left-0 right-0 transition-[height] duration-75"
             style={{
               height: `${pct}%`,
               background: isActive
@@ -87,14 +87,14 @@ function SceneCell({ cuelist, onGo, onStop, onFader }: {
             }}
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[11px] font-bold text-white/80 font-mono drop-shadow">{pct}</span>
+            <span className="text-[9px] font-bold text-white/80 font-mono drop-shadow">{pct}</span>
           </div>
         </div>
       </div>
 
       {/* GO / STOP button */}
       <button
-        className={`shrink-0 py-3 mx-2 mb-2 rounded-lg text-sm font-black uppercase tracking-wide transition-all active:scale-95 ${
+        className={`shrink-0 py-1.5 mx-1 mb-1 rounded text-[11px] font-black uppercase tracking-wide transition-all active:scale-95 ${
           isActive
             ? 'bg-red-600/80 text-white hover:bg-red-500'
             : 'bg-green-600/80 text-white hover:bg-green-500'
@@ -109,23 +109,26 @@ function SceneCell({ cuelist, onGo, onStop, onFader }: {
 
 function EmptyCell() {
   return (
-    <div className="rounded-xl border-2 border-surface-3/30 border-dashed bg-surface-0/50" />
+    <div className="rounded-md border border-surface-3/30 border-dashed bg-surface-0/50" />
   )
 }
 
+// Match main app's ExecutorBar layout: 8 columns × 4 rows = 32 scenes
+const COLUMN_COUNT = 8
+const ROWS_PER_COLUMN = 4
+
 export function ExecutorGrid({ cuelists, onGo, onStop, onFader }: Props) {
-  // Fill up to 16 slots (4 columns x 4 rows), or expand if more scenes
-  const cols = Math.max(4, Math.ceil(Math.sqrt(Math.max(cuelists.length, 4))))
-  const rows = Math.max(2, Math.ceil(cuelists.length / cols))
+  const cols = COLUMN_COUNT
+  const rows = ROWS_PER_COLUMN
   const totalSlots = cols * rows
 
   return (
-    <div className="flex-1 p-3 min-h-0 overflow-hidden">
+    <div className="flex-1 p-2 min-h-0 overflow-hidden">
       <div
-        className="grid gap-2 h-full"
+        className="grid gap-1.5 h-full"
         style={{
-          gridTemplateColumns: `repeat(${cols}, 1fr)`,
-          gridTemplateRows: `repeat(${rows}, 1fr)`
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`
         }}
       >
         {Array.from({ length: totalSlots }, (_, i) => {
