@@ -267,7 +267,7 @@
   </div>
   <div class="version-info">
     Version 0.1.0<br>
-    Avril 2026
+    Avril 2026 &mdash; r&eacute;vision 2
   </div>
 </div>
 
@@ -304,7 +304,13 @@
   <div class="toc-section main"><span>14. Gestion des fichiers Show</span></div>
   <div class="toc-section main"><span>15. Formats de fixtures support&eacute;s</span></div>
   <div class="toc-section main"><span>16. Sortie DMX : ArtNet &amp; USB</span></div>
-  <div class="toc-section main"><span>17. Glossaire</span></div>
+  <div class="toc-section main"><span>17. Raspberry Pi &amp; mode Remote</span></div>
+  <div class="toc-section sub"><span>17.1 Installation sur Raspberry Pi 5</span></div>
+  <div class="toc-section sub"><span>17.2 Stage Window (deuxi&egrave;me &eacute;cran tactile)</span></div>
+  <div class="toc-section sub"><span>17.3 Mode Remote (Mac, tablette, t&eacute;l&eacute;phone)</span></div>
+  <div class="toc-section sub"><span>17.4 Synchronisation bidirectionnelle des ex&eacute;cuteurs</span></div>
+  <div class="toc-section sub"><span>17.5 Bitfocus Companion &amp; API WebSocket</span></div>
+  <div class="toc-section main"><span>18. Glossaire</span></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -491,6 +497,10 @@
 
 <div class="tip">
   Clic droit sur une scene dans l'Executor Bar ouvre le MIDI Learn pour cette scene specifique. Le mode de la cellule (TOG/TRIG/FLASH) est automatiquement applique au mapping MIDI.
+</div>
+
+<div class="note">
+  Lorsque PhotonBoard tourne sur un Raspberry&nbsp;Pi en mode kiosk, la barre d&rsquo;ex&eacute;cuteurs est aussi pr&eacute;sente sur le second &eacute;cran tactile (Stage Window) et dans le navigateur de tout client distant. <strong>Tout d&eacute;placement, renommage ou changement de mode est synchronis&eacute; en temps r&eacute;el dans les deux sens</strong> (voir chapitre 17).
 </div>
 
 <h2>2.5 Barre de statut (Status Bar)</h2>
@@ -1107,10 +1117,142 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     CHAPTER 17 — GLOSSAIRE
+     CHAPTER 17 — RASPBERRY PI & REMOTE
      ═══════════════════════════════════════════════════════════ -->
 <div class="chapter">
-<h1>17. Glossaire</h1>
+<h1>17. Raspberry Pi &amp; mode Remote</h1>
+
+<p>
+  PhotonBoard peut fonctionner en autonomie sur un <strong>Raspberry Pi&nbsp;5</strong> install&eacute; en r&eacute;gie : double &eacute;cran tactile, sortie ArtNet, contr&ocirc;le distant depuis n&rsquo;importe quel ordinateur, tablette ou t&eacute;l&eacute;phone du r&eacute;seau local.
+  Ce chapitre d&eacute;crit l&rsquo;installation, le mode Remote, la synchronisation bidirectionnelle, et l&rsquo;int&eacute;gration Bitfocus Companion.
+</p>
+
+<h2>17.1 Installation sur Raspberry Pi 5</h2>
+
+<p>
+  Une image syst&egrave;me pr&ecirc;te &agrave; l&rsquo;emploi est fournie dans <code>dist/PhotonBoard-v0.1.0-&lt;date&gt;.img.gz</code>.
+  Elle p&egrave;se environ <strong>1.5&nbsp;Go compress&eacute;e</strong> et tient sur n&rsquo;importe quelle carte SD &agrave; partir de <strong>16&nbsp;Go</strong>. La partition est automatiquement &eacute;tendue &agrave; la taille r&eacute;elle de la carte au premier d&eacute;marrage.
+</p>
+
+<div class="steps">
+  <div class="step"><div class="step-content">Ouvrir <strong>Raspberry Pi Imager</strong> sur Mac ou PC.</div></div>
+  <div class="step"><div class="step-content">Choisir l&rsquo;OS &rarr; <em>Use custom</em> &rarr; s&eacute;lectionner le fichier <code>.img.gz</code>.</div></div>
+  <div class="step"><div class="step-content">Cliquer sur l&rsquo;ic&ocirc;ne d&rsquo;engrenage pour personnaliser le hostname (ex.&nbsp;: <code>AulaFlorence</code>) et le r&eacute;seau Wi-Fi de la salle.</div></div>
+  <div class="step"><div class="step-content">Flasher la carte SD, l&rsquo;ins&eacute;rer dans le Pi&nbsp;5, brancher les &eacute;crans HDMI et le c&acirc;ble r&eacute;seau, puis alimenter.</div></div>
+  <div class="step"><div class="step-content">Au premier boot l&rsquo;image se redimensionne et red&eacute;marre. Apr&egrave;s 30&nbsp;s environ, PhotonBoard s&rsquo;affiche en plein &eacute;cran sur la sortie HDMI&nbsp;1.</div></div>
+</div>
+
+<table>
+  <tr><th>Service</th><th>Port</th><th>Adresse</th></tr>
+  <tr><td>PhotonBoard (interface 3D &amp; Stage)</td><td>9091</td><td><code>http://&lt;hostname&gt;.local:9091</code></td></tr>
+  <tr><td>Bitfocus Companion (web UI)</td><td>8000</td><td><code>http://&lt;hostname&gt;.local:8000</code></td></tr>
+  <tr><td>API WebSocket (Companion, OSC bridges&hellip;)</td><td>9090</td><td><code>ws://&lt;hostname&gt;.local:9090</code></td></tr>
+  <tr><td>SSH (administration)</td><td>22</td><td><code>ssh admin@&lt;hostname&gt;.local</code></td></tr>
+</table>
+
+<div class="note">
+  Identifiants par d&eacute;faut&nbsp;: utilisateur <code>admin</code>, mot de passe <code>admin</code>. Le fuseau horaire est <strong>Europe/Paris</strong> par d&eacute;faut.
+</div>
+
+<h3>17.1.1 Configuration des &eacute;crans tactiles</h3>
+<p>
+  L&rsquo;image inclut un script (<code>/usr/local/bin/photonboard-map-touch</code>) qui associe chaque dalle tactile <strong>USB wch.cn</strong> &agrave; la sortie HDMI correspondante en se basant sur le <em>chemin USB physique</em>. Cette association reste stable apr&egrave;s un red&eacute;marrage, contrairement aux ID xinput qui d&eacute;pendent de l&rsquo;ordre d&rsquo;&eacute;num&eacute;ration USB.
+</p>
+
+<p>Si le c&ocirc;t&eacute; gauche/droite est invers&eacute;, &eacute;diter <code>/etc/photonboard/touch-map.conf</code> et passer <code>SWAP=0</code> &agrave; <code>SWAP=1</code>, puis red&eacute;marrer.</p>
+
+<h2>17.2 Stage Window (deuxi&egrave;me &eacute;cran tactile)</h2>
+
+<p>
+  Lorsque deux &eacute;crans HDMI sont d&eacute;tect&eacute;s, PhotonBoard ouvre automatiquement une <strong>fen&ecirc;tre Stage</strong> sur le second &eacute;cran. Cette surface tactile est optimis&eacute;e pour le pilotage live :
+</p>
+
+<ul>
+  <li><strong>Grille 8&nbsp;&times;&nbsp;4</strong> (32&nbsp;sc&egrave;nes) reproduisant fid&egrave;lement la barre d&rsquo;ex&eacute;cuteurs de la fen&ecirc;tre principale.</li>
+  <li>Couleurs de colonnes, badges <code>TOG</code>/<code>TRIG</code>/<code>FLASH</code> et faders identiques &agrave; la fen&ecirc;tre principale.</li>
+  <li><strong>Drag &amp; drop tactile</strong>&nbsp;: maintenir une cellule pour la d&eacute;placer vers une autre case &mdash; la modification se propage instantan&eacute;ment &agrave; la fen&ecirc;tre principale et &agrave; tous les clients distants.</li>
+  <li>Boutons globaux <strong>Blackout</strong>, <strong>Blinder</strong>, <strong>Strobe</strong>, et fader <strong>Grand Master</strong>.</li>
+</ul>
+
+<div class="tip">
+  L&rsquo;onglet 3D View est d&eacute;sactiv&eacute; sur les Raspberry&nbsp;Pi (GPU ARM trop limit&eacute; pour la 3D temps r&eacute;el). Pour pr&eacute;visualiser en 3D, utilisez le mode Remote depuis un Mac (voir 17.3).
+</div>
+
+<h2>17.3 Mode Remote (Mac, tablette, t&eacute;l&eacute;phone)</h2>
+
+<p>
+  Tout appareil du r&eacute;seau local (Mac, iPad, iPhone, Android, Windows&hellip;) peut se connecter &agrave; PhotonBoard via un simple navigateur web&nbsp;:
+</p>
+
+<div class="figure">
+  <div class="figure-box">
+    Sur l&rsquo;ordinateur, ouvrez <code>http://PhotonBoard.local:9091</code><br>
+    Sur un t&eacute;l&eacute;phone connect&eacute; au m&ecirc;me Wi-Fi, ouvrez la m&ecirc;me URL.
+  </div>
+</div>
+
+<table>
+  <tr><th>Appareil</th><th>Affichage par d&eacute;faut</th><th>Bascule</th></tr>
+  <tr><td><strong>Mac / PC</strong> (large &eacute;cran)</td><td>Interface compl&egrave;te avec onglets, 3D View, Stage Layout, Timeline&hellip;</td><td>Bouton <em>Stage</em> dans la toolbar pour passer en surface live tactile</td></tr>
+  <tr><td><strong>Tablette</strong></td><td>Interface compl&egrave;te</td><td>Bouton <em>Stage</em> pour bascule</td></tr>
+  <tr><td><strong>T&eacute;l&eacute;phone</strong></td><td>Surface Stage plein &eacute;cran (32 sc&egrave;nes + Grand Master + Blackout)</td><td>Aucune &mdash; le t&eacute;l&eacute;phone reste en mode Stage</td></tr>
+</table>
+
+<h3>17.3.1 Charger un show depuis un ordinateur</h3>
+<div class="steps">
+  <div class="step"><div class="step-content">Ouvrir <code>http://&lt;hostname&gt;.local:9091</code> dans Chrome ou Safari.</div></div>
+  <div class="step"><div class="step-content">Cliquer sur <strong>&uarr; Upload Show</strong> dans la toolbar.</div></div>
+  <div class="step"><div class="step-content">S&eacute;lectionner un fichier <code>.pbshow</code> sur l&rsquo;ordinateur. Il est transf&eacute;r&eacute; et stock&eacute; sur le Pi.</div></div>
+  <div class="step"><div class="step-content">Le show est imm&eacute;diatement charg&eacute; et reste sur le Pi&nbsp;: l&rsquo;ordinateur peut &ecirc;tre d&eacute;branch&eacute; sans interrompre la lecture.</div></div>
+</div>
+
+<h2>17.4 Synchronisation bidirectionnelle des ex&eacute;cuteurs</h2>
+
+<p>
+  Toutes les actions sont synchronis&eacute;es en temps r&eacute;el dans les deux sens entre le Pi et chaque client distant&nbsp;:
+</p>
+
+<ul>
+  <li><strong>D&eacute;placer une sc&egrave;ne</strong> dans la barre d&rsquo;ex&eacute;cuteurs (sur le Pi, dans le navigateur ou sur tablette) met &agrave; jour instantan&eacute;ment la grille sur tous les autres &eacute;crans, avec couleurs et badges de mode pr&eacute;serv&eacute;s.</li>
+  <li><strong>D&eacute;clencher une sc&egrave;ne</strong>, modifier un fader, basculer le Blackout : tout est diffus&eacute; &agrave; ~4&nbsp;Hz sur le r&eacute;seau (assez fluide pour le retour visuel, &eacute;conome en bande passante).</li>
+  <li>Un <em>guard flag</em> emp&ecirc;che les boucles de r&eacute;tropropagation&nbsp;: une mise &agrave; jour entrante n&rsquo;est jamais renvoy&eacute;e &agrave; son &eacute;metteur.</li>
+</ul>
+
+<div class="warn">
+  Si la grille semble ne pas se mettre &agrave; jour apr&egrave;s un d&eacute;placement dans le navigateur, faites un rechargement forc&eacute; (Cmd+Shift+R) &mdash; le navigateur peut avoir mis en cache une ancienne version de l&rsquo;interface.
+</div>
+
+<h2>17.5 Bitfocus Companion &amp; API WebSocket</h2>
+
+<p>
+  L&rsquo;image Pi inclut <strong>Bitfocus Companion</strong> et le module <code>companion-module-photonboard</code> pr&eacute;-install&eacute;s. Vous pouvez piloter chaque sc&egrave;ne, le Grand Master, le Blackout et la Timeline depuis un Stream Deck ou tout contr&ocirc;leur compatible Companion.
+</p>
+
+<p>L&rsquo;API WebSocket (port 9090) accepte les commandes suivantes&nbsp;:</p>
+
+<table>
+  <tr><th>Commande</th><th>Payload</th><th>Effet</th></tr>
+  <tr><td><code>set-grand-master</code></td><td>nombre 0-255</td><td>Niveau du Grand Master</td></tr>
+  <tr><td><code>toggle-blackout</code></td><td>&mdash;</td><td>Bascule Blackout</td></tr>
+  <tr><td><code>toggle-blinder</code></td><td>bool&eacute;en</td><td>Active/d&eacute;sactive Blinder</td></tr>
+  <tr><td><code>toggle-strobe</code></td><td>bool&eacute;en</td><td>Active/d&eacute;sactive Strobe</td></tr>
+  <tr><td><code>toggle-timeline</code></td><td>&mdash;</td><td>Lecture/pause de la Timeline</td></tr>
+  <tr><td><code>go-cuelist</code> / <code>stop-cuelist</code></td><td>id de sc&egrave;ne</td><td>D&eacute;clenche ou arr&ecirc;te une sc&egrave;ne</td></tr>
+  <tr><td><code>set-cuelist-fader</code></td><td><code>{ id, level }</code></td><td>R&eacute;gle le fader d&rsquo;une sc&egrave;ne</td></tr>
+  <tr><td><code>swap-cells</code></td><td><code>{ from, to }</code></td><td>Permute deux cellules de la grille</td></tr>
+  <tr><td><code>set-executor-layout</code></td><td><code>{ grid, columns, modes }</code></td><td>Applique une disposition compl&egrave;te</td></tr>
+</table>
+
+<div class="note">
+  Le serveur diffuse l&rsquo;&eacute;tat complet (sc&egrave;nes, Grand Master, Blackout, valeurs DMX, layout) en JSON &agrave; ~4&nbsp;Hz. Connectez-vous &agrave; <code>ws://&lt;hostname&gt;.local:9090</code> pour recevoir les broadcasts <code>{ type: "state", data: &hellip; }</code>.
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CHAPTER 18 — GLOSSAIRE
+     ═══════════════════════════════════════════════════════════ -->
+<div class="chapter">
+<h1>18. Glossaire</h1>
 
 <table>
   <tr><th>Terme</th><th>Definition</th></tr>
@@ -1141,7 +1283,7 @@
 <!-- ═══════════════════════════════════════════════════════════ -->
 <hr>
 <p style="text-align:center; color:#999; font-size:9pt; margin-top:2em;">
-  PhotonBoard v0.1.0 — Documentation generee le 11 avril 2026.<br>
+  PhotonBoard v0.1.0 — Documentation generee le 19 avril 2026 (revision 2).<br>
   &copy; 2026 PhotonBoard. Tous droits reserves.
 </p>
 

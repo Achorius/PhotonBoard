@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>PhotonBoard — Guide d'installation rapide</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1d2330;
+    --bg-2: #262d3d;
+    --bg-3: #2f3749;
+    --fg: #e8ecf3;
+    --fg-mute: #b3bccd;
+    --fg-dim: #7e8aa0;
+    --accent: #f97316;       /* orange */
+    --accent-2: #fb923c;
+    --code: #ffd6b3;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: 210mm;
+    height: 297mm;
+    padding: 14mm 18mm 14mm 18mm;
+    position: relative;
+    page-break-after: always;
+    overflow: hidden;
+  }
+  .page:last-of-type { page-break-after: auto; }
+
+  /* ── Top accent bar ── */
+  .accent-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 8mm;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-top: 5mm;
+    margin-bottom: 7mm;
+    padding-bottom: 3mm;
+  }
+  .header h1 {
+    font-size: 28pt; font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--fg);
+  }
+  .header .subtitle {
+    font-size: 13pt; font-weight: 300;
+    color: var(--fg-mute);
+  }
+
+  /* ── Sections ── */
+  .section { margin-bottom: 5mm; }
+  .section h2 {
+    font-size: 13pt;
+    color: var(--fg);
+    font-weight: 700;
+    border-left: 4px solid var(--accent);
+    padding-left: 10px;
+    margin-bottom: 5px;
+  }
+  .section p { font-size: 10pt; }
+
+  /* ── Steps (ordered list) ── */
+  ol.steps {
+    counter-reset: step;
+    list-style: none;
+    padding-left: 6mm;
+  }
+  ol.steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 2px 0 2px 9mm;
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+  ol.steps li::before {
+    content: counter(step) ".";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  ul.bullets {
+    list-style: none;
+    padding-left: 6mm;
+  }
+  ul.bullets li {
+    position: relative;
+    padding: 2px 0 2px 6mm;
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+  ul.bullets li::before {
+    content: "●";
+    position: absolute; left: 0;
+    color: var(--accent);
+    font-size: 8pt;
+    top: 5px;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 10.5pt;
+  }
+  thead th {
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    text-align: left;
+    padding: 5px 10px;
+    font-size: 9.5pt;
+  }
+  tbody td {
+    background: var(--bg-2);
+    padding: 5px 10px;
+    border-top: 1px solid var(--bg-3);
+    font-size: 10pt;
+  }
+  tbody tr:nth-child(even) td { background: var(--bg-3); }
+
+  /* ── Credentials box ── */
+  .creds {
+    background: var(--bg-2);
+    border-radius: 6px;
+    padding: 6px 14px;
+    display: inline-block;
+    min-width: 260px;
+  }
+  .creds .row {
+    display: flex; justify-content: space-between;
+    padding: 2px 0;
+    font-size: 10pt;
+  }
+  .creds .label { color: var(--fg-mute); }
+  .creds .val {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--fg);
+    font-weight: 700;
+    background: var(--bg-3);
+    padding: 1px 10px;
+    border-radius: 4px;
+  }
+
+  code, .mono {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--code);
+    background: var(--bg-3);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10pt;
+  }
+
+  .callout {
+    background: var(--bg-2);
+    border-left: 3px solid var(--accent);
+    padding: 6px 12px;
+    border-radius: 0 6px 6px 0;
+    margin-top: 6px;
+    font-size: 9pt;
+    color: var(--fg-mute);
+  }
+
+  /* ── Footer ── */
+  .footer {
+    position: absolute;
+    bottom: 12mm; left: 18mm; right: 18mm;
+    display: flex; justify-content: space-between;
+    font-size: 8.5pt;
+    color: var(--fg-dim);
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ PAGE 1 ═══════════════ -->
+<div class="page">
+  <div class="accent-bar"></div>
+
+  <div class="header">
+    <h1>PhotonBoard</h1>
+    <span class="subtitle">Guide d'installation rapide</span>
+  </div>
+
+  <div class="section">
+    <h2>1. Installation</h2>
+    <ol class="steps">
+      <li>Ouvrir <strong>Raspberry Pi Imager</strong>.</li>
+      <li>Choisir l'OS &rarr; <em>Use custom</em> &rarr; s&eacute;lectionner <span class="mono">PhotonBoard-v0.1.0-&lt;date&gt;.img.gz</span>.</li>
+      <li>Cliquer sur l'engrenage pour personnaliser&nbsp;: hostname (ex.&nbsp;: <span class="mono">AulaFlorence</span>), Wi-Fi de la salle, utilisateur/mot de passe.</li>
+      <li>Carte SD cible &rarr; flasher (16&nbsp;Go minimum, la partition s'agrandit toute seule au premier boot).</li>
+      <li>Carte SD dans le Pi&nbsp;5 &rarr; brancher les &eacute;crans HDMI &rarr; alimenter &rarr; c'est pr&ecirc;t&nbsp;!</li>
+    </ol>
+  </div>
+
+  <div class="section">
+    <h2>2. Acc&egrave;s</h2>
+    <table>
+      <thead><tr><th>Service</th><th>Adresse</th></tr></thead>
+      <tbody>
+        <tr><td>PhotonBoard (3D &amp; Stage)</td><td><span class="mono">http://&lt;hostname&gt;.local:9091</span></td></tr>
+        <tr><td>Bitfocus Companion</td><td><span class="mono">http://&lt;hostname&gt;.local:8000</span></td></tr>
+        <tr><td>API WebSocket (Companion, OSC&hellip;)</td><td><span class="mono">ws://&lt;hostname&gt;.local:9090</span></td></tr>
+        <tr><td>SSH</td><td><span class="mono">ssh admin@&lt;hostname&gt;.local</span></td></tr>
+      </tbody>
+    </table>
+    <div class="callout">Le hostname par d&eacute;faut est <span class="mono">PhotonBoard</span> si vous n'en choisissez pas dans Pi Imager. Le fuseau horaire est <strong>Europe/Paris</strong>.</div>
+  </div>
+
+  <div class="section">
+    <h2>3. Identifiants par d&eacute;faut</h2>
+    <div class="creds">
+      <div class="row"><span class="label">Utilisateur&nbsp;:</span><span class="val">admin</span></div>
+      <div class="row"><span class="label">Mot de passe&nbsp;:</span><span class="val">admin</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. Charger un show depuis un ordinateur</h2>
+    <ol class="steps">
+      <li>Ouvrir <span class="mono">http://&lt;hostname&gt;.local:9091</span> dans Chrome ou Safari.</li>
+      <li>Cliquer sur <strong>&uarr; Upload Show</strong> dans la toolbar.</li>
+      <li>S&eacute;lectionner un fichier <span class="mono">.pbshow</span>.</li>
+      <li>Le show est transf&eacute;r&eacute; et reste sur le Pi (l'ordinateur peut &ecirc;tre d&eacute;branch&eacute;).</li>
+    </ol>
+  </div>
+
+  <div class="section">
+    <h2>5. Pr&eacute;requis mat&eacute;riel</h2>
+    <ul class="bullets">
+      <li>Raspberry Pi&nbsp;5 (4&nbsp;Go RAM minimum, 8&nbsp;Go recommand&eacute; pour le dual-screen)</li>
+      <li>Carte SD <strong>16&nbsp;Go ou plus</strong> (tient sur n'importe quelle SD &agrave; partir de 16&nbsp;Go)</li>
+      <li>Connexion Ethernet (recommand&eacute;) ou Wi-Fi configur&eacute; via Pi Imager</li>
+      <li>Optionnel&nbsp;: deux &eacute;crans tactiles HDMI <em>wch.cn</em> pour la fen&ecirc;tre Stage</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <span>PhotonBoard v0.1.0 &middot; Avril 2026</span>
+    <span>github.com/Achorius/PhotonBoard</span>
+  </div>
+</div>
+
+<!-- ═══════════════ PAGE 2 ═══════════════ -->
+<div class="page">
+  <div class="accent-bar"></div>
+
+  <div class="header">
+    <h1>Aller plus loin</h1>
+    <span class="subtitle">Configuration avanc&eacute;e</span>
+  </div>
+
+  <div class="section">
+    <h2>6. Mode Remote (Mac, tablette, t&eacute;l&eacute;phone)</h2>
+    <p style="color: var(--fg-mute); margin-bottom: 6px;">
+      Tout appareil du m&ecirc;me r&eacute;seau Wi-Fi peut piloter PhotonBoard depuis un navigateur. La synchronisation est <strong>bidirectionnelle</strong>&nbsp;: un d&eacute;placement de sc&egrave;ne dans le navigateur appara&icirc;t imm&eacute;diatement sur le Pi et inversement.
+    </p>
+    <table>
+      <thead><tr><th>Appareil</th><th>Affichage par d&eacute;faut</th></tr></thead>
+      <tbody>
+        <tr><td>Mac / PC</td><td>Interface compl&egrave;te (3D, Timeline, Stage&hellip;)</td></tr>
+        <tr><td>Tablette</td><td>Interface compl&egrave;te avec bouton <em>Stage</em></td></tr>
+        <tr><td>T&eacute;l&eacute;phone</td><td>Surface Stage plein &eacute;cran (32&nbsp;sc&egrave;nes + GM + Blackout)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>7. &Eacute;crans tactiles</h2>
+    <p style="color: var(--fg-mute); margin-bottom: 6px;">
+      L'image associe automatiquement chaque dalle USB <em>wch.cn</em> &agrave; sa sortie HDMI via le chemin USB physique (stable apr&egrave;s red&eacute;marrage).
+    </p>
+    <ul class="bullets">
+      <li>Si gauche/droite sont invers&eacute;s, &eacute;diter <span class="mono">/etc/photonboard/touch-map.conf</span> et passer <span class="mono">SWAP=0</span> &agrave; <span class="mono">SWAP=1</span>, puis red&eacute;marrer.</li>
+      <li>Logs du mapping&nbsp;: <span class="mono">/tmp/photonboard-touch-map.log</span></li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>8. Bitfocus Companion</h2>
+    <ul class="bullets">
+      <li>Companion est pr&eacute;-install&eacute; et d&eacute;marre automatiquement au boot.</li>
+      <li>Web UI&nbsp;: <span class="mono">http://&lt;hostname&gt;.local:8000</span></li>
+      <li>Le module <span class="mono">companion-module-photonboard</span> est install&eacute; en mode <em>developer</em> &mdash; il appara&icirc;t dans la liste des connexions.</li>
+      <li>Configurer&nbsp;: cible <span class="mono">localhost</span>, port <span class="mono">9090</span>.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>9. R&eacute;g&eacute;n&eacute;rer une image distribuable</h2>
+    <p style="color: var(--fg-mute);">
+      Sur le Mac (Docker Desktop d&eacute;marr&eacute;)&nbsp;:
+      <span class="mono">bash scripts/pi-clone.sh --remote admin@&lt;host&gt;.local --password admin --output dist</span>.
+      L'image finale (~1.5&nbsp;Go) appara&icirc;t dans <span class="mono">dist/</span> et tient sur toute SD &ge; 16&nbsp;Go.
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>10. D&eacute;pannage rapide</h2>
+    <table>
+      <thead><tr><th>Probl&egrave;me</th><th>Solution</th></tr></thead>
+      <tbody>
+        <tr><td>Pas d'affichage HDMI au boot</td><td>~30&nbsp;s n&eacute;cessaires au premier boot pour redimensionner la partition.</td></tr>
+        <tr><td>Touch sur le mauvais &eacute;cran</td><td>Passer <span class="mono">SWAP=1</span> dans <span class="mono">/etc/photonboard/touch-map.conf</span> et red&eacute;marrer.</td></tr>
+        <tr><td><span class="mono">.local</span> ne r&eacute;sout pas</td><td>Activer Bonjour/avahi. Windows&nbsp;: installer <em>Bonjour Print Services</em>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span>PhotonBoard v0.1.0 &middot; Avril 2026</span>
+    <span>github.com/Achorius/PhotonBoard</span>
+  </div>
+</div>
+
+</body>
+</html>
