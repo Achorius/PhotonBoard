@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 interface CuelistInfo {
   id: string
@@ -36,27 +36,23 @@ interface CellProps {
   color: string
   isDragSource: boolean
   isDragOver: boolean
-  draggingActive: boolean
   onGo: () => void
   onStop: () => void
   onFader: (level: number) => void
-  onLongPressStart: () => void
-  onPointerEnter: () => void
-  onDrop: () => void
-  onCancelDrag: () => void
+  onLongPressStart: (col: number, row: number, target: Element, pointerId: number) => void
 }
 
 function SceneCell({
-  cuelist, color, isDragSource, isDragOver, draggingActive,
-  onGo, onStop, onFader, onLongPressStart, onPointerEnter, onDrop, onCancelDrag
+  cuelist, col, row, color, isDragSource, isDragOver,
+  onGo, onStop, onFader, onLongPressStart
 }: CellProps) {
   const trackRef = useRef<HTMLDivElement>(null)
-  const dragging = useRef(false)
+  const faderDragging = useRef(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
   const downPos = useRef<{ x: number; y: number } | null>(null)
 
-  const handleFaderPointer = useCallback((e: React.PointerEvent) => {
+  const handleFader = useCallback((e: React.PointerEvent) => {
     if (!trackRef.current) return
     const rect = trackRef.current.getBoundingClientRect()
     const y = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height))
@@ -64,83 +60,64 @@ function SceneCell({
   }, [onFader])
 
   const onFaderDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation()
-    dragging.current = true
+    e.stopPropagation() // exclusive: fader controls fader, not drag
+    faderDragging.current = true
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    handleFaderPointer(e)
-  }, [handleFaderPointer])
-
+    handleFader(e)
+  }, [handleFader])
   const onFaderMove = useCallback((e: React.PointerEvent) => {
-    if (dragging.current) handleFaderPointer(e)
-  }, [handleFaderPointer])
+    if (faderDragging.current) handleFader(e)
+  }, [handleFader])
+  const onFaderUp = useCallback(() => { faderDragging.current = false }, [])
 
-  const onFaderUp = useCallback(() => {
-    dragging.current = false
-  }, [])
-
-  // Cell-wide pointer handlers for long-press drag detection
+  // Cell-wide pointer down: starts long-press timer (the parent grid takes
+  // over once long-press fires).
   const onCellPointerDown = useCallback((e: React.PointerEvent) => {
     if (!cuelist) return
     longPressFired.current = false
     downPos.current = { x: e.clientX, y: e.clientY }
     if (longPressTimer.current) clearTimeout(longPressTimer.current)
+    const target = e.target as Element
+    const pointerId = e.pointerId
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true
-      onLongPressStart()
+      // Release implicit pointer capture so the parent grid can detect
+      // pointermove on cells we drag over.
+      try { target.releasePointerCapture?.(pointerId) } catch { /* noop */ }
+      onLongPressStart(col, row, target, pointerId)
     }, LONG_PRESS_MS)
-  }, [cuelist, onLongPressStart])
+  }, [cuelist, col, row, onLongPressStart])
 
   const onCellPointerMove = useCallback((e: React.PointerEvent) => {
-    // Cancel pending long-press if user moves significantly before threshold
-    if (!longPressFired.current && downPos.current && longPressTimer.current) {
-      const dx = e.clientX - downPos.current.x
-      const dy = e.clientY - downPos.current.y
-      if (Math.hypot(dx, dy) > 8) {
-        clearTimeout(longPressTimer.current)
-        longPressTimer.current = null
-      }
+    if (longPressFired.current || !downPos.current || !longPressTimer.current) return
+    const dx = e.clientX - downPos.current.x
+    const dy = e.clientY - downPos.current.y
+    if (Math.hypot(dx, dy) > 8) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
     }
-    // While dragging is active globally, reporting hovered cell
-    if (draggingActive) onPointerEnter()
-  }, [draggingActive, onPointerEnter])
+  }, [])
 
   const onCellPointerUp = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
-    if (longPressFired.current) {
-      onDrop()
-      longPressFired.current = false
-    } else if (draggingActive) {
-      onCancelDrag()
-    }
     downPos.current = null
-  }, [draggingActive, onDrop, onCancelDrag])
+    // longPressFired is reset on next pointerdown — let button onClick check it
+  }, [])
 
-  const onCellPointerCancel = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-    longPressFired.current = false
-    if (draggingActive) onCancelDrag()
-    downPos.current = null
-  }, [draggingActive, onCancelDrag])
-
-  // Empty cell — still a drop target while dragging
+  // Empty cell — just a drop target marker
   if (!cuelist) {
     return (
       <div
-        className={`rounded-md border border-dashed transition-colors ${
-          isDragOver ? '' : 'bg-surface-0/50'
-        }`}
+        data-cell-col={col}
+        data-cell-row={row}
+        className="rounded-md border border-dashed transition-colors"
         style={{
           borderColor: isDragOver ? color + 'aa' : color + '30',
-          backgroundColor: isDragOver ? color + '20' : undefined
+          backgroundColor: isDragOver ? color + '20' : 'rgba(15,15,24,0.4)'
         }}
-        onPointerEnter={() => { if (draggingActive) onPointerEnter() }}
-        onPointerUp={onCellPointerUp}
       />
     )
   }
@@ -150,6 +127,8 @@ function SceneCell({
 
   return (
     <div
+      data-cell-col={col}
+      data-cell-row={row}
       className={`flex flex-col rounded-md overflow-hidden border transition-all min-h-0 select-none ${
         isDragSource ? 'opacity-40 scale-95' : ''
       } ${isDragOver ? 'ring-2' : ''}`}
@@ -157,24 +136,16 @@ function SceneCell({
         backgroundColor: isActive ? color + '30' : color + '12',
         borderColor: isActive ? color + 'aa' : color + '40',
         boxShadow: isActive ? `0 0 10px ${color}55` : undefined,
+        touchAction: 'none',
         // @ts-expect-error tailwind ringColor via CSS var
         '--tw-ring-color': color
       }}
       onPointerDown={onCellPointerDown}
       onPointerMove={onCellPointerMove}
       onPointerUp={onCellPointerUp}
-      onPointerCancel={onCellPointerCancel}
-      onPointerEnter={() => { if (draggingActive) onPointerEnter() }}
     >
-      {/* Scene name */}
-      <div
-        className="px-1 py-1 text-center border-b shrink-0"
-        style={{ borderColor: color + '40' }}
-      >
-        <div
-          className="text-[11px] font-bold truncate leading-tight"
-          style={{ color: isActive ? '#fff' : color + 'dd' }}
-        >
+      <div className="px-1 py-1 text-center border-b shrink-0" style={{ borderColor: color + '40' }}>
+        <div className="text-[11px] font-bold truncate leading-tight" style={{ color: isActive ? '#fff' : color + 'dd' }}>
           {cuelist.name}
         </div>
         {cuelist.cueCount > 1 && (
@@ -184,7 +155,6 @@ function SceneCell({
         )}
       </div>
 
-      {/* Fader */}
       <div className="flex-1 flex items-stretch px-1 py-1 min-h-0">
         <div
           ref={trackRef}
@@ -196,10 +166,7 @@ function SceneCell({
         >
           <div
             className="absolute bottom-0 left-0 right-0 transition-[height] duration-75"
-            style={{
-              height: `${pct}%`,
-              background: `linear-gradient(to top, ${color}, ${color}cc)`
-            }}
+            style={{ height: `${pct}%`, background: `linear-gradient(to top, ${color}, ${color}cc)` }}
           />
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-[9px] font-bold text-white/85 font-mono drop-shadow">{pct}</span>
@@ -207,15 +174,22 @@ function SceneCell({
         </div>
       </div>
 
-      {/* GO / STOP button */}
       <button
         className="shrink-0 py-1.5 mx-1 mb-1 rounded text-[11px] font-black uppercase tracking-wide transition-all active:scale-95 text-white"
         style={{
           backgroundColor: isActive ? '#dc2626' : color,
-          boxShadow: isActive ? '0 0 8px #dc262666' : `0 0 6px ${color}66`
+          boxShadow: isActive ? '0 0 8px #dc262666' : `0 0 6px ${color}66`,
+          touchAction: 'none'
         }}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => { e.stopPropagation(); isActive ? onStop() : onGo() }}
+        onClick={(e) => {
+          e.stopPropagation()
+          // Suppress click that immediately follows a long-press / drag gesture
+          if (longPressFired.current) {
+            longPressFired.current = false
+            return
+          }
+          isActive ? onStop() : onGo()
+        }}
       >
         {isActive ? 'STOP' : 'GO'}
       </button>
@@ -227,28 +201,58 @@ export function ExecutorGrid({ cuelists, grid, columns, onGo, onStop, onFader, o
   const cuelistById = new Map(cuelists.map(cl => [cl.id, cl]))
   const [dragSource, setDragSource] = useState<{ col: number; row: number } | null>(null)
   const [dragOver, setDragOver] = useState<{ col: number; row: number } | null>(null)
+  const dragSourceRef = useRef<{ col: number; row: number } | null>(null)
 
-  const handleLongPressStart = useCallback((col: number, row: number) => {
+  const startDrag = useCallback((col: number, row: number, _target: Element, _pointerId: number) => {
+    dragSourceRef.current = { col, row }
     setDragSource({ col, row })
     setDragOver({ col, row })
   }, [])
 
-  const handleDrop = useCallback((col: number, row: number) => {
-    if (dragSource) onSwap(dragSource, { col, row })
-    setDragSource(null)
-    setDragOver(null)
+  // While drag is active, listen for pointer movement at document level
+  // and use elementFromPoint to find the cell under the finger.
+  useEffect(() => {
+    if (!dragSource) return
+
+    const findCell = (x: number, y: number) => {
+      const el = document.elementFromPoint(x, y) as HTMLElement | null
+      if (!el) return null
+      const cell = el.closest('[data-cell-col]') as HTMLElement | null
+      if (!cell) return null
+      const col = parseInt(cell.dataset.cellCol || '', 10)
+      const row = parseInt(cell.dataset.cellRow || '', 10)
+      if (Number.isNaN(col) || Number.isNaN(row)) return null
+      return { col, row }
+    }
+
+    const onMove = (e: PointerEvent) => {
+      const cell = findCell(e.clientX, e.clientY)
+      setDragOver(cell)
+    }
+
+    const finish = (e: PointerEvent) => {
+      const cell = findCell(e.clientX, e.clientY)
+      const src = dragSourceRef.current
+      if (src && cell && (cell.col !== src.col || cell.row !== src.row)) {
+        onSwap(src, cell)
+      }
+      dragSourceRef.current = null
+      setDragSource(null)
+      setDragOver(null)
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', finish)
+    document.addEventListener('pointercancel', finish)
+    return () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', finish)
+      document.removeEventListener('pointercancel', finish)
+    }
   }, [dragSource, onSwap])
 
-  const cancelDrag = useCallback(() => {
-    setDragSource(null)
-    setDragOver(null)
-  }, [])
-
   return (
-    <div
-      className="flex-1 p-2 min-h-0 overflow-hidden"
-      onPointerLeave={cancelDrag}
-    >
+    <div className="flex-1 p-2 min-h-0 overflow-hidden">
       <div
         className="grid gap-1.5 h-full"
         style={{
@@ -273,14 +277,10 @@ export function ExecutorGrid({ cuelists, grid, columns, onGo, onStop, onFader, o
               color={color}
               isDragSource={isSrc}
               isDragOver={isOver}
-              draggingActive={dragSource !== null}
               onGo={() => cuelist && onGo(cuelist.id)}
               onStop={() => cuelist && onStop(cuelist.id)}
               onFader={(level) => cuelist && onFader(cuelist.id, level)}
-              onLongPressStart={() => handleLongPressStart(col, row)}
-              onPointerEnter={() => setDragOver({ col, row })}
-              onDrop={() => handleDrop(col, row)}
-              onCancelDrag={cancelDrag}
+              onLongPressStart={startDrag}
             />
           )
         })}

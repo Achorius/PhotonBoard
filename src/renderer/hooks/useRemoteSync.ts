@@ -155,6 +155,23 @@ export function useRemoteSync(): void {
       }
     )
 
-    return () => { unsub(); unsubDmx() }
+    // Subscribe to Executor store: forward layout changes (grid + columns + modes)
+    // Triggered when the user drags scenes in the bottom bar / Stage view of the
+    // browser. The Pi receives the new layout and re-broadcasts it back.
+    const unsubExecutor = useExecutorStore.subscribe(
+      (state, prev) => {
+        if (_applyingRemoteState) return
+        if (state.grid === prev.grid && state.columns === prev.columns && state.modes === prev.modes) {
+          return
+        }
+        pb().remote.sendCommand('set-executor-layout', {
+          grid: state.grid,
+          columns: state.columns,
+          modes: state.modes
+        })
+      }
+    )
+
+    return () => { unsub(); unsubDmx(); unsubExecutor() }
   }, [])
 }

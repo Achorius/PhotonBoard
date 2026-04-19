@@ -411,6 +411,18 @@ export default function App() {
           }
           break
         }
+        case 'set-executor-layout': {
+          // Remote pushed a full layout (grid + columns + modes).
+          const p = command.payload
+          if (p && typeof p === 'object') {
+            useExecutorStore.getState().applyRemote({
+              grid: Array.isArray(p.grid) ? p.grid : undefined,
+              columns: Array.isArray(p.columns) ? p.columns : undefined,
+              modes: Array.isArray(p.modes) ? p.modes : undefined
+            })
+          }
+          break
+        }
         case 'apply-show': {
           // Remote uploaded a show — apply it to all stores
           const uploaded = command.payload

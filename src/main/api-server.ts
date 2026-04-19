@@ -35,7 +35,8 @@ const AVAILABLE_COMMANDS = [
   'select-all',          // no payload
   'clear-selection',     // no payload
   'clear-programmer',    // no payload
-  'swap-cells'           // payload: { from:{col,row}, to:{col,row} }
+  'swap-cells',          // payload: { from:{col,row}, to:{col,row} }
+  'set-executor-layout'  // payload: { grid, columns, modes }
 ]
 
 /**
