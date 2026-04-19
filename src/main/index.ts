@@ -500,6 +500,13 @@ app.whenReady().then(() => {
   if (mainWindow) startApiServer(mainWindow)
   // Start web server for remote editing from Mac
   if (mainWindow) startWebServer(mainWindow, dmxEngine, outputManager, showManager, oflService)
+
+  // Auto-open Stage window on second display if available
+  const displays = screen.getAllDisplays()
+  if (displays.length > 1) {
+    console.log(`[Main] ${displays.length} displays detected — auto-opening Stage window`)
+    createStageWindow()
+  }
 })
 
 app.on('window-all-closed', () => {

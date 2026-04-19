@@ -38,6 +38,9 @@ export interface StageState {
   }[]
   selectedFixtureIds: string[]
   fixtureCount: number
+  executorGrid: (string | null)[][]
+  executorColumns: { title: string; color: string }[]
+  executorModes: string[][]
 }
 
 const INITIAL_STATE: StageState = {
@@ -50,7 +53,13 @@ const INITIAL_STATE: StageState = {
   cuelists: [],
   groups: [],
   selectedFixtureIds: [],
-  fixtureCount: 0
+  fixtureCount: 0,
+  executorGrid: Array.from({ length: 8 }, () => Array.from({ length: 4 }, () => null)),
+  executorColumns: Array.from({ length: 8 }, (_, i) => ({
+    title: '',
+    color: ['#e85d04', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#eab308', '#06b6d4', '#f97316'][i]
+  })),
+  executorModes: Array.from({ length: 8 }, () => Array.from({ length: 4 }, () => 'toggle'))
 }
 
 export function StageApp() {
@@ -107,9 +116,12 @@ export function StageApp() {
         {/* Executor grid */}
         <ExecutorGrid
           cuelists={state.cuelists}
+          grid={state.executorGrid}
+          columns={state.executorColumns}
           onGo={(id) => sendCommand('go-cuelist', id)}
           onStop={(id) => sendCommand('stop-cuelist', id)}
           onFader={(id, level) => sendCommand('set-cuelist-fader', { id, level })}
+          onSwap={(from, to) => sendCommand('swap-cells', { from, to })}
         />
       </div>
 

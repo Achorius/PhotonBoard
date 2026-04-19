@@ -1,14 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { usePlaybackStore } from '../../stores/playback-store'
 import { useMidiStore } from '../../stores/midi-store'
-
-const COLUMN_COUNT = 8
-const ROWS_PER_COLUMN = 4
-
-const DEFAULT_COLUMN_COLORS = [
-  '#e85d04', '#22c55e', '#3b82f6', '#a855f7',
-  '#ef4444', '#eab308', '#06b6d4', '#f97316'
-]
+import {
+  useExecutorStore,
+  COLUMN_COUNT,
+  ROWS_PER_COLUMN,
+  type SceneMode
+} from '../../stores/executor-store'
 
 const COLOR_PALETTE = [
   '#e85d04', '#ef4444', '#f97316', '#eab308',
@@ -16,7 +14,6 @@ const COLOR_PALETTE = [
   '#ec4899', '#6b7280', '#ffffff', '#8b5cf6'
 ]
 
-type SceneMode = 'toggle' | 'trigger' | 'flash'
 const MODE_LABELS: Record<SceneMode, string> = { toggle: 'TOG', trigger: 'TRIG', flash: 'FLASH' }
 const MODE_CYCLE: SceneMode[] = ['toggle', 'trigger', 'flash']
 const MODE_DESCRIPTIONS: Record<SceneMode, string> = {
@@ -25,42 +22,25 @@ const MODE_DESCRIPTIONS: Record<SceneMode, string> = {
   flash: 'Flash — Plein fader tant qu\'on appuie'
 }
 
-interface ColumnMeta {
-  title: string
-  color: string
-}
-
 export function ExecutorBar() {
   const { cuelists, goCuelist, stopCuelist, renameCuelist } = usePlaybackStore()
   const { mappings, isLearning, learnTarget, startLearn, cancelLearn, updateMapping } = useMidiStore()
+
+  // Executor layout from shared store (broadcast to Stage + remote)
+  const grid = useExecutorStore(s => s.grid)
+  const columns = useExecutorStore(s => s.columns)
+  const modes = useExecutorStore(s => s.modes)
+  const swapCellsAction = useExecutorStore(s => s.swapCells)
+  const syncCuelistsAction = useExecutorStore(s => s.syncCuelists)
+  const setColumnTitleAction = useExecutorStore(s => s.setColumnTitle)
+  const setColumnColorAction = useExecutorStore(s => s.setColumnColor)
+  const setModeAction = useExecutorStore(s => s.setMode)
 
   // Get MIDI mapping for a cuelist
   const getMidiMapping = (cuelistId: string) =>
     mappings.find(m => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
   const isLearningScene = (cuelistId: string) =>
     isLearning && learnTarget?.type === 'cuelist_go' && learnTarget?.id === cuelistId
-
-  // Column metadata (title + color)
-  const [columns, setColumns] = useState<ColumnMeta[]>(() =>
-    Array.from({ length: COLUMN_COUNT }, (_, i) => ({
-      title: '',
-      color: DEFAULT_COLUMN_COLORS[i]
-    }))
-  )
-
-  // Grid state: [col][row] → cuelist id or null
-  const [grid, setGrid] = useState<(string | null)[][]>(() =>
-    Array.from({ length: COLUMN_COUNT }, () =>
-      Array.from({ length: ROWS_PER_COLUMN }, () => null)
-    )
-  )
-
-  // Mode per cell: [col][row] → SceneMode
-  const [modes, setModes] = useState<SceneMode[][]>(() =>
-    Array.from({ length: COLUMN_COUNT }, () =>
-      Array.from({ length: ROWS_PER_COLUMN }, () => 'toggle' as SceneMode)
-    )
-  )
 
   // Editing state
   const [editingTitle, setEditingTitle] = useState<number | null>(null)
@@ -71,44 +51,8 @@ export function ExecutorBar() {
 
   // Sync: when cuelists change, place new ones in first available slot
   useEffect(() => {
-    const currentPlaced = new Set<string>()
-    for (const col of grid) {
-      for (const cell of col) {
-        if (cell) currentPlaced.add(cell)
-      }
-    }
-
-    const newCuelists = cuelists.filter(cl => !currentPlaced.has(cl.id))
-    const validIds = new Set(cuelists.map(c => c.id))
-    const hasDeleted = Array.from(currentPlaced).some(id => !validIds.has(id))
-
-    if (newCuelists.length === 0 && !hasDeleted) return
-
-    setGrid(prev => {
-      const newGrid = prev.map(c => [...c])
-
-      // Clear deleted
-      for (let col = 0; col < COLUMN_COUNT; col++) {
-        for (let row = 0; row < ROWS_PER_COLUMN; row++) {
-          if (newGrid[col][row] && !validIds.has(newGrid[col][row]!)) {
-            newGrid[col][row] = null
-          }
-        }
-      }
-
-      // Place new
-      let idx = 0
-      for (let col = 0; col < COLUMN_COUNT && idx < newCuelists.length; col++) {
-        for (let row = 0; row < ROWS_PER_COLUMN && idx < newCuelists.length; row++) {
-          if (!newGrid[col][row]) {
-            newGrid[col][row] = newCuelists[idx].id
-            idx++
-          }
-        }
-      }
-      return newGrid
-    })
-  }, [cuelists])
+    syncCuelistsAction(cuelists.map(c => c.id))
+  }, [cuelists, syncCuelistsAction])
 
   // Focus inputs when editing starts
   useEffect(() => {
@@ -135,25 +79,10 @@ export function ExecutorBar() {
 
   const handleDrop = useCallback((col: number, row: number) => {
     if (!dragSource) return
-    setGrid(prev => {
-      const newGrid = prev.map(c => [...c])
-      const sourceId = newGrid[dragSource.col][dragSource.row]
-      const targetId = newGrid[col][row]
-      newGrid[col][row] = sourceId
-      newGrid[dragSource.col][dragSource.row] = targetId
-      return newGrid
-    })
-    // Also swap modes
-    setModes(prev => {
-      const newModes = prev.map(c => [...c])
-      const srcMode = newModes[dragSource.col][dragSource.row]
-      newModes[dragSource.col][dragSource.row] = newModes[col][row]
-      newModes[col][row] = srcMode
-      return newModes
-    })
+    swapCellsAction(dragSource, { col, row })
     setDragSource(null)
     setDragOver(null)
-  }, [dragSource])
+  }, [dragSource, swapCellsAction])
 
   const handleDragEnd = useCallback(() => {
     setDragSource(null)
@@ -163,19 +92,11 @@ export function ExecutorBar() {
   const getCuelist = (id: string | null) => id ? cuelists.find(c => c.id === id) : null
 
   const updateColumnTitle = (col: number, title: string) => {
-    setColumns(prev => {
-      const updated = [...prev]
-      updated[col] = { ...updated[col], title }
-      return updated
-    })
+    setColumnTitleAction(col, title)
   }
 
   const updateColumnColor = (col: number, color: string) => {
-    setColumns(prev => {
-      const updated = [...prev]
-      updated[col] = { ...updated[col], color }
-      return updated
-    })
+    setColumnColorAction(col, color)
     setColorPicker(null)
   }
 
@@ -185,11 +106,7 @@ export function ExecutorBar() {
     const nextIdx = (MODE_CYCLE.indexOf(currentMode) + 1) % MODE_CYCLE.length
     const nextMode = MODE_CYCLE[nextIdx]
 
-    setModes(prev => {
-      const newModes = prev.map(c => [...c])
-      newModes[col][row] = nextMode
-      return newModes
-    })
+    setModeAction(col, row, nextMode)
 
     // Update existing MIDI mapping behavior to match
     const sceneId = grid[col]?.[row]

@@ -14,6 +14,7 @@
 import { useEffect } from 'react'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
+import { useExecutorStore } from '@renderer/stores/executor-store'
 
 const pb = () => (window as any).photonboard
 
@@ -77,6 +78,15 @@ export function useRemoteSync(): void {
           if (useDmxStore.getState().blackout !== data.blackout) {
             useDmxStore.setState({ blackout: data.blackout })
           }
+        }
+
+        // Sync executor layout (grid + columns + modes)
+        if (data.executorGrid && Array.isArray(data.executorGrid)) {
+          useExecutorStore.getState().applyRemote({
+            grid: data.executorGrid,
+            columns: Array.isArray(data.executorColumns) ? data.executorColumns : undefined,
+            modes: Array.isArray(data.executorModes) ? data.executorModes : undefined
+          })
         }
 
         // Sync DMX values (for 3D visualizer on Mac) — clamp all values to 0-255

@@ -34,7 +34,8 @@ const AVAILABLE_COMMANDS = [
   'select-group',        // payload: group id
   'select-all',          // no payload
   'clear-selection',     // no payload
-  'clear-programmer'     // no payload
+  'clear-programmer',    // no payload
+  'swap-cells'           // payload: { from:{col,row}, to:{col,row} }
 ]
 
 /**

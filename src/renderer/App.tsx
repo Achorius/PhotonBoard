@@ -4,6 +4,7 @@ import { usePatchStore } from './stores/patch-store'
 import { useDmxStore } from './stores/dmx-store'
 import { useMidiStore } from './stores/midi-store'
 import { usePlaybackStore } from './stores/playback-store'
+import { useExecutorStore } from './stores/executor-store'
 import { useVisualizerStore } from './stores/visualizer-store'
 import type { ShowFile } from '@shared/types'
 import { initMidiRouting } from './lib/midi-manager'
@@ -305,6 +306,7 @@ export default function App() {
     const { cuelists } = usePlaybackStore.getState()
     const { showName } = useUiStore.getState()
     const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
+    const { grid: executorGrid, columns: executorColumns, modes: executorModes } = useExecutorStore.getState()
     const timelineState = getTimelineState()
 
     return {
@@ -330,7 +332,10 @@ export default function App() {
         fixtureCount: g.fixtureIds.length
       })),
       selectedFixtureIds,
-      fixtureCount: patch.length
+      fixtureCount: patch.length,
+      executorGrid,
+      executorColumns,
+      executorModes
     }
   }
 
@@ -397,6 +402,15 @@ export default function App() {
         case 'clear-programmer':
           clearProgrammer()
           break
+        case 'swap-cells': {
+          const p = command.payload
+          if (p && p.from && p.to
+              && typeof p.from.col === 'number' && typeof p.from.row === 'number'
+              && typeof p.to.col === 'number' && typeof p.to.row === 'number') {
+            useExecutorStore.getState().swapCells(p.from, p.to)
+          }
+          break
+        }
         case 'apply-show': {
           // Remote uploaded a show — apply it to all stores
           const uploaded = command.payload
@@ -426,10 +440,12 @@ export default function App() {
 
     const unsubPlayback = usePlaybackStore.subscribe(scheduleBroadcast)
     const unsubDmx = useDmxStore.subscribe(scheduleBroadcast)
+    const unsubExecutor = useExecutorStore.subscribe(scheduleBroadcast)
 
     return () => {
       unsubPlayback()
       unsubDmx()
+      unsubExecutor()
       if (broadcastTimer) clearTimeout(broadcastTimer)
     }
   }, [])

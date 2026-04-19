@@ -29,6 +29,9 @@ export interface StageState {
   }[]
   selectedFixtureIds: string[]
   fixtureCount: number
+  executorGrid: (string | null)[][]
+  executorColumns: { title: string; color: string }[]
+  executorModes: string[][]
 }
 
 const api = {
