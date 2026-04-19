@@ -223,26 +223,87 @@ SVCEOF
       | gzip -1 > "$OUTPUT_DIR/$IMG_NAME.img.gz"
   fi
 
-  FINAL_SIZE=$(du -h "$OUTPUT_DIR/$IMG_NAME.img.gz" | awk '{print $1}')
-  log "Raw image created: $IMG_NAME.img.gz ($FINAL_SIZE)"
+  RAW_SIZE=$(du -h "$OUTPUT_DIR/$IMG_NAME.img.gz" | awk '{print $1}')
+  log "Raw image created: $IMG_NAME.img.gz ($RAW_SIZE)"
 
-  # Try to shrink locally if pishrink is available on Mac (via Docker)
-  if command -v docker &>/dev/null; then
-    log "Shrinking image with PiShrink (Docker)..."
-    gunzip "$OUTPUT_DIR/$IMG_NAME.img.gz"
-    docker run --privileged --rm \
-      -v "$OUTPUT_DIR:/workdir" \
-      mgomesborges/pishrink \
-      pishrink.sh -z "/workdir/$IMG_NAME.img" 2>/dev/null || {
-        warn "Docker PiShrink failed — keeping full-size image"
-        gzip -1 "$OUTPUT_DIR/$IMG_NAME.img"
-      }
-    FINAL_SIZE=$(du -h "$OUTPUT_DIR/$IMG_NAME.img.gz" 2>/dev/null || du -h "$OUTPUT_DIR/$IMG_NAME.img" | awk '{print $1}')
-    log "Shrunk image: $FINAL_SIZE"
-  else
-    warn "Install Docker for automatic image shrinking (saves ~80% space)"
-    warn "Or shrink manually on a Linux machine with pishrink.sh"
+  # ---- Step 5: Shrink the image so it fits on smaller SD cards ----
+  # Without this, the image's partition table reflects the SOURCE SD size
+  # (e.g. 128 GB), and `dd` will refuse to flash it onto smaller cards.
+  # PiShrink truncates the partition to its minimum size and adds a
+  # systemd unit that auto-resizes back to fill the destination card on
+  # first boot.
+  #
+  # The .img.gz currently lives on the Mac. To shrink it we'd normally need
+  # to gunzip it (≈ source SD size), but most Macs don't have that much
+  # free disk. Trick: decompress through a sparse-aware writer so zero
+  # blocks become file holes (only ~6 GB of physical disk is needed).
+  # Then PiShrink runs in a Docker container (Ubuntu 24+ has new enough
+  # e2fsprogs to handle ext4 FEATURE_C12 from recent Pi OS).
+
+  if ! command -v docker &>/dev/null; then
+    warn "Docker not found — image kept at $RAW_SIZE."
+    warn "Install Docker Desktop and re-run; the image won't fit on smaller SD cards otherwise."
+    return
   fi
+
+  if ! docker info &>/dev/null; then
+    warn "Docker daemon not running — start Docker Desktop and re-run to shrink."
+    return
+  fi
+
+  log "Step 5/5: Shrinking with PiShrink (sparse decompress + Docker)..."
+
+  SPARSE="$OUTPUT_DIR/$IMG_NAME.sparse.img"
+  rm -f "$SPARSE"
+  # 130 GiB upper bound — covers any SD up to 128 GB. Sparse, so it costs
+  # 0 bytes physical until written.
+  truncate -s 130G "$SPARSE"
+
+  if ! python3 - "$SPARSE" <<'PY' < <(gunzip -c "$OUTPUT_DIR/$IMG_NAME.img.gz") 2>/dev/null
+import sys
+CHUNK = 1024 * 1024
+ZERO = b'\0' * CHUNK
+out = open(sys.argv[1], 'r+b')
+total = 0
+while True:
+    data = sys.stdin.buffer.read(CHUNK)
+    if not data: break
+    if len(data) == CHUNK and data == ZERO:
+        out.seek(CHUNK, 1)
+    else:
+        out.write(data)
+    total += len(data)
+out.truncate(total)
+out.close()
+PY
+  then
+    warn "Sparse decompress failed — keeping full-size image."
+    rm -f "$SPARSE"
+    return
+  fi
+
+  if ! docker run --privileged --rm \
+        -v "$OUTPUT_DIR:/workdir" -w /workdir ubuntu:24.04 bash -c "
+          set -e
+          apt-get update -qq >/dev/null 2>&1
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            parted gzip util-linux e2fsprogs udev curl ca-certificates >/dev/null 2>&1
+          curl -fsSL https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh \
+            -o /usr/local/bin/pishrink.sh
+          chmod +x /usr/local/bin/pishrink.sh
+          pishrink.sh -z /workdir/$(basename "$SPARSE")
+        "; then
+    warn "PiShrink failed — keeping full-size image."
+    rm -f "$SPARSE"
+    return
+  fi
+
+  # PiShrink emits <name>.gz next to the input
+  rm -f "$SPARSE"
+  mv -f "$OUTPUT_DIR/$IMG_NAME.sparse.img.gz" "$OUTPUT_DIR/$IMG_NAME.img.gz"
+
+  FINAL_SIZE=$(du -h "$OUTPUT_DIR/$IMG_NAME.img.gz" | awk '{print $1}')
+  log "Shrunk image: $FINAL_SIZE (fits on any SD ≥ 16 GB; auto-resizes on first boot)"
 }
 
 # ============================================================
