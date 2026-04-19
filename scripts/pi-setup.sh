@@ -223,6 +223,26 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
 EOF
 
+# Install touchscreen mapping script (maps wch.cn touchscreens to HDMI outputs
+# by stable USB port path — survives reboots regardless of xinput enumeration).
+SCRIPT_SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_SRC_DIR/photonboard-map-touch.sh" ]; then
+  install -m 0755 "$SCRIPT_SRC_DIR/photonboard-map-touch.sh" /usr/local/bin/photonboard-map-touch
+  log "Installed /usr/local/bin/photonboard-map-touch"
+else
+  warn "photonboard-map-touch.sh not found alongside pi-setup.sh — touch mapping may be wrong"
+fi
+
+# Optional touch mapping config (SWAP=1 to invert left/right)
+mkdir -p /etc/photonboard
+if [ ! -f /etc/photonboard/touch-map.conf ]; then
+  cat > /etc/photonboard/touch-map.conf << 'TOUCHCONF'
+# PhotonBoard touchscreen mapping
+# Set SWAP=1 if the left/right touchscreens are inverted.
+SWAP=0
+TOUCHCONF
+fi
+
 # .xinitrc — kiosk mode with PhotonBoard
 cat > "$REAL_HOME/.xinitrc" << 'XINITRC'
 #!/bin/bash
@@ -239,6 +259,9 @@ xset s noblank
 # Minimal window manager (needed for fullscreen)
 openbox --sm-disable &
 sleep 0.5
+
+# Map touchscreens to their physical HDMI outputs (background — script waits for X)
+[ -x /usr/local/bin/photonboard-map-touch ] && /usr/local/bin/photonboard-map-touch &
 
 # Launch PhotonBoard
 exec photonboard --no-sandbox --ignore-gpu-blocklist --use-gl=egl --start-fullscreen
@@ -278,6 +301,15 @@ if [[ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ]]; then
   log "Hostname set to $NEW_HOSTNAME (was: $CURRENT_HOSTNAME)"
 else
   log "Hostname already set to $NEW_HOSTNAME"
+fi
+
+# Set timezone (default: Europe/Paris — override with PB_TIMEZONE env var)
+PB_TIMEZONE="${PB_TIMEZONE:-Europe/Paris}"
+if [ -f "/usr/share/zoneinfo/$PB_TIMEZONE" ]; then
+  timedatectl set-timezone "$PB_TIMEZONE" 2>/dev/null || true
+  log "Timezone set to $PB_TIMEZONE"
+else
+  warn "Timezone $PB_TIMEZONE not found — leaving system default"
 fi
 
 # Enable and start avahi (mDNS — makes <hostname>.local work)
