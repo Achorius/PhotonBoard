@@ -259,7 +259,9 @@ SVCEOF
   # 0 bytes physical until written.
   truncate -s 130G "$SPARSE"
 
-  if ! python3 - "$SPARSE" <<'PY' < <(gunzip -c "$OUTPUT_DIR/$IMG_NAME.img.gz") 2>/dev/null
+  # Write the sparse-writer to a tempfile (heredoc + stdin redirect can't coexist).
+  SPARSE_PY=$(mktemp -t pb-sparse.XXXXXX.py)
+  cat > "$SPARSE_PY" <<'PY'
 import sys
 CHUNK = 1024 * 1024
 ZERO = b'\0' * CHUNK
@@ -276,11 +278,13 @@ while True:
 out.truncate(total)
 out.close()
 PY
-  then
+
+  if ! gunzip -c "$OUTPUT_DIR/$IMG_NAME.img.gz" | python3 "$SPARSE_PY" "$SPARSE"; then
     warn "Sparse decompress failed — keeping full-size image."
-    rm -f "$SPARSE"
+    rm -f "$SPARSE" "$SPARSE_PY"
     return
   fi
+  rm -f "$SPARSE_PY"
 
   if ! docker run --privileged --rm \
         -v "$OUTPUT_DIR:/workdir" -w /workdir ubuntu:24.04 bash -c "
