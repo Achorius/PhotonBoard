@@ -286,8 +286,10 @@ PY
   fi
   rm -f "$SPARSE_PY"
 
+  # Docker Desktop on macOS only accepts absolute paths for bind mounts.
+  OUTPUT_DIR_ABS=$(cd "$OUTPUT_DIR" && pwd)
   if ! docker run --privileged --rm \
-        -v "$OUTPUT_DIR:/workdir" -w /workdir ubuntu:24.04 bash -c "
+        -v "$OUTPUT_DIR_ABS:/workdir" -w /workdir ubuntu:24.04 bash -c "
           set -e
           apt-get update -qq >/dev/null 2>&1
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
