@@ -43,26 +43,72 @@ export function useRemoteSync(): void {
 
       _applyingRemoteState = true
       try {
-        // Sync cuelist play/fader states (with type validation)
+        // Sync cuelists: structural replace so the remote sees add/remove/rename,
+        // not just runtime state changes on pre-existing scenes. The Pi is the
+        // source of truth; we rebuild the local list from the broadcast payload,
+        // preserving any fields the Pi didn't include (e.g. cues when the
+        // broadcast only carried a subset during an older build).
         const piCuelists = data.cuelists
         if (piCuelists && Array.isArray(piCuelists)) {
           const local = usePlaybackStore.getState().cuelists
-          let changed = false
-          const updated = local.map(cl => {
-            const pi = piCuelists.find((p: any) => p.id === cl.id)
-            if (!pi) return cl
-            // Validate types before applying
-            const isPlaying = typeof pi.isPlaying === 'boolean' ? pi.isPlaying : cl.isPlaying
-            const faderLevel = typeof pi.faderLevel === 'number'
-              ? Math.max(0, Math.min(255, Math.round(pi.faderLevel)))
-              : cl.faderLevel
-            if (cl.isPlaying !== isPlaying || cl.faderLevel !== faderLevel) {
-              changed = true
-              return { ...cl, isPlaying, faderLevel }
+          const localById = new Map(local.map(cl => [cl.id, cl]))
+
+          const next = piCuelists
+            .filter((pi: any) => pi && typeof pi.id === 'string')
+            .map((pi: any) => {
+              const existing = localById.get(pi.id)
+              const faderLevel = typeof pi.faderLevel === 'number'
+                ? Math.max(0, Math.min(255, Math.round(pi.faderLevel)))
+                : existing?.faderLevel ?? 255
+              return {
+                id: pi.id,
+                name: typeof pi.name === 'string' ? pi.name : existing?.name ?? 'Scene',
+                cues: Array.isArray(pi.cues) ? pi.cues : existing?.cues ?? [],
+                currentCueIndex: typeof pi.currentCueIndex === 'number'
+                  ? pi.currentCueIndex
+                  : existing?.currentCueIndex ?? 0,
+                isPlaying: typeof pi.isPlaying === 'boolean'
+                  ? pi.isPlaying
+                  : existing?.isPlaying ?? false,
+                isLooping: typeof pi.isLooping === 'boolean'
+                  ? pi.isLooping
+                  : existing?.isLooping ?? false,
+                priority: typeof pi.priority === 'number'
+                  ? pi.priority
+                  : existing?.priority ?? 0,
+                faderLevel,
+                flash: typeof pi.flash === 'boolean'
+                  ? pi.flash
+                  : existing?.flash ?? false,
+                goGeneration: existing?.goGeneration,
+                effectSnapshots: existing?.effectSnapshots
+              }
+            })
+
+          // Only push into the store if something actually changed.
+          let changed = next.length !== local.length
+          if (!changed) {
+            for (let i = 0; i < next.length; i++) {
+              const a = next[i]
+              const b = local[i]
+              if (
+                !b ||
+                a.id !== b.id ||
+                a.name !== b.name ||
+                a.cues !== b.cues ||
+                a.currentCueIndex !== b.currentCueIndex ||
+                a.isPlaying !== b.isPlaying ||
+                a.isLooping !== b.isLooping ||
+                a.priority !== b.priority ||
+                a.faderLevel !== b.faderLevel ||
+                a.flash !== b.flash
+              ) {
+                changed = true
+                break
+              }
             }
-            return cl
-          })
-          if (changed) usePlaybackStore.setState({ cuelists: updated })
+          }
+          if (changed) usePlaybackStore.setState({ cuelists: next })
         }
 
         // Sync grand master (with clamping)

@@ -55,6 +55,12 @@ REAL_HOME=$(eval echo "~$REAL_USER")
 
 log "Setting up PhotonBoard for user: $REAL_USER ($REAL_HOME)"
 
+# Grant ALSA / MIDI / DMX-USB access without root. These group memberships
+# are required for Web MIDI (Chromium) to see USB MIDI controllers like the
+# Akai APC Mini, and for serialport access to USB-DMX adapters.
+usermod -a -G audio,plugdev,dialout "$REAL_USER" 2>/dev/null || true
+log "Added $REAL_USER to groups: audio, plugdev, dialout"
+
 # ---- Configuration ----
 
 # PhotonBoard version and download URL
@@ -86,7 +92,10 @@ DEPS=(
   unclutter
   libusb-1.0-0
   libgbm1
-  libasound2t64
+  libasound2t64      # ALSA runtime — required for Web MIDI (Chromium)
+  alsa-utils         # amidi / aplay -l for MIDI troubleshooting
+  zenity             # Native file-open/save dialogs for Electron on Linux
+  libgtk-3-0         # GTK runtime used by zenity/Electron dialogs
   avahi-daemon       # mDNS for .local resolution
   avahi-utils
 )

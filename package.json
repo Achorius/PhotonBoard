@@ -111,7 +111,10 @@
     },
     "deb": {
       "depends": [
-        "libusb-1.0-0"
+        "libusb-1.0-0",
+        "libasound2 | libasound2t64",
+        "zenity",
+        "libgtk-3-0"
       ]
     }
   }

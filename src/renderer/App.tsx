@@ -317,13 +317,20 @@ export default function App() {
       dmxValues, // Raw DMX universes for remote 3D preview
       timelinePlaying: timelineState.isPlaying,
       showName,
+      // Full cuelist definitions so remote browsers can add/remove/rename scenes
+      // in real time. The JSON dedup in api-server/web-server avoids rebroadcast
+      // when nothing has changed, so the extra bytes only go on the wire when
+      // the user actually edits the show.
       cuelists: cuelists.map(cl => ({
         id: cl.id,
         name: cl.name,
-        isPlaying: cl.isPlaying,
-        faderLevel: cl.faderLevel,
+        cues: cl.cues,
         currentCueIndex: cl.currentCueIndex,
-        cueCount: cl.cues.length
+        isPlaying: cl.isPlaying,
+        isLooping: cl.isLooping,
+        priority: cl.priority,
+        faderLevel: cl.faderLevel,
+        flash: cl.flash
       })),
       groups: groups.filter(g => !g.parentGroupId).map(g => ({
         id: g.id,
