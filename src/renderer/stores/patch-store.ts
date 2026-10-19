@@ -4,6 +4,9 @@ import { useShallow } from 'zustand/react/shallow'
 import { v4 as uuidv4 } from 'uuid'
 import type { PatchEntry, FixtureDefinition, Group, PixelLayout } from '@shared/types'
 
+/** A fixture to patch: everything but the id (generated) and groups (see addFixtures) */
+export type NewPatchEntry = Omit<PatchEntry, 'id' | 'groupIds'> & { groupIds?: string[] }
+
 interface PatchState {
   patch: PatchEntry[]
   fixtures: FixtureDefinition[]
@@ -15,6 +18,12 @@ interface PatchState {
   addFixture: (fixtureDefId: string, modeName: string, universe: number, address: number, name: string, count?: number, groupId?: string) => void
   removeFixture: (id: string) => void
   updateFixture: (id: string, updates: Partial<PatchEntry>) => void
+  /** Patch several fixtures in one update (each with its own address / name). Returns the new ids. */
+  addFixtures: (entries: NewPatchEntry[], groupId?: string) => string[]
+  /** Remove several fixtures in one update (groups and selection follow) */
+  removeFixtures: (ids: string[]) => void
+  /** Apply per-fixture changes in one update (re-address, rename, mode change on a selection) */
+  updateFixtures: (updates: Record<string, Partial<PatchEntry>>) => void
   selectFixture: (id: string, multi?: boolean) => void
   /** Replace the selection (range select, lasso…) */
   selectFixtures: (ids: string[]) => void
@@ -27,6 +36,8 @@ interface PatchState {
   // Groups
   addGroup: (name: string, color: string, parentGroupId?: string) => void
   removeGroup: (id: string) => void
+  /** Rename / recolour a group */
+  updateGroup: (id: string, updates: Partial<Pick<Group, 'name' | 'color'>>) => void
   addToGroup: (groupId: string, fixtureIds: string[]) => void
   removeFromGroup: (groupId: string, fixtureIds: string[]) => void
   moveToGroup: (fixtureIds: string[], fromGroupId: string, toGroupId: string) => void
@@ -109,6 +120,52 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
     }))
   },
 
+  addFixtures: (entries, groupId) => {
+    const fixtures = get().fixtures
+    const created: PatchEntry[] = []
+    for (const e of entries) {
+      const def = fixtures.find((f) => f.id === e.fixtureDefId)
+      if (!def || !def.modes.some((m) => m.name === e.modeName)) {
+        console.error('[PhotonBoard] addFixtures: unknown fixture or mode:', e.fixtureDefId, e.modeName)
+        continue
+      }
+      const groupIds = [...new Set([...(e.groupIds ?? []), ...(groupId ? [groupId] : [])])]
+      created.push({ ...e, id: uuidv4(), groupIds })
+    }
+    if (created.length === 0) return []
+    set((state) => ({
+      patch: [...state.patch, ...created],
+      groups: state.groups.some((g) => created.some((c) => c.groupIds.includes(g.id)))
+        ? state.groups.map((g) => {
+            const add = created.filter((c) => c.groupIds.includes(g.id)).map((c) => c.id)
+            return add.length > 0 ? { ...g, fixtureIds: [...new Set([...g.fixtureIds, ...add])] } : g
+          })
+        : state.groups
+    }))
+    return created.map((c) => c.id)
+  },
+
+  removeFixtures: (ids) => {
+    if (ids.length === 0) return
+    const gone = new Set(ids)
+    set((state) => ({
+      patch: state.patch.filter((p) => !gone.has(p.id)),
+      groups: state.groups.some((g) => g.fixtureIds.some((f) => gone.has(f)))
+        ? state.groups.map((g) => (g.fixtureIds.some((f) => gone.has(f)) ? { ...g, fixtureIds: g.fixtureIds.filter((f) => !gone.has(f)) } : g))
+        : state.groups,
+      selectedFixtureIds: state.selectedFixtureIds.some((sid) => gone.has(sid))
+        ? state.selectedFixtureIds.filter((sid) => !gone.has(sid))
+        : state.selectedFixtureIds
+    }))
+  },
+
+  updateFixtures: (updates) => {
+    if (Object.keys(updates).length === 0) return
+    set((state) => ({
+      patch: state.patch.map((p) => (updates[p.id] ? { ...p, ...updates[p.id] } : p))
+    }))
+  },
+
   selectFixture: (id, multi = false) => {
     set((state) => {
       if (multi) {
@@ -167,11 +224,20 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
 
   removeGroup: (id) => {
     set((state) => ({
-      groups: state.groups.filter((g) => g.id !== id),
+      // Sub-groups move up to the removed group's parent (instead of becoming unreachable orphans)
+      groups: state.groups
+        .filter((g) => g.id !== id)
+        .map((g) => (g.parentGroupId === id ? { ...g, parentGroupId: state.groups.find((x) => x.id === id)?.parentGroupId } : g)),
       patch: state.patch.map((p) => ({
         ...p,
         groupIds: p.groupIds.filter((gid) => gid !== id)
       }))
+    }))
+  },
+
+  updateGroup: (id, updates) => {
+    set((state) => ({
+      groups: state.groups.map((g) => (g.id === id ? { ...g, ...updates } : g))
     }))
   },
 
