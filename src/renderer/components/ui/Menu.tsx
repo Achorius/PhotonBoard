@@ -142,7 +142,7 @@ export function Menu({ items, onClose, className }: MenuProps) {
             onPointerEnter={(e) => { if (e.pointerType === 'mouse' && !entry.disabled) setActive(i) }}
             onClick={() => choose(entry)}
             className={cn(
-              'mx-1 flex min-h-control items-center gap-2.5 rounded px-2 text-left text-sm',
+              'mx-1 flex min-h-control shrink-0 items-center gap-2.5 rounded px-2 py-1 text-left text-sm',
               entry.disabled ? 'cursor-default text-fg-disabled' : entry.danger ? 'text-danger-fg' : 'text-fg-primary',
               i === active && !entry.disabled && (entry.danger ? 'bg-danger/15' : 'bg-surface-4')
             )}

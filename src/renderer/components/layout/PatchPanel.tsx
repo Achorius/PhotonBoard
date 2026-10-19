@@ -93,7 +93,7 @@ export function PatchPanel() {
             />
           )}
           {groups.length > 0 && (
-            <div className="flex max-h-[76px] flex-wrap gap-1 overflow-y-auto [[data-density=touch]_&]:max-h-[92px]">
+            <div className="flex max-h-[76px] flex-wrap gap-1 overflow-y-auto [[data-density=touch]_&]:max-h-[148px]">
               {groups.map((g) => {
                 const inGroup = g.fixtureIds.length > 0 && g.fixtureIds.every((id) => selected.has(id)) && selectedIds.length === g.fixtureIds.length
                 return (

@@ -20,7 +20,6 @@ import {
   Badge, Button, DropdownMenu, EmptyState, SegmentedControl, Tag, toast, type MenuEntry
 } from '@renderer/components/ui'
 import { usePatchStore } from '@renderer/stores/patch-store'
-import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { locateFixtures, releaseFixtures, useProgrammerStore, useProgrammerWatch } from '@renderer/lib/programmer-utils'
 import { getProgrammerValue } from '@renderer/lib/dmx-mixer'
@@ -47,7 +46,6 @@ export function FixtureControlView() {
   const mode = useProgrammerView((s) => s.mode)
   const unit = useProgrammerView((s) => s.unit)
   const universe = useUiStore((s) => s.selectedUniverse)
-  const universeCount = useDmxStore((s) => s.universeCount)
 
   const defs = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures])
   const byId = useMemo(() => new Map(patch.map((p) => [p.id, p])), [patch])
@@ -56,9 +54,9 @@ export function FixtureControlView() {
   const model = useMemo(() => buildProgrammerModel(selectedEntries, fixtures), [selectedEntries, fixtures])
 
   const universes = useMemo(() => {
-    const n = Math.max(universeCount, ...patch.map((p) => p.universe + 1), 1)
+    const n = Math.max(...patch.map((p) => p.universe + 1), 1)
     return Array.from({ length: n }, (_, i) => i)
-  }, [universeCount, patch])
+  }, [patch])
 
   // Follow the selection to its universe (Faders / DMX)
   const firstUniverse = selectedEntries[0]?.universe

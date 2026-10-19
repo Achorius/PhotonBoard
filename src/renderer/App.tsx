@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react'
-import { LuLayoutDashboard } from 'react-icons/lu'
 import { isPhone, useUiStore } from './stores/ui-store'
 import { usePatchStore } from './stores/patch-store'
 import { useMidiStore } from './stores/midi-store'
@@ -13,7 +12,7 @@ import { ShortcutsDialog } from './components/layout/ShortcutsDialog'
 import { RemoteAccess } from './components/layout/RemoteAccess'
 import { BlackoutBanner } from './components/layout/MasterControls'
 import { requestNewShow, requestOpenShow, requestSave, requestSaveAs } from './components/layout/file-actions'
-import { Button, DialogHost, Spinner, ToastHost } from './components/ui'
+import { DialogHost, Spinner, ToastHost } from './components/ui'
 import { PatchView } from './components/patch/PatchView'
 import { FixtureControlView } from './components/fixtures/FixtureControlView'
 import { PlaybackView } from './components/playback/PlaybackView'
@@ -169,16 +168,6 @@ export default function App() {
           <RemoteStageView />
           {/* The masters (Blackout) sit at the bottom of the stage view */}
           <ToastHost placement="top" />
-          {!isPhone() && (
-            <Button
-              variant="secondary"
-              icon={LuLayoutDashboard}
-              onClick={() => useUiStore.getState().setStageMode(false)}
-              className="fixed right-3 top-3 z-popover"
-            >
-              Full console
-            </Button>
-          )}
         </div>
         {overlays}
       </div>

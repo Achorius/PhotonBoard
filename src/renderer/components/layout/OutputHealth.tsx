@@ -6,6 +6,7 @@ import type { DmxOutputStatus } from '@shared/types'
 import { Badge, Button, Popover, StatusDot, usePopover, cn, type Tone } from '@renderer/components/ui'
 import { outputHealth, useOutputStatus, type OutputHealth } from '@renderer/hooks/useOutputStatus'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { usePatchStore } from '@renderer/stores/patch-store'
 
 const HEALTH_TONE: Record<OutputHealth, Tone> = { ok: 'go', degraded: 'warning', error: 'danger', none: 'neutral', unknown: 'neutral' }
 
@@ -29,6 +30,7 @@ export function OutputHealthIndicator({ variant = 'toolbar' }: { variant?: 'tool
   const status = useOutputStatus()
   const { health, active } = outputHealth(status)
   const pop = usePopover()
+  const patchedUniverses = usePatchStore((s) => new Set(s.patch.map((p) => p.universe)).size)
   const summary = healthSummary(health, active.length)
   const tone = HEALTH_TONE[health]
 
@@ -63,7 +65,7 @@ export function OutputHealthIndicator({ variant = 'toolbar' }: { variant?: 'tool
         <div className="flex items-center gap-2 border-b border-line-subtle px-3 py-2.5">
           <StatusDot tone={tone} size="md" />
           <span className="flex-1 text-sm font-semibold text-fg-primary">{summary}</span>
-          {status && <span className="text-xs text-fg-tertiary">{status.universeCount} universes</span>}
+          {patchedUniverses > 0 && <span className="text-xs text-fg-tertiary">{patchedUniverses} universe{patchedUniverses > 1 ? 's' : ''} patched</span>}
         </div>
         <div className="max-h-[320px] overflow-y-auto py-1">
           {!status || status.outputs.length === 0 ? (
