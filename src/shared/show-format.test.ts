@@ -67,6 +67,14 @@ describe('normalizeShow', () => {
     expect(warnings.some(w => /output/i.test(w))).toBe(true)
   })
 
+  it('keeps v1 static fixture aim (tilt sign) for ceiling and back-wall mounts', () => {
+    const fixture = (id: string, mountingLocation: string | undefined, mountingAngle: number) =>
+      ({ id, fixtureDefId: 'd', modeName: 'm', universe: 0, address: 1, name: id, groupIds: [], mountingLocation, mountingAngle })
+    const raw = { version: '1.0.0', patch: [fixture('a', undefined, 20), fixture('b', 'wall-back', -15), fixture('c', 'floor', 10)] }
+    expect(normalizeShow(raw).show.patch.map(p => p.mountingAngle)).toEqual([-20, 15, 10])
+    expect(normalizeShow({ ...raw, version: '2' }).show.patch.map(p => p.mountingAngle)).toEqual([20, -15, 10])
+  })
+
   it('strips runtime state so nothing starts on load', () => {
     const { show } = normalizeShow(V1_SHOW)
     const cl = show.cuelists[0]

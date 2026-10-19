@@ -607,6 +607,15 @@ export function normalizeShow(raw: unknown): NormalizeResult {
   const effects = normalizeList(data.effects, 'effect', warnings, o => str(o.name, 'effect'), (o, id) => normalizeEffect(o, id))
   const midiMappings = normalizeList(data.midiMappings, 'MIDI mapping', warnings, o => str(o.name, 'mapping'), normalizeMidiMapping)
 
+  if (version < 2) {
+    // v1 visualizer leaned ceiling and back-wall fixtures the other way for a
+    // positive tilt; flip so existing rigs keep pointing where they did
+    for (const p of patch) {
+      const m = p.mountingLocation ?? 'ceiling'
+      if (p.mountingAngle && (m === 'ceiling' || m === 'wall-back')) p.mountingAngle = -p.mountingAngle
+    }
+  }
+
   if (version < 2 && (Array.isArray(data.artnetConfig) || Array.isArray(data.dmxOutputs))) {
     // v1 shows carried the DMX output config; it is machine config now
     warnings.push('Legacy DMX output settings in the show were ignored (outputs are configured per machine)')
