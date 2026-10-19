@@ -25,6 +25,7 @@ import { getDeviceProfile } from './lib/device-detect'
 import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
+import { startExecutorAutoSync } from './stores/executor-store'
 import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { useRemoteSync } from './hooks/useRemoteSync'
@@ -36,6 +37,7 @@ import { getBridge, isRemoteMode } from './lib/runtime'
 import { handleCommand } from './lib/command-handler'
 import { startStateBroadcast } from './lib/state-snapshot'
 import { installDirtyTracking, loadLastShow } from './lib/show-io'
+import { installContentTracking, loadConsoleShow } from './lib/content-sync'
 
 // Lazy-load the 3D visualizer (three.js): not loaded until the 3D tab opens,
 // never on weak GPUs (they get the 2D stage layout instead)
@@ -68,6 +70,9 @@ export default function App() {
     return () => stopMixer()
   }, [])
 
+  // Executor slots follow the scene list even when the executor bar is hidden
+  useEffect(() => startExecutorAutoSync(), [])
+
   // One-time init: fixture library, MIDI, gamepad, last show
   useEffect(() => {
     let cancelled = false
@@ -84,9 +89,10 @@ export default function App() {
         try { startFollowGamepadLoop() } catch (e) { console.warn('[Init] Gamepad init skipped:', e) }
       }
       // Console: reload the last show (DMX outputs are machine config, applied by main).
-      // Remote: fetch the console's show for display (patch, scenes, timeline…);
-      // live state then arrives with the state broadcasts.
-      await loadLastShow()
+      // Remote: the show the console is running NOW (unsaved edits included — never
+      // a file, never echoed back); live state then arrives with the state broadcasts.
+      if (isRemoteMode()) await loadConsoleShow()
+      else await loadLastShow()
     }
     void init()
     return () => { cancelled = true }
@@ -99,6 +105,8 @@ export default function App() {
     if (!bridge) return
     const offs = [
       installDirtyTracking(),
+      // Content revisions: remotes refetch what changed (lib/content-sync.ts)
+      installContentTracking(),
       // Application menu (and its Cmd/Ctrl accelerators): same flow as the File menu
       listen(bridge.onMenuEvent('menu:new', () => { void requestNewShow() })),
       listen(bridge.onMenuEvent('menu:save', () => { void requestSave() })),

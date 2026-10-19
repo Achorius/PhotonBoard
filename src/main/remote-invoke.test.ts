@@ -155,15 +155,43 @@ describe('remote saves go through the Pi renderer', () => {
 })
 
 describe('handleRemoteSend', () => {
-  it('relays only whitelisted commands and validates DMX writes', () => {
-    const deps = { dmxEngine: engine, sendToRenderer: (channel: string, ...args: unknown[]) => { sent.push({ channel, args }) } }
-    expect(handleRemoteSend(deps, IPC.STAGE_COMMAND, [{ type: 'go-cuelist', payload: 'c1' }])).toBe(true)
+  it('relays only whitelisted commands, tagged with the client id', () => {
+    const deps = { sendToRenderer: (channel: string, ...args: unknown[]) => { sent.push({ channel, args }) } }
+    expect(handleRemoteSend(deps, IPC.STAGE_COMMAND, [{ type: 'go-cuelist', payload: 'c1', clientId: 'spoofed' }], 'web-1')).toBe(true)
+    expect(sent[0].args[0]).toEqual({ type: 'go-cuelist', payload: 'c1', clientId: 'web-1' })
+    // Web-remote-only commands are accepted, internal ones never
+    expect(handleRemoteSend(deps, IPC.STAGE_COMMAND, [{ type: 'apply-show-content', payload: {} }], 'web-1')).toBe(true)
     expect(handleRemoteSend(deps, IPC.STAGE_COMMAND, [{ type: 'apply-show', payload: {} }])).toBe(false)
+    expect(handleRemoteSend(deps, IPC.STAGE_COMMAND, [{ type: 'client-disconnected', payload: { clientId: 'web-2' } }])).toBe(false)
     expect(handleRemoteSend(deps, IPC.STAGE_COMMAND, ['go-cuelist'])).toBe(false)
-    expect(sent).toHaveLength(1)
-    expect(handleRemoteSend(deps, IPC.DMX_SET_CHANNEL, [0, 10, 300])).toBe(true)
-    expect(engine.getChannel(0, 10)).toBe(255)
-    expect(handleRemoteSend(deps, IPC.DMX_SET_CHANNEL, [7, 10, 3])).toBe(false)
+    expect(sent).toHaveLength(2)
     expect(handleRemoteSend(deps, 'evil', [])).toBe(false)
+  })
+
+  it('refuses raw DMX writes (they would bypass the console mixer)', () => {
+    const deps = { sendToRenderer: (channel: string, ...args: unknown[]) => { sent.push({ channel, args }) } }
+    expect(handleRemoteSend(deps, IPC.DMX_SET_CHANNEL, [0, 10, 255])).toBe(false)
+    expect(handleRemoteSend(deps, IPC.DMX_SET_CHANNELS, [0, { 10: 255 }])).toBe(false)
+    expect(handleRemoteSend(deps, IPC.DMX_BLACKOUT, [])).toBe(false)
+    expect(engine.getChannel(0, 10)).toBe(0)
+    expect(sent).toHaveLength(0)
+  })
+})
+
+describe('show:get-current', () => {
+  it('asks the console renderer and never reads a file', async () => {
+    const asked: unknown[] = []
+    const h = createRemoteInvokeHandler({
+      dmxEngine: engine, outputManager, showManager, piSave,
+      oflService: new OFLService({ fetch: async () => { throw new Error('offline') } }),
+      userDataPath: join(root, 'userData'),
+      getVersion: () => '1',
+      getRemoteStatus: () => ({ web: { port: 1, listening: true, clients: 0 }, api: { port: 2, listening: true, clients: 0 }, addresses: [] }),
+      sendToRenderer: () => {},
+      requestFromConsole: async (type, payload) => { asked.push({ type, payload }); return { success: true, show: { name: 'Live' } } }
+    })
+    await expect(h(IPC.SHOW_GET_CURRENT, [{ origin: 'abc', sections: ['cuelists', 42] }])).resolves.toEqual({ success: true, show: { name: 'Live' } })
+    expect(asked).toEqual([{ type: 'collect-show-content', payload: { origin: 'abc', sections: ['cuelists'] } }])
+    await expect(handle(IPC.SHOW_GET_CURRENT, [{}])).rejects.toThrow(RemoteInputError)
   })
 })

@@ -403,7 +403,8 @@ export interface ChaseStep {
 
 // --- Effects ---
 
-export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random' | 'pulse' | 'bounce' | 'step' | 'custom'
+/** 'constant' holds the attribute at its size (used e.g. to open the dimmer of a colour effect) */
+export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'random' | 'pulse' | 'bounce' | 'step' | 'custom' | 'constant'
 
 /** Spatial mode for 3D-aware effects */
 export type SpatialMode = 'index' | 'spatial'
@@ -649,6 +650,8 @@ export const IPC = {
   SHOW_GET_PATH: 'show:get-path',
   SHOW_REVEAL: 'show:reveal',
   SHOW_LOAD_LAST: 'show:load-last',
+  /** Web remote: the console's CURRENT show content (relayed to the console renderer) */
+  SHOW_GET_CURRENT: 'show:get-current',
 
   // App
   APP_GET_VERSION: 'app:get-version',
@@ -664,6 +667,8 @@ export const IPC = {
   // State relay for remote clients (Companion API + web remote)
   API_STATE: 'api:state',
   API_REQUEST_STATE: 'api:request-state',
+  /** Console renderer → main: answer to a main → renderer request (collect-show-content, save-show busy) */
+  CONSOLE_REPLY: 'console:reply',
 
   // Remote access (Electron only — never reachable from remote clients)
   REMOTE_GET_SETTINGS: 'remote:get-settings',

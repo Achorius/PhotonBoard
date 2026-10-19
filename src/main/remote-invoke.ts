@@ -22,7 +22,7 @@ import type { OFLService } from './ofl-service'
 import { isOflKey } from './ofl-service'
 import type { PiSaveCoordinator } from './pi-save-coordinator'
 import { MAX_SHOW_FILE_SIZE, checkShowObject, parseShowFileContent, sanitizeShowName } from './show-validation'
-import { isRemoteCommandType } from '../shared/remote-commands'
+import { isWebRemoteCommandType } from '../shared/remote-commands'
 import type { ShowFile } from '../shared/types'
 import type { ShowLoadResult, ShowSaveResult, RemoteStatus } from '../shared/photonboard-api'
 
@@ -37,6 +37,11 @@ export interface RemoteInvokeDeps {
   getRemoteStatus: () => RemoteStatus
   /** Deliver a channel message to the Pi's main renderer */
   sendToRenderer: (channel: string, ...args: unknown[]) => void
+  /**
+   * Ask the Pi renderer something and wait for its answer
+   * (ConsoleRequestCoordinator). Absent: show:get-current is unavailable.
+   */
+  requestFromConsole?: (type: string, payload: Record<string, unknown>) => Promise<unknown>
 }
 
 /** Thrown for bad input: the message is returned to the client as the error */
@@ -188,6 +193,16 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
         return showManager.getCurrentPath()
       case IPC.SHOW_REVEAL:
         return false // no Finder on the remote side
+      case IPC.SHOW_GET_CURRENT: {
+        // The show the Pi renderer is running now (unsaved edits included) — never a file
+        const opts = optionsArg(args[0])
+        const origin = typeof opts.origin === 'string' && opts.origin.length <= 64 ? opts.origin : undefined
+        const sections = Array.isArray(opts.sections)
+          ? opts.sections.filter((x): x is string => typeof x === 'string' && x.length <= 32).slice(0, 32)
+          : undefined
+        if (!deps.requestFromConsole) throw new RemoteInputError('The console cannot be reached')
+        return deps.requestFromConsole('collect-show-content', { origin, sections })
+      }
       case 'remote:upload-show':
         return upload(args[0], args[1], args[2])
 
@@ -247,39 +262,27 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
 /**
  * Fire-and-forget messages from remote clients. Returns false when rejected.
  */
-export function handleRemoteSend(deps: Pick<RemoteInvokeDeps, 'dmxEngine' | 'sendToRenderer'>, channel: string, args: unknown[]): boolean {
-  const { dmxEngine } = deps
-  const count = dmxEngine.getUniverseCount()
-  const validUniverse = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < count
+export function handleRemoteSend(
+  deps: Pick<RemoteInvokeDeps, 'sendToRenderer'>,
+  channel: string,
+  args: unknown[],
+  /** Set by the web server for each connection: lets the console release what a client holds */
+  clientId?: string
+): boolean {
   switch (channel) {
-    case IPC.DMX_SET_CHANNEL: {
-      const [universe, ch, val] = args
-      if (!validUniverse(universe) || typeof ch !== 'number' || typeof val !== 'number') return false
-      dmxEngine.setChannel(universe, Math.trunc(ch), Math.max(0, Math.min(255, Math.round(val))))
-      return true
-    }
-    case IPC.DMX_SET_CHANNELS: {
-      const [universe, channels] = args
-      if (!validUniverse(universe) || !isPlainObject(channels)) return false
-      const entries = Object.entries(channels)
-      if (entries.length > 512) return false
-      for (const [ch, val] of entries) {
-        const chNum = Number(ch)
-        if (!Number.isInteger(chNum) || typeof val !== 'number') continue
-        dmxEngine.setChannel(universe, chNum, Math.max(0, Math.min(255, Math.round(val))))
-      }
-      return true
-    }
-    case IPC.DMX_BLACKOUT:
-      dmxEngine.blackout()
-      return true
+    // Raw DMX writes (dmx:set-channel(s), dmx:blackout) are NOT accepted from
+    // remote clients: they would bypass the console's mixer (and the mixer only
+    // re-sends changed channels, so a raw blackout would stick on pan/tilt…).
     case IPC.STAGE_COMMAND: {
       const command = args[0]
-      if (!isPlainObject(command) || !isRemoteCommandType(command.type)) {
+      if (!isPlainObject(command) || !isWebRemoteCommandType(command.type)) {
         console.warn('[Web] Rejected command:', isPlainObject(command) ? String(command.type).slice(0, 64) : typeof command)
         return false
       }
-      deps.sendToRenderer(IPC.STAGE_COMMAND, { type: command.type, payload: command.payload })
+      // Rebuilt: a client can never inject its own clientId
+      const relayed: { type: string; payload: unknown; clientId?: string } = { type: command.type, payload: command.payload }
+      if (clientId) relayed.clientId = clientId
+      deps.sendToRenderer(IPC.STAGE_COMMAND, relayed)
       return true
     }
     case IPC.API_STATE:

@@ -13,6 +13,8 @@
 //   ← { id, type: 'invoke', channel, args }     → { id, type: 'result', data } | { id, type: 'result', error }
 //   ← { type: 'send', channel, args }           fire-and-forget
 //   → { type: 'event', channel: 'state', data } Pi state, max ~20 Hz, only on change
+//   Every relayed command carries the connection's clientId; when a client
+//   disconnects the console gets 'client-disconnected' and releases its holds.
 //   Wrong/missing PIN → close code 4401.
 // ============================================================
 
@@ -20,6 +22,9 @@ import http from 'node:http'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { join, extname, resolve, sep } from 'node:path'
 import { WebSocketServer, WebSocket } from 'ws'
+import { ipcMain } from 'electron'
+import { IPC } from '../shared/types'
+import { ConsoleRequestCoordinator } from './console-request'
 import type { RemoteServerStatus, RemoteSettings } from '../shared/photonboard-api'
 import { createRemoteInvokeHandler, handleRemoteSend, RemoteInputError, type RemoteInvokeDeps } from './remote-invoke'
 import { ThrottledBroadcaster } from './state-broadcast'
@@ -46,6 +51,9 @@ let wss: WebSocketServer | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let retries = 0
 let status: RemoteServerStatus = { port: WEB_PORT, listening: false, clients: 0 }
+let clientCounter = 0
+let consoleRequests: ConsoleRequestCoordinator | null = null
+let offConsoleReply: (() => void) | null = null
 const clients = new Map<WebSocket, ClientAuth>()
 const limiter = new AuthFailureLimiter()
 
@@ -85,7 +93,32 @@ const MIME: Record<string, string> = {
 
 export function startWebServer(deps: WebServerDeps): void {
   if (server) return
-  const handleInvoke = createRemoteInvokeHandler(deps)
+  // Requests to the console renderer (show:get-current): command out, IPC.CONSOLE_REPLY back
+  const requests = new ConsoleRequestCoordinator((command) => {
+    deps.sendToRenderer(IPC.STAGE_COMMAND, command)
+    return true
+  })
+  consoleRequests = requests
+  const onReply = (_event: unknown, requestId: unknown, data: unknown) => {
+    if (requests.answer(requestId, data)) return
+    // The console could not run a remote Save (another show operation is
+    // running): answer the remote now instead of letting it time out
+    const claim = deps.piSave.claim(requestId)
+    if (claim) {
+      let reply: unknown = data
+      if (typeof data === 'string') { try { reply = JSON.parse(data) } catch { reply = null } }
+      const error = reply && typeof reply === 'object' && typeof (reply as { error?: unknown }).error === 'string'
+        ? (reply as { error: string }).error
+        : 'The console could not save the show.'
+      deps.piSave.complete(claim.id, { success: false, error })
+    }
+  }
+  ipcMain.on(IPC.CONSOLE_REPLY, onReply)
+  offConsoleReply = () => { ipcMain.removeListener(IPC.CONSOLE_REPLY, onReply) }
+  const handleInvoke = createRemoteInvokeHandler({
+    ...deps,
+    requestFromConsole: (type, payload) => requests.request(type, payload)
+  })
 
   // ---- HTTP server: serve static renderer files ----
   const canonicalRendererPath = resolve(deps.rendererPath)
@@ -157,6 +190,8 @@ export function startWebServer(deps: WebServerDeps): void {
 
   wsServer.on('connection', (ws, req) => {
     const address = req.socket.remoteAddress
+    // Commands carry it so the console can release what this client holds when it goes away
+    const clientId = `web-${++clientCounter}`
     console.log(`[Web] Remote client connected (${address})`)
 
     // Rate limiting state per client
@@ -227,7 +262,7 @@ export function startWebServer(deps: WebServerDeps): void {
       } else if (msg.type === 'send') {
         if (typeof msg.channel !== 'string') return
         try {
-          if (!handleRemoteSend(deps, msg.channel, Array.isArray(msg.args) ? msg.args : [])) {
+          if (!handleRemoteSend(deps, msg.channel, Array.isArray(msg.args) ? msg.args : [], clientId)) {
             console.warn('[Web] Rejected send:', msg.channel.slice(0, 64))
           }
         } catch (e) {
@@ -241,6 +276,12 @@ export function startWebServer(deps: WebServerDeps): void {
       auth.dispose()
       clients.delete(ws)
       status = { ...status, clients: clients.size }
+      // Flash / trigger / blinder / strobe held by this client must not stay on
+      try {
+        deps.sendToRenderer(IPC.STAGE_COMMAND, { type: 'client-disconnected', payload: { clientId } })
+      } catch (e) {
+        console.warn('[Web] client-disconnected relay failed:', (e as Error).message)
+      }
       console.log(`[Web] Remote client disconnected (${address})`)
     })
   })
@@ -294,6 +335,10 @@ async function serveFile(filePath: string, req: http.IncomingMessage, res: http.
 
 export function stopWebServer(): void {
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  offConsoleReply?.()
+  offConsoleReply = null
+  consoleRequests?.dispose()
+  consoleRequests = null
   broadcaster.dispose()
   for (const client of clients.keys()) {
     try { client.terminate() } catch { /* ignore */ }

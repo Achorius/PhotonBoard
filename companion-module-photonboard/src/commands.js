@@ -27,7 +27,7 @@ export const COMMANDS = [
   'set-chase-bpm',                // payload: { id, bpm }
   'set-chase-fader',              // payload: { id, level }
   'tap-tempo',                    // payload?: chase id (default: every playing chase)
-  'start-effect',                 // payload: Effect (started / updated, phase kept when running)
+  'start-effect',                 // payload: effect id (legacy: an Effect — only created when its id is unknown)
   'stop-effect',                  // payload: effect id
   'stop-all-effects',             // no payload
   'select-group',                 // payload: group id

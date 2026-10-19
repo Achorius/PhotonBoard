@@ -86,7 +86,9 @@ const api: PhotonBoardAPI = {
     upload: async () => {
       // In Electron desktop mode, use File > Open instead
       return { success: false, error: 'Use File > Open in desktop mode' }
-    }
+    },
+    // The console IS the current show
+    getCurrent: async () => ({ success: false, error: 'Only available in the remote web UI' })
   },
 
   // --- Fixtures ---
@@ -159,7 +161,9 @@ const api: PhotonBoardAPI = {
       callback('open')
       return () => {}
     },
-    getConnectionState: () => 'open'
+    getConnectionState: () => 'open',
+    // Large shows cross IPC as JSON text (see show.save)
+    replyToMain: (requestId, data) => ipcRenderer.send(IPC.CONSOLE_REPLY, requestId, JSON.stringify(data ?? null))
   }
 }
 

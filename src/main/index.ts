@@ -5,7 +5,7 @@ import { DmxEngine } from './dmx-engine'
 import { DmxOutputManager } from './dmx-output-manager'
 import { ShowFileManager } from './show-file'
 import { OFLService } from './ofl-service'
-import { IPC, type DmxOutputsConfig } from '../shared/types'
+import { IPC, MAX_UNIVERSES, type DmxOutputsConfig } from '../shared/types'
 import type { RemoteStatus, ShowLoadResult, ShowSaveResult } from '../shared/photonboard-api'
 import { startApiServer, stopApiServer, broadcastState, disconnectApiClients, getApiServerStatus } from './api-server'
 import { startWebServer, stopWebServer, broadcastToWeb, disconnectWebClients, getWebServerStatus } from './web-server'
@@ -17,7 +17,12 @@ import { lanAddresses } from './remote-access'
 import { parseShowArg } from './remote-invoke'
 import { sanitizeShowName, SHOW_EXTENSION } from './show-validation'
 
-const UNIVERSE_COUNT = 3
+/**
+ * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
+ * only read the universes they are configured for and skip unchanged frames,
+ * and the renderer sends only changed channels, so unused universes cost nothing.
+ */
+const UNIVERSE_COUNT = MAX_UNIVERSES
 
 function safeLog(level: 'log' | 'warn' | 'error', ...args: unknown[]): void {
   try { console[level](...args) } catch { /* stdout pipe closed */ }

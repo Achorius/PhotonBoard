@@ -149,6 +149,8 @@ export function getWaveformValue(
     }
     case 'custom':
       return interpolateKeyframes(p, keyframes)
+    case 'constant':
+      return 1
     default:
       return 0
   }
@@ -304,7 +306,9 @@ export function computeEffectLayer(
     const colorWheelIdx = modeChLower.findIndex(ch => ch === 'color wheel' || ch === 'color' || ch === 'colour wheel')
 
     // Effect uses RGB but the fixture only has a colour wheel → nearest slot
-    if (effectHasRgb && !fixtureHasRgb && colorWheelIdx !== -1) {
+    // (the other attributes, e.g. an open dimmer, still run below)
+    const wheelFallback = effectHasRgb && !fixtureHasRgb && colorWheelIdx !== -1
+    if (wheelFallback) {
       const rgb: Record<string, number> = { red: 0, green: 0, blue: 0 }
       for (const ech of effectChannels) {
         const chName = (CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType).toLowerCase()
@@ -315,11 +319,11 @@ export function computeEffectLayer(
       if (absChannel >= 0 && absChannel < 512) {
         addToLayerMap(layerChannels, entry.universe, absChannel, rgbToColorWheelDmx(rgb.red, rgb.green, rgb.blue))
       }
-      return
     }
 
     for (const ech of effectChannels) {
       const targetName = CHANNEL_TYPE_TO_NAME[ech.channelType] || ech.channelType.toLowerCase()
+      if (wheelFallback && RGB_CHANNEL_TYPES.has(targetName)) continue
       const centered = isPositionChannel(ech.channelType)
       const pixelLayout = mode.pixelLayout
 

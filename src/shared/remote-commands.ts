@@ -27,7 +27,7 @@ export const REMOTE_COMMANDS = [
   'set-chase-bpm',       // payload: { id, bpm }
   'set-chase-fader',     // payload: { id, level }
   'tap-tempo',           // payload?: chase id (default: every playing chase)
-  'start-effect',        // payload: Effect (started / updated, phase kept when running)
+  'start-effect',        // payload: effect id (legacy: an Effect — only created when its id is unknown)
   'stop-effect',         // payload: effect id
   'stop-all-effects',    // no payload
   'select-group',        // payload: group id
@@ -52,6 +52,86 @@ export function isRemoteCommandType(type: unknown): type is RemoteCommandType {
 }
 
 // ------------------------------------------------------------
+// Commands only the web remote (full UI in a browser) may send, on top
+// of REMOTE_COMMANDS. Not part of the Companion protocol.
+// ------------------------------------------------------------
+
+export const WEB_REMOTE_COMMANDS = [
+  // Content edits made on the remote, merged into the running show
+  // without stopping anything. payload: ApplyShowContentPayload
+  'apply-show-content',
+  // Record with the CONSOLE's programmer / output. payload: RecordCommandPayload
+  'record'
+] as const
+
+export type WebRemoteCommandType = (typeof WEB_REMOTE_COMMANDS)[number]
+
+/** Commands a web remote client may send (REMOTE_COMMANDS + WEB_REMOTE_COMMANDS). */
+export function isWebRemoteCommandType(type: unknown): type is RemoteCommandType | WebRemoteCommandType {
+  return isRemoteCommandType(type) || (typeof type === 'string' && (WEB_REMOTE_COMMANDS as readonly string[]).includes(type))
+}
+
+/** One changed section. List sections: a diff by id; the others: the whole value. */
+export interface SectionChange {
+  upsert?: unknown[]
+  remove?: string[]
+  /** Item ids in their new order (items the remote does not know keep their place at the end) */
+  order?: string[]
+  /** Whole-value sections (executor, timeline, roomConfig) */
+  value?: unknown
+}
+
+export interface ApplyShowContentPayload {
+  /** Random id of the remote page (stable for its lifetime) */
+  origin: string
+  /** Increases with every payload sent by that page */
+  seq: number
+  sections: Record<string, SectionChange>
+  /** Section revisions the remote edited from (informational: last writer wins per item) */
+  baseRevisions?: Record<string, number>
+}
+
+export type RecordAction = 'new-scene' | 'add-cue' | 'update-cue' | 'new-chase' | 'add-step' | 'update-step'
+
+export interface RecordCommandPayload {
+  action: RecordAction
+  /** Limit to these fixtures (the remote's selection); omitted = all fixtures */
+  fixtureIds?: string[]
+  /** new-scene / add-cue: id of the scene; new-chase / add-step: id of the chase (new ones are created with it) */
+  targetId: string
+  /** add-cue / new-scene: id of the new cue · update-cue: the cue · update-step: the step · add-step / new-chase: id of the new step */
+  itemId?: string
+  name?: string
+  includeEffects?: boolean
+  mode?: 'merge' | 'replace'
+}
+
+/** Per-section revision as published in the state snapshot */
+export interface ContentRevision {
+  rev: number
+  /** Origin (remote page) of the last change, when it came from a remote edit */
+  by?: string
+  seq?: number
+}
+
+export interface ContentState {
+  /** Changes when the console renderer restarts (revisions start again) */
+  epoch: string
+  sections: Record<string, ContentRevision>
+}
+
+/** show:get-current result (remote → main → console renderer) */
+export interface CurrentShowContent {
+  success: boolean
+  error?: string
+  /** The requested sections (all when none were named) + name */
+  show?: Record<string, unknown>
+  content?: ContentState
+  /** Last seq applied from the requesting origin */
+  appliedSeq?: number
+}
+
+// ------------------------------------------------------------
 // Commands only the MAIN process sends to the main renderer
 // (over the same 'stage:command' channel). They are deliberately
 // NOT in REMOTE_COMMANDS: remote clients / Companion cannot send them.
@@ -62,11 +142,19 @@ export const INTERNAL_COMMANDS = [
   // of truth for the show, so main asks it to save ITS OWN state. The renderer
   // must answer with window.photonboard.show.save(collectShowData(), { requestId })
   // — main writes it to the path the remote chose and returns the result to the
-  // remote client. payload: SaveShowCommandPayload
+  // remote client. When another show operation keeps it busy for too long it answers
+  // remote.replyToMain(requestId, { error }) instead. payload: SaveShowCommandPayload
   'save-show',
   // Main replaced the show on disk on behalf of a remote client (upload, or
   // load-by-name with apply). The renderer must adopt it. payload: ShowFile
-  'apply-show'
+  'apply-show',
+  // A web remote asked for the console's CURRENT show content (show:get-current).
+  // The renderer answers with window.photonboard.remote.replyToMain(requestId, CurrentShowContent).
+  // payload: { requestId, origin?, sections?: string[] }
+  'collect-show-content',
+  // A web remote client disconnected: release what it was holding (flash, trigger,
+  // blinder, strobe). payload: { clientId }
+  'client-disconnected'
 ] as const
 
 export type InternalCommandType = (typeof INTERNAL_COMMANDS)[number]

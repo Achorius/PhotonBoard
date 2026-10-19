@@ -325,15 +325,14 @@ const remoteOnly = (): Promise<never> =>
 
 export function createRemoteAPI(): PhotonBoardAPI {
   return {
+    // Raw DMX writes would bypass the console's mixer: a remote never sends
+    // them (programmer / masters go through commands)
     dmx: {
-      setChannel: (universe, channel, value) =>
-        send('dmx:set-channel', universe, channel, value),
-      setChannels: (universe, channels) =>
-        send('dmx:set-channels', universe, channels),
+      setChannel: () => {},
+      setChannels: () => {},
       getValues: (universe) =>
         invoke('dmx:get-values', universe),
-      blackout: () =>
-        send('dmx:blackout')
+      blackout: () => {}
     },
 
     artnet: {
@@ -378,7 +377,10 @@ export function createRemoteAPI(): PhotonBoardAPI {
         invoke('show:reveal'),
       /** Upload a .pbshow file from the browser to the Pi (the Pi adopts it) */
       upload: (content, filename, opts) =>
-        invokeWithTimeout(SLOW_TIMEOUT_MS, 'remote:upload-show', content, filename, opts ?? {})
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'remote:upload-show', content, filename, opts ?? {}),
+      /** The console's current (possibly unsaved) show, or some sections of it */
+      getCurrent: (opts) =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'show:get-current', opts ?? {})
     },
 
     fixtures: {
@@ -445,7 +447,8 @@ export function createRemoteAPI(): PhotonBoardAPI {
         try { callback(connectionState) } catch (e) { console.error('[Remote] connection listener failed:', e) }
         return () => { connectionListeners.delete(callback) }
       },
-      getConnectionState: () => connectionState
+      getConnectionState: () => connectionState,
+      replyToMain: () => { /* console only */ }
     }
   }
 }

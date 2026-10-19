@@ -16,6 +16,11 @@ export function isFlashStarted(id: string): boolean {
   return flashStarted.has(id)
 }
 
+/** A cuelist disappeared (content merged from a remote): forget its flash state. */
+export function forgetFlashStarted(id: string): void {
+  flashStarted.delete(id)
+}
+
 type CuelistSettings = Partial<Pick<Cuelist, 'name' | 'isLooping' | 'priority' | 'faderLevel' | 'effectSnapshots'>>
 type ChaseSettings = Partial<Pick<Chase, 'name' | 'isLooping' | 'bpm' | 'fadePercent' | 'direction' | 'faderLevel' | 'priority'>>
 
@@ -25,10 +30,11 @@ interface PlaybackState {
   presets: Preset[]
 
   // Cuelist actions
-  addCuelist: (name: string) => string
+  /** `id`: use this id (remote recording names the scene it creates) */
+  addCuelist: (name: string, id?: string) => string
   removeCuelist: (id: string) => void
   renameCuelist: (id: string, name: string) => void
-  addCue: (cuelistId: string, name: string, values: CueChannelValue[], fadeIn?: number, fadeOut?: number) => void
+  addCue: (cuelistId: string, name: string, values: CueChannelValue[], fadeIn?: number, fadeOut?: number, id?: string) => void
   updateCue: (cuelistId: string, cueId: string, updates: Partial<Cue>) => void
   removeCue: (cuelistId: string, cueId: string) => void
   goCuelist: (id: string) => void
@@ -44,9 +50,9 @@ interface PlaybackState {
   releaseAll: () => void
 
   // Chase actions
-  addChase: (name: string) => string
+  addChase: (name: string, id?: string) => string
   removeChase: (id: string) => void
-  addChaseStep: (chaseId: string, values: CueChannelValue[]) => void
+  addChaseStep: (chaseId: string, values: CueChannelValue[], id?: string) => void
   removeChaseStep: (chaseId: string, stepId: string) => void
   /** Toggle, or force with `on` */
   toggleChase: (id: string, on?: boolean) => void
@@ -145,8 +151,8 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
   presets: [],
 
   // --- Cuelists ---
-  addCuelist: (name) => {
-    const id = uuidv4()
+  addCuelist: (name, givenId) => {
+    const id = givenId || uuidv4()
     set((state) => ({
       cuelists: [...state.cuelists, {
         id,
@@ -178,13 +184,13 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
     }))
   },
 
-  addCue: (cuelistId, name, values, fadeIn = DEFAULT_CUE_FADE_IN, fadeOut = DEFAULT_CUE_FADE_OUT) => {
+  addCue: (cuelistId, name, values, fadeIn = DEFAULT_CUE_FADE_IN, fadeOut = DEFAULT_CUE_FADE_OUT, cueId) => {
     set((state) => ({
       cuelists: state.cuelists.map((cl) => {
         if (cl.id !== cuelistId) return cl
         const lastNumber = cl.cues.length > 0 ? cl.cues[cl.cues.length - 1].number : 0
         const newCue: Cue = {
-          id: uuidv4(),
+          id: cueId || uuidv4(),
           name,
           number: lastNumber + 1,
           values,
@@ -328,8 +334,8 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
   },
 
   // --- Chases ---
-  addChase: (name) => {
-    const id = uuidv4()
+  addChase: (name, givenId) => {
+    const id = givenId || uuidv4()
     set((state) => ({
       chases: [...state.chases, {
         id,
@@ -352,11 +358,11 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
     set((state) => ({ chases: state.chases.filter((c) => c.id !== id) }))
   },
 
-  addChaseStep: (chaseId, values) => {
+  addChaseStep: (chaseId, values, stepId) => {
     set((state) => ({
       chases: state.chases.map((ch) => {
         if (ch.id !== chaseId) return ch
-        const step: ChaseStep = { id: uuidv4(), values }
+        const step: ChaseStep = { id: stepId || uuidv4(), values }
         return { ...ch, steps: [...ch.steps, step] }
       })
     }))

@@ -199,7 +199,7 @@ export const WAVEFORMS: { id: WaveformType; label: string }[] = [
 ]
 
 export function waveformLabel(w: WaveformType): string {
-  return WAVEFORMS.find((x) => x.id === w)?.label ?? w
+  return WAVEFORMS.find((x) => x.id === w)?.label ?? (w === 'constant' ? 'Hold' : w)
 }
 
 export const DEFAULT_KEYFRAMES = [
@@ -310,6 +310,29 @@ export function effectFromTemplate(t: EffectTemplate, fixtureIds: string[]): Par
   if (t.spatialMode) effect.spatialMode = t.spatialMode
   if (t.spatialAxis) effect.spatialAxis = t.spatialAxis
   return effect
+}
+
+/**
+ * Colour effects need light. The dimmer is NEVER written to the programmer
+ * (it would override the effect / every scene until Clear): when all the
+ * targets are dark, the effect gets its own constant "open dimmer"
+ * attribute, which lives on the effect's layer and goes away with it.
+ * When only some are dark, a hint is shown and nothing is changed.
+ */
+export function withOpenDimmer(
+  effect: Partial<Effect> & { fixtureIds: string[] },
+  state: { dark: number; lit: number }
+): { effect: Partial<Effect> & { fixtureIds: string[] }; hint: boolean } {
+  if (state.dark === 0) return { effect, hint: false }
+  if (state.lit > 0) return { effect, hint: true }
+  const channels: EffectChannel[] = effect.channels && effect.channels.length > 0
+    ? effect.channels
+    : [{ channelType: effect.channelType ?? 'Dimmer', phaseOffset: 0, depth: effect.depth ?? 255, frequencyMultiplier: 1 }]
+  if (channels.some((c) => c.channelType === 'Dimmer')) return { effect, hint: false }
+  return {
+    effect: { ...effect, channels: [...channels, { channelType: 'Dimmer', phaseOffset: 0, depth: 255, frequencyMultiplier: 1, waveform: 'constant' }] },
+    hint: false
+  }
 }
 
 // ------------------------------------------------------------

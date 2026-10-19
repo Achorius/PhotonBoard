@@ -37,7 +37,7 @@ import {
   onTimecodeSettingsChange, setTimecodeChase, setTimecodeDropoutMs, setTimecodeFramerate, setTimecodeOffset
 } from './timecode-engine'
 import { stopAllEffects } from './effect-engine'
-import { getBridge, isRemoteMode } from './runtime'
+import { getBridge, isRemoteMode, runRemotePreflight } from './runtime'
 
 export type ShowIoStatus = 'ok' | 'canceled' | 'error' | 'busy'
 
@@ -315,6 +315,8 @@ export function saveShow(opts: SaveShowOptions = {}): Promise<ShowIoResult> {
   const label = opts.saveAs ? 'Save As' : 'Save'
   return exclusive(label, async () => {
     const bridge = requireBridge()
+    // Remote: the console saves ITS show — send our pending edits first (same socket, in order)
+    runRemotePreflight()
     status(opts.saveAs ? 'Save As…' : 'Saving…', 'info', 0)
     const show = collectShowData()
     let result: ShowSaveResult | null

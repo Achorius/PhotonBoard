@@ -4,12 +4,12 @@
 import { confirm } from '@renderer/components/ui'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
-import { setTimelineTime } from '@renderer/lib/timeline-engine'
+import { transportSeek } from '@renderer/lib/timeline-transport'
 import { MARKER_COLORS, ZONE_COLORS, removeTrack, trackName } from './timeline-model'
 import { getCanvasApi, useTimelineView } from './timeline-view-store'
 
 export function seek(t: number, reveal = false): void {
-  setTimelineTime(Math.max(0, t))
+  transportSeek(Math.max(0, t))
   if (reveal) getCanvasApi()?.reveal(t)
 }
 

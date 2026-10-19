@@ -1,4 +1,4 @@
-import { DMX_CHANNELS_PER_UNIVERSE, DMX_MAX, DMX_MIN } from '../shared/types'
+import { DMX_CHANNELS_PER_UNIVERSE, DMX_MAX, DMX_MIN, MAX_UNIVERSES } from '../shared/types'
 
 /** `changed` is true when a channel was written since the previous tick */
 type FrameCallback = (universes: Uint8Array[], changed: boolean) => void
@@ -12,7 +12,7 @@ export class DmxEngine {
   private dirty = false
   private lastCallbackErrorAt = 0
 
-  constructor(universeCount: number = 3) {
+  constructor(universeCount: number = MAX_UNIVERSES) {
     this.universeCount = universeCount
     this.universes = []
     for (let i = 0; i < universeCount; i++) {

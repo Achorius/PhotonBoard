@@ -9,7 +9,7 @@
 // ============================================================
 
 import type { PhotonBoardAPI } from '@shared/photonboard-api'
-import type { RemoteCommandType } from '@shared/remote-commands'
+import type { RemoteCommandType, WebRemoteCommandType } from '@shared/remote-commands'
 
 /** window.photonboard, or undefined (node tests, very early boot). */
 export function getBridge(): PhotonBoardAPI | undefined {
@@ -40,9 +40,32 @@ export function clockNow(): number {
 // Remote commands (browser → Pi)
 // ---------------------------------------------------------------
 
+let preflight: (() => void) | null = null
+let inPreflight = false
+
+/**
+ * Remote mode: run before every command is sent. The content sync registers
+ * its flush here so a command never overtakes the edit it depends on
+ * (create a scene, then GO it).
+ */
+export function setRemoteCommandPreflight(fn: (() => void) | null): void {
+  preflight = fn
+}
+
+/** Remote mode: run the preflight now (e.g. before an invoke such as Save). */
+export function runRemotePreflight(): void {
+  if (!isRemoteMode() || !preflight || inPreflight) return
+  inPreflight = true
+  try { preflight() } catch (e) { console.warn('[Remote] preflight failed:', e) } finally { inPreflight = false }
+}
+
 /** Send a command to the Pi renderer. No-op outside remote mode. */
-export function sendRemoteCommand(type: RemoteCommandType, payload?: unknown): void {
+export function sendRemoteCommand(type: RemoteCommandType | WebRemoteCommandType, payload?: unknown): void {
   if (!isRemoteMode()) return
+  if (preflight && !inPreflight) {
+    inPreflight = true
+    try { preflight() } catch (e) { console.warn('[Remote] preflight failed:', e) } finally { inPreflight = false }
+  }
   try {
     getBridge()?.remote.sendCommand(type, payload)
   } catch (e) {

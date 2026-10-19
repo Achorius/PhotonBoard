@@ -14,11 +14,61 @@ interface LearnSource {
   deviceName?: string
 }
 
+export type MidiBehavior = MidiMapping['options']['behavior']
+type MidiTarget = MidiMapping['target']
+
 interface MidiLearnTarget {
   type: MidiTargetType
   id?: string
   parameter?: string
   label: string
+  /** Button behaviour of the learned mapping (e.g. the executor cell's mode) */
+  behavior?: MidiBehavior
+}
+
+/** Same target (type + id + parameter)? */
+export function sameMidiTarget(a: MidiTarget, b: MidiTarget): boolean {
+  return a.type === b.type && (a.id ?? undefined) === (b.id ?? undefined) && (a.parameter ?? undefined) === (b.parameter ?? undefined)
+}
+
+function sameMidiSource(a: MidiMapping['source'], b: MidiMapping['source']): boolean {
+  return a.type === b.type && a.channel === b.channel && a.number === b.number && (a.deviceName ?? '') === (b.deviceName ?? '')
+}
+
+/** Mappings that drive a target (oldest first) */
+export function mappingsForTarget(mappings: MidiMapping[], target: MidiTarget): MidiMapping[] {
+  return mappings.filter((m) => sameMidiTarget(m.target, target))
+}
+
+/**
+ * Put a learned mapping in the list: it REPLACES every mapping of the same
+ * target (re-learn never leaves the old pad mapped too — two mappings on one
+ * pad would toggle twice per press). It takes the place of the first one.
+ */
+export function insertLearnedMapping(mappings: MidiMapping[], mapping: MidiMapping): { mappings: MidiMapping[]; replaced: MidiMapping[] } {
+  const replaced: MidiMapping[] = []
+  const next: MidiMapping[] = []
+  let placed = false
+  for (const m of mappings) {
+    if (sameMidiTarget(m.target, mapping.target)) {
+      replaced.push(m)
+      if (!placed) { next.push(mapping); placed = true }
+      continue
+    }
+    next.push(m)
+  }
+  if (!placed) next.push(mapping)
+  return { mappings: next, replaced }
+}
+
+/** Drop exact duplicates (same source AND same target): they fire twice per message. */
+export function dedupeMappings(mappings: MidiMapping[]): MidiMapping[] {
+  const out: MidiMapping[] = []
+  for (const m of mappings) {
+    if (out.some((o) => sameMidiTarget(o.target, m.target) && sameMidiSource(o.source, m.source))) continue
+    out.push(m)
+  }
+  return out.length === mappings.length ? mappings : out
 }
 
 type MidiApiStatus = 'pending' | 'available' | 'unavailable' | 'error'
@@ -61,6 +111,8 @@ interface MidiState {
   addMapping: (mapping: Omit<MidiMapping, 'id'>) => void
   removeMapping: (id: string) => void
   updateMapping: (id: string, updates: Partial<MidiMapping>) => void
+  /** Set the button behaviour of EVERY mapping of a target (e.g. a scene's GO) */
+  setTargetBehavior: (target: MidiTarget, behavior: MidiBehavior) => void
   /** Records an incoming message: lastMessage + monitor log */
   setLastMessage: (msg: MidiMessageInfo) => void
   /** Log a message for the monitor only (note-offs) */
@@ -236,6 +288,17 @@ export const useMidiStore = create<MidiState>((set, get) => ({
     }))
   },
 
+  setTargetBehavior: (target, behavior) => {
+    const { mappings } = get()
+    if (!mappings.some((m) => sameMidiTarget(m.target, target) && m.options.behavior !== behavior)) return
+    for (const m of mappings) if (sameMidiTarget(m.target, target)) cleanupMappingState(m.id)
+    set({
+      mappings: mappings.map((m) => sameMidiTarget(m.target, target) && m.options.behavior !== behavior
+        ? { ...m, options: { ...m.options, behavior } }
+        : m)
+    })
+  },
+
   setLastMessage: (msg) => {
     const entry = { ...msg, ts: msg.ts ?? performance.now() }
     set((state) => ({ lastMessage: entry, messageLog: [entry, ...state.messageLog].slice(0, MIDI_LOG_SIZE) }))
@@ -248,7 +311,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
   clearMessageLog: () => set({ messageLog: [] }),
 
-  setMappings: (mappings) => set({ mappings })
+  setMappings: (mappings) => set({ mappings: dedupeMappings(mappings) })
 }))
 
 // ---- MIDI learn capture ----
@@ -261,8 +324,15 @@ function cancelLearnCapture(): void {
 }
 
 function finishLearn(source: LearnSource, encoding: 'absolute' | 'relative'): void {
-  const { learnTarget } = useMidiStore.getState()
+  const { learnTarget, mappings } = useMidiStore.getState()
   if (!learnTarget) return
+  const target: MidiTarget = { type: learnTarget.type, id: learnTarget.id, parameter: learnTarget.parameter }
+  // Re-learn keeps the user's range / behaviour when the control kind is the same
+  const previous = mappingsForTarget(mappings, target).find((m) => m.source.type === source.type)
+  const options: MidiMapping['options'] = previous
+    ? { ...previous.options, encoding }
+    : { min: 0, max: 255, inverted: false, encoding, behavior: source.type === 'cc' ? 'direct' : 'toggle' }
+  if (learnTarget.behavior) options.behavior = learnTarget.behavior
   const mapping: MidiMapping = {
     id: uuidv4(),
     name: learnTarget.label,
@@ -272,24 +342,17 @@ function finishLearn(source: LearnSource, encoding: 'absolute' | 'relative'): vo
       channel: source.channel,
       number: source.number
     },
-    target: {
-      type: learnTarget.type,
-      id: learnTarget.id,
-      parameter: learnTarget.parameter
-    },
-    options: {
-      min: 0,
-      max: 255,
-      inverted: false,
-      encoding,
-      behavior: source.type === 'cc' ? 'direct' : 'toggle'
-    }
+    target,
+    options
   }
-  useMidiStore.setState((state) => ({
-    mappings: [...state.mappings, mapping],
+  const result = insertLearnedMapping(mappings, mapping)
+  // Replaced mappings: forget their toggle state, but never reset their target
+  for (const m of result.replaced) cleanupMappingState(m.id)
+  useMidiStore.setState({
+    mappings: result.mappings,
     isLearning: false,
     learnTarget: null
-  }))
+  })
 }
 
 // Module-level debounce for device state changes (must persist across initMidi calls)

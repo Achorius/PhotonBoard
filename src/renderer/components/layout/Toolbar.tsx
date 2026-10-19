@@ -15,7 +15,8 @@ import { useUiStore } from '@renderer/stores/ui-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useFollowStore } from '@renderer/stores/follow-store'
 import { clearProgrammer, isProgrammerActive } from '@renderer/lib/dmx-mixer'
-import { getTimelineState, onTimelinePlayStateChange, toggleTimeline } from '@renderer/lib/timeline-engine'
+import { getTimelineState, onTimelinePlayStateChange } from '@renderer/lib/timeline-engine'
+import { transportToggle } from '@renderer/lib/timeline-transport'
 import { listShows } from '@renderer/lib/show-io'
 import { getBridge, isElectronRuntime, isRemoteMode } from '@renderer/lib/runtime'
 import { useRemoteConnection } from '@renderer/hooks/useRemoteConnection'
@@ -172,7 +173,7 @@ function TimelineButton() {
       icon={playing ? LuSquare : LuPlay}
       tone="go"
       active={playing}
-      onClick={toggleTimeline}
+      onClick={transportToggle}
       onContextMenu={midi.onContextMenu}
       tooltip={`${playing ? 'Stop' : 'Play'} the timeline · right-click: MIDI learn`}
       aria-label={playing ? 'Stop timeline' : 'Play timeline'}

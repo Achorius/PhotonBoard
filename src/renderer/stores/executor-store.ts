@@ -17,6 +17,8 @@ import {
   defaultExecutorLayout,
   normalizeExecutorLayout
 } from '@shared/show-format'
+import { usePlaybackStore } from './playback-store'
+import { isRemoteMode } from '@renderer/lib/runtime'
 
 export const COLUMN_COUNT = EXECUTOR_COLUMN_COUNT
 export const ROWS_PER_COLUMN = EXECUTOR_ROW_COUNT
@@ -62,6 +64,47 @@ interface ExecutorState {
 
 const initialLayout = defaultExecutorLayout()
 
+/**
+ * Grid with deleted scenes removed and unplaced scenes put in the first free
+ * slots (column-first). Returns the SAME array when nothing changes — also
+ * when more scenes exist than slots (> 32), so a fader move or a GO never
+ * produces a new grid (no dirty show, no snapshot rebuild).
+ */
+export function syncGrid(grid: (string | null)[][], cuelistIds: string[]): (string | null)[][] {
+  const validIds = new Set(cuelistIds)
+  const placed = new Set<string>()
+  let hasDeleted = false
+  let hasFree = false
+  for (const col of grid) {
+    for (const cell of col) {
+      if (!cell) { hasFree = true; continue }
+      placed.add(cell)
+      if (!validIds.has(cell)) hasDeleted = true
+    }
+  }
+  const unplaced = cuelistIds.filter((id) => !placed.has(id))
+  if (!hasDeleted && (unplaced.length === 0 || !hasFree)) return grid
+
+  const newGrid = grid.map((c) => [...c])
+  let changed = false
+  for (let col = 0; col < newGrid.length; col++) {
+    for (let row = 0; row < newGrid[col].length; row++) {
+      const id = newGrid[col][row]
+      if (id && !validIds.has(id)) { newGrid[col][row] = null; changed = true }
+    }
+  }
+  let idx = 0
+  for (let col = 0; col < Math.min(COLUMN_COUNT, newGrid.length) && idx < unplaced.length; col++) {
+    for (let row = 0; row < Math.min(ROWS_PER_COLUMN, newGrid[col].length) && idx < unplaced.length; row++) {
+      if (!newGrid[col][row]) {
+        newGrid[col][row] = unplaced[idx++]
+        changed = true
+      }
+    }
+  }
+  return changed ? newGrid : grid
+}
+
 export const useExecutorStore = create<ExecutorState>()(subscribeWithSelector((set, get) => ({
   grid: initialLayout.grid,
   columns: initialLayout.columns,
@@ -84,35 +127,8 @@ export const useExecutorStore = create<ExecutorState>()(subscribeWithSelector((s
 
   syncCuelists: (cuelistIds) => {
     set((state) => {
-      const validIds = new Set(cuelistIds)
-      const placed = new Set<string>()
-      for (const col of state.grid) {
-        for (const cell of col) if (cell) placed.add(cell)
-      }
-      const newCuelists = cuelistIds.filter((id) => !placed.has(id))
-      const hasDeleted = Array.from(placed).some((id) => !validIds.has(id))
-      if (newCuelists.length === 0 && !hasDeleted) return state
-
-      const newGrid = state.grid.map((c) => [...c])
-      // Clear deleted cuelists
-      for (let col = 0; col < COLUMN_COUNT; col++) {
-        for (let row = 0; row < ROWS_PER_COLUMN; row++) {
-          if (newGrid[col][row] && !validIds.has(newGrid[col][row]!)) {
-            newGrid[col][row] = null
-          }
-        }
-      }
-      // Fill empty slots column-first with new cuelists
-      let idx = 0
-      for (let col = 0; col < COLUMN_COUNT && idx < newCuelists.length; col++) {
-        for (let row = 0; row < ROWS_PER_COLUMN && idx < newCuelists.length; row++) {
-          if (!newGrid[col][row]) {
-            newGrid[col][row] = newCuelists[idx]
-            idx++
-          }
-        }
-      }
-      return { grid: newGrid }
+      const next = syncGrid(state.grid, cuelistIds)
+      return next === state.grid ? state : { grid: next }
     })
   },
 
@@ -170,3 +186,34 @@ export const useExecutorStore = create<ExecutorState>()(subscribeWithSelector((s
     })
   }
 })))
+
+// ------------------------------------------------------------
+// Auto-placement: new scenes take the first free slot, deleted ones free
+// theirs — whether or not the executor bar is shown. Console only: in
+// remote mode the layout comes from the console.
+// ------------------------------------------------------------
+
+let stopAutoSync: (() => void) | null = null
+
+/** Keep the grid in step with the scene list (idempotent). Returns a stop function. */
+export function startExecutorAutoSync(): () => void {
+  if (stopAutoSync) return stopAutoSync
+  let lastIds: string[] = []
+  const run = (force: boolean) => {
+    if (isRemoteMode()) return
+    const { cuelists } = usePlaybackStore.getState()
+    if (!force && cuelists.length === lastIds.length && cuelists.every((c, i) => c.id === lastIds[i])) return
+    lastIds = cuelists.map((c) => c.id)
+    useExecutorStore.getState().syncCuelists(lastIds)
+  }
+  run(true)
+  const unsubPlayback = usePlaybackStore.subscribe((s, p) => { if (s.cuelists !== p.cuelists) run(false) })
+  // Layout replaced (show load, remote edit): re-check (no-op when consistent)
+  const unsubGrid = useExecutorStore.subscribe((s, p) => { if (s.grid !== p.grid) run(true) })
+  stopAutoSync = () => {
+    unsubPlayback()
+    unsubGrid()
+    stopAutoSync = null
+  }
+  return stopAutoSync
+}

@@ -46,8 +46,7 @@ export function formatSlot(slot: ExecutorSlot): string {
 /** Change a cell's button mode and keep the scene's MIDI GO mapping behaviour in step (scenes view, executor bar) */
 export function setSceneMode(cuelistId: string, slot: Pick<ExecutorSlot, 'col' | 'row'>, mode: SceneMode): void {
   useExecutorStore.getState().setMode(slot.col, slot.row, mode)
-  const mapping = useMidiStore.getState().mappings.find((m) => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
-  if (mapping) useMidiStore.getState().updateMapping(mapping.id, { options: { ...mapping.options, behavior: mode } })
+  useMidiStore.getState().setTargetBehavior({ type: 'cuelist_go', id: cuelistId }, mode)
 }
 
 /** GO mappings by scene id */
@@ -76,18 +75,9 @@ export function describeMidiSource(m: MidiMapping): string {
   return `${kind} ${m.source.number} · channel ${m.source.channel}${m.source.deviceName ? ` · ${m.source.deviceName}` : ''}`
 }
 
-/** MIDI-learn a scene's GO, then give the new mapping the cell's button mode */
+/** MIDI-learn a scene's GO with the cell's button mode (replaces the scene's previous GO mapping) */
 export function startSceneLearn(cl: Cuelist, mode: SceneMode): void {
-  const midi = useMidiStore.getState()
-  midi.startLearn({ type: 'cuelist_go', id: cl.id, label: cl.name })
-  const unsubscribe = useMidiStore.subscribe((s) => {
-    if (s.isLearning) return
-    unsubscribe()
-    const mapping = s.mappings.find((m) => m.target.type === 'cuelist_go' && m.target.id === cl.id)
-    if (mapping && mapping.options.behavior !== mode) {
-      setTimeout(() => useMidiStore.getState().updateMapping(mapping.id, { options: { ...mapping.options, behavior: mode } }), 0)
-    }
-  })
+  useMidiStore.getState().startLearn({ type: 'cuelist_go', id: cl.id, label: cl.name, behavior: mode })
 }
 
 /** Channels each cue outputs once tracking is applied (cue i = cues 0..i, later values win) */

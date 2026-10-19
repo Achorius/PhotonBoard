@@ -12,7 +12,7 @@ import {
 } from '@renderer/components/ui'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useMidiLearnTarget } from '@renderer/components/layout/MasterControls'
-import { rewindTimeline, stopTimeline, toggleTimeline } from '@renderer/lib/timeline-engine'
+import { transportRewind, transportStop, transportToggle } from '@renderer/lib/timeline-transport'
 import { formatSecondsAsTimecode, getTimecodeFramerate } from '@renderer/lib/timecode-engine'
 import { TimecodeButton } from './TimecodePanel'
 import { SNAP_OPTIONS, formatBars, type SnapMode, type TimeDisplay } from './timeline-model'
@@ -41,7 +41,7 @@ export function TransportBar() {
       {/* Transport */}
       <div className="flex items-center gap-1" role="group" aria-label="Transport">
         <IconButton icon={LuSkipBack} label="Rewind to start (Home) · right-click: MIDI learn" variant="secondary"
-          onClick={() => { rewindTimeline(); getCanvasApi()?.reveal(0) }} onContextMenu={rewindMidi.onContextMenu} className={rewindMidi.ring} />
+          onClick={() => { transportRewind(); getCanvasApi()?.reveal(0) }} onContextMenu={rewindMidi.onContextMenu} className={rewindMidi.ring} />
         <IconButton icon={LuStepBack} label="Previous marker" variant="secondary" onClick={() => jumpMarker(-1)} />
         <Button
           data-transport="play"
@@ -50,7 +50,7 @@ export function TransportBar() {
           variant="secondary"
           active={playing}
           icon={playing ? LuPause : LuPlay}
-          onClick={toggleTimeline}
+          onClick={transportToggle}
           onContextMenu={playMidi.onContextMenu}
           tooltip={`${playing ? 'Pause' : 'Play'} (Space) · right-click: MIDI learn`}
           aria-label={playing ? 'Pause timeline' : 'Play timeline'}
@@ -63,7 +63,7 @@ export function TransportBar() {
           icon={LuSquare}
           label="Stop (press again: back to start) · right-click: MIDI learn"
           variant="secondary"
-          onClick={() => { if (playing) stopTimeline(); else { rewindTimeline(); getCanvasApi()?.reveal(0) } }}
+          onClick={() => { if (transportStop()) getCanvasApi()?.reveal(0) }}
           onContextMenu={stopMidi.onContextMenu}
           className={stopMidi.ring}
         />

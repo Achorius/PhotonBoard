@@ -144,7 +144,7 @@ class IdRegistry {
 // ------------------------------------------------------------
 
 const PRESET_TYPES: readonly PresetType[] = ['intensity', 'color', 'position', 'gobo', 'beam', 'full']
-const WAVEFORMS: readonly WaveformType[] = ['sine', 'square', 'sawtooth', 'triangle', 'random', 'pulse', 'bounce', 'step', 'custom']
+const WAVEFORMS: readonly WaveformType[] = ['sine', 'square', 'sawtooth', 'triangle', 'random', 'pulse', 'bounce', 'step', 'custom', 'constant']
 const SPATIAL_AXES: readonly SpatialAxis[] = ['x', 'y', 'z', 'radial']
 const MOUNTINGS: readonly MountingLocation[] = ['ceiling', 'floor', 'wall-left', 'wall-right', 'wall-back']
 const CHASE_DIRECTIONS: readonly Chase['direction'][] = ['forward', 'backward', 'bounce', 'random']
@@ -673,4 +673,78 @@ export function normalizeShow(raw: unknown): NormalizeResult {
 /** A brand-new empty show in the current format. */
 export function createEmptyShow(name = 'New Show'): ShowFile {
   return normalizeShow({ version: String(SHOW_FORMAT_VERSION), name, patch: [] }).show
+}
+
+// ------------------------------------------------------------
+// Show content sections (remote editing)
+// A remote browser edits its copy of the show and sends the changed
+// SECTIONS to the console, which merges them into the running show.
+// The incoming data goes through the very same normalisers as a show
+// file, so a section can never carry something a .pbshow could not.
+// ------------------------------------------------------------
+
+/** Sections of the show a remote can edit (and the console versions) */
+export const CONTENT_SECTIONS = [
+  'patch', 'groups', 'presets', 'cuelists', 'chases', 'effects', 'midiMappings', 'executor', 'timeline', 'roomConfig'
+] as const
+export type ContentSection = (typeof CONTENT_SECTIONS)[number]
+
+/** Sections made of id'd items: sent as a diff */
+export const LIST_SECTIONS = ['patch', 'groups', 'presets', 'cuelists', 'chases', 'effects', 'midiMappings'] as const
+export type ListSection = (typeof LIST_SECTIONS)[number]
+
+export function isContentSection(v: unknown): v is ContentSection {
+  return typeof v === 'string' && (CONTENT_SECTIONS as readonly string[]).includes(v)
+}
+
+export function isListSection(v: unknown): v is ListSection {
+  return typeof v === 'string' && (LIST_SECTIONS as readonly string[]).includes(v)
+}
+
+/** Timeline section: the timeline without its timecode settings (machine/console side) */
+export type TimelineContent = Omit<ShowTimeline, 'timecode'> & { length: number; loop: boolean }
+
+export interface ContentItems {
+  patch: PatchEntry
+  groups: Group
+  presets: Preset
+  cuelists: Cuelist
+  chases: Chase
+  effects: Effect
+  midiMappings: MidiMapping
+}
+
+export interface ContentValues {
+  executor: ShowExecutorLayout
+  timeline: TimelineContent
+  roomConfig: RoomConfig
+}
+
+/**
+ * Normalise the items of a list section exactly like a show load does
+ * (runtime state stripped, numbers clamped, malformed / duplicate entries dropped).
+ */
+export function normalizeSectionItems<S extends ListSection>(section: S, raw: unknown): ContentItems[S][] {
+  const warnings: string[] = []
+  const name = (o: Obj, fallback: string) => str(o.name, fallback)
+  let out: unknown[]
+  switch (section) {
+    case 'patch': out = normalizeList(raw, 'fixture', warnings, o => name(o, 'fixture'), normalizePatchEntry); break
+    case 'groups': out = normalizeList(raw, 'group', warnings, o => name(o, 'group'), normalizeGroup); break
+    case 'presets': out = normalizeList(raw, 'preset', warnings, o => name(o, 'preset'), normalizePreset); break
+    case 'cuelists': out = normalizeList(raw, 'scene', warnings, o => name(o, 'scene'), (o, id) => normalizeCuelist(o, id, warnings)); break
+    case 'chases': out = normalizeList(raw, 'chase', warnings, o => name(o, 'chase'), (o, id) => normalizeChase(o, id, warnings)); break
+    case 'effects': out = normalizeList(raw, 'effect', warnings, o => name(o, 'effect'), (o, id) => normalizeEffect(o, id)); break
+    case 'midiMappings': out = normalizeList(raw, 'MIDI mapping', warnings, o => name(o, 'mapping'), normalizeMidiMapping); break
+    default: out = []
+  }
+  return out as ContentItems[S][]
+}
+
+/** Normalise a whole-value section. `cuelistIds` = the scenes it may reference. */
+export function normalizeSectionValue<S extends keyof ContentValues>(section: S, raw: unknown, cuelistIds: Set<string>): ContentValues[S] {
+  if (section === 'executor') return normalizeExecutorLayout(raw, cuelistIds) as ContentValues[S]
+  if (section === 'roomConfig') return normalizeRoomConfig(raw) as ContentValues[S]
+  const { timecode: _tc, ...timeline } = normalizeTimeline(raw, cuelistIds, [])
+  return { ...timeline, length: timeline.length ?? DEFAULT_TIMELINE_LENGTH, loop: timeline.loop ?? false } as ContentValues[S]
 }

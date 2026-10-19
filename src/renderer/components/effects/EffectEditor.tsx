@@ -437,7 +437,7 @@ const PlaybackSection = memo(function PlaybackSection({ effect, update }: Sectio
 // ------------------------------------------------------------
 
 const ATTRIBUTE_OPTIONS = ATTRIBUTES.map((a) => ({ value: a as string, label: attributeLabel(a) }))
-const WAVE_OVERRIDE_OPTIONS = [{ value: '', label: 'Main waveform' }, ...WAVEFORMS.filter((w) => w.id !== 'custom').map((w) => ({ value: w.id as string, label: w.label }))]
+const WAVE_OVERRIDE_OPTIONS = [{ value: '', label: 'Main waveform' }, ...WAVEFORMS.filter((w) => w.id !== 'custom').map((w) => ({ value: w.id as string, label: w.label })), { value: 'constant', label: 'Hold (constant)' }]
 
 const AttributesSection = memo(function AttributesSection({ effect, update }: SectionProps) {
   const compound = !!effect.channels && effect.channels.length > 0

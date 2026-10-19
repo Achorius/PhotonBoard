@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Effect } from '@shared/types'
-import { getActiveEffects, stopAllEffects } from '@renderer/lib/effect-engine'
+import { computeEffectLayer, getActiveEffects, getWaveformValue, stopAllEffects } from '@renderer/lib/effect-engine'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
-import { ALL_FIXTURES, DIMMER, patchEntry } from '@renderer/lib/testing/test-fixtures'
-import { EFFECT_TEMPLATES, effectFromTemplate, sizeUpdates, templateCompat } from './effect-templates'
+import { ALL_FIXTURES, DIMMER, MOVING_HEAD, patchEntry } from '@renderer/lib/testing/test-fixtures'
+import { EFFECT_TEMPLATES, effectFromTemplate, sizeUpdates, templateCompat, withOpenDimmer } from './effect-templates'
 
 const patch = [0, 1, 2].map((i) => patchEntry(`d${i}`, DIMMER, 0, i + 1))
 const tpl = (id: string) => EFFECT_TEMPLATES.find((t) => t.id === id)!
@@ -86,5 +86,32 @@ describe('effects store additions', () => {
     vi.advanceTimersByTime(3000)
     expect(getActiveEffects().has(id)).toBe(false)
     expect(useEffectsStore.getState().effects[0].isRunning).toBe(false)
+  })
+})
+
+describe('colour effects on dark fixtures', () => {
+  it('adds a constant open-dimmer attribute to the effect instead of writing the programmer', () => {
+    const base = effectFromTemplate(tpl('rainbow'), ['d0'])
+    const { effect, hint } = withOpenDimmer(base, { dark: 2, lit: 0 })
+    expect(hint).toBe(false)
+    const dim = effect.channels?.find((c) => c.channelType === 'Dimmer')
+    expect(dim).toMatchObject({ waveform: 'constant', depth: 255 })
+    // Single-attribute templates become compound, keeping their own attribute
+    const wheel = withOpenDimmer(effectFromTemplate(tpl('wheel-cycle'), ['d0']), { dark: 1, lit: 0 }).effect
+    expect(wheel.channels?.map((c) => c.channelType)).toEqual(['Color Wheel', 'Dimmer'])
+  })
+
+  it('changes nothing when targets are lit, and only hints when some are dark', () => {
+    const base = effectFromTemplate(tpl('rainbow'), ['d0'])
+    expect(withOpenDimmer(base, { dark: 0, lit: 3 })).toEqual({ effect: base, hint: false })
+    expect(withOpenDimmer(base, { dark: 1, lit: 1 })).toEqual({ effect: base, hint: true })
+  })
+
+  it('the open dimmer lives on the effect layer: full while running, gone when stopped', () => {
+    const fx = withOpenDimmer({ ...effectFromTemplate(tpl('rainbow'), ['m0']), id: 'fx' }, { dark: 1, lit: 0 }).effect as Effect
+    const head = patchEntry('m0', MOVING_HEAD, 0, 1)
+    const layer = computeEffectLayer(fx, 0.3, [head], ALL_FIXTURES)
+    expect(layer.get(0)?.get(4)).toBe(255) // Dimmer (5th channel of the head)
+    expect(getWaveformValue('constant', 0.42)).toBe(1)
   })
 })

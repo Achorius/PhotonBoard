@@ -154,7 +154,12 @@ function syncClips(t: number) {
   }
 }
 
-/** Seek. Releases the clips that were running; while playing, starts the ones at `t`. */
+/**
+ * Seek. While playing, only the clips that are not active at `t` are
+ * released and the newly active ones started: a clip that spans the seek
+ * (timecode chase corrections, scrubbing inside a clip) keeps running —
+ * its effects keep their phase and its fade level just follows `t`.
+ */
 export function setTimelineTime(t: number) {
   if (!Number.isFinite(t)) return
   if (isRemoteMode()) {
@@ -162,8 +167,8 @@ export function setTimelineTime(t: number) {
     return
   }
   _currentTime = Math.max(0, t)
-  releaseAllClips()
   if (_isPlaying) syncClips(_currentTime)
+  else releaseAllClips()
   _onUpdate?.(_currentTime, _isPlaying)
 }
 

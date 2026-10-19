@@ -162,6 +162,13 @@ function syncCuelists(cuelists: Cuelist[], now: number): void {
   }
 }
 
+/**
+ * Shortest time between a cue completing and the automatic GO that follows
+ * it. A looping scene whose cues all have 0 fade and 0 follow would
+ * otherwise GO on every mixer frame (store update per frame + flicker).
+ */
+export const MIN_FOLLOW_MS = 50
+
 function onCueComplete(cuelistId: string, now: number): void {
   const cl = usePlaybackStore.getState().cuelists.find(c => c.id === cuelistId)
   if (!cl || !cl.isPlaying) return
@@ -170,7 +177,8 @@ function onCueComplete(cuelistId: string, now: number): void {
   const hasFollow = typeof cue.followTime === 'number' && Number.isFinite(cue.followTime) && cue.followTime >= 0
   const isLast = cl.currentCueIndex >= cl.cues.length - 1
   if (!hasFollow && !(isLast && cl.isLooping && cl.cues.length > 1)) return
-  followDue.set(cuelistId, now + (hasFollow ? (cue.followTime as number) * 1000 : 0))
+  const followMs = hasFollow ? (cue.followTime as number) * 1000 : 0
+  followDue.set(cuelistId, now + Math.max(MIN_FOLLOW_MS, followMs))
 }
 
 // ---------------------------------------------------------------

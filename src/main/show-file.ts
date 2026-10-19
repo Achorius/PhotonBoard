@@ -4,6 +4,7 @@ import { homedir } from 'os'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
 import type { ShowLoadResult, ShowSaveResult } from '../shared/photonboard-api'
 import { DEFAULT_ROOM_CONFIG } from '../shared/types'
+import { SHOW_FORMAT_VERSION } from '../shared/show-format'
 import { BUILTIN_FIXTURES } from './fixture-library'
 import { parseFixtureFile } from './fixture-parsers'
 import { atomicWriteFile, atomicWriteFileSync, backupPathFor, isJsonContent } from './atomic-write'
@@ -229,19 +230,20 @@ export class ShowFileManager {
 
   // ---- Saving ----
 
-  /** Template for a new show. `resetCurrent` (local New Show) forgets the current file. */
+  /**
+   * Template for a new show, in the CURRENT format (no legacy output config:
+   * outputs are machine config) — so it never triggers the v1 migration or
+   * the legacy-outputs warning. `resetCurrent` (local New Show) forgets the
+   * current file.
+   */
   newShow(opts: { resetCurrent?: boolean } = { resetCurrent: true }): ShowFile {
     if (opts.resetCurrent) this.currentFilePath = null
+    const now = new Date().toISOString()
     return {
-      version: '1.0.0',
+      version: String(SHOW_FORMAT_VERSION),
       name: 'New Show',
-      createdAt: new Date().toISOString(),
-      modifiedAt: new Date().toISOString(),
-      artnetConfig: [
-        { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
-        { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
-        { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
-      ],
+      createdAt: now,
+      modifiedAt: now,
       patch: [],
       groups: [],
       presets: [],

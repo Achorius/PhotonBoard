@@ -10,9 +10,9 @@ import { Badge, Button, EmptyState, Tabs, TextInput, cn, effectCategoryIcon, wit
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
-import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
+import { showToast } from '@renderer/stores/toast-store'
 import {
-  CATEGORIES, CATEGORY_COLOR, EFFECT_TEMPLATES, effectFromTemplate, fixtureAttributes, templateCompat,
+  CATEGORIES, CATEGORY_COLOR, EFFECT_TEMPLATES, effectFromTemplate, fixtureAttributes, templateAttributes, templateCompat, withOpenDimmer,
   type Compat, type EffectCategory, type EffectTemplate
 } from './effect-templates'
 import { TemplatePreview } from './effect-graphics'
@@ -20,28 +20,44 @@ import { useEffectsUiStore } from './effects-ui-store'
 
 type CategoryFilter = 'all' | EffectCategory
 
-/** Colour / intensity effects need light: open the dimmer of targets that are at 0 */
-function openDimmers(targetIds: string[]): void {
+/**
+ * Targets that have a dimmer channel, split by whether it is currently at 0
+ * (pre-master mix). Fixtures without a dimmer (RGB-only) are left out.
+ */
+function dimmerState(targetIds: string[]): { dark: number; lit: number } {
   const { patch, fixtures } = usePatchStore.getState()
   const values = useDmxStore.getState().values
   const byId = new Map(patch.map((p) => [p.id, p]))
   const defs = new Map(fixtures.map((f) => [f.id, f]))
+  let dark = 0
+  let lit = 0
   for (const id of targetIds) {
     const entry = byId.get(id)
     const mode = entry ? defs.get(entry.fixtureDefId)?.modes.find((m) => m.name === entry.modeName) : undefined
     if (!entry || !mode) continue
     const idx = mode.channels.findIndex((ch) => ch.toLowerCase() === 'dimmer' || ch.toLowerCase() === 'intensity')
     if (idx < 0) continue
-    const abs = entry.address - 1 + idx
-    if ((values[entry.universe]?.[abs] ?? 0) === 0) setProgrammerChannel(entry.universe, abs, 255)
+    if ((values[entry.universe]?.[entry.address - 1 + idx] ?? 0) === 0) dark++
+    else lit++
   }
+  return { dark, lit }
 }
 
 function applyTemplate(t: EffectTemplate): void {
   const targets = [...usePatchStore.getState().selectedFixtureIds]
   if (targets.length === 0) return
-  if (t.category === 'color' || t.category === 'intensity' || t.category === 'spatial') openDimmers(targets)
-  const id = useEffectsStore.getState().createEffect(effectFromTemplate(t, targets))
+  let init = effectFromTemplate(t, targets)
+  // Templates that drive the dimmer (intensity, dim waves, strobes) need nothing:
+  // the effect itself is the intensity.
+  const drivesDimmer = templateAttributes(t).includes('dimmer')
+  if (!drivesDimmer && (t.category === 'color' || t.category === 'spatial')) {
+    const res = withOpenDimmer(init, dimmerState(targets))
+    init = res.effect
+    if (res.hint) {
+      showToast('info', 'Some targets are dark', { description: 'Raise their intensity to see the colour effect on them.' })
+    }
+  }
+  const id = useEffectsStore.getState().createEffect(init)
   useEffectsUiStore.getState().setEditing(id)
 }
 

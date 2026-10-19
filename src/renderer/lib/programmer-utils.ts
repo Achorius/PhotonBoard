@@ -11,7 +11,7 @@ import {
 } from './dmx-mixer'
 import { ChannelRole, classifyModeChannels } from './channel-classify'
 import { usePatchStore } from '@renderer/stores/patch-store'
-import type { CueChannelValue } from '@shared/types'
+import type { CueChannelValue, FixtureDefinition, PatchEntry } from '@shared/types'
 
 /**
  * Capture the current programmer state as an array of CueChannelValues.
@@ -152,14 +152,17 @@ export function clearProgrammerAll(): void {
   refreshProgrammerState()
 }
 
-/** Release every programmer channel of these fixtures. Returns the channel count released. */
-export function releaseFixtures(fixtureIds: readonly string[]): number {
-  const { patch, fixtures } = usePatchStore.getState()
-  const ids = new Set(fixtureIds)
+/**
+ * Release the programmer channels at the DMX footprint of these patch
+ * entries (address .. address + channel count − 1, as patched). Used when
+ * fixtures are deleted or re-addressed / re-moded: programmer values are
+ * stored by absolute address, so they would otherwise stay and drive
+ * whatever is patched there next. Returns the channel count released.
+ */
+export function releaseFootprints(entries: readonly PatchEntry[], fixtures: readonly FixtureDefinition[]): number {
   const out: Record<number, number[]> = {}
   let n = 0
-  for (const entry of patch) {
-    if (!ids.has(entry.id)) continue
+  for (const entry of entries) {
     const mode = fixtures.find((f) => f.id === entry.fixtureDefId)?.modes.find((m) => m.name === entry.modeName)
     if (!mode) continue
     for (let i = 0; i < mode.channels.length; i++) {
@@ -171,6 +174,21 @@ export function releaseFixtures(fixtureIds: readonly string[]): number {
   }
   if (n > 0) releaseChannels(out)
   return n
+}
+
+/** Release every programmer channel of these fixtures. Returns the channel count released. */
+export function releaseFixtures(fixtureIds: readonly string[]): number {
+  const { patch, fixtures } = usePatchStore.getState()
+  const ids = new Set(fixtureIds)
+  return releaseFootprints(patch.filter((entry) => ids.has(entry.id)), fixtures)
+}
+
+/** Did a patch update move the fixture's DMX footprint (address, universe, fixture or mode)? */
+export function footprintChanged(before: PatchEntry, updates: Partial<PatchEntry>): boolean {
+  return (updates.universe !== undefined && updates.universe !== before.universe) ||
+    (updates.address !== undefined && updates.address !== before.address) ||
+    (updates.fixtureDefId !== undefined && updates.fixtureDefId !== before.fixtureDefId) ||
+    (updates.modeName !== undefined && updates.modeName !== before.modeName)
 }
 
 const LOCATE_FULL_COLOUR = /^(red|green|blue|white|warm white|cool white|cold white|r|g|b|w)(\s*\d+)?$/i

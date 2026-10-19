@@ -17,7 +17,8 @@ import {
 import { Button, EmptyState, cn, palette, useContextMenu, useDensity, withAlpha, type MenuEntry } from '@renderer/components/ui'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
-import { getActiveClipIds, toggleTimeline, rewindTimeline } from '@renderer/lib/timeline-engine'
+import { getActiveClipIds } from '@renderer/lib/timeline-engine'
+import { transportRewind, transportToggle } from '@renderer/lib/timeline-transport'
 import { CanvasContext, type CanvasContextValue } from './canvas-context'
 import { TimelineClip } from './TimelineClip'
 import { MarkerLane, Ruler, ZoneLane } from './TimelineLanes'
@@ -280,8 +281,8 @@ export function TimelineCanvas() {
     const pb = usePlaybackStore.getState()
     const consume = () => { e.preventDefault(); e.stopPropagation() }
     const mod = e.metaKey || e.ctrlKey
-    if (e.key === ' ') { consume(); if (!e.repeat) toggleTimeline(); return }
-    if (e.key === 'Home') { consume(); rewindTimeline(); scrollRef.current?.scrollTo({ left: 0 }); return }
+    if (e.key === ' ') { consume(); if (!e.repeat) transportToggle(); return }
+    if (e.key === 'Home') { consume(); transportRewind(); scrollRef.current?.scrollTo({ left: 0 }); return }
     if (e.key === 'Escape' && sel) { consume(); useTimelineView.getState().select(null); return }
     if ((e.key === 'm' || e.key === 'M') && !mod) { consume(); if (!e.repeat) addMarkerAt(snap(getClockTime())); return }
     if (!sel) return

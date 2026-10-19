@@ -14,6 +14,8 @@ import { Button, EmptyState, ResizeHandle, SegmentedControl, cn, usePopover, use
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { recordFromProgrammer } from '@renderer/lib/programmer-utils'
+import { summaryCounts, useConsoleProgrammer } from '@renderer/lib/console-programmer'
+import { isRemoteMode } from '@renderer/lib/runtime'
 import { SceneList } from './SceneList'
 import { SceneDetail } from './SceneDetail'
 import { ChaseDetail, ChaseList } from './ChasePane'
@@ -148,9 +150,19 @@ function ProgrammerStatus() {
   const [counts, setCounts] = useState<{ fixtures: number; channels: number }>({ fixtures: 0, channels: 0 })
   useEffect(() => {
     const poll = () => {
-      const values = recordFromProgrammer()
-      const fixtures = countFixtures(values)
-      setCounts((cur) => (cur.fixtures === fixtures && cur.channels === values.length ? cur : { fixtures, channels: values.length }))
+      let fixtures: number
+      let channels: number
+      if (isRemoteMode()) {
+        // Record uses the CONSOLE's programmer: show that one
+        const c = summaryCounts(useConsoleProgrammer.getState())
+        fixtures = c.fixtureCount
+        channels = c.channelCount
+      } else {
+        const values = recordFromProgrammer()
+        fixtures = countFixtures(values)
+        channels = values.length
+      }
+      setCounts((cur) => (cur.fixtures === fixtures && cur.channels === channels ? cur : { fixtures, channels }))
     }
     poll()
     const t = setInterval(poll, 250)

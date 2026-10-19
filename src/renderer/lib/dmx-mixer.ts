@@ -472,7 +472,15 @@ export function releaseProgrammerChannels(channels: Record<number, number[]>): v
     if (!uniMap || !Array.isArray(list)) continue
     for (const ch of list) uniMap.delete(ch)
   }
-  if (isRemoteMode()) sendRemoteCommand('release-programmer-channels', channels)
+  if (isRemoteMode()) {
+    // A set still waiting in the batch would be re-sent after the release
+    for (const [u, list] of Object.entries(channels)) {
+      const pending = pendingRemoteProgrammer.get(Number(u))
+      if (!pending || !Array.isArray(list)) continue
+      for (const ch of list) pending.delete(ch)
+    }
+    sendRemoteCommand('release-programmer-channels', channels)
+  }
 }
 
 /** Clear all programmer values. */

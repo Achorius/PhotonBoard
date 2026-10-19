@@ -16,10 +16,14 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { useEffectsStore } from '@renderer/stores/effects-store'
 import { getTimelineState, onTimelinePlayStateChange } from './timeline-engine'
-import { getMixBuffer, getMixVersion } from './dmx-mixer'
+import { getMixBuffer, getMixVersion, getProgrammerChannels } from './dmx-mixer'
 import { getBridge, isRemoteMode } from './runtime'
+import { getContentState, onContentStateChange } from './content-sync'
+import { computeProgrammerSummary, type ProgrammerSummary } from './console-programmer'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
+import type { ContentState } from '@shared/remote-commands'
 
 export interface SnapshotCue {
   id: string
@@ -76,6 +80,12 @@ export interface StateSnapshot {
   executorGrid: (string | null)[][]
   executorColumns: { title: string; color: string }[]
   executorModes: string[][]
+  /** Ids of the running effects (remote effect buttons) */
+  runningEffects: string[]
+  /** Show content revisions per section: remotes refetch what they did not produce */
+  content: ContentState
+  /** Console programmer (remote record UI); sent with the DMX part */
+  programmer?: ProgrammerSummary
   /** Pre-master DMX mix for remote previews: base64 of universes × 512 bytes */
   dmx?: { universes: number; data: string }
 }
@@ -143,7 +153,9 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
     fixtureCount: patch.length,
     executorGrid: grid,
     executorColumns: columns,
-    executorModes: modes
+    executorModes: modes,
+    runningEffects: useEffectsStore.getState().effects.filter(e => e.isRunning).map(e => e.id),
+    content: getContentState()
   }
   return cachedControl
 }
@@ -192,9 +204,33 @@ function currentDmx(): StateSnapshot['dmx'] {
 }
 
 /** Full snapshot including the DMX mix (Companion / remote browsers). */
+let cachedProgrammer: { sig: string; patch: unknown; value: ProgrammerSummary } | null = null
+
+/** Cheap signature of the programmer's channel set and values */
+export function programmerSignature(): string {
+  let count = 0
+  let hash = 0
+  for (const [u, chMap] of getProgrammerChannels()) {
+    for (const [ch, v] of chMap) {
+      count++
+      hash = (hash + Math.imul(u * 512 + ch + 1, 2654435761) + v * 7) | 0
+    }
+  }
+  return `${count}:${hash}`
+}
+
+function currentProgrammer(): ProgrammerSummary {
+  const sig = programmerSignature()
+  const patch = usePatchStore.getState().patch
+  if (cachedProgrammer && cachedProgrammer.sig === sig && cachedProgrammer.patch === patch) return cachedProgrammer.value
+  const value = computeProgrammerSummary()
+  cachedProgrammer = { sig, patch, value }
+  return value
+}
+
 export function collectFullSnapshot(): StateSnapshot {
   const timelineTime = Math.round(getTimelineState().currentTime * 100) / 100
-  return { ...collectStateSnapshot(), timelineTime, dmx: currentDmx() }
+  return { ...collectStateSnapshot(), timelineTime, programmer: currentProgrammer(), dmx: currentDmx() }
 }
 
 const CONTROL_INTERVAL_MS = 50 // ~20 Hz
@@ -215,6 +251,7 @@ export function startStateBroadcast(): () => void {
   let lastDmxSent = -Infinity
   let lastDmxVersion = -1
   let lastTimelineTime = getTimelineState().currentTime
+  let lastProgrammerSig = programmerSignature()
   let timer: ReturnType<typeof setTimeout> | null = null
 
   const send = () => {
@@ -277,14 +314,23 @@ export function startStateBroadcast(): () => void {
     useUiStore.subscribe((s, p) => {
       if (s.showName !== p.showName || s.isDirty !== p.isDirty) onControlChange()
     }),
+    useEffectsStore.subscribe((s, p) => {
+      if (s.effects === p.effects) return
+      const running = (list: typeof s.effects) => list.filter(e => e.isRunning).map(e => e.id).join(',')
+      if (running(s.effects) !== running(p.effects)) onControlChange()
+    }),
+    onContentStateChange(onControlChange),
     onTimelinePlayStateChange(onControlChange)
   ]
 
   // The playhead rides with the DMX part (same ~10 Hz rate)
+  // So does the programmer summary (a value equal to the output changes no DMX)
   const timelinePoll = setInterval(() => {
     const t = getTimelineState().currentTime
-    if (t === lastTimelineTime) return
+    const sig = programmerSignature()
+    if (t === lastTimelineTime && sig === lastProgrammerSig) return
     lastTimelineTime = t
+    lastProgrammerSig = sig
     dmxDirty = true
     schedule()
   }, DMX_INTERVAL_MS)

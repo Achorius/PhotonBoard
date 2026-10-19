@@ -3,7 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { v4 as uuidv4 } from 'uuid'
 import type { Effect } from '@shared/types'
 import { startEffect, stopEffect, onEffectComplete } from '../lib/effect-engine'
-import { clockNow, isRemoteMode, sendRemoteCommand, sendRemoteCommandThrottled } from '../lib/runtime'
+import { clockNow, isRemoteMode, markLocalChange, sendRemoteCommand } from '../lib/runtime'
 
 interface EffectsState {
   effects: Effect[]
@@ -29,11 +29,17 @@ interface EffectsState {
   checkOneShotCompleted: () => void
 }
 
-/** Run an effect on the engine (local) or on the Pi (remote). */
+/**
+ * Run an effect on the engine (local) or on the Pi (remote). A remote only
+ * starts / stops the console's effect BY ID: definition edits travel with the
+ * content sync (lib/content-sync.ts), which flushes before any command so the
+ * console knows the effect by the time 'start-effect' arrives.
+ */
 function engineStart(effect: Effect, restart: boolean): void {
   if (isRemoteMode()) {
-    if (restart) sendRemoteCommand('start-effect', effect)
-    else sendRemoteCommandThrottled(`effect:${effect.id}`, 'start-effect', effect, 60)
+    markLocalChange(`effect:${effect.id}`)
+    // After the store update that follows (a new effect is then part of the content flush)
+    if (restart) queueMicrotask(() => sendRemoteCommand('start-effect', effect.id))
     return
   }
   startEffect(effect, { restart })
@@ -41,7 +47,8 @@ function engineStart(effect: Effect, restart: boolean): void {
 
 function engineStop(id: string): void {
   if (isRemoteMode()) {
-    sendRemoteCommand('stop-effect', id)
+    markLocalChange(`effect:${id}`)
+    queueMicrotask(() => sendRemoteCommand('stop-effect', id)) // same order as starts
     return
   }
   stopEffect(id)

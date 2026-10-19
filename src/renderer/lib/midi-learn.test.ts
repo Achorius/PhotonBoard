@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { MidiMapping } from '@shared/types'
 import { detectCcEncoding, relativeDelta } from './midi-learn'
 import { resolveValue, mappingMatches, computeTapTempo } from './midi-manager'
-import { useMidiStore, LEARN_CAPTURE_MS } from '@renderer/stores/midi-store'
+import { useMidiStore, LEARN_CAPTURE_MS, dedupeMappings } from '@renderer/stores/midi-store'
+import { setSceneMode, startSceneLearn } from '@renderer/components/playback/scene-meta'
+import type { Cuelist } from '@shared/types'
 
 function mapping(extra: Partial<MidiMapping['options']> = {}, source: Partial<MidiMapping['source']> = {}): MidiMapping {
   return {
@@ -124,5 +126,67 @@ describe('MIDI learn', () => {
     store.cancelLearn()
     vi.advanceTimersByTime(LEARN_CAPTURE_MS + 1)
     expect(useMidiStore.getState().mappings).toHaveLength(0)
+  })
+})
+
+describe('MIDI re-learn never duplicates a target', () => {
+  beforeEach(() => {
+    useMidiStore.setState({ mappings: [], isLearning: false, learnTarget: null })
+  })
+
+  it('re-learning a chase start/stop replaces the old pad', () => {
+    const store = useMidiStore.getState()
+    store.startLearn({ type: 'chase_toggle', id: 'ch1', label: 'Chase' })
+    store.completeLearn({ type: 'note', channel: 1, number: 36 })
+    store.startLearn({ type: 'chase_toggle', id: 'ch1', label: 'Chase' })
+    store.completeLearn({ type: 'note', channel: 1, number: 37 })
+    const list = useMidiStore.getState().mappings
+    expect(list).toHaveLength(1)
+    expect(list[0].source.number).toBe(37)
+  })
+
+  it('learning the same pad twice for a scene leaves one mapping (no GO-then-STOP)', () => {
+    const cl = { id: 'sc1', name: 'Scene 1' } as Cuelist
+    startSceneLearn(cl, 'toggle')
+    useMidiStore.getState().completeLearn({ type: 'note', channel: 1, number: 40 })
+    startSceneLearn(cl, 'flash')
+    useMidiStore.getState().completeLearn({ type: 'note', channel: 1, number: 40 })
+    const list = useMidiStore.getState().mappings
+    expect(list).toHaveLength(1)
+    expect(list[0].options.behavior).toBe('flash')
+  })
+
+  it('keeps mappings of other targets and their order', () => {
+    const store = useMidiStore.getState()
+    store.startLearn({ type: 'blackout', label: 'BO' })
+    store.completeLearn({ type: 'note', channel: 1, number: 1 })
+    store.startLearn({ type: 'cuelist_go', id: 'a', label: 'A' })
+    store.completeLearn({ type: 'note', channel: 1, number: 2 })
+    store.startLearn({ type: 'cuelist_go', id: 'b', label: 'B' })
+    store.completeLearn({ type: 'note', channel: 1, number: 3 })
+    store.startLearn({ type: 'cuelist_go', id: 'a', label: 'A' })
+    store.completeLearn({ type: 'note', channel: 1, number: 4 })
+    expect(useMidiStore.getState().mappings.map((m) => m.source.number)).toEqual([1, 4, 3])
+  })
+
+  it('a mode change updates every mapping of the scene', () => {
+    const base = mapping()
+    useMidiStore.setState({
+      mappings: [
+        { ...base, id: 'x', source: { type: 'note', channel: 1, number: 1 }, target: { type: 'cuelist_go', id: 'sc' }, options: { ...base.options, behavior: 'toggle' } },
+        { ...base, id: 'y', source: { type: 'note', channel: 1, number: 2 }, target: { type: 'cuelist_go', id: 'sc' }, options: { ...base.options, behavior: 'toggle' } }
+      ]
+    })
+    setSceneMode('sc', { col: 0, row: 0 }, 'trigger')
+    expect(useMidiStore.getState().mappings.map((m) => m.options.behavior)).toEqual(['trigger', 'trigger'])
+  })
+
+  it('show load drops exact duplicates (same source + target)', () => {
+    const a = { ...mapping(), id: 'a', target: { type: 'cuelist_go' as const, id: 's' } }
+    const b = { ...a, id: 'b' }
+    const c = { ...a, id: 'c', source: { ...a.source, number: 9 } }
+    expect(dedupeMappings([a, b, c]).map((m) => m.id)).toEqual(['a', 'c'])
+    const clean = [a, c]
+    expect(dedupeMappings(clean)).toBe(clean)
   })
 })

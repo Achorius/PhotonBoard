@@ -166,3 +166,14 @@ describe('ShowFileManager names', () => {
     expect(m.pathForName('../../evil')).toMatch(new RegExp(`^${shows.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
   })
 })
+
+describe('ShowFileManager.newShow', () => {
+  it('returns an empty show in the current format (no legacy output config, no migration warning)', async () => {
+    const { normalizeShow, SHOW_FORMAT_VERSION } = await import('../shared/show-format')
+    const show = manager().newShow()
+    expect(show.version).toBe(String(SHOW_FORMAT_VERSION))
+    expect(show.artnetConfig).toBeUndefined()
+    expect(show.dmxOutputs).toBeUndefined()
+    expect(normalizeShow(show).warnings).toEqual([])
+  })
+})

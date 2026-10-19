@@ -62,10 +62,7 @@ export function ExecutorBar() {
   const [drag, setDrag] = useState<DragState | null>(null)
   const ctx = useContextMenu()
 
-  // New scenes take the first free slot; deleted ones free theirs
-  useEffect(() => {
-    useExecutorStore.getState().syncCuelists(cuelists.map((c) => c.id))
-  }, [cuelists])
+  // Slot assignment for new / deleted scenes: startExecutorAutoSync (executor-store), started by App
 
   const byId = useMemo(() => new Map(cuelists.map((c) => [c.id, c])), [cuelists])
   const mapped = useMemo(() => new Set(mappings.filter((m) => m.target.type === 'cuelist_go' && m.target.id).map((m) => m.target.id!)), [mappings])

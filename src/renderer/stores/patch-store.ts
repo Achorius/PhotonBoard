@@ -3,6 +3,8 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
 import { v4 as uuidv4 } from 'uuid'
 import type { PatchEntry, FixtureDefinition, Group, PixelLayout } from '@shared/types'
+import { footprintChanged, releaseFootprints } from '@renderer/lib/programmer-utils'
+import { isRemoteMode } from '@renderer/lib/runtime'
 
 /** A fixture to patch: everything but the id (generated) and groups (see addFixtures) */
 export type NewPatchEntry = Omit<PatchEntry, 'id' | 'groupIds'> & { groupIds?: string[] }
@@ -56,6 +58,21 @@ interface PatchState {
   setFixtures: (fixtures: FixtureDefinition[]) => void
 }
 
+/**
+ * Programmer values are stored by absolute DMX address: when fixtures are
+ * deleted or moved (address, universe, fixture type or mode), release the
+ * values at their OLD footprint so they never drive what is patched there
+ * next. Console only (a remote browser's programmer lives on the console).
+ */
+function releaseOldFootprints(state: { fixtures: FixtureDefinition[] }, entries: PatchEntry[]): void {
+  if (entries.length === 0 || isRemoteMode()) return
+  try {
+    releaseFootprints(entries, state.fixtures)
+  } catch (e) {
+    console.error('[Patch] releasing programmer values failed:', e)
+  }
+}
+
 export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, get) => ({
   patch: [],
   fixtures: [],
@@ -105,6 +122,7 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
   },
 
   removeFixture: (id) => {
+    releaseOldFootprints(get(), get().patch.filter((p) => p.id === id))
     set((state) => ({
       patch: state.patch.filter((p) => p.id !== id),
       groups: state.groups.some((g) => g.fixtureIds.includes(id))
@@ -115,6 +133,7 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
   },
 
   updateFixture: (id, updates) => {
+    releaseOldFootprints(get(), get().patch.filter((p) => p.id === id && footprintChanged(p, updates)))
     set((state) => ({
       patch: state.patch.map((p) => (p.id === id ? { ...p, ...updates } : p))
     }))
@@ -148,6 +167,7 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
   removeFixtures: (ids) => {
     if (ids.length === 0) return
     const gone = new Set(ids)
+    releaseOldFootprints(get(), get().patch.filter((p) => gone.has(p.id)))
     set((state) => ({
       patch: state.patch.filter((p) => !gone.has(p.id)),
       groups: state.groups.some((g) => g.fixtureIds.some((f) => gone.has(f)))
@@ -161,6 +181,7 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
 
   updateFixtures: (updates) => {
     if (Object.keys(updates).length === 0) return
+    releaseOldFootprints(get(), get().patch.filter((p) => updates[p.id] && footprintChanged(p, updates[p.id])))
     set((state) => ({
       patch: state.patch.map((p) => (updates[p.id] ? { ...p, ...updates[p.id] } : p))
     }))

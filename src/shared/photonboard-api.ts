@@ -15,6 +15,7 @@ import type {
   SerialPortInfo,
   ShowFile
 } from './types'
+import type { CurrentShowContent } from './remote-commands'
 
 /** Every `on*` listener returns this; call it to remove the listener. */
 export type Unsubscribe = () => void
@@ -164,6 +165,11 @@ export interface PhotonBoardAPI {
     reveal(): Promise<boolean>
     /** Remote only: upload a .pbshow from the browser; the Pi adopts it. */
     upload(content: string, filename: string, opts?: ShowUploadOptions): Promise<ShowLoadResult>
+    /**
+     * Remote only: the show the console is running RIGHT NOW (unsaved edits
+     * included), or some sections of it. Electron: unsupported.
+     */
+    getCurrent(opts?: { origin?: string; sections?: string[] }): Promise<CurrentShowContent>
   }
 
   fixtures: {
@@ -216,5 +222,7 @@ export interface PhotonBoardAPI {
     /** Calls back immediately with the current state, then on every change */
     onConnectionChange(callback: (state: RemoteConnectionState) => void): Unsubscribe
     getConnectionState(): RemoteConnectionState
+    /** Console only: answer a main → renderer request (collect-show-content, busy save) */
+    replyToMain(requestId: string, data: unknown): void
   }
 }

@@ -1,4 +1,4 @@
-import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn, setTimecodeProcessor } from '../stores/midi-store'
+import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn, setTimecodeProcessor, sameMidiTarget } from '../stores/midi-store'
 import { useDmxStore } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
@@ -33,19 +33,16 @@ export function initMidiRouting(): void {
     }
   })
 
-  // Register cleanup: release the target when a mapping is removed
+  // Register cleanup: release the target when a mapping is removed.
+  // The Grand Master is deliberately left where it is: removing a mapping
+  // must never make the stage jump (e.g. GM at 30 % → full).
   setMappingResetFn((mapping: MidiMapping) => {
-    const { target } = mapping
-    switch (target.type) {
-      case 'channel': {
-        const addr = resolveChannelTarget(mapping)
-        if (addr) clearProgrammerChannel(addr.universe, addr.channel)
-        break
-      }
-      case 'master':
-        useDmxStore.getState().setGrandMaster(255)
-        break
-    }
+    if (mapping.target.type !== 'channel') return
+    // Another mapping still drives this channel: keep its value
+    const others = useMidiStore.getState().mappings.some((m) => m.id !== mapping.id && sameMidiTarget(m.target, mapping.target))
+    if (others) return
+    const addr = resolveChannelTarget(mapping)
+    if (addr) clearProgrammerChannel(addr.universe, addr.channel)
   })
 
   setMappingCleanupFn((mappingId: string) => {
