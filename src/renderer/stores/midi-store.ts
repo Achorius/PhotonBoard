@@ -23,12 +23,28 @@ interface MidiLearnTarget {
 
 type MidiApiStatus = 'pending' | 'available' | 'unavailable' | 'error'
 
+/** An incoming MIDI message as shown by the monitor ('noteoff' = note released) */
+export interface MidiMessageInfo {
+  type: string
+  channel: number
+  number: number
+  value: number
+  deviceName?: string
+  /** performance.now() when received */
+  ts?: number
+}
+
+/** Messages kept for the MIDI monitor */
+export const MIDI_LOG_SIZE = 64
+
 interface MidiState {
   devices: MidiDevice[]
   mappings: MidiMapping[]
   isLearning: boolean
   learnTarget: MidiLearnTarget | null
-  lastMessage: { type: string; channel: number; number: number; value: number } | null
+  lastMessage: MidiMessageInfo | null
+  /** Most recent incoming messages, newest first (MIDI monitor) */
+  messageLog: MidiMessageInfo[]
   apiStatus: MidiApiStatus
   apiError: string | null
 
@@ -45,7 +61,11 @@ interface MidiState {
   addMapping: (mapping: Omit<MidiMapping, 'id'>) => void
   removeMapping: (id: string) => void
   updateMapping: (id: string, updates: Partial<MidiMapping>) => void
-  setLastMessage: (msg: { type: string; channel: number; number: number; value: number }) => void
+  /** Records an incoming message: lastMessage + monitor log */
+  setLastMessage: (msg: MidiMessageInfo) => void
+  /** Log a message for the monitor only (note-offs) */
+  logMessage: (msg: MidiMessageInfo) => void
+  clearMessageLog: () => void
 
   // Import
   setMappings: (mappings: MidiMapping[]) => void
@@ -57,6 +77,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   isLearning: false,
   learnTarget: null,
   lastMessage: null,
+  messageLog: [],
   apiStatus: 'pending',
   apiError: null,
 
@@ -112,20 +133,21 @@ export const useMidiStore = create<MidiState>((set, get) => ({
           if (type === 0xb0) {
             // Control Change
             const value = data2 || 0
-            get().setLastMessage({ type: 'cc', channel, number: data1, value })
+            get().setLastMessage({ type: 'cc', channel, number: data1, value, deviceName })
             if (get().isLearning) get().completeLearn({ type: 'cc', channel, number: data1, value, deviceName })
             handleMidiInput('cc', channel, data1, value, deviceName)
           } else if (type === 0x90 && data2 > 0) {
             // Note On
-            get().setLastMessage({ type: 'note', channel, number: data1, value: data2 })
+            get().setLastMessage({ type: 'note', channel, number: data1, value: data2, deviceName })
             if (get().isLearning) get().completeLearn({ type: 'note', channel, number: data1, deviceName })
             handleMidiInput('note', channel, data1, data2, deviceName)
           } else if (type === 0x80 || (type === 0x90 && data2 === 0)) {
             // Note Off
+            get().logMessage({ type: 'noteoff', channel, number: data1, value: 0, deviceName })
             handleMidiInput('note', channel, data1, 0, deviceName)
           } else if (type === 0xc0) {
             // Program Change: momentary trigger (no release message exists)
-            get().setLastMessage({ type: 'program', channel, number: data1, value: 127 })
+            get().setLastMessage({ type: 'program', channel, number: data1, value: 127, deviceName })
             if (get().isLearning) get().completeLearn({ type: 'program', channel, number: data1, deviceName })
             handleMidiInput('program', channel, data1, 127, deviceName)
           }
@@ -230,8 +252,16 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   },
 
   setLastMessage: (msg) => {
-    set({ lastMessage: msg })
+    const entry = { ...msg, ts: msg.ts ?? performance.now() }
+    set((state) => ({ lastMessage: entry, messageLog: [entry, ...state.messageLog].slice(0, MIDI_LOG_SIZE) }))
   },
+
+  logMessage: (msg) => {
+    const entry = { ...msg, ts: msg.ts ?? performance.now() }
+    set((state) => ({ messageLog: [entry, ...state.messageLog].slice(0, MIDI_LOG_SIZE) }))
+  },
+
+  clearMessageLog: () => set({ messageLog: [] }),
 
   setMappings: (mappings) => set({ mappings })
 }))

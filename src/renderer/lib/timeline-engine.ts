@@ -11,7 +11,7 @@
 
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
-import { setLayer, removeLayer, registerFrameSource } from './dmx-mixer'
+import { setLayer, setLayerMaster, removeLayer, registerFrameSource } from './dmx-mixer'
 import { startEffect, stopEffectsWithPrefix } from './effect-engine'
 import { computeTrackedState } from './cue-engine'
 import { getFixtureIndex } from './fixture-index'
@@ -72,7 +72,23 @@ function isClipActiveAt(clip: TimelineClip, t: number): boolean {
   return t >= clip.startTime && t < clip.startTime + clip.duration
 }
 
-function triggerClip(clip: TimelineClip) {
+function hasFades(clip: TimelineClip): boolean {
+  return (clip.fadeIn ?? 0) > 0 || (clip.fadeOut ?? 0) > 0
+}
+
+/** Level 0…1 of a clip at time `t` from its fade-in / fade-out ramps (1 without fades). */
+export function clipFadeLevel(clip: Pick<TimelineClip, 'startTime' | 'duration' | 'fadeIn' | 'fadeOut'>, t: number): number {
+  const end = clip.startTime + clip.duration
+  if (t < clip.startTime || t >= end) return 0
+  let level = 1
+  const fadeIn = clip.fadeIn ?? 0
+  const fadeOut = clip.fadeOut ?? 0
+  if (fadeIn > 0) level = Math.min(level, (t - clip.startTime) / fadeIn)
+  if (fadeOut > 0) level = Math.min(level, (end - t) / fadeOut)
+  return Math.max(0, Math.min(1, level))
+}
+
+function triggerClip(clip: TimelineClip, t: number) {
   const cuelist = usePlaybackStore.getState().cuelists.find(c => c.id === clip.cuelistId)
   activeClipIds.add(clip.id)
   if (!cuelist || cuelist.cues.length === 0) return
@@ -80,7 +96,8 @@ function triggerClip(clip: TimelineClip) {
   const { patch, fixtures } = usePatchStore.getState()
   const index = getFixtureIndex(patch, fixtures)
   const state = computeTrackedState(cuelist.cues, cuelist.cues.length - 1)
-  setLayer(clipLayerId(clip.id), index.toLayer(state), TIMELINE_LAYER_PRIORITY, 255)
+  const master = hasFades(clip) ? clipFadeLevel(clip, t) * 255 : 255
+  setLayer(clipLayerId(clip.id), index.toLayer(state), TIMELINE_LAYER_PRIORITY, master)
 
   for (const fx of cuelist.effectSnapshots ?? []) {
     // Own id per clip instance: releasing the clip never kills a live effect
@@ -106,8 +123,9 @@ function syncClips(t: number) {
     known.add(clip.id)
     const wasActive = activeClipIds.has(clip.id)
     const isActive = isClipActiveAt(clip, t)
-    if (isActive && !wasActive) triggerClip(clip)
+    if (isActive && !wasActive) triggerClip(clip, t)
     else if (!isActive && wasActive) releaseClip(clip.id)
+    else if (isActive && hasFades(clip)) setLayerMaster(clipLayerId(clip.id), clipFadeLevel(clip, t) * 255)
   }
   // Clips deleted while active
   for (const clipId of Array.from(activeClipIds)) {
