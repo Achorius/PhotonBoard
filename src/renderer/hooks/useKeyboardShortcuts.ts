@@ -8,7 +8,7 @@
 import { useEffect } from 'react'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
-import { usePlaybackStore } from '@renderer/stores/playback-store'
+import { selectGoTargetChaseId, selectGoTargetCuelistId, usePlaybackStore } from '@renderer/stores/playback-store'
 import { clearProgrammer } from '@renderer/lib/dmx-mixer'
 import { isRemoteMode } from '@renderer/lib/runtime'
 import { hasOpenOverlay } from '@renderer/components/ui'
@@ -37,7 +37,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Playback',
     shortcuts: [
-      { keys: 'Space', label: 'GO first scene (Scenes view)' }
+      { keys: 'Space', label: 'GO selected scene / start-stop selected chase (Scenes view)' },
+      { keys: 'Up', label: 'Previous scene / chase (list focused)' },
+      { keys: 'Down', label: 'Next scene / chase (list focused)' }
     ]
   },
   {
@@ -120,8 +122,15 @@ export function useKeyboardShortcuts(): void {
         case ' ': {
           if (useUiStore.getState().activeTab !== 'playback') return
           e.preventDefault()
-          const first = usePlaybackStore.getState().cuelists[0]
-          if (first && !e.repeat) usePlaybackStore.getState().goCuelist(first.id)
+          if (e.repeat) break
+          const pb = usePlaybackStore.getState()
+          if (pb.editorPane === 'chases') {
+            const chaseId = selectGoTargetChaseId(pb)
+            if (chaseId) pb.toggleChase(chaseId)
+          } else {
+            const cuelistId = selectGoTargetCuelistId(pb)
+            if (cuelistId) pb.goCuelist(cuelistId)
+          }
           break
         }
         case '/': {

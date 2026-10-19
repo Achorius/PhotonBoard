@@ -86,10 +86,41 @@ interface PlaybackState {
   setTimelineZones: (zones: TimelineZone[]) => void
   reorderTimelineZones: (orderedIds: string[]) => void
 
+  // Scenes view editor state (UI only — never saved, never synced)
+  /** Scene selected in the Scenes view: target of Space = GO and of "add cue" */
+  selectedCuelistId: string | null
+  selectCuelist: (id: string | null) => void
+  selectedChaseId: string | null
+  selectChase: (id: string | null) => void
+  /** Which list the Scenes view shows */
+  editorPane: 'scenes' | 'chases'
+  setEditorPane: (pane: 'scenes' | 'chases') => void
+
+  /** Move a cue to another position; it gets a number between its new neighbours (playing cue keeps playing) */
+  moveCue: (cuelistId: string, fromIndex: number, toIndex: number) => void
+  /** Jump to a cue (fades with that cue's times) */
+  goToCue: (cuelistId: string, index: number) => void
+  /** Copy a scene (new ids, stopped); returns the new id or null */
+  duplicateCuelist: (id: string) => string | null
+  /** Move a chase step to another position */
+  moveChaseStep: (chaseId: string, fromIndex: number, toIndex: number) => void
+
   // Import
   setCuelists: (cuelists: Cuelist[]) => void
   setChases: (chases: Chase[]) => void
   setPresets: (presets: Preset[]) => void
+}
+
+/** Scene that GO (Space) acts on in the Scenes view: the selected one, else the first */
+export function selectGoTargetCuelistId(state: Pick<PlaybackState, 'cuelists' | 'selectedCuelistId'>): string | null {
+  const selected = state.selectedCuelistId ? state.cuelists.find((c) => c.id === state.selectedCuelistId) : undefined
+  return (selected ?? state.cuelists[0])?.id ?? null
+}
+
+/** Chase that Space toggles in the Scenes view (chases pane): the selected one, else the first */
+export function selectGoTargetChaseId(state: Pick<PlaybackState, 'chases' | 'selectedChaseId'>): string | null {
+  const selected = state.selectedChaseId ? state.chases.find((c) => c.id === state.selectedChaseId) : undefined
+  return (selected ?? state.chases[0])?.id ?? null
 }
 
 function clampLevel(level: number): number {
@@ -183,7 +214,15 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
     set((state) => ({
       cuelists: state.cuelists.map((cl) => {
         if (cl.id !== cuelistId) return cl
-        return { ...cl, cues: cl.cues.filter((cue) => cue.id !== cueId) }
+        const index = cl.cues.findIndex((cue) => cue.id === cueId)
+        if (index < 0) return cl
+        const cues = cl.cues.filter((cue) => cue.id !== cueId)
+        // Keep the playing cue playing (or stop when the list is now empty)
+        if (cues.length === 0) return { ...cl, cues, isPlaying: false, currentCueIndex: -1 }
+        let currentCueIndex = cl.currentCueIndex
+        if (index < currentCueIndex) currentCueIndex -= 1
+        else if (index === currentCueIndex) currentCueIndex = Math.min(currentCueIndex, cues.length - 1)
+        return { ...cl, cues, currentCueIndex }
       })
     }))
   },
@@ -492,6 +531,85 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
           .filter(Boolean) as TimelineZone[]
       }
     })
+  },
+
+  // --- Scenes view editor state ---
+  selectedCuelistId: null,
+  selectCuelist: (id) => {
+    if (get().selectedCuelistId !== id) set({ selectedCuelistId: id })
+  },
+  selectedChaseId: null,
+  selectChase: (id) => {
+    if (get().selectedChaseId !== id) set({ selectedChaseId: id })
+  },
+  editorPane: 'scenes',
+  setEditorPane: (pane) => {
+    if (get().editorPane !== pane) set({ editorPane: pane })
+  },
+
+  moveCue: (cuelistId, fromIndex, toIndex) => {
+    set(mapCuelist(cuelistId, (cl) => {
+      const n = cl.cues.length
+      if (fromIndex < 0 || fromIndex >= n || toIndex < 0 || toIndex >= n || fromIndex === toIndex) return cl
+      const playingId = cl.currentCueIndex >= 0 ? cl.cues[cl.currentCueIndex]?.id : undefined
+      const cues = [...cl.cues]
+      const [moved] = cues.splice(fromIndex, 1)
+      cues.splice(toIndex, 0, moved)
+      // Number between the new neighbours (2 → 2.5), or renumber when there is no room
+      const prev = cues[toIndex - 1]?.number
+      const next = cues[toIndex + 1]?.number
+      let number: number
+      if (prev === undefined) number = next === undefined ? 1 : next >= 2 ? Math.ceil(next) - 1 : Math.round((next / 2) * 1000) / 1000
+      else if (next === undefined) number = Math.floor(prev) + 1
+      else number = Math.round(((prev + next) / 2) * 1000) / 1000
+      const ordered = (list: Cue[]) => list.every((c, i) => i === 0 || c.number > list[i - 1].number)
+      cues[toIndex] = { ...moved, number }
+      const final = ordered(cues) ? cues : cues.map((c, i) => ({ ...c, number: i + 1 }))
+      const currentCueIndex = playingId ? final.findIndex((c) => c.id === playingId) : cl.currentCueIndex
+      return { ...cl, cues: final, currentCueIndex }
+    }))
+  },
+
+  goToCue: (cuelistId, index) => {
+    set(mapCuelist(cuelistId, (cl) => {
+      if (index < 0 || index >= cl.cues.length) return cl
+      return { ...cl, currentCueIndex: index, isPlaying: true, goGeneration: (cl.goGeneration ?? 0) + 1 }
+    }))
+  },
+
+  duplicateCuelist: (id) => {
+    const source = get().cuelists.find((c) => c.id === id)
+    if (!source) return null
+    const newId = uuidv4()
+    const copy: Cuelist = {
+      ...source,
+      id: newId,
+      name: `${source.name} copy`,
+      cues: source.cues.map((cue) => ({ ...cue, id: uuidv4(), values: cue.values.map((v) => ({ ...v })) })),
+      currentCueIndex: -1,
+      isPlaying: false,
+      flash: false,
+      goGeneration: 0,
+      effectSnapshots: source.effectSnapshots?.map((e) => ({ ...e, fixtureIds: [...e.fixtureIds] }))
+    }
+    set((state) => {
+      const at = state.cuelists.findIndex((c) => c.id === id)
+      const cuelists = [...state.cuelists]
+      cuelists.splice(at + 1, 0, copy)
+      return { cuelists }
+    })
+    return newId
+  },
+
+  moveChaseStep: (chaseId, fromIndex, toIndex) => {
+    set(mapChase(chaseId, (ch) => {
+      const n = ch.steps.length
+      if (fromIndex < 0 || fromIndex >= n || toIndex < 0 || toIndex >= n || fromIndex === toIndex) return ch
+      const steps = [...ch.steps]
+      const [moved] = steps.splice(fromIndex, 1)
+      steps.splice(toIndex, 0, moved)
+      return { ...ch, steps }
+    }))
   },
 
   setCuelists: (cuelists) => {
