@@ -34,6 +34,7 @@ import {
   type RoomConfig,
   type ShowExecutorLayout,
   type ShowFile,
+  type ShowTimecodeSettings,
   type ShowTimeline,
   type SpatialAxis,
   type StageLayout,
@@ -259,6 +260,9 @@ function normalizeEffectChannels(raw: unknown): EffectChannel[] | undefined {
   })
 }
 
+/** Longest effect start / stop fade (seconds) */
+const MAX_EFFECT_FADE = 600
+
 /** Normalise an effect definition. Runtime state (isRunning) is always cleared. */
 export function normalizeEffect(raw: unknown, id?: string): Effect | null {
   if (!isObj(raw)) return null
@@ -281,6 +285,10 @@ export function normalizeEffect(raw: unknown, id?: string): Effect | null {
   if (keyframes) effect.keyframes = keyframes
   if (typeof raw.spatialMode === 'string') effect.spatialMode = oneOf(raw.spatialMode, ['index', 'spatial'] as const, 'index')
   if (typeof raw.spatialAxis === 'string') effect.spatialAxis = oneOf(raw.spatialAxis, SPATIAL_AXES, 'x')
+  const fadeIn = optNum(raw.fadeIn, 0, MAX_EFFECT_FADE)
+  if (fadeIn !== undefined) effect.fadeIn = fadeIn
+  const fadeOut = optNum(raw.fadeOut, 0, MAX_EFFECT_FADE)
+  if (fadeOut !== undefined) effect.fadeOut = fadeOut
   return effect
 }
 
@@ -478,7 +486,27 @@ function normalizeTimeline(raw: unknown, cuelistIds: Set<string>, warnings: stri
   const maxTrack = clips.reduce((m, c) => Math.max(m, c.trackIndex + 1), 0)
   const trackCount = Math.max(int(o.trackCount, DEFAULT_TRACK_COUNT, 1, 999), maxTrack)
   const trackNames = arr(o.trackNames).slice(0, trackCount).map(n => (typeof n === 'string' ? n : ''))
-  return { clips, markers, zones, trackCount, trackNames }
+  return {
+    clips, markers, zones, trackCount, trackNames,
+    length: num(o.length, DEFAULT_TIMELINE_LENGTH, 10, MAX_TIMELINE_LENGTH),
+    loop: bool(o.loop, false),
+    timecode: normalizeTimecodeSettings(o.timecode)
+  }
+}
+
+export const DEFAULT_TIMELINE_LENGTH = 120
+const MAX_TIMELINE_LENGTH = 36000
+const TIMECODE_FPS = [24, 25, 29.97, 30] as const
+
+function normalizeTimecodeSettings(raw: unknown): ShowTimecodeSettings {
+  const o = isObj(raw) ? raw : {}
+  return {
+    source: oneOf(o.source, ['internal', 'mtc'] as const, 'internal'),
+    fps: TIMECODE_FPS.find(f => f === o.fps) ?? 25,
+    chase: bool(o.chase, false),
+    dropoutMs: num(o.dropoutMs, 1000, 100, 10000),
+    offset: num(o.offset, 0, -MAX_TIMELINE_LENGTH, MAX_TIMELINE_LENGTH)
+  }
 }
 
 /** Default (empty) executor layout. */

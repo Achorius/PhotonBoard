@@ -20,6 +20,7 @@ import { useUiStore } from '@renderer/stores/ui-store'
 import { decodeSnapshotDmx } from '@renderer/lib/state-snapshot'
 import { isProgrammerChannelHeld } from '@renderer/lib/dmx-mixer'
 import { onShowApplied, withoutDirtyTracking } from '@renderer/lib/show-io'
+import { getTimelineState, mirrorTimelineState } from '@renderer/lib/timeline-engine'
 import { getBridge, isLocallyHeld, isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
 
 /** True when running in browser (remote mode) */
@@ -203,6 +204,9 @@ export function applyRemoteState(data: unknown): void {
         })
       }
       mirrorDmx(d)
+      if (typeof d.timelinePlaying === 'boolean') {
+        mirrorTimelineState(typeof d.timelineTime === 'number' ? d.timelineTime : getTimelineState().currentTime, d.timelinePlaying)
+      }
       const ui = useUiStore.getState()
       if (typeof d.showName === 'string' && d.showName !== ui.showName) ui.setShowName(d.showName)
       if (typeof d.isDirty === 'boolean' && d.isDirty !== ui.isDirty) ui.setDirty(d.isDirty)

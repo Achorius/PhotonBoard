@@ -103,6 +103,7 @@ export function MasterControls() {
         shortcut="Esc"
         className={cn(
           'w-[128px] font-bold uppercase tracking-[0.06em]',
+          blackout && 'shadow-glow-danger',
           blackoutMidi.ring
         )}
       >

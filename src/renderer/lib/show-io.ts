@@ -16,7 +16,7 @@
 //      and nothing starts playing by itself.
 // ============================================================
 
-import type { Chase, Cuelist, Effect, ShowFile } from '@shared/types'
+import type { Chase, Cuelist, Effect, ShowFile, ShowTimeline } from '@shared/types'
 import { createEmptyShow, normalizeShow, SHOW_FORMAT_VERSION } from '@shared/show-format'
 import type { ShowLoadResult, ShowSaveResult } from '@shared/photonboard-api'
 import { usePatchStore } from '@renderer/stores/patch-store'
@@ -29,7 +29,13 @@ import { useFollowStore } from '@renderer/stores/follow-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { resetMixer } from './dmx-mixer'
 import { resetPlayback } from './playback-controller'
-import { resetTimeline } from './timeline-engine'
+import {
+  getTimelineState, onTimelineSettingsChange, resetTimeline, setTimelineLooping, setTimelineTotalDuration
+} from './timeline-engine'
+import {
+  enableTimecode, getTimecodeDropoutMs, getTimecodeFramerate, getTimecodeOffset, isTimecodeChase, isTimecodeEnabled,
+  onTimecodeSettingsChange, setTimecodeChase, setTimecodeDropoutMs, setTimecodeFramerate, setTimecodeOffset
+} from './timecode-engine'
 import { stopAllEffects } from './effect-engine'
 import { getBridge, isRemoteMode } from './runtime'
 
@@ -99,10 +105,33 @@ export function collectShowData(): ShowFile {
       markers: [...pb.timelineMarkers],
       zones: [...pb.timelineZones],
       trackCount: pb.timelineTrackCount,
-      trackNames: [...pb.timelineTrackNames]
+      trackNames: [...pb.timelineTrackNames],
+      length: getTimelineState().totalDuration,
+      loop: getTimelineState().isLooping,
+      timecode: {
+        source: isTimecodeEnabled() ? 'mtc' : 'internal',
+        fps: getTimecodeFramerate(),
+        chase: isTimecodeChase(),
+        dropoutMs: getTimecodeDropoutMs(),
+        offset: getTimecodeOffset()
+      }
     },
     executor: useExecutorStore.getState().getLayout()
   }
+}
+
+/** Timeline length / loop and timecode settings (engine state, saved with the show) */
+function applyTimelineSettings(tl: ShowTimeline): void {
+  if (tl.length !== undefined) setTimelineTotalDuration(tl.length)
+  setTimelineLooping(tl.loop ?? false)
+  // Remote browsers only display the console's timeline: no MIDI timecode input there
+  const tc = tl.timecode
+  if (!tc || isRemoteMode()) return
+  setTimecodeFramerate(tc.fps)
+  setTimecodeChase(tc.chase)
+  setTimecodeDropoutMs(tc.dropoutMs)
+  setTimecodeOffset(tc.offset)
+  enableTimecode(tc.source === 'mtc')
 }
 
 /**
@@ -146,6 +175,7 @@ export function applyShowData(raw: unknown, opts: { name?: string } = {}): { sho
     pb.setTimelineZones(tl.zones)
     pb.setTimelineTrackCount(tl.trackCount)
     pb.setTimelineTrackNames(tl.trackNames ?? [])
+    applyTimelineSettings(tl)
 
     useEffectsStore.getState().setEffects(show.effects)
     useMidiStore.getState().setMappings(show.midiMappings)
@@ -463,7 +493,9 @@ export function installDirtyTracking(): () => void {
     }),
     useExecutorStore.subscribe((s, p) => {
       if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes) markDirty()
-    })
+    }),
+    onTimelineSettingsChange(markDirty),
+    onTimecodeSettingsChange(markDirty)
   ]
   return () => { for (const u of unsubs) u() }
 }

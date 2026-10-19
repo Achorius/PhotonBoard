@@ -319,7 +319,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
             color={color}
             ticks
             aria-label={`${name} level`}
-            className="!w-full max-w-[96px]"
+            className="w-full max-w-[96px]"
           />
         </div>
         )}

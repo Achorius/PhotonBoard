@@ -15,13 +15,22 @@ describe('OFLService index loading', () => {
       return ok({ name: 'Acme', fixtures: [{ key: 'par-64', name: 'PAR 64', categories: ['Color Changer'] }] })
     }
     const svc = new OFLService({ fetch, now: () => now, retryDelayMs: 0 })
-    expect(await svc.search('par')).toEqual([])
+    // An unreachable index is an error (the UI shows "offline"), not "no fixtures found"
+    await expect(svc.search('par')).rejects.toThrow(/Open Fixture Library \(offline\)/)
     online = true
     // Within the retry back-off we do not hammer the network
-    expect(await svc.search('par')).toEqual([])
+    await expect(svc.search('par')).rejects.toThrow(/Open Fixture Library/)
     now += 60_000
     const results = await svc.search('par')
     expect(results.map(r => r.fixtureKey)).toEqual(['par-64'])
+  })
+
+  it('an index that loaded but has no match is an empty result', async () => {
+    const fetch = async (url: string) => url.endsWith('/manufacturers')
+      ? ok({ acme: { name: 'Acme' } })
+      : ok({ fixtures: [{ key: 'par-64', name: 'PAR 64' }] })
+    const svc = new OFLService({ fetch, retryDelayMs: 0 })
+    expect(await svc.search('moving head')).toEqual([])
   })
 
   it('retries failed manufacturer batches', async () => {

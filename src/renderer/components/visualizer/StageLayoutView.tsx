@@ -1,23 +1,19 @@
 // ============================================================
 // Stage layout view: top-view plan editor + section view + inspector.
-//
-// On ARM / mid-range devices the shell routes the "3D" tab here; when that
-// happens (and the GPU is not a weak one) this view hands over to the 3D
-// visualiser, which runs at "medium" quality on those devices.
+// Also what the "3D" tab shows on weak GPUs (see App.tsx).
 // ============================================================
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   LuAlignHorizontalSpaceAround, LuCable, LuFileDown, LuFlipHorizontal2, LuGrid3X3, LuLayoutGrid, LuMagnet, LuPanelBottom,
   LuPlus, LuRotateCcw, LuScan, LuX, LuZoomIn, LuZoomOut
 } from 'react-icons/lu'
 import {
-  Button, Divider, EmptyState, IconButton, Section, Select, Spinner, ToggleButton, ToolbarGroup, toast
+  Button, Divider, EmptyState, IconButton, Section, Select, ToggleButton, ToolbarGroup, toast
 } from '@renderer/components/ui'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
-import { getDeviceProfile } from '@renderer/lib/device-detect'
 import { exportStagePDF } from '@renderer/lib/pdf-export'
 import { LayoutEditor2D, type LayoutEditorHandle } from './editor/LayoutEditor2D'
 import { SideView } from './editor/SideView'
@@ -25,8 +21,6 @@ import { FixturePropertiesPanel } from './editor/FixturePropertiesPanel'
 import { RoomPropertiesPanel, TrussPropertiesPanel } from './editor/RigPanels'
 import { MOUNT_OPTIONS, flipFixtures, hangOnBar, resetPlacement, setMount } from './editor/rig-actions'
 import { SelectionControls } from './SelectionControls'
-
-const LazyVisualizerView = lazy(() => import('./VisualizerView').then((m) => ({ default: m.VisualizerView })))
 
 const GRID_OPTIONS = [
   { value: '0.1', label: '10 cm' },
@@ -36,18 +30,6 @@ const GRID_OPTIONS = [
 ]
 
 export function StageLayoutView() {
-  const activeTab = useUiStore((s) => s.activeTab)
-  if (activeTab === 'visualizer' && !getDeviceProfile().isLowEnd) {
-    return (
-      <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>
-        <LazyVisualizerView />
-      </Suspense>
-    )
-  }
-  return <StageLayoutEditor />
-}
-
-function StageLayoutEditor() {
   const editor = useRef<LayoutEditorHandle>(null)
   // Zoom changes stream at pointer rate: only the readout re-renders
   const zoomListener = useRef<((scale: number, fit: number) => void) | null>(null)

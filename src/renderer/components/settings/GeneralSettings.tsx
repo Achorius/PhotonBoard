@@ -66,7 +66,7 @@ export function DisplaySettings() {
 
       <SettingsCard icon={LuSparkles} title="3D visualiser" subtitle="Quality adapts automatically to this device's graphics.">
         <InfoRow label="Device class">
-          {profile.isLowEnd ? 'Low-end graphics — 2D stage layout' : profile.isMidRange ? 'ARM graphics (Raspberry Pi) — 2D stage layout by default' : 'Desktop graphics — full 3D'}
+          {profile.isLowEnd ? 'Low-end graphics — 2D stage layout' : profile.isMidRange ? 'Mid-range graphics (Raspberry Pi) — 3D at reduced quality' : 'Desktop graphics — full 3D'}
         </InfoRow>
         <InfoRow label="Frame rate"><span className="font-mono tabular">{profile.visualizerFps} fps</span></InfoRow>
         <InfoRow label="Pixel ratio"><span className="font-mono tabular">{profile.maxPixelRatio}×</span> maximum</InfoRow>

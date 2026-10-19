@@ -6,7 +6,8 @@
 // times / count) and the DMX mix as a compact base64 string. It is
 // rebuilt only when something it contains changed, and pushed to main
 //   - at most ~20 Hz for control state (scenes, masters, executor…),
-//   - at most ~10 Hz when only the DMX mix changed (remote 3D view).
+//   - at most ~10 Hz when only the DMX mix or the timeline playhead
+//     changed (remote 3D view, remote timeline).
 // Never runs in remote mode (a browser must not echo state back).
 // ============================================================
 
@@ -63,6 +64,8 @@ export interface StateSnapshot {
   strobe: boolean
   strobeRate: number
   timelinePlaying: boolean
+  /** Timeline playhead (seconds); sent with the DMX part, ~10 Hz while it moves */
+  timelineTime?: number
   showName: string
   isDirty: boolean
   cuelists: SnapshotCuelist[]
@@ -190,7 +193,8 @@ function currentDmx(): StateSnapshot['dmx'] {
 
 /** Full snapshot including the DMX mix (Companion / remote browsers). */
 export function collectFullSnapshot(): StateSnapshot {
-  return { ...collectStateSnapshot(), dmx: currentDmx() }
+  const timelineTime = Math.round(getTimelineState().currentTime * 100) / 100
+  return { ...collectStateSnapshot(), timelineTime, dmx: currentDmx() }
 }
 
 const CONTROL_INTERVAL_MS = 50 // ~20 Hz
@@ -210,6 +214,7 @@ export function startStateBroadcast(): () => void {
   let lastSent = -Infinity
   let lastDmxSent = -Infinity
   let lastDmxVersion = -1
+  let lastTimelineTime = getTimelineState().currentTime
   let timer: ReturnType<typeof setTimeout> | null = null
 
   const send = () => {
@@ -275,6 +280,15 @@ export function startStateBroadcast(): () => void {
     onTimelinePlayStateChange(onControlChange)
   ]
 
+  // The playhead rides with the DMX part (same ~10 Hz rate)
+  const timelinePoll = setInterval(() => {
+    const t = getTimelineState().currentTime
+    if (t === lastTimelineTime) return
+    lastTimelineTime = t
+    dmxDirty = true
+    schedule()
+  }, DMX_INTERVAL_MS)
+
   // Stage window polls at 30 Hz: answer from the cache (no DMX needed there)
   const offStage = bridge.stage.onRequestState(() => {
     bridge.stage.sendState(collectStateSnapshot())
@@ -288,6 +302,7 @@ export function startStateBroadcast(): () => void {
 
   return () => {
     for (const u of unsubs) u()
+    clearInterval(timelinePoll)
     offStage?.()
     offApi?.()
     if (timer) clearTimeout(timer)

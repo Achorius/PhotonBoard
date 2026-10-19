@@ -141,7 +141,7 @@ const ChaseRow = memo(function ChaseRow({ chase: ch, number, selected, onSelect 
         active={ch.isPlaying}
         tone="go"
         disabled={ch.steps.length === 0}
-        className={ch.isPlaying ? undefined : '!text-go-fg'}
+        className={ch.isPlaying ? undefined : 'text-go-fg'}
         onClick={() => usePlaybackStore.getState().toggleChase(ch.id)}
       />
     </div>
@@ -299,7 +299,7 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
         />
         <NumberField size="sm" className="w-[132px]" label="Crossfade" value={ch.fadePercent} onChange={(v) => pb().updateChase(ch.id, { fadePercent: v })} min={0} max={100} step={1} unit="%" />
         <NumberField size="sm" className="w-[104px]" label="Priority" value={ch.priority ?? 40} onChange={(v) => pb().updateChase(ch.id, { priority: v })} min={0} max={100} step={1} />
-        <Switch checked={ch.isLooping} onChange={(v) => pb().updateChase(ch.id, { isLooping: v })} label="Loop" className="!min-h-0 !gap-2" />
+        <Switch checked={ch.isLooping} onChange={(v) => pb().updateChase(ch.id, { isLooping: v })} label="Loop" className="min-h-0 gap-2" />
       </div>
 
       {/* Steps toolbar */}
@@ -321,7 +321,7 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
             <Button size="sm" variant="ghost" icon={LuRefreshCw} tooltip="Merge the programmer into the selected step" onClick={() => updateStepFromProgrammer(ch.id, ch.steps[selectedIndex], selectedIndex, 'merge')}>Update</Button>
           </>
         )}
-        <Button size="sm" variant="secondary" icon={LuCircleDot} className="!text-accent-fg" tooltip="Record the programmer as a new step at the end" onClick={addStep}>Add step</Button>
+        <Button size="sm" variant="secondary" icon={LuCircleDot} className="text-accent-fg" tooltip="Record the programmer as a new step at the end" onClick={addStep}>Add step</Button>
       </div>
 
       <div data-reorder-scroll="" className="min-h-0 flex-1 overflow-y-auto">
@@ -387,12 +387,12 @@ function StepTable({ chase: ch, selectedStepId, onSelectStep, beat }: {
       </colgroup>
       <THead>
         <Tr>
-          <Th className="!px-0"><span className="sr-only">Reorder</span></Th>
+          <Th className="px-0"><span className="sr-only">Reorder</span></Th>
           <Th className="pl-2">Step</Th>
           <Th className="pl-2">Look</Th>
-          <Th align="right" className="!px-1.5">Contents</Th>
-          <Th className="!px-1.5" title="Step time: one beat at the chase tempo, or a fixed hold time">Time</Th>
-          <Th className="!px-0"><span className="sr-only">Actions</span></Th>
+          <Th align="right" className="px-1.5">Contents</Th>
+          <Th className="px-1.5" title="Step time: one beat at the chase tempo, or a fixed hold time">Time</Th>
+          <Th className="px-0"><span className="sr-only">Actions</span></Th>
         </Tr>
       </THead>
       <TBody>
@@ -458,7 +458,7 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
         dropIndicator(drag, index)
       )}
     >
-      <Td className="!px-0">
+      <Td className="px-0">
         <button
           type="button"
           aria-label={`Drag to reorder step ${index + 1}`}
@@ -500,13 +500,13 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
           {swatches.length > 24 && <span className="text-xs text-fg-tertiary">+{swatches.length - 24}</span>}
         </span>
       </Td>
-      <Td mono align="right" className="!px-1.5 text-fg-secondary">{fixtures} fix · {step.values.length} ch</Td>
-      <Td className="!px-1.5">
+      <Td mono align="right" className="px-1.5 text-fg-secondary">{fixtures} fix · {step.values.length} ch</Td>
+      <Td className="px-1.5">
         {hold === null ? (
           <Button
             variant="ghost"
             size="sm"
-            className="w-full !justify-start !text-fg-tertiary"
+            className="w-full justify-start text-fg-tertiary"
             tooltip="One beat at the chase tempo. Click to hold this step for a fixed time."
             onClick={(e) => { e.stopPropagation(); pb().updateChaseStep(chaseId, step.id, { holdTime: Math.max(0.1, Math.round(beat * 10) / 10) }) }}
           >
@@ -529,7 +529,7 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
           </span>
         )}
       </Td>
-      <Td className="!px-0 text-center" onClick={(e) => e.stopPropagation()}>
+      <Td className="px-0 text-center" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu placement="bottom-end" items={menu} trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={`Step ${index + 1} actions`} size="sm" />} />
       </Td>
     </Tr>

@@ -31,6 +31,7 @@ let _isLooping = false
 let _totalDuration = 120
 let _onUpdate: ((time: number, playing: boolean) => void) | null = null
 const stateListeners = new Set<(playing: boolean) => void>()
+const settingsListeners = new Set<() => void>()
 
 /** Single UI callback (LiveView playhead). Replaces the previous one. */
 export function setTimelineUpdateCallback(cb: (time: number, playing: boolean) => void) {
@@ -55,9 +56,29 @@ export function getTimelineState() {
   return { isPlaying: _isPlaying, currentTime: _currentTime, isLooping: _isLooping, totalDuration: _totalDuration }
 }
 
-export function setTimelineLooping(v: boolean) { _isLooping = v }
+/** Listen for length / loop changes (saved with the show). Returns an unsubscribe fn. */
+export function onTimelineSettingsChange(listener: () => void): () => void {
+  settingsListeners.add(listener)
+  return () => { settingsListeners.delete(listener) }
+}
+
+function settingsChanged(): void {
+  for (const l of settingsListeners) {
+    try { l() } catch (e) { console.error('[Timeline] settings listener failed:', e) }
+  }
+}
+
+export function setTimelineLooping(v: boolean) {
+  if (_isLooping === v) return
+  _isLooping = v
+  settingsChanged()
+}
 export function setTimelineTotalDuration(v: number) {
-  if (Number.isFinite(v)) _totalDuration = Math.max(10, v)
+  if (!Number.isFinite(v)) return
+  const d = Math.max(10, v)
+  if (d === _totalDuration) return
+  _totalDuration = d
+  settingsChanged()
 }
 
 function clipLayerId(clipId: string): string {
@@ -216,6 +237,16 @@ export function rewindTimeline() {
     lastTime = clockNow()
     syncClips(0)
   }
+  _onUpdate?.(_currentTime, _isPlaying)
+}
+
+/**
+ * Remote browsers: mirror the console's playhead and play state from its
+ * state broadcasts (the console runs the clips; nothing is output here).
+ */
+export function mirrorTimelineState(time: number, playing: boolean) {
+  if (Number.isFinite(time)) _currentTime = Math.max(0, time)
+  setPlaying(playing)
   _onUpdate?.(_currentTime, _isPlaying)
 }
 

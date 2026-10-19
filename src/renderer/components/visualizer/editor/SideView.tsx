@@ -11,6 +11,7 @@ import { palette, withAlpha } from '@renderer/components/ui'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
+import { useCanvasSize } from '@renderer/hooks/useCanvasSize'
 import { getEffectiveColor, resolveChannels } from '@renderer/lib/dmx-channel-resolver'
 import { aimDirection, clamp, cm, describeFixture, fixturePosition, rayToRoom, snap } from '../scene/layout-math'
 
@@ -19,7 +20,8 @@ interface Dot { id: string; x: number; y: number }
 export function SideView({ className = '' }: { className?: string }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const size = useRef({ w: 0, h: 0, dpr: 1 })
+  // draw synchronously on resize: a resized canvas is blank until redrawn
+  const size = useCanvasSize(wrapRef, canvasRef, () => draw())
   const frame = useRef({ ox: 0, oy: 0, s: 1 })
   const dots = useRef<Dot[]>([])
   const raf = useRef(0)
@@ -159,20 +161,6 @@ export function SideView({ className = '' }: { className?: string }) {
   }, [draw])
 
   useEffect(() => {
-    const wrap = wrapRef.current, canvas = canvasRef.current
-    if (!wrap || !canvas) return
-    const resize = () => {
-      const w = wrap.clientWidth, h = wrap.clientHeight, dpr = window.devicePixelRatio || 1
-      const p = size.current
-      if (w === p.w && h === p.h && dpr === p.dpr) return
-      size.current = { w, h, dpr }
-      canvas.width = Math.max(1, Math.round(w * dpr))
-      canvas.height = Math.max(1, Math.round(h * dpr))
-      draw()
-    }
-    const ro = new ResizeObserver(resize)
-    ro.observe(wrap)
-    resize()
     const unsubs = [
       usePatchStore.subscribe((s) => s.patch, requestDraw),
       usePatchStore.subscribe((s) => s.selectedFixtureIds, requestDraw),
@@ -181,12 +169,11 @@ export function SideView({ className = '' }: { className?: string }) {
       useDmxStore.subscribe(requestDraw)
     ]
     return () => {
-      ro.disconnect()
       unsubs.forEach((u) => u())
       if (raf.current) cancelAnimationFrame(raf.current)
       raf.current = 0
     }
-  }, [draw, requestDraw])
+  }, [requestDraw])
 
   const pick = (sx: number, sy: number): string | null => {
     const touch = document.documentElement.dataset.density === 'touch'

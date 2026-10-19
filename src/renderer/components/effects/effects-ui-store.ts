@@ -1,10 +1,10 @@
 // ============================================================
 // View-local state of the Effects view: which effect is being
-// edited, solo, speed unit and per-effect fade times. Fade times
-// are a per-console preference (localStorage), not part of the show.
+// edited, solo, speed unit. Fade times live on the effect (show).
 // ============================================================
 
 import { create } from 'zustand'
+import type { Effect } from '@shared/types'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 
 export type SpeedUnit = 'bpm' | 'hz'
@@ -14,8 +14,8 @@ export interface FadeTimes {
   fadeOut: number
 }
 
-const NO_FADE: FadeTimes = { fadeIn: 0, fadeOut: 0 }
-const FADES_KEY = 'photonboard.effects.fades'
+/** Before fades were saved in the show they were a per-console preference */
+const LEGACY_FADES_KEY = 'photonboard.effects.fades'
 const UNIT_KEY = 'photonboard.effects.speedUnit'
 
 function read<T>(key: string, fallback: T): T {
@@ -34,20 +34,17 @@ function write(key: string, value: unknown): void {
 interface EffectsUiState {
   editingId: string | null
   speedUnit: SpeedUnit
-  fades: Record<string, FadeTimes>
   /** Effect soloed + the effects it stopped (restarted on un-solo) */
   solo: { id: string; stopped: string[] } | null
 
   setEditing: (id: string | null) => void
   setSpeedUnit: (unit: SpeedUnit) => void
-  setFade: (id: string, fade: Partial<FadeTimes>) => void
   toggleSolo: (id: string) => void
 }
 
 export const useEffectsUiStore = create<EffectsUiState>()((set, get) => ({
   editingId: null,
   speedUnit: read<SpeedUnit>(UNIT_KEY, 'bpm') === 'hz' ? 'hz' : 'bpm',
-  fades: read<Record<string, FadeTimes>>(FADES_KEY, {}),
   solo: null,
 
   setEditing: (id) => set({ editingId: id }),
@@ -55,12 +52,6 @@ export const useEffectsUiStore = create<EffectsUiState>()((set, get) => ({
   setSpeedUnit: (unit) => {
     write(UNIT_KEY, unit)
     set({ speedUnit: unit })
-  },
-
-  setFade: (id, fade) => {
-    const fades = { ...get().fades, [id]: { ...(get().fades[id] ?? NO_FADE), ...fade } }
-    write(FADES_KEY, fades)
-    set({ fades })
   },
 
   toggleSolo: (id) => {
@@ -81,14 +72,26 @@ export const useEffectsUiStore = create<EffectsUiState>()((set, get) => ({
   }
 }))
 
-export function fadeTimesOf(fades: Record<string, FadeTimes>, id: string): FadeTimes {
-  return fades[id] ?? NO_FADE
+const legacyFades = read<Record<string, Partial<FadeTimes>>>(LEGACY_FADES_KEY, {})
+
+/** An effect's fade times (older consoles kept them in localStorage: used until edited) */
+export function fadeTimesOf(effect: Pick<Effect, 'id' | 'fadeIn' | 'fadeOut'>): FadeTimes {
+  const legacy = legacyFades[effect.id]
+  return {
+    fadeIn: effect.fadeIn ?? legacy?.fadeIn ?? 0,
+    fadeOut: effect.fadeOut ?? legacy?.fadeOut ?? 0
+  }
+}
+
+/** Store fade times in the effect (both, so a legacy value no longer applies) */
+export function setFadeTimes(effect: Effect, fade: Partial<FadeTimes>): void {
+  useEffectsStore.getState().updateEffect(effect.id, { ...fadeTimesOf(effect), ...fade })
 }
 
 /** Start / stop an effect honouring its fade times */
 export function runEffect(id: string, running: boolean): void {
-  const { fades } = useEffectsUiStore.getState()
-  const f = fadeTimesOf(fades, id)
+  const effect = useEffectsStore.getState().effects.find((e) => e.id === id)
+  const f = effect ? fadeTimesOf(effect) : { fadeIn: 0, fadeOut: 0 }
   useEffectsStore.getState().fadeEffect(id, running, running ? f.fadeIn : f.fadeOut)
   if (!running && useEffectsUiStore.getState().solo?.id === id) useEffectsUiStore.setState({ solo: null })
 }

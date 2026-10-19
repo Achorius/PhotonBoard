@@ -27,6 +27,7 @@ import { palette, prompt, useContextMenu, withAlpha, type MenuEntry } from '@ren
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
+import { useCanvasSize } from '@renderer/hooks/useCanvasSize'
 import { resolveChannels, getEffectiveColor } from '@renderer/lib/dmx-channel-resolver'
 import {
   aimDirection, clamp, cm, describeFixture, fixturePosition, rayToRoom, snap, type FixtureKind, type Vec3
@@ -70,7 +71,16 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const view = useRef({ panX: 0, panY: 0, scale: 0 })
-  const size = useRef({ w: 0, h: 0, dpr: 1 })
+  const size = useCanvasSize(wrapRef, canvasRef, ({ w, h }) => {
+    if (view.current.scale === 0 && w > 0 && h > 0) {
+      const saved = useVisualizerStore.getState().layoutView
+      if (saved.zoom > 0) view.current = { panX: saved.panX, panY: saved.panY, scale: saved.zoom }
+      else fit()
+    }
+    reportScale()
+    // draw synchronously: a resized canvas is blank until redrawn
+    draw()
+  })
   const raf = useRef(0)
   const shapes = useRef<{ fixtures: Shape[]; bars: BarShape[]; edgeY: number; roomX0: number; roomX1: number }>({ fixtures: [], bars: [], edgeY: -1, roomX0: 0, roomX1: 0 })
   const gesture = useRef<Gesture>({ type: 'idle' })
@@ -843,39 +853,6 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
   }
 
   // ── effects ────────────────────────────────────────────────────────
-  // Size: only reallocate the backing store when the CSS size or DPR changes
-  useEffect(() => {
-    const wrap = wrapRef.current
-    const canvas = canvasRef.current
-    if (!wrap || !canvas) return
-    const resize = () => {
-      const w = wrap.clientWidth, h = wrap.clientHeight
-      const dpr = window.devicePixelRatio || 1
-      const prev = size.current
-      if (w === prev.w && h === prev.h && dpr === prev.dpr) return
-      size.current = { w, h, dpr }
-      canvas.width = Math.max(1, Math.round(w * dpr))
-      canvas.height = Math.max(1, Math.round(h * dpr))
-      if (view.current.scale === 0 && w > 0 && h > 0) {
-        const saved = useVisualizerStore.getState().layoutView
-        if (saved.zoom > 0) view.current = { panX: saved.panX, panY: saved.panY, scale: saved.zoom }
-        else fit()
-      }
-      reportScale()
-      // draw synchronously: a resized canvas is blank until redrawn
-      draw()
-    }
-    const ro = new ResizeObserver(resize)
-    ro.observe(wrap)
-    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
-    mq.addEventListener?.('change', resize)
-    resize()
-    return () => {
-      ro.disconnect()
-      mq.removeEventListener?.('change', resize)
-    }
-  }, [fit])
-
   // Redraw on any relevant store change (coalesced to one frame)
   useEffect(() => {
     const unsubs = [

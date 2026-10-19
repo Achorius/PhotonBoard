@@ -43,8 +43,8 @@ export function formatSlot(slot: ExecutorSlot): string {
   return `${slot.col + 1}.${slot.row + 1}`
 }
 
-/** Change a cell's button mode (and keep its MIDI mapping's behaviour in step, like the executor bar) */
-export function setSceneMode(cuelistId: string, slot: ExecutorSlot, mode: SceneMode): void {
+/** Change a cell's button mode and keep the scene's MIDI GO mapping behaviour in step (scenes view, executor bar) */
+export function setSceneMode(cuelistId: string, slot: Pick<ExecutorSlot, 'col' | 'row'>, mode: SceneMode): void {
   useExecutorStore.getState().setMode(slot.col, slot.row, mode)
   const mapping = useMidiStore.getState().mappings.find((m) => m.target.type === 'cuelist_go' && m.target.id === cuelistId)
   if (mapping) useMidiStore.getState().updateMapping(mapping.id, { options: { ...mapping.options, behavior: mode } })

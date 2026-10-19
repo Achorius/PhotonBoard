@@ -123,7 +123,9 @@ export default {
       boxShadow: {
         raised: 'var(--pb-shadow-raised)',
         popover: 'var(--pb-shadow-popover)',
-        modal: 'var(--pb-shadow-modal)'
+        modal: 'var(--pb-shadow-modal)',
+        // Active Blackout: the stage is dark, the button must be impossible to miss
+        'glow-danger': '0 0 0 1px rgb(var(--pb-danger) / 0.6), 0 0 20px 3px rgb(var(--pb-danger) / 0.6)'
       },
       transitionDuration: {
         fast: 'var(--pb-dur-fast)',

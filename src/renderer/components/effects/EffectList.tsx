@@ -12,7 +12,7 @@ import {
 import type { CueChannelValue, Effect } from '@shared/types'
 import {
   Badge, Button, DropdownMenu, EmptyState, IconButton, SegmentedControl, ToggleButton, cn, confirm, effectCategoryIcon,
-  formatBpm, toast, useContextMenu, type MenuEntry
+  contextMenuHandlers, formatBpm, toast, useContextMenu, type MenuEntry, type MenuPoint
 } from '@renderer/components/ui'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
@@ -192,7 +192,7 @@ const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, on
   targets: string
   editing: boolean
   soloed: boolean
-  onMenu: (e: React.MouseEvent) => void
+  onMenu: (e: MenuPoint) => void
 }) {
   const category = effectCategoryOf(effect)
   const color = CATEGORY_COLOR[category]
@@ -208,7 +208,7 @@ const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, on
       tabIndex={0}
       data-fx-row={effect.name}
       onClick={edit}
-      onContextMenu={onMenu}
+      {...contextMenuHandlers(onMenu)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
         if (e.key === 'Enter') { e.preventDefault(); edit() }

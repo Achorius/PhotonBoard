@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizeShow,
+  normalizeEffect,
   createEmptyShow,
   normalizeExecutorLayout,
   parseShowVersion,
   SHOW_FORMAT_VERSION,
+  DEFAULT_TIMELINE_LENGTH,
   DEFAULT_CUE_FADE_IN,
   DEFAULT_CUE_FADE_OUT,
   EXECUTOR_COLUMN_COUNT,
@@ -118,7 +120,7 @@ describe('normalizeShow', () => {
       expect(show[key]).toEqual([])
     }
     expect(show.stageLayout).toEqual({ width: 1200, height: 600, fixtures: [] })
-    expect(show.timeline).toEqual({ clips: [], markers: [], zones: [], trackCount: 3, trackNames: [] })
+    expect(show.timeline).toMatchObject({ clips: [], markers: [], zones: [], trackCount: 3, trackNames: [], length: DEFAULT_TIMELINE_LENGTH, loop: false })
   })
 
   it('accepts JSON text', () => {
@@ -171,6 +173,60 @@ describe('normalizeShow', () => {
     const once = normalizeShow(V1_SHOW).show
     const twice = normalizeShow(JSON.parse(JSON.stringify(once))).show
     expect(twice).toEqual(once)
+  })
+})
+
+describe('effect fades', () => {
+  const base = { name: 'Pulse', waveform: 'sine', speed: 1, depth: 255, offset: 0, channelType: 'Dimmer', fixtureIds: [], fan: 0 }
+
+  it('keeps start / stop fade times (seconds)', () => {
+    const fx = normalizeEffect({ ...base, fadeIn: 1.5, fadeOut: 3 }, 'e1')!
+    expect(fx.fadeIn).toBe(1.5)
+    expect(fx.fadeOut).toBe(3)
+  })
+
+  it('leaves them out of older shows and clamps bad values', () => {
+    const old = normalizeEffect(base, 'e1')!
+    expect('fadeIn' in old).toBe(false)
+    expect('fadeOut' in old).toBe(false)
+    const bad = normalizeEffect({ ...base, fadeIn: -2, fadeOut: 'x' }, 'e1')!
+    expect(bad.fadeIn).toBe(0)
+    expect('fadeOut' in bad).toBe(false)
+  })
+
+  it('keeps an explicit zero (overrides an older per-console value)', () => {
+    expect(normalizeEffect({ ...base, fadeIn: 0 }, 'e1')!.fadeIn).toBe(0)
+  })
+
+  it('survives a show round-trip', () => {
+    const { show } = normalizeShow({ ...V1_SHOW, effects: [{ ...base, id: 'fx1', fadeIn: 2, fadeOut: 0.5 }] })
+    expect(show.effects[0]).toMatchObject({ id: 'fx1', fadeIn: 2, fadeOut: 0.5, isRunning: false })
+    expect(normalizeShow(JSON.parse(JSON.stringify(show))).show.effects).toEqual(show.effects)
+  })
+})
+
+describe('timeline settings', () => {
+  it('defaults length, loop and timecode for older shows', () => {
+    const tl = normalizeShow(V1_SHOW).show.timeline!
+    expect(tl.length).toBe(DEFAULT_TIMELINE_LENGTH)
+    expect(tl.loop).toBe(false)
+    expect(tl.timecode).toEqual({ source: 'internal', fps: 25, chase: false, dropoutMs: 1000, offset: 0 })
+  })
+
+  it('keeps saved settings', () => {
+    const timecode = { source: 'mtc', fps: 29.97, chase: true, dropoutMs: 2500, offset: -3.5 }
+    const tl = normalizeShow({ ...V1_SHOW, timeline: { ...V1_SHOW.timeline, length: 300, loop: true, timecode } }).show.timeline!
+    expect(tl.length).toBe(300)
+    expect(tl.loop).toBe(true)
+    expect(tl.timecode).toEqual(timecode)
+  })
+
+  it('clamps invalid settings', () => {
+    const timecode = { source: 'ltc', fps: 50, chase: 'yes', dropoutMs: 5, offset: 'later' }
+    const tl = normalizeShow({ ...V1_SHOW, timeline: { ...V1_SHOW.timeline, length: 2, loop: 1, timecode } }).show.timeline!
+    expect(tl.length).toBe(10)
+    expect(tl.loop).toBe(false)
+    expect(tl.timecode).toEqual({ source: 'internal', fps: 25, chase: false, dropoutMs: 100, offset: 0 })
   })
 })
 

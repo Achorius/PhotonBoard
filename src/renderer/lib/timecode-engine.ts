@@ -180,11 +180,24 @@ let _onTimecodeUpdate: ((pos: TimecodePosition, totalSeconds: number) => void) |
 let _onStatusChange: ((receiving: boolean) => void) | null = null
 
 let _watchdogTimer: ReturnType<typeof setInterval> | null = null
+const settingsListeners = new Set<() => void>()
+
+/** Listen for source / frame rate / chase / dropout / offset changes (saved with the show). */
+export function onTimecodeSettingsChange(listener: () => void): () => void {
+  settingsListeners.add(listener)
+  return () => { settingsListeners.delete(listener) }
+}
+
+function settingsChanged(): void {
+  for (const l of settingsListeners) {
+    try { l() } catch (e) { console.error('[Timecode] settings listener failed:', e) }
+  }
+}
 
 // ── Public API ──
 
 export function enableTimecode(enabled: boolean): void {
-  _enabled = enabled
+  if (_enabled !== enabled) { _enabled = enabled; settingsChanged() }
   assembler.reset()
   if (enabled) {
     startWatchdog()
@@ -204,8 +217,8 @@ export function isTimecodeReceiving(): boolean {
 
 /** Manual framerate (used for display / when no MTC is received). */
 export function setTimecodeFramerate(fps: TimecodeFramerate): void {
-  _framerate = fps
   _lastPosition.framerate = fps
+  if (_framerate !== fps) { _framerate = fps; settingsChanged() }
 }
 
 export function getTimecodeFramerate(): TimecodeFramerate {
@@ -213,7 +226,7 @@ export function getTimecodeFramerate(): TimecodeFramerate {
 }
 
 export function setTimecodeOffset(seconds: number): void {
-  if (Number.isFinite(seconds)) _offset = seconds
+  if (Number.isFinite(seconds) && seconds !== _offset) { _offset = seconds; settingsChanged() }
 }
 
 export function getTimecodeOffset(): number {
@@ -225,8 +238,8 @@ export function getTimecodeOffset(): number {
  * locks, resyncs on drift, and stops after a dropout of `getTimecodeDropoutMs()`.
  */
 export function setTimecodeChase(on: boolean): void {
-  _chase = on
   if (!on) _startedByTimecode = false
+  if (_chase !== on) { _chase = on; settingsChanged() }
 }
 
 export function isTimecodeChase(): boolean {
@@ -235,7 +248,9 @@ export function isTimecodeChase(): boolean {
 
 /** Dropout timeout before the chased timeline stops (ms, default 1000). */
 export function setTimecodeDropoutMs(ms: number): void {
-  if (Number.isFinite(ms)) _dropoutMs = Math.max(100, Math.min(10000, ms))
+  if (!Number.isFinite(ms)) return
+  const v = Math.max(100, Math.min(10000, ms))
+  if (v !== _dropoutMs) { _dropoutMs = v; settingsChanged() }
 }
 
 export function getTimecodeDropoutMs(): number {

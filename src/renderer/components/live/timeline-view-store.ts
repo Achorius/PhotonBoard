@@ -7,7 +7,7 @@
 import { useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 import {
-  getTimelineState, onTimelinePlayStateChange, setTimelineLooping, setTimelineTotalDuration, setTimelineUpdateCallback
+  getTimelineState, onTimelinePlayStateChange, onTimelineSettingsChange, setTimelineLooping, setTimelineTotalDuration, setTimelineUpdateCallback
 } from '@renderer/lib/timeline-engine'
 import { DEFAULT_ZOOM, clampZoom, type SnapMode, type TimeDisplay } from './timeline-model'
 
@@ -92,16 +92,17 @@ export const useTimelineView = create<TimelineViewState>((set) => ({
   setLibraryOpen: (libraryOpen) => { write('library', libraryOpen); set({ libraryOpen }) },
   setLibraryTab: (libraryTab) => set({ libraryTab }),
   select: (selection) => set({ selection }),
-  setLength: (seconds) => {
-    setTimelineTotalDuration(seconds)
-    set({ length: getTimelineState().totalDuration })
-  },
-  setLooping: (looping) => {
-    setTimelineLooping(looping)
-    set({ looping })
-  },
+  // Length and loop are show data (engine state): see onTimelineSettingsChange below
+  setLength: (seconds) => setTimelineTotalDuration(seconds),
+  setLooping: (looping) => setTimelineLooping(looping),
   setLibraryDrag: (libraryDrag) => set({ libraryDrag })
 }))
+
+// Mirror the engine (edits here, or a show load)
+onTimelineSettingsChange(() => {
+  const { totalDuration, isLooping } = getTimelineState()
+  useTimelineView.setState({ length: totalDuration, looping: isLooping })
+})
 
 // ---------------- Canvas API (zoom / scroll / drop) ----------------
 

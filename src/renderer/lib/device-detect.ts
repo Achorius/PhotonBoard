@@ -32,14 +32,12 @@ export function getDeviceProfile(): DeviceProfile {
   const ua = navigator.userAgent.toLowerCase()
   const platform = navigator.platform?.toLowerCase() ?? ''
 
-  // Detect ARM architecture
-  const isArm = platform.includes('arm') ||
-    platform.includes('aarch64') ||
-    ua.includes('aarch64') ||
-    ua.includes('armv') ||
-    platform.includes('linux') && ua.includes('linux')
+  // ARM CPU: "Linux aarch64" / "Linux armv7l" (navigator.platform is not
+  // reduced on Linux, unlike the UA string). Apple Silicon reports as Intel.
+  const isArm = /aarch64|arm64|armv\d|\barm\b/.test(`${platform} ${ua}`)
 
-  // Detect GPU via WebGL renderer string
+  // Detect GPU via WebGL renderer string, then release the probe context
+  // (browsers cap live WebGL contexts; the 3D view needs one)
   let gpuRenderer = ''
   try {
     const canvas = document.createElement('canvas')
@@ -49,6 +47,7 @@ export function getDeviceProfile(): DeviceProfile {
       if (ext) {
         gpuRenderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)?.toLowerCase() ?? ''
       }
+      gl.getExtension('WEBGL_lose_context')?.loseContext()
     }
   } catch { /* ignore */ }
 
@@ -59,8 +58,8 @@ export function getDeviceProfile(): DeviceProfile {
     gpuRenderer.includes('llvmpipe') ||
     gpuRenderer.includes('software')
 
-  // Mid-range: ARM GPUs that work but aren't desktop-grade
-  // Pi 5 VideoCore VII (v3d), SwiftShader on ARM, or any ARM + Linux combo
+  // Mid-range: GPUs that run the 3D view at reduced quality —
+  // Pi 5 VideoCore VII (v3d), SwiftShader, ANGLE on ARM, any ARM Linux
   const isLinux = platform.includes('linux') || ua.includes('linux')
   const isMidRange = !isLowEnd && (
     gpuRenderer.includes('v3d') ||
@@ -82,13 +81,6 @@ export function getDeviceProfile(): DeviceProfile {
     mixerIntervalMs: isLowEnd ? 33 : 0,
     stageSyncMs: isLowEnd ? 50 : 33,
   }
-
-  const tier = isLowEnd ? 'low-end' : isMidRange ? 'mid-range (ARM)' : 'desktop'
-  console.log(`[Device] ${tier} GPU detected:`, {
-    platform,
-    gpu: gpuRenderer || 'unknown',
-    profile: cached
-  })
 
   return cached
 }

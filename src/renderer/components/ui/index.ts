@@ -18,7 +18,7 @@ export { IconButton, type IconButtonProps } from './IconButton'
 export { ToggleButton, type ToggleButtonProps } from './ToggleButton'
 export { SegmentedControl, type SegmentedControlProps, type SegmentedItem } from './SegmentedControl'
 export { Tabs, type TabsProps, type TabItem } from './Tabs'
-export { DropdownMenu, Menu, useContextMenu, type MenuEntry } from './Menu'
+export { contextMenuHandlers, DropdownMenu, Menu, useContextMenu, type MenuEntry, type MenuPoint } from './Menu'
 
 // Structure
 export { Panel, PanelHeader, PanelBody, Section } from './Panel'

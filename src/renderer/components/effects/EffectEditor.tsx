@@ -24,7 +24,7 @@ import {
   ATTRIBUTES, CATEGORY_COLOR, DEFAULT_KEYFRAMES, WAVEFORMS, attributeLabel, effectCategoryOf, effectChannels, sizeUpdates
 } from './effect-templates'
 import { FanPreview, WaveGlyph, WaveformScope, attributeColor } from './effect-graphics'
-import { fadeTimesOf, runEffect, useEffectsUiStore } from './effects-ui-store'
+import { fadeTimesOf, runEffect, setFadeTimes, useEffectsUiStore } from './effects-ui-store'
 import { deleteEffect, duplicateEffect, useTargetLabel } from './EffectList'
 
 const MIN_HZ = 0.01
@@ -408,8 +408,8 @@ const SpreadSection = memo(function SpreadSection({ effect, update }: SectionPro
 // ------------------------------------------------------------
 
 const PlaybackSection = memo(function PlaybackSection({ effect, update }: SectionProps) {
-  const fade = useEffectsUiStore((s) => fadeTimesOf(s.fades, effect.id))
-  const setFade = (f: Partial<{ fadeIn: number; fadeOut: number }>) => useEffectsUiStore.getState().setFade(effect.id, f)
+  const fade = fadeTimesOf(effect)
+  const setFade = (f: Partial<{ fadeIn: number; fadeOut: number }>) => setFadeTimes(effect, f)
   return (
     <Group title="Playback">
       <SegmentedControl
@@ -427,7 +427,7 @@ const PlaybackSection = memo(function PlaybackSection({ effect, update }: Sectio
         <NumberField label="Fade in" value={fade.fadeIn} onChange={(v) => setFade({ fadeIn: v })} min={0} max={60} step={0.1} unit="s" />
         <NumberField label="Fade out" value={fade.fadeOut} onChange={(v) => setFade({ fadeOut: v })} min={0} max={60} step={0.1} unit="s" />
       </div>
-      <p className="-mt-1 text-xs text-fg-tertiary">Fades ramp the size when starting / stopping from this view. Saved on this console only.</p>
+      <p className="-mt-1 text-xs text-fg-tertiary">Fades ramp the size when starting / stopping from this view. Saved with the show.</p>
     </Group>
   )
 })

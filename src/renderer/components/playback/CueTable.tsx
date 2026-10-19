@@ -52,16 +52,16 @@ export function CueTable({ cuelist: cl, selectedCueId, onSelectCue, columns }: {
       </colgroup>
       <THead>
         <Tr>
-          <Th className="!px-0"><span className="sr-only">Reorder</span></Th>
+          <Th className="px-0"><span className="sr-only">Reorder</span></Th>
           <Th className="pl-2">Cue</Th>
           <Th className="pl-2">Name</Th>
-          <Th align="right" className="!px-1.5" title="Fade in: intensity going up and every other attribute">Fade in</Th>
-          <Th align="right" className="!px-1.5" title="Fade out: intensity going down">Fade out</Th>
-          {columns.delay && <Th align="right" className="!px-1.5" title="Wait before the fade starts">Delay</Th>}
-          <Th className="!px-1.5" title="Auto-follow: the next cue starts this long after this cue's fade ends">Follow</Th>
-          <Th align="right" className="!px-1.5" title="Channels stored in this cue">Ch</Th>
-          {columns.tracked && <Th align="right" className="!px-1.5" title="Channels on stage with tracking (this cue and the cues before it)">Tracked</Th>}
-          <Th className="!px-0"><span className="sr-only">Actions</span></Th>
+          <Th align="right" className="px-1.5" title="Fade in: intensity going up and every other attribute">Fade in</Th>
+          <Th align="right" className="px-1.5" title="Fade out: intensity going down">Fade out</Th>
+          {columns.delay && <Th align="right" className="px-1.5" title="Wait before the fade starts">Delay</Th>}
+          <Th className="px-1.5" title="Auto-follow: the next cue starts this long after this cue's fade ends">Follow</Th>
+          <Th align="right" className="px-1.5" title="Channels stored in this cue">Ch</Th>
+          {columns.tracked && <Th align="right" className="px-1.5" title="Channels on stage with tracking (this cue and the cues before it)">Tracked</Th>}
+          <Th className="px-0"><span className="sr-only">Actions</span></Th>
         </Tr>
       </THead>
       <TBody>
@@ -116,7 +116,7 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
         dropIndicator(drag, index)
       )}
     >
-      <Td className="!px-0">
+      <Td className="px-0">
         <button
           type="button"
           aria-label={`Drag to reorder cue ${cue.number}`}
@@ -149,24 +149,24 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
           className="h-control-sm w-full min-w-0 rounded bg-transparent px-1.5 text-sm text-fg-primary outline-none ring-inset placeholder:text-fg-disabled hover:bg-surface-2 focus:bg-surface-0 focus:ring-1 focus:ring-info-fg"
         />
       </Td>
-      <Td className="!px-1.5">
+      <Td className="px-1.5">
         <NumberField size="sm" value={cue.fadeIn} onChange={(v) => update({ fadeIn: v })} min={0} max={MAX_TIME} step={0.1} unit="s" aria-label={`Cue ${cue.number} fade in`} />
       </Td>
-      <Td className="!px-1.5">
+      <Td className="px-1.5">
         <NumberField size="sm" value={cue.fadeOut} onChange={(v) => update({ fadeOut: v })} min={0} max={MAX_TIME} step={0.1} unit="s" aria-label={`Cue ${cue.number} fade out`} />
       </Td>
       {columns.delay && (
-        <Td className="!px-1.5">
+        <Td className="px-1.5">
           <NumberField size="sm" value={cue.delay} onChange={(v) => update({ delay: v })} min={0} max={MAX_TIME} step={0.1} unit="s" aria-label={`Cue ${cue.number} delay`} />
         </Td>
       )}
-      <Td className="!px-1.5">
+      <Td className="px-1.5">
         {cue.followTime === null ? (
           <Button
             variant="ghost"
             size="sm"
             icon={LuHand}
-            className="w-full !justify-start !text-fg-tertiary"
+            className="w-full justify-start text-fg-tertiary"
             tooltip="Manual: waits for GO. Click for auto-follow."
             onClick={(e) => { e.stopPropagation(); update({ followTime: 0 }) }}
           >
@@ -190,9 +190,9 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
           </span>
         )}
       </Td>
-      <Td mono align="right" className="!px-1.5 text-fg-secondary">{cue.values.length}</Td>
-      {columns.tracked && <Td mono align="right" muted className="!px-1.5">{tracked}</Td>}
-      <Td className="!px-0 text-center" onClick={(e) => e.stopPropagation()}>
+      <Td mono align="right" className="px-1.5 text-fg-secondary">{cue.values.length}</Td>
+      {columns.tracked && <Td mono align="right" muted className="px-1.5">{tracked}</Td>}
+      <Td className="px-0 text-center" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu
           placement="bottom-end"
           items={() => cueMenu(cuelistId, cue, index, count)}

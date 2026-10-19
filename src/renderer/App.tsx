@@ -37,7 +37,8 @@ import { handleCommand } from './lib/command-handler'
 import { startStateBroadcast } from './lib/state-snapshot'
 import { installDirtyTracking, loadLastShow } from './lib/show-io'
 
-// Lazy-load 3D visualizer — never imported on ARM/mid-range devices
+// Lazy-load the 3D visualizer (three.js): not loaded until the 3D tab opens,
+// never on weak GPUs (they get the 2D stage layout instead)
 const VisualizerView = React.lazy(() =>
   import('./components/visualizer/VisualizerView').then(m => ({ default: m.VisualizerView }))
 )
@@ -125,8 +126,8 @@ export default function App() {
       case 'effects':    return <EffectsView />
       case 'midi':       return <MidiView />
       case 'visualizer': {
-        const dev = getDeviceProfile()
-        if (dev.isMidRange || dev.isLowEnd) return <StageLayoutView />
+        // Mid-range (Pi 5) runs the 3D view at medium quality
+        if (getDeviceProfile().isLowEnd) return <StageLayoutView />
         return (
           <React.Suspense fallback={<ViewLoading />}>
             <VisualizerView />
@@ -144,7 +145,6 @@ export default function App() {
   const overlays = (
     <>
       <DialogHost />
-      <ToastHost />
       <ShortcutsDialog />
     </>
   )
@@ -159,12 +159,14 @@ export default function App() {
         <RemoteAccess />
         <div className="relative min-h-0 flex-1">
           <RemoteStageView />
+          {/* The masters (Blackout) sit at the bottom of the stage view */}
+          <ToastHost placement="top" />
           {!isPhone() && (
             <Button
               variant="secondary"
               icon={LuLayoutDashboard}
               onClick={() => useUiStore.getState().setStageMode(false)}
-              className="!fixed right-3 top-3 z-popover"
+              className="fixed right-3 top-3 z-popover"
             >
               Full console
             </Button>
@@ -180,12 +182,14 @@ export default function App() {
       <Toolbar />
       <BlackoutBanner />
       <RemoteAccess />
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <NavRail />
         {sidebarOpen && <PatchPanel />}
         <main className="min-w-0 flex-1 overflow-hidden" data-view={activeTab}>
           {renderView()}
         </main>
+        {/* Over the view, above the executor + status bars */}
+        <ToastHost />
       </div>
       {executorBarOpen && <ExecutorBar />}
       <StatusBar />

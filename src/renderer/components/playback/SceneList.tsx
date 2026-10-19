@@ -197,7 +197,7 @@ const SceneRow = memo(function SceneRow({ cuelist: cl, number, selected, slot, m
           size="sm"
           variant="secondary"
           disabled={cl.cues.length === 0}
-          className="!text-go-fg"
+          className="text-go-fg"
           onClick={() => usePlaybackStore.getState().goCuelist(cl.id)}
         />
       </span>

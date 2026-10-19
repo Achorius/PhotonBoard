@@ -93,19 +93,15 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       // Reuse existing MIDIAccess if available (avoids reinit loop)
       let access: MIDIAccess
       if (currentMidiAccess) {
-        console.log('[MIDI] Reusing existing MIDI access, rescanning devices...')
         access = currentMidiAccess
       } else {
-        console.log('[MIDI] Requesting MIDI access...')
         access = await navigator.requestMIDIAccess({ sysex: false })
         currentMidiAccess = access
-        console.log('[MIDI] Access granted.')
       }
 
       const devices: MidiDevice[] = []
 
       access.inputs.forEach((input) => {
-        console.log('[MIDI] Input found:', input.name, '| state:', input.state)
         devices.push({
           id: input.id,
           name: input.name || 'Unknown',
@@ -155,7 +151,6 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       })
 
       access.outputs.forEach((output) => {
-        console.log('[MIDI] Output found:', output.name, '| state:', output.state)
         devices.push({
           id: output.id,
           name: output.name || 'Unknown',
@@ -165,22 +160,12 @@ export const useMidiStore = create<MidiState>((set, get) => ({
         })
       })
 
-      console.log('[MIDI] Total devices:', devices.length, '(inputs:', devices.filter(d => d.type === 'input').length, ', outputs:', devices.filter(d => d.type === 'output').length, ')')
-
       // Listen for device changes — use module-level debounce to prevent reinit loop
-      access.onstatechange = (event) => {
-        const port = (event as any).port
-        console.log('[MIDI] Device state changed:', port?.name, port?.state)
+      access.onstatechange = () => {
         // Don't reinit while learning
-        if (get().isLearning) {
-          console.log('[MIDI] Skipping reinit during learn mode')
-          return
-        }
+        if (get().isLearning) return
         if (reinitTimeout) clearTimeout(reinitTimeout)
-        reinitTimeout = setTimeout(() => {
-          console.log('[MIDI] Debounced rescan triggered')
-          get().initMidi()
-        }, 2000)
+        reinitTimeout = setTimeout(() => { get().initMidi() }, 2000)
       }
 
       set({ devices, apiStatus: 'available', apiError: null })

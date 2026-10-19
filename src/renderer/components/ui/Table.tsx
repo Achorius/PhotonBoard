@@ -59,7 +59,8 @@ export interface ThProps extends React.ComponentPropsWithRef<'th'> {
 
 export function Th({ align = 'left', sort, onSort, className, children, ...rest }: ThProps) {
   const content = onSort ? (
-    <button type="button" onClick={onSort} className="inline-flex items-center gap-1 hover:text-fg-primary">
+    // Buttons reset text-transform (preflight): inherit the caption style
+    <button type="button" onClick={onSort} className="inline-flex items-center gap-1 [text-transform:inherit] hover:text-fg-primary">
       {children}
       {sort === 'asc' ? <LuArrowUp size={12} aria-hidden /> : sort === 'desc' ? <LuArrowDown size={12} aria-hidden /> : null}
     </button>

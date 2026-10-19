@@ -30,6 +30,7 @@ export class OFLService {
   private fixtureIndex: OFLIndexItem[] | null = null
   private indexLoadedAt = 0
   private lastFailureAt: number | null = null
+  private lastError: string | null = null
   private indexLoadPromise: Promise<void> | null = null
   private fetchFn: FetchFn
   private now: () => number
@@ -61,9 +62,11 @@ export class OFLService {
         this.fixtureIndex = index
         this.indexLoadedAt = this.now()
         this.lastFailureAt = null
+        this.lastError = null
       } catch (e) {
         console.error('[OFL] Failed to load index:', (e as Error).message)
         this.lastFailureAt = this.now()
+        this.lastError = (e as Error).message || String(e)
         // Keep a previously loaded (stale) index if we have one; otherwise stay
         // null so a later search tries again instead of being disabled until restart.
       } finally {
@@ -128,9 +131,12 @@ export class OFLService {
     return index
   }
 
+  /** Rejects when the online index cannot be loaded (offline, OFL down) — never "no results" */
   async search(query: string, maxResults = 50): Promise<OFLSearchResult[]> {
     await this.ensureIndex()
-    if (!this.fixtureIndex || this.fixtureIndex.length === 0) return []
+    if (!this.fixtureIndex || this.fixtureIndex.length === 0) {
+      throw new Error(`Could not reach the Open Fixture Library${this.lastError ? ` (${this.lastError})` : ''}. Check the internet connection and try again.`)
+    }
 
     const q = query.toLowerCase().trim()
     if (!q) return []

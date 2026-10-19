@@ -52,7 +52,7 @@ Tailwind `gray-*` (remapped onto the graphite ramp), `.btn-*`, `.input`, `.panel
 **Do not write new code with `gray-*`, `text-white` on accent, `.btn-*` or arbitrary hex.**
 
 Radii: `rounded-sm` 4 · `rounded` 6 (controls) · `rounded-lg` 8 (panels, cards) · `rounded-xl` 12 (dialogs).
-Shadows: `shadow-raised` (buttons), `shadow-popover`, `shadow-modal`.
+Shadows: `shadow-raised` (buttons), `shadow-popover`, `shadow-modal`, `shadow-glow-danger` (active Blackout only).
 Motion: `duration-fast` (90ms, hovers), `duration` (150), `duration-slow` (240); default easing.
 `animate-blink` (alarm), `animate-fade-in`, `animate-pop-in`. Reduced motion is honoured globally.
 Z-index: `z-popover` < `z-modal` < `z-toast` < `z-tooltip`.
@@ -109,11 +109,17 @@ Do not set font sizes below `text-sm` for primary content in touch layouts.
 <Button labelClassName="hidden xl:inline" icon={…} aria-label="Stage">Stage</Button>  // icon-only on narrow screens
 <IconButton icon={LuX} label="Close" />          // label is required (aria-label + tooltip)
 <ToggleButton pressed={x} onPressedChange={setX} tone="info">Solo</ToggleButton>
-<SegmentedControl items={[{ value: 'all', label: 'All' }, …]} value={v} onChange={setV} />
-<Tabs items={[{ id: 'cues', label: 'Cues', badge: 4 }]} value={tab} onChange={setTab} />   // panel switching
+<SegmentedControl items={[{ value: 'all', label: 'All' }, …]} value={v} onChange={setV} />   // fullWidth, compact (narrow panels)
+<Tabs items={[{ id: 'cues', label: 'Cues', badge: 4 }]} value={tab} onChange={setTab} />   // panel switching; fit = equal widths, labels truncate
 <DropdownMenu items={[…]} trigger={(p) => <Button {...p} iconRight={LuChevronDown}>More</Button>} />
-const ctx = useContextMenu(); <div onContextMenu={(e) => ctx.open(e, items)}>…</div>{ctx.menu}
+const ctx = useContextMenu(); <div {...ctx.bind(items)}>…</div>{ctx.menu}          // right-click + touch long-press
 ```
+Tab and segment items also take `dot` (status dot: `true` = accent, or a tone), `badge`, and any
+`data-*` / `aria-*` attribute, forwarded to the item's button (`{ id: 'cues', label: 'Cues', 'data-tab': 'cues', dot: 'warning' }`).
+Context menus: `ctx.bind(items | () => items)` opens on right-click **and** on a touch/pen long-press
+(iOS Safari never fires `contextmenu`); the click ending a long press is swallowed. Rows with their own
+menu logic: `{...contextMenuHandlers((e) => openRowMenu(id, e))}`. `ctx.open(e, items)` still works
+(right-click only). Don't spread these on an element that has its own pointer handlers (drag surfaces).
 Sizes: `xs | sm | md (default) | lg`. Variants: `primary | secondary | ghost | outline | danger | danger-outline | success`.
 Menu entries: `{ label, icon, shortcut, onSelect, disabled, danger, checked, description, submenu }`,
 `{ type: 'separator' }`, `{ type: 'label', label }`. `submenu` may be an async loader.
@@ -140,7 +146,7 @@ controls, 12px (`p-3`) panel padding, 16px (`gap-4`) between panels. Align to a 
 <Fader value={v} onChange={set} defaultValue={0} label="Dim" color={getChannelTypeColor(type, name)} />  // vertical console fader
 <Slider value={v} onChange={set} showValue defaultValue={255} />          // horizontal; bipolar for ±
 <Encoder value={pan} onChange={setPan} format={formatDegrees} label="Pan" />
-<NumberField value={fade} onChange={setFade} min={0} max={600} step={0.1} unit="s" label="In" />
+<NumberField value={fade} onChange={setFade} min={0} max={600} step={0.1} unit="s" label="In" />   // in a Field: <Field label="Fade">{(id) => <NumberField id={id} …/>}</Field>
 <TextInput icon={LuSearch} value={q} onChange={…} onClear={() => setQ('')} />
 <Select value={mode} onChange={setMode} options={[{ value: '13ch', label: '13 channels' }]} />   // native picker on purpose
 <Switch checked={on} onChange={setOn} label="Loop" description="Restart after the last cue" />
@@ -150,11 +156,10 @@ controls, 12px (`p-3`) panel padding, 16px (`gap-4`) between panels. Align to a 
 ```
 Faders/sliders/encoders: drag (pointer capture), Shift or a second finger = fine, double-tap =
 `defaultValue` (or `onDoubleTap`), arrows/PageUp/Home/End, `onChangeStart/End` around a drag.
-Legacy `components/common/Fader` and `HSlider` are thin wrappers over these — migrate to the new props.
 
 ### Feedback & overlays
 ```tsx
-toast.success('Scene recorded')  toast.error('Save failed', { description: err })   // top-right
+toast.success('Scene recorded')  toast.error('Save failed', { description: err })   // bottom-right of the view (bottom-centre on phones, top in the remote stage view); tap / swipe to dismiss
 useUiStore.getState().showStatus(msg, 'info' | 'success' | 'warning' | 'error', ms)   // same slot, still supported
 if (await confirm({ title: 'Delete “Verse”?', message: 'This cannot be undone.', confirmLabel: 'Delete', tone: 'danger' })) …
 const choice = await ask({ title, actions: [{ id: 'a', label: 'A' }, …] })   // several choices
@@ -163,7 +168,7 @@ const name = await prompt({ title: 'Rename scene', defaultValue: cl.name })
 const pop = usePopover(); <Button ref={pop.anchorRef} onClick={pop.toggle}/> <Popover {...pop.props}>…</Popover>
 <Tooltip content="…" shortcut="B"><button …/></Tooltip>   // hover/keyboard only, never on touch
 <EmptyState icon={LuCable} title="No fixtures patched" description="…" action={<Button variant="primary">Add fixtures</Button>} />
-<Badge tone="go">LIVE</Badge>  <Badge size="xs" mono>U1</Badge>  <Tag color={g.color} selected onClick onRemove>Spots</Tag>
+<Badge tone="go">LIVE</Badge>  <Badge size="xs" mono>U1</Badge>  <Tag color={g.color} selected onClick onRemove>Spots</Tag>   // interactive Tags: h-control in touch
 <StatusDot tone="go" pulse label="Connected" />  <Kbd keys="Mod+Shift+S" />  <Spinner/>  <Skeleton lines={3}/>
 ```
 
@@ -200,7 +205,7 @@ Universes and fixture numbers are 1-based in the UI, 0-based in data.
 - Do: Pointer events (`onPointerDown/Move/Up/Cancel`, `onLostPointerCapture`) with pointer capture — use `usePointerDrag`, `usePress`.
 - Don't: `onMouseDown/Up/Leave`, HTML5 drag-and-drop (`draggable`, `onDragStart`) — they do not work with fingers on the Pi. Long-press-then-drag (see `ExecutorBar.tsx`) for rearranging on touch.
 - Do: `touch-none` (or `.touch-none-surface`) on drag surfaces, canvases, pads — nowhere else. Scroll containers pan natively.
-- Do: Right-click actions must also be reachable on touch (long-press → Chromium fires `contextmenu`, or a visible "…" menu).
+- Do: Right-click actions must also be reachable on touch: `ctx.bind(items)` / `contextMenuHandlers` (long-press, iOS included), or a visible "…" menu.
 - Do: Hold actions (flash, blinder, trigger) release on pointerup, pointercancel, lost capture, blur **and** unmount.
 - Do: Every icon-only control has a label (`IconButton label`); every input has a label.
 
@@ -214,6 +219,13 @@ missing and the one action that fixes it — never a blank panel or a lone grey 
 **Keyboard.** Global shortcuts live in `hooks/useKeyboardShortcuts.ts` (`SHORTCUT_GROUPS` feeds the
 `?` cheat sheet). View-local keys: handle them on the focused element, `stopPropagation` keys you
 consume, ignore `e.repeat` for actions, and never bind single keys globally from a view.
+
+**Classes.** `cn()` resolves Tailwind conflicts (tailwind-merge, taught our tokens in `cn.ts`): a
+component's `className` overrides its built-in classes (`<Td className="px-1.5">`, `<Button className="h-14">`).
+No `!important` hacks or wrapper divs for that. Add new custom utilities from `tailwind.config.js` to `cn.ts` too.
+
+**Shared hooks** (`hooks/`): `useSquareFit` (largest square that fits: pads, wheels), `useCanvasSize`
+(canvas backing store = CSS size × devicePixelRatio, ResizeObserver + DPR changes).
 
 **Layout.** Views fill `<main>` (`h-full flex flex-col`), handle their own scrolling, and must work
 from 1024×700 (tablet, sidebar closed) to 1920×1080 touch. No horizontal page scroll; dense grids scroll inside their panel.

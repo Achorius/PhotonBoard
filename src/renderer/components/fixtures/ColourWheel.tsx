@@ -6,7 +6,7 @@
 
 import { memo, useRef } from 'react'
 import { cn, usePointerDrag } from '@renderer/components/ui'
-import { useSquareFit } from './useSquareFit'
+import { useSquareFit } from '@renderer/hooks/useSquareFit'
 
 export interface ColourWheelProps {
   /** 0…360 */

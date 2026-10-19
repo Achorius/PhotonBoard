@@ -442,6 +442,9 @@ export interface Effect {
   keyframes?: WaveformKeyframe[] // custom waveform curve points (used when waveform === 'custom')
   spatialMode?: SpatialMode  // 'index' = fixture order, 'spatial' = 3D position (default: 'index')
   spatialAxis?: SpatialAxis  // axis for spatial phase spread (default: 'x' = left→right)
+  /** Size fade when the effect is started / stopped from the Effects view (seconds, default 0) */
+  fadeIn?: number
+  fadeOut?: number
 }
 
 // --- Timeline ---
@@ -549,6 +552,23 @@ export interface ShowTimeline {
   trackCount: number
   /** Track names by index ('' = default "Track n") */
   trackNames?: string[]
+  /** Length in seconds: playback stops (or loops) here (default 120) */
+  length?: number
+  loop?: boolean
+  timecode?: ShowTimecodeSettings
+}
+
+/** MIDI timecode input, saved with the show */
+export interface ShowTimecodeSettings {
+  /** Clock: the timeline's own, or incoming MIDI timecode */
+  source: 'internal' | 'mtc'
+  fps: 24 | 25 | 29.97 | 30
+  /** The timeline follows timecode (starts on lock, stops after a dropout) */
+  chase: boolean
+  /** Silence before a chased timeline stops (ms) */
+  dropoutMs: number
+  /** Added to incoming timecode (seconds) */
+  offset: number
 }
 
 export type ExecutorSceneMode = 'toggle' | 'trigger' | 'flash'

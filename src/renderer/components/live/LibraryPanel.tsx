@@ -24,13 +24,14 @@ export function LibraryPanel() {
       <Tabs<LibraryTab>
         aria-label="Library"
         size="sm"
-        className="shrink-0 gap-0 px-1 [&>button]:px-2"
+        fit
+        className="shrink-0 gap-0 px-1"
         value={tab}
         onChange={(t) => useTimelineView.getState().setLibraryTab(t)}
         items={[
-          { id: 'scenes', label: `Scenes · ${counts.scenes}` },
-          { id: 'markers', label: `Markers · ${counts.markers}` },
-          { id: 'zones', label: `Sections · ${counts.zones}` }
+          { id: 'scenes', label: 'Scenes', badge: counts.scenes },
+          { id: 'markers', label: 'Markers', badge: counts.markers },
+          { id: 'zones', label: 'Sections', badge: counts.zones }
         ]}
       />
       <div role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex min-h-0 flex-1 flex-col">

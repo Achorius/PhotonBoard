@@ -9,7 +9,7 @@
 
 import { memo, useRef } from 'react'
 import { cn, usePointerDrag } from '../ui'
-import { useSquareFit } from '../fixtures/useSquareFit'
+import { useSquareFit } from '@renderer/hooks/useSquareFit'
 
 export interface XYPadProps {
   /** Horizontal value 0…max (pan) */

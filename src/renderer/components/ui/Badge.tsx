@@ -76,7 +76,10 @@ export interface TagProps {
   title?: string
 }
 
-/** Chip for user-defined things (groups, filters). Clickable and/or removable. */
+/**
+ * Chip for user-defined things (groups, filters). Clickable and/or removable.
+ * Interactive chips are full control height in touch density (44px targets).
+ */
 export function Tag({ children, color, selected, onClick, onRemove, className, title }: TagProps) {
   const body = (
     <>
@@ -86,6 +89,7 @@ export function Tag({ children, color, selected, onClick, onRemove, className, t
   )
   const base = cn(
     'inline-flex h-control-xs max-w-full shrink-0 items-center gap-1.5 rounded-full border text-xs font-medium transition-colors duration-fast',
+    (onClick || onRemove) && '[[data-density=touch]_&]:h-control [[data-density=touch]_&]:text-sm',
     selected ? 'border-info-fg/60 bg-info/20 text-fg-primary' : 'border-line bg-surface-2 text-fg-secondary',
     className
   )
@@ -97,7 +101,7 @@ export function Tag({ children, color, selected, onClick, onRemove, className, t
         </button>
       ) : body}
       {onRemove && (
-        <button type="button" aria-label="Remove" onClick={onRemove} className="flex h-5 w-5 items-center justify-center rounded-full text-fg-tertiary hover:bg-surface-4 hover:text-fg-primary">
+        <button type="button" aria-label="Remove" onClick={onRemove} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-fg-tertiary hover:bg-surface-4 hover:text-fg-primary [[data-density=touch]_&]:h-8 [[data-density=touch]_&]:w-8">
           <LuX size={12} aria-hidden />
         </button>
       )}

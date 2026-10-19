@@ -29,7 +29,10 @@ export interface NumberFieldProps {
   /** Pixels per step while scrubbing (default 4) */
   scrubPixels?: number
   className?: string
+  /** Id of the input — for `<Field>{(id) => <NumberField id={id} … />}</Field>` */
+  id?: string
   'aria-label'?: string
+  'aria-describedby'?: string
   /** Fires on scrub start/end — e.g. to batch undo or hold remote sync */
   onScrubStart?: () => void
   onScrubEnd?: () => void
@@ -55,6 +58,7 @@ export function NumberField({
   disabled,
   scrubPixels = 4,
   className,
+  id,
   onScrubStart,
   onScrubEnd,
   ...aria
@@ -142,8 +146,10 @@ export function NumberField({
       {label && <span className="shrink-0 text-xs text-fg-tertiary">{label}</span>}
       <input
         ref={inputRef}
+        id={id}
         inputMode="decimal"
-        aria-label={aria['aria-label'] ?? label}
+        aria-label={aria['aria-label'] ?? (id ? undefined : label)}
+        aria-describedby={aria['aria-describedby']}
         role="spinbutton"
         aria-valuenow={value}
         aria-valuemin={Number.isFinite(min) ? min : undefined}

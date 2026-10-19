@@ -24,6 +24,7 @@ import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { COLUMN_COUNT, ROWS_PER_COLUMN, useExecutorStore, type SceneMode } from '@renderer/stores/executor-store'
+import { setSceneMode, startSceneLearn } from '@renderer/components/playback/scene-meta'
 
 const MODE_LABEL: Record<SceneMode, string> = { toggle: 'TOG', trigger: 'TRIG', flash: 'FLASH' }
 const MODE_NAME: Record<SceneMode, string> = { toggle: 'Toggle — tap GO / STOP', trigger: 'Trigger — plays while held', flash: 'Flash — full while held' }
@@ -178,12 +179,6 @@ function cellMenu(cl: Cuelist, cell: Cell, mode: SceneMode): MenuEntry[] {
   const pb = usePlaybackStore.getState
   const midi = useMidiStore.getState()
   const learning = midi.isLearning && midi.learnTarget?.type === 'cuelist_go' && midi.learnTarget.id === cl.id
-  const setMode = (m: SceneMode) => {
-    useExecutorStore.getState().setMode(cell.col, cell.row, m)
-    // Keep an existing MIDI mapping's button behaviour in step with the cell
-    const mapping = useMidiStore.getState().mappings.find((x) => x.target.type === 'cuelist_go' && x.target.id === cl.id)
-    if (mapping) useMidiStore.getState().updateMapping(mapping.id, { options: { ...mapping.options, behavior: m } })
-  }
   return [
     { type: 'label', label: cl.name },
     { label: 'GO', icon: LuPlay, onSelect: () => pb().goCuelist(cl.id), disabled: cl.cues.length === 0 },
@@ -194,7 +189,7 @@ function cellMenu(cl: Cuelist, cell: Cell, mode: SceneMode): MenuEntry[] {
     ...(['toggle', 'trigger', 'flash'] as SceneMode[]).map((m): MenuEntry => ({
       label: MODE_NAME[m],
       checked: mode === m,
-      onSelect: () => setMode(m)
+      onSelect: () => setSceneMode(cl.id, cell, m)
     })),
     { type: 'separator' },
     learning
@@ -210,20 +205,6 @@ function cellMenu(cl: Cuelist, cell: Cell, mode: SceneMode): MenuEntry[] {
     },
     { label: 'Edit in Scenes', icon: LuSquarePen, onSelect: () => useUiStore.getState().navigateToCuelist(cl.id) }
   ]
-}
-
-/** MIDI-learn a scene's GO, then give the new mapping the cell's button mode */
-function startSceneLearn(cl: Cuelist, mode: SceneMode) {
-  const midi = useMidiStore.getState()
-  midi.startLearn({ type: 'cuelist_go', id: cl.id, label: cl.name })
-  const unsubscribe = useMidiStore.subscribe((s) => {
-    if (s.isLearning) return
-    unsubscribe()
-    const mapping = s.mappings.find((m) => m.target.type === 'cuelist_go' && m.target.id === cl.id)
-    if (mapping && mapping.options.behavior !== mode) {
-      setTimeout(() => useMidiStore.getState().updateMapping(mapping.id, { options: { ...mapping.options, behavior: mode } }), 0)
-    }
-  })
 }
 
 // ---------------------------------------------------------------

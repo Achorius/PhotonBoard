@@ -16,7 +16,7 @@ import {
 import type { FixtureDefinition, Group, PatchEntry } from '@shared/types'
 import {
   Button, DropdownMenu, EmptyState, IconButton, SegmentedControl, Table, TBody, Td, Th, THead, TextInput, ToggleButton, Tooltip, Tr,
-  cn, confirm, fixtureCategoryIcon, formatAddressRange, prompt, toast, useContextMenu, type MenuEntry
+  cn, confirm, contextMenuHandlers, fixtureCategoryIcon, formatAddressRange, prompt, toast, useContextMenu, type MenuEntry, type MenuPoint
 } from '@renderer/components/ui'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { duplicateFixtures, nextGroupColor, useGroupsByFixture, usePatchAnalysis, useRowSelection } from './patch-hooks'
@@ -180,7 +180,7 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
     ]
   }, [groupMenu, removeWithConfirm, targetIds])
 
-  const openRowMenu = useCallback((id: string, e: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation?: () => void }) => {
+  const openRowMenu = useCallback((id: string, e: MenuPoint) => {
     const sel = usePatchStore.getState().selectedFixtureIds
     if (!sel.includes(id)) usePatchStore.getState().selectFixtures([id])
     ctxOpen(e, rowMenu(id))
@@ -223,9 +223,7 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
 
   const sortProps = (key: SortKey) => ({
     sort: sort.key === key ? sort.dir : null,
-    onSort: () => setSort(key),
-    // Header buttons do not inherit the caption style
-    className: '[&>button]:uppercase [&>button]:tracking-[0.06em]'
+    onSort: () => setSort(key)
   })
   const selCount = selectedIds.length
   const totalChannels = analysis.items.reduce((n, f) => n + f.count, 0)
@@ -412,7 +410,7 @@ interface PatchRowProps {
   selected: boolean
   renaming: boolean
   onSelect: (id: string, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => void
-  onMenu: (id: string, e: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation?: () => void }) => void
+  onMenu: (id: string, e: MenuPoint) => void
   onRename: (id: string | null) => void
   onCommitRename: (id: string, value: string) => void
   onAddress: (id: string) => void
@@ -434,7 +432,7 @@ const PatchRow = memo(function PatchRow({
       className={cn('outline-offset-[-2px]', conflict && !selected && 'bg-danger/[0.07] hover:bg-danger/10')}
       onClick={(e) => onSelect(entry.id, e)}
       onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest('button, select, input')) onRename(entry.id) }}
-      onContextMenu={(e) => onMenu(entry.id, e)}
+      {...contextMenuHandlers((e) => onMenu(entry.id, e))}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id, e) }

@@ -156,7 +156,7 @@ export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelect
       <div className="flex shrink-0 items-end gap-2 border-b border-line px-3">
         <Tabs<SceneTab>
           aria-label="Scene editor"
-          className="!border-b-0"
+          className="border-b-0"
           value={tab}
           onChange={setTab}
           items={[
@@ -183,7 +183,7 @@ export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelect
                 <Button size="sm" variant="ghost" icon={LuRefreshCw} tooltip="Merge the programmer into the selected cue" onClick={updateSelectedCue}>Update</Button>
               </>
             )}
-            <Button size="sm" variant="secondary" icon={LuCircleDot} className="!text-accent-fg" tooltip="Record the programmer as a new cue at the end" onClick={recordCue}>Add cue</Button>
+            <Button size="sm" variant="secondary" icon={LuCircleDot} className="text-accent-fg" tooltip="Record the programmer as a new cue at the end" onClick={recordCue}>Add cue</Button>
           </div>
         )}
       </div>

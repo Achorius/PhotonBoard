@@ -47,7 +47,7 @@ export const GrandMasterFader = memo(function GrandMasterFader({ value, onChange
           readout={false}
           color={reduced ? 'rgb(var(--pb-warning))' : 'rgb(var(--pb-fg-secondary))'}
           aria-label="Grand Master"
-          className={size === 'lg' ? '!w-24' : '!w-16'}
+          className={size === 'lg' ? 'w-24' : 'w-16'}
         />
       </div>
     </div>
@@ -133,7 +133,7 @@ export interface MasterButtonsProps {
 
 /** Strobe & Blinder (hold) and Blackout (latching) */
 export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder, onStrobe, layout, size = 'md' }: MasterButtonsProps) {
-  const tall = size === 'lg' ? '!h-16 text-base' : '!h-14'
+  const tall = size === 'lg' ? 'h-16 text-base' : 'h-14'
   return (
     <div className={cn('grid gap-2', layout === 'column' ? 'grid-cols-2' : 'grid-cols-3')}>
       <Button
@@ -169,7 +169,7 @@ export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder
           tall,
           'font-bold uppercase tracking-[0.08em]',
           layout === 'column' ? 'col-span-2' : 'flex-col gap-0.5',
-          blackout && 'shadow-[0_0_24px_rgb(var(--pb-danger)/0.55)]'
+          blackout && 'shadow-glow-danger'
         )}
       >
         <span className="inline-flex items-center gap-1.5">

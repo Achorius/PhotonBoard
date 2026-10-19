@@ -196,24 +196,88 @@ export function DropdownMenu({ items, trigger, placement = 'bottom-start' }: Dro
   )
 }
 
+/** Where a context menu opens: a mouse/pointer event, or a synthetic point */
+export interface MenuPoint {
+  clientX: number
+  clientY: number
+  preventDefault: () => void
+  stopPropagation?: () => void
+}
+
+const LONG_PRESS_MS = 500
+const LONG_PRESS_SLOP = 8
+
+// One long press can be pending at a time (primary finger), so the state is shared
+const press: { timer: ReturnType<typeof setTimeout> | null; x: number; y: number; firedAt: number } = { timer: null, x: 0, y: 0, firedAt: 0 }
+
+function cancelPress() {
+  if (press.timer) clearTimeout(press.timer)
+  press.timer = null
+}
+
+/** A long press just opened a menu: swallow the click / native contextmenu that follow it */
+const justLongPressed = () => performance.now() - press.firedAt < 800
+
 /**
- * Context menu at the pointer (right-click, or long-press on touch which
- * Chromium reports as `contextmenu`).
+ * Handlers that call `onMenu` on right-click **and** on a touch / pen long-press
+ * (iOS Safari never fires `contextmenu`; Chromium on touchscreens does, the
+ * duplicate is ignored). The click that ends a long press is swallowed.
+ * Spread on the target; don't combine with your own pointer/click handlers of the same name.
+ *   <tr {...contextMenuHandlers((e) => openRowMenu(id, e))}>
+ */
+export function contextMenuHandlers(onMenu: (e: MenuPoint) => void) {
+  return {
+    onContextMenu: (e: React.MouseEvent) => {
+      if (justLongPressed()) { e.preventDefault(); return }
+      // Chromium's own touch long-press got there first: same gesture, one menu
+      if (press.timer) { cancelPress(); press.firedAt = performance.now() }
+      onMenu(e)
+    },
+    onPointerDown: (e: React.PointerEvent) => {
+      cancelPress()
+      if (e.pointerType === 'mouse' || !e.isPrimary) return
+      const { clientX, clientY } = e
+      press.x = clientX
+      press.y = clientY
+      press.timer = setTimeout(() => {
+        press.timer = null
+        press.firedAt = performance.now()
+        onMenu({ clientX, clientY, preventDefault: () => {} })
+      }, LONG_PRESS_MS)
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (press.timer && Math.hypot(e.clientX - press.x, e.clientY - press.y) > LONG_PRESS_SLOP) cancelPress()
+    },
+    onPointerUp: cancelPress,
+    onPointerCancel: cancelPress,
+    onClickCapture: (e: React.MouseEvent) => {
+      if (justLongPressed()) { e.preventDefault(); e.stopPropagation() }
+    }
+  }
+}
+
+/**
+ * Context menu at the pointer (right-click, or long-press on touch).
  *   const ctx = useContextMenu()
- *   <div onContextMenu={(e) => ctx.open(e, [...items])}> … {ctx.menu}
+ *   <div {...ctx.bind(items)}> … {ctx.menu}                    // right-click + long-press
+ *   <div onContextMenu={(e) => ctx.open(e, [...items])}> …      // right-click (Chromium long-press)
  */
 export function useContextMenu() {
   const [state, setState] = useState<{ at: Rect; items: MenuEntry[] } | null>(null)
   const close = useCallback(() => setState(null), [])
-  const open = useCallback((e: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation?: () => void }, items: MenuEntry[]) => {
+  const open = useCallback((e: MenuPoint, items: MenuEntry[]) => {
     e.preventDefault()
     e.stopPropagation?.()
     setState({ at: pointRect(e.clientX, e.clientY), items })
   }, [])
+  /** Trigger handlers: items now, or built when the menu opens */
+  const bind = useCallback((items: MenuEntry[] | (() => MenuEntry[])) => (
+    contextMenuHandlers((e) => open(e, typeof items === 'function' ? items() : items))
+  ), [open])
   const menu = (
     <Popover open={!!state} onClose={close} anchor={state?.at ?? null} placement="bottom-start" offset={2} role="presentation">
       {state && <Menu items={state.items} onClose={close} />}
     </Popover>
   )
-  return { open, close, isOpen: !!state, menu }
+  return { open, close, bind, isOpen: !!state, menu }
 }
