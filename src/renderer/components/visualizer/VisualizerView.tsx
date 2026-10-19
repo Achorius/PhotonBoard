@@ -1,420 +1,267 @@
-import React, { useState, useCallback, useMemo } from 'react'
-import { useVisualizerStore } from '@renderer/stores/visualizer-store'
-import { ThreeCanvas } from './ThreeCanvas'
-import { usePatchStore } from '@renderer/stores/patch-store'
-import { useDmxStore } from '@renderer/stores/dmx-store'
-import { HSlider } from '../common/HSlider'
-import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
-import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
-import type { MountingLocation } from '@shared/types'
+// ============================================================
+// 3D visualiser view: toolbar (camera presets, view toggles, quality,
+// room, fullscreen), the WebGL canvas with a floating fixture inspector,
+// and the quick programmer strip for the selection.
+// ============================================================
 
-/** Error boundary: catch WebGL crashes and show fallback instead of blank screen */
-class WebGLErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error?: string }
-> {
-  state = { hasError: false, error: undefined as string | undefined }
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  LuBox, LuCable, LuCloudFog, LuEye, LuFlashlight, LuGrid3X3, LuHash, LuMaximize, LuMinimize, LuMinus, LuPanelLeft,
+  LuPanelRight, LuPlus, LuRectangleHorizontal, LuRuler, LuSquareDashed, LuSunMoon, LuTriangleAlert, LuWarehouse
+} from 'react-icons/lu'
+import {
+  Button, Divider, EmptyState, IconButton, Popover, SegmentedControl, Slider, ToggleButton, ToolbarGroup, Tooltip, cn, usePopover
+} from '@renderer/components/ui'
+import { useVisualizerStore, type VisualizerQuality } from '@renderer/stores/visualizer-store'
+import { usePatchStore } from '@renderer/stores/patch-store'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { ThreeCanvas } from './ThreeCanvas'
+import { FixturePropertiesPanel } from './editor/FixturePropertiesPanel'
+import { RoomFields } from './editor/RigPanels'
+import { SelectionControls } from './SelectionControls'
+import type { CameraPreset, VisualizerEngine } from './scene/VisualizerEngine'
+
+/** Catch WebGL / three.js crashes and offer a way out instead of a blank view */
+class WebGLErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: string | null }> {
+  state = { error: null as string | null }
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error: error.message }
+    return { error: error.message }
   }
   render() {
-    if (this.state.hasError) {
+    if (this.state.error !== null) {
       return (
-        <div className="w-full h-full flex items-center justify-center bg-surface-0 text-gray-500">
-          <div className="text-center p-6">
-            <div className="text-lg mb-2">3D non disponible</div>
-            <div className="text-xs text-gray-600 mb-4">{this.state.error}</div>
-            <div className="text-xs">Utilisez l'onglet Stage Layout</div>
-          </div>
-        </div>
+        <EmptyState
+          icon={LuTriangleAlert}
+          title="3D view crashed"
+          description={this.state.error || 'The 3D renderer stopped unexpectedly.'}
+          action={
+            <>
+              <Button variant="primary" onClick={() => this.setState({ error: null })}>Try again</Button>
+              <Button onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>Open stage layout</Button>
+            </>
+          }
+        />
       )
     }
     return this.props.children
   }
 }
 
+const CAMERAS: Array<{ id: CameraPreset; label: string; icon: typeof LuBox; hint: string }> = [
+  { id: 'perspective', label: 'Persp', icon: LuBox, hint: 'Perspective view' },
+  { id: 'front', label: 'Front', icon: LuRectangleHorizontal, hint: 'From the audience' },
+  { id: 'top', label: 'Top', icon: LuSquareDashed, hint: 'Plan view from above' },
+  { id: 'side', label: 'Side', icon: LuPanelLeft, hint: 'From stage left' }
+]
+
+const QUALITY_ITEMS: Array<{ value: VisualizerQuality; label: string; title: string }> = [
+  { value: 'low', label: 'Low', title: 'Low — 20 fps, reduced resolution, no real lights' },
+  { value: 'medium', label: 'Med', title: 'Medium — 30 fps, 4 real lights' },
+  { value: 'high', label: 'High', title: 'High — up to 60 fps, full resolution, 10 real lights' }
+]
+
 export function VisualizerView() {
-  const {
-    roomConfig, setRoomConfig,
-    showBeams, setShowBeams,
-    showRoom, setShowRoom,
-    showGrid, setShowGrid,
-    shadowsEnabled, setShadowsEnabled,
-    snapToGrid, setSnapToGrid
-  } = useVisualizerStore()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [engine, setEngine] = useState<VisualizerEngine | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const selectedFixtureId = useVisualizerStore((s) => s.selectedFixtureId)
+  const patchCount = usePatchStore((s) => s.patch.length)
+  const touch = useUiStore((s) => s.density === 'touch')
 
-  const { patch, fixtures, selectedFixtureIds, getFixtureChannels, groups, selectGroup, clearSelection, selectAll } = usePatchStore()
-  const { values } = useDmxStore()
-  const setChannel = setProgrammerChannel
-  const [showControls, setShowControls] = useState(true)
-
-  const selectedEntries = patch.filter(p => selectedFixtureIds.includes(p.id))
-
-  const findCh = useCallback((channels: { name: string; absoluteChannel: number }[], ...names: string[]) => {
-    return channels.find(c => names.some(n => c.name.toLowerCase() === n))
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === rootRef.current)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
-  const setRGB = useCallback((r: number, g: number, b: number) => {
-    for (const entry of selectedEntries) {
-      const channels = getFixtureChannels(entry)
-      const rCh = findCh(channels, 'red', 'r')
-      const gCh = findCh(channels, 'green', 'g')
-      const bCh = findCh(channels, 'blue', 'b')
-      const dimCh = findCh(channels, 'dimmer', 'intensity')
-
-      if (rCh && gCh && bCh) {
-        setChannel(entry.universe, rCh.absoluteChannel, r)
-        setChannel(entry.universe, gCh.absoluteChannel, g)
-        setChannel(entry.universe, bCh.absoluteChannel, b)
-      } else {
-        const cwCh = findCh(channels, 'color wheel', 'color', 'colour wheel', 'color wheel effect')
-        if (cwCh) {
-          setChannel(entry.universe, cwCh.absoluteChannel, rgbToColorWheelDmx(r, g, b))
-        }
-      }
-
-      if (dimCh && (r > 0 || g > 0 || b > 0)) {
-        const cur = values[entry.universe]?.[dimCh.absoluteChannel] ?? 0
-        if (cur === 0) setChannel(entry.universe, dimCh.absoluteChannel, 255)
-      }
-    }
-  }, [selectedEntries, getFixtureChannels, setChannel, findCh, values])
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void rootRef.current?.requestFullscreen?.().catch(() => {})
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-surface-3 bg-surface-1 flex-wrap">
-        {/* Room dimensions */}
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-gray-500">Room:</span>
-          {(['width', 'depth', 'height'] as const).map(dim => (
-            <label key={dim} className="flex items-center gap-0.5">
-              <span className="text-[10px] text-gray-600">{dim[0].toUpperCase()}</span>
-              <input
-                type="number"
-                min={2} max={100} step={0.5}
-                value={roomConfig[dim]}
-                onChange={e => setRoomConfig({ [dim]: parseFloat(e.target.value) || 10 })}
-                className="input w-12 text-[10px] py-0.5 text-center"
-              />
-              <span className="text-[10px] text-gray-600">m</span>
-            </label>
-          ))}
-        </div>
-
-        <div className="w-px h-4 bg-surface-3" />
-
-        {/* Toggles */}
-        <div className="flex items-center gap-2">
-          {[
-            { label: 'Beams', value: showBeams, set: setShowBeams },
-            { label: 'Room',  value: showRoom,  set: setShowRoom  },
-            { label: 'Grid',  value: showGrid,  set: setShowGrid  },
-            { label: 'Snap',  value: snapToGrid, set: setSnapToGrid }
-          ].map(({ label, value, set }) => (
-            <button
-              key={label}
-              className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-                value ? 'bg-accent/20 text-accent border border-accent/30' : 'bg-surface-3 text-gray-500'
-              }`}
-              onClick={() => set(!value)}
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-surface-0">
+      <header className="flex h-control-lg shrink-0 items-center gap-2 overflow-x-auto border-b border-line bg-surface-1 px-3">
+        <LuBox size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
+        <h1 className="shrink-0 text-sm font-semibold text-fg-primary">Visualiser</h1>
+        <Divider />
+        <ToolbarGroup aria-label="Camera">
+          {CAMERAS.map((c) => (
+            <Button
+              key={c.id}
+              size="sm"
+              variant="ghost"
+              icon={c.icon}
+              tooltip={c.hint}
+              aria-label={c.hint}
+              labelClassName="hidden xl:inline"
+              disabled={!engine}
+              onClick={() => engine?.setCameraPreset(c.id)}
             >
-              {label}
-            </button>
+              {c.label}
+            </Button>
           ))}
-          <button
-            className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-              shadowsEnabled ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30' : 'bg-surface-3 text-gray-500'
-            }`}
-            onClick={() => setShadowsEnabled(!shadowsEnabled)}
-            title="Shadows are GPU-intensive"
-          >
-            Shadows
-          </button>
-        </div>
-
+        </ToolbarGroup>
+        <Divider />
+        <ViewToggles />
+        <Divider />
+        <QualityControl engine={engine} />
         <div className="flex-1" />
+        <ToggleButton
+          size="sm"
+          variant="ghost"
+          tone="neutral"
+          icon={LuPanelRight}
+          pressed={inspectorOpen}
+          onPressedChange={setInspectorOpen}
+          tooltip="Fixture inspector"
+          aria-label="Fixture inspector"
+          labelClassName="hidden xl:inline"
+        >
+          Inspector
+        </ToggleButton>
+        <RoomButton />
+        <IconButton
+          size="sm"
+          icon={fullscreen ? LuMinimize : LuMaximize}
+          label={fullscreen ? 'Exit full screen' : 'Full screen'}
+          onClick={toggleFullscreen}
+        />
+      </header>
 
-        <span className="text-[10px] text-gray-600">
-          Orbit: drag · Zoom: scroll · Pan: right-drag
-        </span>
-      </div>
+      <div className="relative min-h-0 flex-1">
+        <WebGLErrorBoundary>
+          <ThreeCanvas onEngine={setEngine} />
+        </WebGLErrorBoundary>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-hidden">
-          <div className="relative w-full h-full flex">
-            <WebGLErrorBoundary>
-              <ThreeCanvas />
-            </WebGLErrorBoundary>
-            <FixtureProps3D />
-          </div>
-        </div>
-
-        {/* Quick DMX controls for selected fixtures */}
-        {selectedEntries.length > 0 && showControls && (
-          <div className="shrink-0 border-t border-surface-3 bg-surface-1 px-3 py-2 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-accent font-semibold">{selectedEntries.length} fixture{selectedEntries.length > 1 ? 's' : ''}</span>
-
-              {/* Group quick-select */}
-              {groups.length > 0 && (
-                <div className="flex gap-1 ml-2">
-                  {groups.filter(g => !g.parentGroupId).map(g => {
-                    const isEmpty = g.fixtureIds.length === 0
-                    return (
-                      <button
-                        key={g.id}
-                        className={`px-1.5 py-0.5 rounded text-[9px] ${isEmpty ? 'opacity-40 cursor-default' : 'hover:opacity-80'}`}
-                        style={{ backgroundColor: g.color + '33', color: g.color }}
-                        onClick={() => !isEmpty && selectGroup(g.id)}
-                        title={isEmpty ? `${g.name} (empty — add fixtures to this group)` : `Select ${g.name} (${g.fixtureIds.length})`}
-                      >
-                        {g.name} {!isEmpty && <span className="opacity-60">({g.fixtureIds.length})</span>}
-                      </button>
-                    )
-                  })}
-                  <button className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-gray-300 bg-surface-3" onClick={selectAll}>All</button>
-                  <button className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-gray-300 bg-surface-3" onClick={clearSelection}>None</button>
-                </div>
-              )}
-
-              <div className="flex-1" />
-
-              {/* Color presets */}
-              <div className="flex gap-0.5">
-                {[
-                  { r: 255, g: 0, b: 0 }, { r: 0, g: 255, b: 0 }, { r: 0, g: 0, b: 255 },
-                  { r: 255, g: 255, b: 255 }, { r: 255, g: 191, b: 0 }, { r: 0, g: 255, b: 255 },
-                  { r: 255, g: 0, b: 255 }, { r: 255, g: 200, b: 120 }, { r: 0, g: 0, b: 0 }
-                ].map(({ r, g, b }, i) => (
-                  <button
-                    key={i}
-                    className="w-5 h-5 rounded border border-white/10 hover:scale-110 transition-transform"
-                    style={{ backgroundColor: `rgb(${r},${g},${b})` }}
-                    onClick={() => setRGB(r, g, b)}
-                  />
-                ))}
-              </div>
-
-              <button className="text-[10px] text-gray-500 hover:text-gray-300" onClick={() => setShowControls(false)}>x</button>
-            </div>
-
-            {/* Sliders row */}
-            <div className="flex items-center gap-4">
-              {[
-                { label: 'Dim', name: 'dimmer', color: '#e85d04', alt: ['intensity'] },
-                { label: 'Pan', name: 'pan', color: '#6366f1', alt: [] },
-                { label: 'Tilt', name: 'tilt', color: '#6366f1', alt: [] },
-                { label: 'Zoom', name: 'zoom', color: '#22c55e', alt: [] },
-              ].map(({ label, name, color, alt }) => {
-                // Read first selected fixture's value
-                const first = selectedEntries[0]
-                const chs = first ? getFixtureChannels(first) : []
-                const ch = findCh(chs, name, ...alt)
-                if (!ch) return null
-                const val = values[first.universe]?.[ch.absoluteChannel] ?? 0
-                return (
-                  <div key={name} className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <span className="text-[10px] text-gray-500 uppercase font-medium shrink-0 w-7">{label}</span>
-                    <HSlider
-                      value={val}
-                      onChange={(v) => {
-                        for (const entry of selectedEntries) {
-                          const channels = getFixtureChannels(entry)
-                          const c = findCh(channels, name, ...alt)
-                          if (c) setChannel(entry.universe, c.absoluteChannel, v)
-                        }
-                      }}
-                      color={color}
-                      className="flex-1 min-w-0"
-                    />
-                    <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">{val}</span>
-                  </div>
-                )
-              })}
+        {patchCount === 0 && (
+          <div className="pointer-events-none absolute inset-x-0 top-6 flex justify-center">
+            <div className="pointer-events-auto rounded-lg border border-line bg-surface-overlay shadow-popover">
+              <EmptyState
+                size="sm"
+                icon={LuCable}
+                title="No fixtures patched"
+                description="Patched fixtures appear here with live beams."
+                action={<Button size="sm" variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>Add fixtures</Button>}
+              />
             </div>
           </div>
         )}
-        {selectedEntries.length > 0 && !showControls && (
-          <button
-            className="shrink-0 border-t border-surface-3 bg-surface-1 px-3 py-1 text-[10px] text-accent hover:text-accent-light text-center"
-            onClick={() => setShowControls(true)}
-          >
-            Show controls ({selectedEntries.length} fixtures)
-          </button>
+
+        {/* Zoom buttons for fingers (pinch works too) */}
+        {engine && (
+          <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg border border-line bg-surface-1/90 shadow-raised backdrop-blur">
+            <IconButton icon={LuPlus} label="Zoom in" size="sm" onClick={() => engine.zoomBy(0.75)} className="rounded-none" />
+            <div className="h-px bg-line" />
+            <IconButton icon={LuMinus} label="Zoom out" size="sm" onClick={() => engine.zoomBy(1.33)} className="rounded-none" />
+          </div>
+        )}
+
+        <p className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-surface-1/80 px-2 py-1 text-2xs text-fg-tertiary backdrop-blur">
+          {touch
+            ? 'Drag to orbit · pinch to zoom · two fingers to pan · tap a fixture to select, double-tap to focus'
+            : 'Drag to orbit · scroll to zoom · right-drag to pan · click a fixture to select, double-click to focus'}
+        </p>
+
+        {selectedFixtureId && inspectorOpen && (
+          <div className="absolute right-3 top-3 flex max-h-[calc(100%-24px)] w-72 flex-col overflow-y-auto rounded-lg border border-line bg-surface-overlay/95 shadow-popover backdrop-blur [[data-density=touch]_&]:w-80">
+            <FixturePropertiesPanel onClose={() => setInspectorOpen(false)} />
+          </div>
         )}
       </div>
+
+      <SelectionControls />
     </div>
   )
 }
 
-/** Compact fixture properties panel overlaid on 3D view */
-function FixtureProps3D() {
-  const { selectedFixtureId, roomConfig } = useVisualizerStore()
-  const { patch, fixtures, updateFixture } = usePatchStore()
-
-  const entry = useMemo(() => patch.find(p => p.id === selectedFixtureId), [patch, selectedFixtureId])
-  const def = useMemo(() => entry ? fixtures.find(f => f.id === entry.fixtureDefId) : null, [entry, fixtures])
-
-  if (!entry) return null
-
-  const isMovingHead = def?.categories.includes('Moving Head') ?? false
-  const mount = entry.mountingLocation ?? 'ceiling'
-  const defaultY = mount === 'floor' ? 0.15 : mount.startsWith('wall') ? roomConfig.height * 0.6 : roomConfig.height - 0.05
-  const pos = entry.position3D ?? { x: 0, y: defaultY, z: 0 }
-  const mountingAngle = entry.mountingAngle ?? 0
-  const mountingPan = entry.mountingPan ?? 0
-  const beamAngle = entry.beamAngle ?? def?.physical?.lens?.degreesMinMax?.[1] ?? 25
-
-  const updatePos = (key: 'x' | 'y' | 'z', value: number) => {
-    updateFixture(entry.id, { position3D: { ...pos, [key]: value } })
-  }
-
+function ViewToggles() {
+  const showBeams = useVisualizerStore((s) => s.showBeams)
+  const hazeEnabled = useVisualizerStore((s) => s.hazeEnabled)
+  const showRoom = useVisualizerStore((s) => s.showRoom)
+  const showGrid = useVisualizerStore((s) => s.showGrid)
+  const showLabels = useVisualizerStore((s) => s.showLabels)
+  const shadows = useVisualizerStore((s) => s.shadowsEnabled)
+  const lowQuality = useVisualizerStore((s) => s.quality === 'low')
+  const v = useVisualizerStore.getState()
+  const items = [
+    { label: 'Beams', icon: LuFlashlight, on: showBeams, set: v.setShowBeams, hint: 'Show beam cones' },
+    { label: 'Haze', icon: LuCloudFog, on: hazeEnabled, set: v.setHazeEnabled, hint: 'Hazed air: bright beams (off: clean air)' },
+    { label: 'Walls', icon: LuWarehouse, on: showRoom, set: v.setShowRoom, hint: 'Walls and ceiling' },
+    { label: 'Grid', icon: LuGrid3X3, on: showGrid, set: v.setShowGrid, hint: 'Floor grid (1 m)' },
+    { label: 'Labels', icon: LuHash, on: showLabels, set: v.setShowLabels, hint: 'Fixture numbers' },
+    { label: 'Shadows', icon: LuSunMoon, on: shadows, set: v.setShadowsEnabled, hint: lowQuality ? 'Shadows need Medium or High quality' : 'Real-time shadows (GPU heavy)', disabled: lowQuality }
+  ]
   return (
-    <div className="absolute top-2 right-2 w-52 bg-surface-1/95 backdrop-blur border border-surface-3 rounded-lg p-3 space-y-3 z-10 shadow-xl">
-      {/* Header */}
-      <div>
-        <div className="text-xs font-semibold text-gray-200 truncate">{entry.name}</div>
-        <div className="text-[9px] text-gray-500">{def?.name} — U{entry.universe + 1}.{entry.address}</div>
-      </div>
-
-      {/* Position */}
-      <div className="space-y-1">
-        <div className="text-[9px] text-gray-500 uppercase">Position</div>
-        {([
-          { label: 'X', key: 'x' as const, min: -50, max: 50 },
-          { label: 'Y', key: 'y' as const, min: 0, max: 20 },
-          { label: 'Z', key: 'z' as const, min: -50, max: 50 },
-        ]).map(({ label, key, min, max }) => (
-          <div key={key} className="flex items-center gap-1">
-            <span className="text-[9px] text-gray-500 w-3">{label}</span>
-            <HSlider
-              value={pos[key]}
-              onChange={(v) => updatePos(key, v)}
-              min={min} max={max} step={0.1}
-              color="#e85d04"
-              className="flex-1"
-            />
-            <span className="text-[9px] font-mono text-accent w-10 text-right">{pos[key].toFixed(1)}m</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Aim / Tilt for static fixtures */}
-      {!isMovingHead && (
-        <div className="space-y-1">
-          <div className="text-[9px] text-gray-500 uppercase">Aim</div>
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] text-gray-500 w-8">Tilt</span>
-            <HSlider
-              value={mountingAngle}
-              onChange={(v) => updateFixture(entry.id, { mountingAngle: v })}
-              min={-90} max={90} step={1}
-              color="#e85d04"
-              className="flex-1"
-            />
-            <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingAngle}°</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] text-gray-500 w-8">Dir</span>
-            <HSlider
-              value={mountingPan}
-              onChange={(v) => updateFixture(entry.id, { mountingPan: v })}
-              min={-180} max={180} step={1}
-              color="#e85d04"
-              className="flex-1"
-            />
-            <span className="text-[9px] font-mono text-accent w-8 text-right">{mountingPan}°</span>
-          </div>
-        </div>
-      )}
-
-      {/* Pan/Tilt Invert for moving heads */}
-      {isMovingHead && (
-        <div className="space-y-1">
-          <div className="text-[9px] text-gray-500 uppercase">Invert</div>
-          <div className="flex gap-3">
-            <label className="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" checked={entry.panInvert ?? false}
-                onChange={e => updateFixture(entry.id, { panInvert: e.target.checked })}
-                className="accent-accent w-3 h-3" />
-              <span className="text-[9px] text-gray-400">Pan</span>
-            </label>
-            <label className="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" checked={entry.tiltInvert ?? false}
-                onChange={e => updateFixture(entry.id, { tiltInvert: e.target.checked })}
-                className="accent-accent w-3 h-3" />
-              <span className="text-[9px] text-gray-400">Tilt</span>
-            </label>
-          </div>
-        </div>
-      )}
-
-      {/* Beam angle */}
-      <div className="flex items-center gap-1">
-        <span className="text-[9px] text-gray-500 w-8">Beam</span>
-        <HSlider
-          value={beamAngle}
-          onChange={(v) => updateFixture(entry.id, { beamAngle: v })}
-          min={2} max={90} step={1}
-          color="#e85d04"
-          className="flex-1"
-        />
-        <span className="text-[9px] font-mono text-accent w-8 text-right">{beamAngle}°</span>
-      </div>
-
-      {/* Mounting location */}
-      <div className="space-y-1">
-        <div className="text-[9px] text-gray-500 uppercase">Mount</div>
-        <select
-          className="input w-full text-[9px] py-0.5"
-          value={mount}
-          onChange={e => {
-            const loc = e.target.value as MountingLocation
-            updateFixture(entry.id, {
-              mountingLocation: loc === 'ceiling' ? undefined : loc,
-              position3D: undefined  // reset position when changing mount
-            })
-          }}
+    <ToolbarGroup aria-label="Show">
+      {items.map((it) => (
+        <ToggleButton
+          key={it.label}
+          size="sm"
+          variant="ghost"
+          tone="neutral"
+          icon={it.icon}
+          pressed={it.on}
+          onPressedChange={it.set}
+          disabled={'disabled' in it ? it.disabled : false}
+          tooltip={it.hint}
+          aria-label={it.label}
+          labelClassName="hidden min-[1800px]:inline"
         >
-          <option value="ceiling">Ceiling</option>
-          <option value="floor">Floor</option>
-          <option value="wall-left">Wall Left</option>
-          <option value="wall-right">Wall Right</option>
-          <option value="wall-back">Wall Back</option>
-        </select>
-      </div>
+          {it.label}
+        </ToggleButton>
+      ))}
+    </ToolbarGroup>
+  )
+}
 
-      {/* Quick placement */}
-      <div className="flex gap-1 flex-wrap">
-        {mount === 'ceiling' && (
-          <>
-            <button className="btn-secondary text-[8px] flex-1 py-0.5"
-              onClick={() => updatePos('y', roomConfig.height - 0.05)}>Ceiling</button>
-            <button className="btn-secondary text-[8px] flex-1 py-0.5"
-              onClick={() => updatePos('y', 4)}>4m</button>
-          </>
-        )}
-        {mount === 'floor' && (
-          <button className="btn-secondary text-[8px] flex-1 py-0.5"
-            onClick={() => updatePos('y', 0.15)}>Floor</button>
-        )}
-        {mount === 'wall-left' && (
-          <button className="btn-secondary text-[8px] flex-1 py-0.5"
-            onClick={() => updatePos('x', -roomConfig.width / 2 + 0.1)}>L Wall</button>
-        )}
-        {mount === 'wall-right' && (
-          <button className="btn-secondary text-[8px] flex-1 py-0.5"
-            onClick={() => updatePos('x', roomConfig.width / 2 - 0.1)}>R Wall</button>
-        )}
-        {mount === 'wall-back' && (
-          <button className="btn-secondary text-[8px] flex-1 py-0.5"
-            onClick={() => updatePos('z', roomConfig.depth / 2 - 0.1)}>Back</button>
-        )}
-        <button className="btn-ghost text-[8px] flex-1 py-0.5 text-red-400"
-          onClick={() => updateFixture(entry.id, { position3D: undefined, mountingAngle: undefined, mountingPan: undefined, mountingLocation: undefined })}>Reset</button>
-      </div>
-    </div>
+/** Quality selector + live frame rate (polled at 2 Hz, set only on change) */
+function QualityControl({ engine }: { engine: VisualizerEngine | null }) {
+  const quality = useVisualizerStore((s) => s.quality)
+  const [fps, setFps] = useState(0)
+  useEffect(() => {
+    if (!engine) return
+    const id = window.setInterval(() => setFps((prev) => (prev === engine.fps ? prev : engine.fps)), 500)
+    return () => window.clearInterval(id)
+  }, [engine])
+  return (
+    <ToolbarGroup aria-label="Quality">
+      <SegmentedControl
+        size="sm"
+        aria-label="Render quality"
+        value={quality}
+        onChange={(q) => useVisualizerStore.getState().setQuality(q)}
+        items={QUALITY_ITEMS}
+      />
+      <Tooltip content="Frames rendered per second — the view only redraws when something changes">
+        <span className={cn('flex w-14 items-center justify-end gap-1 font-mono text-2xs tabular', fps > 0 ? 'text-fg-secondary' : 'text-fg-tertiary')}>
+          {fps > 0 ? `${fps} fps` : 'idle'}
+        </span>
+      </Tooltip>
+    </ToolbarGroup>
+  )
+}
+
+function RoomButton() {
+  const pop = usePopover()
+  const ambient = useVisualizerStore((s) => s.ambientIntensity)
+  return (
+    <>
+      <Button ref={pop.anchorRef} size="sm" variant="ghost" icon={LuRuler} active={pop.open} tone="neutral" onClick={pop.toggle} {...pop.triggerProps} labelClassName="hidden xl:inline">
+        Room
+      </Button>
+      <Popover {...pop.props} placement="bottom-end" className="flex w-[300px] flex-col gap-3 p-3" aria-label="Room">
+        <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Room (metres)</p>
+        <RoomFields />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-xs text-fg-secondary">
+            <LuEye size={14} aria-hidden className="text-fg-tertiary" />
+            House lights
+          </div>
+          <Slider value={Math.round(ambient * 100)} onChange={(v) => useVisualizerStore.getState().setAmbientIntensity(v / 100)} min={0} max={100} defaultValue={15} showValue={(v) => `${v}%`} aria-label="House lights" />
+        </div>
+      </Popover>
+    </>
   )
 }

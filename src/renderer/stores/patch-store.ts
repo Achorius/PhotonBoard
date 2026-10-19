@@ -15,6 +15,8 @@ interface PatchState {
   addFixture: (fixtureDefId: string, modeName: string, universe: number, address: number, name: string, count?: number, groupId?: string) => void
   removeFixture: (id: string) => void
   updateFixture: (id: string, updates: Partial<PatchEntry>) => void
+  /** Update several fixtures in one change (group drags in the stage layout) */
+  updateFixtures: (updates: Record<string, Partial<PatchEntry>>) => void
   selectFixture: (id: string, multi?: boolean) => void
   /** Replace the selection (range select, lasso…) */
   selectFixtures: (ids: string[]) => void
@@ -106,6 +108,12 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
   updateFixture: (id, updates) => {
     set((state) => ({
       patch: state.patch.map((p) => (p.id === id ? { ...p, ...updates } : p))
+    }))
+  },
+
+  updateFixtures: (updates) => {
+    set((state) => ({
+      patch: state.patch.map((p) => (updates[p.id] ? { ...p, ...updates[p.id] } : p))
     }))
   },
 

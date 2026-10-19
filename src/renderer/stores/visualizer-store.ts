@@ -1,8 +1,49 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { DEFAULT_ROOM_CONFIG, type RoomConfig, type TrussBar } from '@shared/types'
+import { getDeviceProfile } from '@renderer/lib/device-detect'
 
 export type VisualizerSubTab = '3d' | 'layout'
+/** 3D render quality: frame-rate cap, resolution, real lights, detail */
+export type VisualizerQuality = 'low' | 'medium' | 'high'
+
+const PREF_KEY = 'photonboard.visualizer.prefs'
+
+interface VisualizerPrefs {
+  quality?: VisualizerQuality
+  hazeEnabled?: boolean
+  showLabels?: boolean
+  shadowsEnabled?: boolean
+}
+
+function readPrefs(): VisualizerPrefs {
+  try {
+    const raw = localStorage.getItem(PREF_KEY)
+    return raw ? (JSON.parse(raw) as VisualizerPrefs) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writePrefs(patch: VisualizerPrefs): void {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPrefs(), ...patch }))
+  } catch { /* private mode / blocked storage: keep in memory only */ }
+}
+
+/** Medium on the Pi and other ARM / mid-range GPUs, low on weak GPUs, high on desktops */
+function defaultQuality(): VisualizerQuality {
+  try {
+    const dev = getDeviceProfile()
+    if (dev.isLowEnd) return 'low'
+    if (dev.isMidRange || dev.isArm) return 'medium'
+    return 'high'
+  } catch {
+    return 'medium'
+  }
+}
+
+const prefs = readPrefs()
 
 interface VisualizerState {
   subTab: VisualizerSubTab
@@ -13,6 +54,11 @@ interface VisualizerState {
   showRoom: boolean
   showGrid: boolean
   shadowsEnabled: boolean
+  /** Atmosphere: beams strongly visible (haze) or faint (clean air) */
+  hazeEnabled: boolean
+  /** Fixture number labels in the 3D view */
+  showLabels: boolean
+  quality: VisualizerQuality
   ambientIntensity: number // 0-1
   // Layout editor
   gridSize: number  // metres
@@ -27,11 +73,15 @@ interface VisualizerState {
   setShowRoom: (v: boolean) => void
   setShowGrid: (v: boolean) => void
   setShadowsEnabled: (v: boolean) => void
+  setHazeEnabled: (v: boolean) => void
+  setShowLabels: (v: boolean) => void
+  setQuality: (q: VisualizerQuality) => void
   setAmbientIntensity: (v: number) => void
   setGridSize: (v: number) => void
   setSnapToGrid: (v: boolean) => void
   setLayoutView: (v: { panX: number; panY: number; zoom: number }) => void
-  addTrussBar: () => void
+  /** Adds a bar (optionally with initial fields, e.g. a depth) and selects it */
+  addTrussBar: (init?: Partial<Omit<TrussBar, 'id'>>) => void
   removeTrussBar: (id: string) => void
   updateTrussBar: (id: string, updates: Partial<TrussBar>) => void
 }
@@ -44,7 +94,10 @@ export const useVisualizerStore = create<VisualizerState>()(subscribeWithSelecto
   showBeams: true,
   showRoom: true,
   showGrid: true,
-  shadowsEnabled: false,
+  shadowsEnabled: prefs.shadowsEnabled ?? false,
+  hazeEnabled: prefs.hazeEnabled ?? true,
+  showLabels: prefs.showLabels ?? true,
+  quality: prefs.quality ?? defaultQuality(),
   ambientIntensity: 0.15,
   gridSize: 0.5,
   snapToGrid: true,
@@ -57,20 +110,24 @@ export const useVisualizerStore = create<VisualizerState>()(subscribeWithSelecto
   setShowBeams: (v) => set({ showBeams: v }),
   setShowRoom: (v) => set({ showRoom: v }),
   setShowGrid: (v) => set({ showGrid: v }),
-  setShadowsEnabled: (v) => set({ shadowsEnabled: v }),
+  setShadowsEnabled: (v) => { writePrefs({ shadowsEnabled: v }); set({ shadowsEnabled: v }) },
+  setHazeEnabled: (v) => { writePrefs({ hazeEnabled: v }); set({ hazeEnabled: v }) },
+  setShowLabels: (v) => { writePrefs({ showLabels: v }); set({ showLabels: v }) },
+  setQuality: (q) => { writePrefs({ quality: q }); set({ quality: q }) },
   setAmbientIntensity: (v) => set({ ambientIntensity: v }),
   setGridSize: (v) => set({ gridSize: v }),
   setSnapToGrid: (v) => set({ snapToGrid: v }),
   setLayoutView: (v) => set({ layoutView: v }),
 
-  addTrussBar: () => set((s) => {
-    const { width, depth, height, trussBars } = s.roomConfig
+  addTrussBar: (init) => set((s) => {
+    const { width, height, trussBars } = s.roomConfig
     const newBar: TrussBar = {
       id: crypto.randomUUID(),
       name: `Bar ${trussBars.length + 1}`,
       z: 0,
       y: height - 0.05,
       width: width,
+      ...init
     }
     return { roomConfig: { ...s.roomConfig, trussBars: [...trussBars, newBar] }, selectedTrussId: newBar.id }
   }),
