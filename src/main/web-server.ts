@@ -27,7 +27,7 @@ import { makeVerifyClient, startClientAuth, type ClientAuth } from './remote-acc
 import { AuthFailureLimiter, WS_CLOSE_AUTH_FAILED } from './remote-auth'
 import { MAX_SHOW_FILE_SIZE } from './show-validation'
 
-const WEB_PORT = 9091
+const WEB_PORT = Number(process.env.PHOTONBOARD_WEB_PORT) || 9091
 // A show (≤16 MB) plus JSON/protocol overhead must fit in one message
 const MAX_WS_MESSAGE_SIZE = MAX_SHOW_FILE_SIZE + 4 * 1024 * 1024
 const WS_RATE_LIMIT = 200 // max messages per second per client

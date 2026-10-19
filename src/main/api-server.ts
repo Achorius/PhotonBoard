@@ -21,7 +21,7 @@ import { ThrottledBroadcaster, slimStateForCompanion } from './state-broadcast'
 import { makeVerifyClient, startClientAuth, type ClientAuth } from './remote-access'
 import { AuthFailureLimiter, WS_CLOSE_AUTH_FAILED } from './remote-auth'
 
-const API_PORT = 9090
+const API_PORT = Number(process.env.PHOTONBOARD_API_PORT) || 9090
 const MAX_API_MESSAGE_SIZE = 64 * 1024 // 64 KB max for API messages
 const API_RATE_LIMIT = 100 // max messages per second per client
 const BROADCAST_INTERVAL_MS = 100 // Companion: max 10 Hz

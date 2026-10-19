@@ -1,14 +1,19 @@
 import React, { useEffect } from 'react'
-import { useUiStore, type ViewTab } from './stores/ui-store'
+import { LuLayoutDashboard } from 'react-icons/lu'
+import { isPhone, useUiStore } from './stores/ui-store'
 import { usePatchStore } from './stores/patch-store'
-import { useDmxStore } from './stores/dmx-store'
 import { useMidiStore } from './stores/midi-store'
-import { usePlaybackStore } from './stores/playback-store'
 import { initMidiRouting } from './lib/midi-manager'
 import { startFollowGamepadLoop } from './stores/follow-store'
 import { Toolbar } from './components/layout/Toolbar'
+import { NavRail } from './components/layout/NavRail'
 import { StatusBar } from './components/layout/StatusBar'
 import { PatchPanel } from './components/layout/PatchPanel'
+import { ShortcutsDialog } from './components/layout/ShortcutsDialog'
+import { RemoteAccess } from './components/layout/RemoteAccess'
+import { BlackoutBanner } from './components/layout/MasterControls'
+import { requestNewShow, requestOpenShow, requestSave, requestSaveAs } from './components/layout/file-actions'
+import { Button, DialogHost, Spinner, ToastHost } from './components/ui'
 import { PatchView } from './components/patch/PatchView'
 import { FixtureControlView } from './components/fixtures/FixtureControlView'
 import { PlaybackView } from './components/playback/PlaybackView'
@@ -17,12 +22,6 @@ import { MidiView } from './components/midi/MidiView'
 import { StageLayoutView } from './components/visualizer/StageLayoutView'
 import { RemoteStageView } from './components/stage/RemoteStageView'
 import { getDeviceProfile } from './lib/device-detect'
-import { isPhone } from './stores/ui-store'
-
-// Lazy-load 3D visualizer — never imported on ARM/mid-range devices
-const VisualizerView = React.lazy(() =>
-  import('./components/visualizer/VisualizerView').then(m => ({ default: m.VisualizerView }))
-)
 import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
@@ -30,26 +29,18 @@ import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { useRemoteSync } from './hooks/useRemoteSync'
 import { useSelectionSync } from './hooks/useSelectionSync'
-import { startMixer, stopMixer, clearProgrammer } from './lib/dmx-mixer'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useDensityController } from './hooks/useDensityController'
+import { startMixer, stopMixer } from './lib/dmx-mixer'
 import { getBridge, isRemoteMode } from './lib/runtime'
 import { handleCommand } from './lib/command-handler'
 import { startStateBroadcast } from './lib/state-snapshot'
-import { installDirtyTracking, loadLastShow, newShow, openShow, saveShow } from './lib/show-io'
+import { installDirtyTracking, loadLastShow } from './lib/show-io'
 
-type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
-
-const WORKSPACE_TABS: WorkspaceTab[] = [
-  { id: 'visualizer',    label: '3D View',      shortcut: '1' },
-  { id: 'stage-layout',  label: 'Stage Layout', shortcut: '2' },
-  { id: 'live',          label: 'Timeline',     shortcut: '3' },
-  { id: 'effects',       label: 'Effects',      shortcut: '4' },
-  { id: 'playback',      label: 'Scenes',       shortcut: '5' },
-  { id: 'fixtures',      label: 'Fixtures',     shortcut: '6' },
-  { id: 'patch',         label: 'Patch',        shortcut: '7' },
-  { id: 'midi',          label: 'MIDI',         shortcut: '8' },
-  { id: 'follow',        label: 'Follow',       shortcut: '9' },
-  { id: 'settings',      label: 'Settings',     shortcut: '0' },
-]
+// Lazy-load 3D visualizer — never imported on ARM/mid-range devices
+const VisualizerView = React.lazy(() =>
+  import('./components/visualizer/VisualizerView').then(m => ({ default: m.VisualizerView }))
+)
 
 /** Call an `on*` bridge listener and return its unsubscribe (older bridges return void). */
 function listen(off: unknown): () => void {
@@ -58,13 +49,15 @@ function listen(off: unknown): () => void {
 
 export default function App() {
   const activeTab = useUiStore(s => s.activeTab)
-  const setActiveTab = useUiStore(s => s.setActiveTab)
   const stageMode = useUiStore(s => s.stageMode)
-  const setStageMode = useUiStore(s => s.setStageMode)
+  const sidebarOpen = useUiStore(s => s.sidebarOpen)
+  const executorBarOpen = useUiStore(s => s.executorBarOpen)
 
   usePlaybackController()
   useRemoteSync()
   useSelectionSync()
+  useDensityController()
+  useKeyboardShortcuts()
 
   // Central DMX mixer (programmer, scenes, chases, effects, timeline → output).
   // In remote mode, DMX comes from the Pi — no local mixer.
@@ -105,10 +98,11 @@ export default function App() {
     if (!bridge) return
     const offs = [
       installDirtyTracking(),
-      listen(bridge.onMenuEvent('menu:new', () => { void newShow() })),
-      listen(bridge.onMenuEvent('menu:save', () => { void saveShow() })),
-      listen(bridge.onMenuEvent('menu:save-as', () => { void saveShow({ saveAs: true }) })),
-      listen(bridge.onMenuEvent('menu:load', () => { void openShow() })),
+      // Application menu (and its Cmd/Ctrl accelerators): same flow as the File menu
+      listen(bridge.onMenuEvent('menu:new', () => { void requestNewShow() })),
+      listen(bridge.onMenuEvent('menu:save', () => { void requestSave() })),
+      listen(bridge.onMenuEvent('menu:save-as', () => { void requestSaveAs() })),
+      listen(bridge.onMenuEvent('menu:load', () => { void requestOpenShow() })),
       // Commands from the Stage window, remote browsers, Companion and main
       listen(bridge.stage.onCommand((command) => {
         try {
@@ -122,40 +116,6 @@ export default function App() {
     return () => { for (const off of offs) off() }
   }, [])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // File shortcuts (Cmd+S/O/N) are handled by Electron menu accelerators → onMenuEvent
-      // Only handle non-file shortcuts here
-
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
-
-      const tab = WORKSPACE_TABS.find(t => t.shortcut === e.key)
-      if (tab) {
-        setActiveTab(tab.id)
-        e.preventDefault()
-      }
-
-      if (e.key === 'Escape') {
-        useDmxStore.getState().toggleBlackout()
-      }
-
-      if (e.key === 'Backspace') {
-        clearProgrammer()
-        e.preventDefault()
-      }
-
-      if (e.key === ' ' && activeTab === 'playback') {
-        const cuelists = usePlaybackStore.getState().cuelists
-        if (cuelists.length > 0) {
-          usePlaybackStore.getState().goCuelist(cuelists[0].id)
-          e.preventDefault()
-        }
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTab, setActiveTab])
-
   const renderView = () => {
     switch (activeTab) {
       case 'patch':      return <PatchView />
@@ -168,7 +128,7 @@ export default function App() {
         const dev = getDeviceProfile()
         if (dev.isMidRange || dev.isLowEnd) return <StageLayoutView />
         return (
-          <React.Suspense fallback={<div className="w-full h-full bg-surface-0" />}>
+          <React.Suspense fallback={<ViewLoading />}>
             <VisualizerView />
           </React.Suspense>
         )
@@ -181,71 +141,63 @@ export default function App() {
     }
   }
 
+  const overlays = (
+    <>
+      <DialogHost />
+      <ToastHost />
+      <ShortcutsDialog />
+    </>
+  )
+
   // ---- Remote Stage Mode ----
   // Phone: always stage, no way out
   // Tablet: stage by default, button to switch to full app
   // Desktop browser: full app, Stage button to switch
   if (isRemoteMode() && stageMode) {
-    // Phone: stage only, no toggle
-    if (isPhone()) {
-      return (
-        <div className="h-screen w-screen bg-surface-0 text-gray-200 select-none">
-          <RemoteStageView />
-        </div>
-      )
-    }
-    // Tablet / Desktop: stage with "App" button to switch back
     return (
-      <div className="h-screen w-screen bg-surface-0 text-gray-200 select-none relative">
-        <RemoteStageView />
-        <button
-          className="fixed top-3 right-3 z-50 px-3 py-1.5 text-xs font-bold rounded-lg bg-accent/90 text-white shadow-lg hover:bg-accent transition-colors"
-          onClick={() => setStageMode(false)}
-          style={{ backdropFilter: 'blur(8px)' }}
-        >
-          App ▸
-        </button>
+      <div className="relative flex h-screen w-screen flex-col bg-surface-0 text-fg-primary">
+        <RemoteAccess />
+        <div className="relative min-h-0 flex-1">
+          <RemoteStageView />
+          {!isPhone() && (
+            <Button
+              variant="secondary"
+              icon={LuLayoutDashboard}
+              onClick={() => useUiStore.getState().setStageMode(false)}
+              className="fixed right-3 top-3 z-popover"
+            >
+              Full console
+            </Button>
+          )}
+        </div>
+        {overlays}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface-0 text-gray-200 select-none">
+    <div className="flex h-screen flex-col bg-surface-0 text-fg-primary">
       <Toolbar />
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: persistent patch panel */}
-        <PatchPanel />
-
-        {/* Center: workspace */}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Workspace tab bar */}
-          <div className="flex items-center gap-0.5 px-2 py-1 border-b border-surface-3 bg-surface-1 shrink-0 overflow-x-auto">
-            {WORKSPACE_TABS.map(({ id, label, shortcut }) => (
-              <button
-                key={id}
-                className={`px-2.5 py-0.5 text-xs rounded transition-colors whitespace-nowrap ${
-                  activeTab === id
-                    ? 'bg-accent text-white'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'
-                }`}
-                onClick={() => setActiveTab(id)}
-                title={`${label} (${shortcut})`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* View content */}
-          <main className="flex-1 overflow-hidden">
-            {renderView()}
-          </main>
-        </div>
+      <BlackoutBanner />
+      <RemoteAccess />
+      <div className="flex min-h-0 flex-1">
+        <NavRail />
+        {sidebarOpen && <PatchPanel />}
+        <main className="min-w-0 flex-1 overflow-hidden" data-view={activeTab}>
+          {renderView()}
+        </main>
       </div>
-
-      {/* Bottom: executor / playback bar */}
-      <ExecutorBar />
+      {executorBarOpen && <ExecutorBar />}
       <StatusBar />
+      {overlays}
+    </div>
+  )
+}
+
+function ViewLoading() {
+  return (
+    <div className="flex h-full w-full items-center justify-center gap-2 text-sm text-fg-tertiary">
+      <Spinner size={16} /> Loading view…
     </div>
   )
 }

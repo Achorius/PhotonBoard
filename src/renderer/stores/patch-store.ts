@@ -16,6 +16,8 @@ interface PatchState {
   removeFixture: (id: string) => void
   updateFixture: (id: string, updates: Partial<PatchEntry>) => void
   selectFixture: (id: string, multi?: boolean) => void
+  /** Replace the selection (range select, lasso…) */
+  selectFixtures: (ids: string[]) => void
   selectAll: () => void
   clearSelection: () => void
   getFixtureDef: (fixtureDefId: string) => FixtureDefinition | undefined
@@ -119,6 +121,10 @@ export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, ge
       }
       return { selectedFixtureIds: [id] }
     })
+  },
+
+  selectFixtures: (ids) => {
+    set({ selectedFixtureIds: [...new Set(ids)] })
   },
 
   selectAll: () => {

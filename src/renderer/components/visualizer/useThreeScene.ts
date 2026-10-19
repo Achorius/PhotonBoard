@@ -14,7 +14,7 @@ export interface ThreeRefs {
   ambientRef: React.MutableRefObject<THREE.AmbientLight | null>
 }
 
-export function useThreeScene(containerRef: React.RefObject<HTMLDivElement>): ThreeRefs {
+export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | null>): ThreeRefs {
   const sceneRef    = useRef<THREE.Scene | null>(null)
   const cameraRef   = useRef<THREE.PerspectiveCamera | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)

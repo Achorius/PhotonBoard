@@ -1,12 +1,130 @@
+/* ============================================================
+   PhotonBoard — design tokens & global styles
+   Every colour is an "R G B" triplet so Tailwind can apply
+   opacity (`bg-accent/15`). Tailwind names map 1:1 onto these
+   variables (tailwind.config.js); see components/ui/README.md.
+   ============================================================ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  * {
+  :root {
+    color-scheme: dark;
+
+    /* ---- Surfaces: neutral graphite, darkest = app background ---- */
+    --pb-surface-0: 13 14 16;     /* #0d0e10 app background, wells, tracks */
+    --pb-surface-1: 20 22 25;     /* #141619 bars, sidebars, panels */
+    --pb-surface-2: 26 29 33;     /* #1a1d21 cards, inputs, list rows */
+    --pb-surface-3: 34 38 43;     /* #22262b hover, secondary buttons */
+    --pb-surface-4: 43 48 54;     /* #2b3036 pressed, selected neutral */
+    --pb-surface-5: 53 59 66;     /* #353b42 highest step (thumbs, caps) */
+    --pb-overlay: 28 31 36;       /* #1c1f24 popovers, menus, dialogs */
+
+    /* ---- Lines ---- */
+    --pb-line-subtle: 31 35 40;   /* #1f2328 dividers inside panels */
+    --pb-line: 42 47 53;          /* #2a2f35 default borders */
+    --pb-line-strong: 61 67 74;   /* #3d434a input borders, focusable edges */
+
+    /* ---- Text ---- */
+    --pb-fg-primary: 236 238 241;   /* #eceef1 15.6:1 on surface-1 */
+    --pb-fg-secondary: 170 177 186; /* #aab1ba  8.4:1 */
+    --pb-fg-tertiary: 133 140 150;  /* #858c96  5.3:1 (AA up to surface-2) */
+    --pb-fg-disabled: 90 96 105;    /* #5a6069 never for information */
+    --pb-fg-inverse: 13 14 16;
+
+    /* ---- Brand accent (PhotonBoard orange) ---- */
+    --pb-accent: 255 122 26;        /* #ff7a1a solid fills, active nav */
+    --pb-accent-hover: 255 143 61;  /* #ff8f3d */
+    --pb-accent-active: 232 104 15; /* #e8680f */
+    --pb-accent-fg: 255 149 72;     /* #ff9548 accent text on dark (8.3:1) */
+    --pb-on-accent: 20 10 3;        /* text on accent fill (7.5:1) */
+
+    /* ---- Semantic ---- */
+    --pb-go: 34 184 102;            /* #22b866 GO / live / running / OK */
+    --pb-go-fg: 78 216 138;
+    --pb-on-go: 4 20 10;
+    --pb-danger: 217 45 51;         /* #d92d33 blackout / destructive / error */
+    --pb-danger-fg: 255 107 107;
+    --pb-on-danger: 255 255 255;
+    --pb-warning: 245 166 35;       /* #f5a623 degraded / attention / blinder */
+    --pb-warning-fg: 255 192 77;
+    --pb-on-warning: 26 16 3;
+    --pb-info: 43 110 224;          /* #2b6ee0 selection / information */
+    --pb-info-fg: 98 173 255;
+    --pb-on-info: 255 255 255;
+    --pb-midi: 124 77 237;          /* #7c4ded MIDI learn / mapped */
+    --pb-midi-fg: 180 148 255;
+    --pb-on-midi: 255 255 255;
+
+    --pb-focus: 98 173 255;         /* focus ring (info-fg) */
+
+    /* ---- Radii ---- */
+    --pb-radius-sm: 4px;
+    --pb-radius: 6px;
+    --pb-radius-lg: 8px;
+    --pb-radius-xl: 12px;
+
+    /* ---- Elevation ---- */
+    --pb-shadow-raised: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+    --pb-shadow-popover: 0 0 0 1px rgb(var(--pb-line-strong) / 0.6), 0 8px 24px rgb(0 0 0 / 0.5);
+    --pb-shadow-modal: 0 0 0 1px rgb(var(--pb-line-strong) / 0.6), 0 24px 64px rgb(0 0 0 / 0.6);
+
+    /* ---- Motion ---- */
+    --pb-dur-fast: 90ms;
+    --pb-dur: 150ms;
+    --pb-dur-slow: 240ms;
+    --pb-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+    /* ---- Fonts ---- */
+    --pb-font-sans: 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --pb-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    /* ---- Density: compact (mouse / trackpad) ---- */
+    --pb-font-size: 13px;
+    --pb-control-h-xs: 22px;
+    --pb-control-h-sm: 26px;
+    --pb-control-h: 30px;
+    --pb-control-h-lg: 38px;
+    --pb-row-h: 28px;
+    --pb-gap: 8px;
+    --pb-topbar-h: 44px;
+    --pb-statusbar-h: 26px;
+    --pb-executor-row-h: 34px;
+    --pb-fader-w: 30px;
+    --pb-fader-cap-h: 14px;
+    --pb-slider-thumb: 14px;
+    --pb-scrollbar: 10px;
+  }
+
+  /* ---- Density: touch (Pi touchscreen, tablets) — every target >= 44px ---- */
+  :root[data-density='touch'] {
+    --pb-font-size: 14px;
+    --pb-control-h-xs: 32px;
+    --pb-control-h-sm: 40px;
+    --pb-control-h: 44px;
+    --pb-control-h-lg: 52px;
+    --pb-row-h: 44px;
+    --pb-gap: 10px;
+    --pb-topbar-h: 56px;
+    --pb-statusbar-h: 32px;
+    --pb-executor-row-h: 48px;
+    --pb-fader-w: 44px;
+    --pb-fader-cap-h: 24px;
+    --pb-slider-thumb: 24px;
+    --pb-scrollbar: 14px;
+  }
+
+  *, *::before, *::after {
     box-sizing: border-box;
-    touch-action: none;
-    -webkit-user-select: none;
+  }
+
+  html {
+    /* Double-tap zoom off; pinch zoom is disabled by the viewport meta / Electron */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   html, body, #root {
@@ -16,103 +134,186 @@
   }
 
   body {
-    background: #0a0a0f;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: rgb(var(--pb-surface-0));
+    color: rgb(var(--pb-fg-primary));
+    font-family: var(--pb-font-sans);
+    font-size: var(--pb-font-size);
+    line-height: 1.4;
+    /* Inter: open digits, disambiguated l/I, straight-sided comma */
+    font-feature-settings: 'cv01', 'cv05', 'cv08', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
+    overscroll-behavior: none;
+    cursor: default;
+    /* App chrome is not selectable text (accidental selections while
+       dragging faders). Inputs and .selectable opt back in. */
+    -webkit-user-select: none;
     user-select: none;
   }
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  input, textarea, select, button {
+    font: inherit;
+    color: inherit;
   }
 
-  ::-webkit-scrollbar-track {
+  input, textarea, [contenteditable='true'], .selectable {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  code, kbd, samp, pre {
+    font-family: var(--pb-font-mono);
+  }
+
+  /* Scroll containers keep native panning on touch */
+  .overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-scroll {
+    touch-action: pan-x pan-y;
+  }
+
+  /* Keyboard focus only (never on mouse/touch) */
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--pb-focus));
+    outline-offset: 2px;
+  }
+
+  /* Scrollbars: thin look, wide enough to grab on a touchscreen */
+  ::-webkit-scrollbar {
+    width: var(--pb-scrollbar);
+    height: var(--pb-scrollbar);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
     background: transparent;
   }
-
   ::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 3px;
+    background-color: rgb(var(--pb-surface-5));
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
   }
-
   ::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background-color: rgb(var(--pb-fg-disabled));
   }
 
-  input[type="range"] {
+  ::selection {
+    background: rgb(var(--pb-info) / 0.45);
+  }
+
+  /* Legacy native range inputs still used by a few views */
+  input[type='range'] {
     -webkit-appearance: none;
     appearance: none;
     background: transparent;
     cursor: pointer;
+    touch-action: none;
   }
-
-  input[type="range"]::-webkit-slider-track {
-    background: #3a3a4a;
+  input[type='range']::-webkit-slider-runnable-track {
+    background: rgb(var(--pb-surface-4));
     height: 4px;
     border-radius: 2px;
   }
-
-  input[type="range"]::-webkit-slider-thumb {
+  input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: var(--pb-slider-thumb);
+    height: var(--pb-slider-thumb);
     border-radius: 50%;
-    background: var(--slider-color, #e85d04);
-    margin-top: -5px;
+    background: var(--slider-color, rgb(var(--pb-accent)));
+    margin-top: calc((4px - var(--pb-slider-thumb)) / 2);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
   }
 }
 
 @layer components {
-  .fader-vertical {
-    writing-mode: vertical-lr;
-    direction: rtl;
-    -webkit-appearance: slider-vertical;
+  /* Drag / pointer surfaces (faders, pads, canvases): the browser must not pan or zoom */
+  .touch-none-surface {
+    touch-action: none;
   }
 
-  .fader-vertical::-webkit-slider-track {
-    width: 4px;
-    height: 100%;
+  /* Electron title bar drag region (macOS hidden-inset title bar) */
+  .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+  .titlebar-no-drag {
+    -webkit-app-region: no-drag;
   }
 
-  .fader-vertical::-webkit-slider-thumb {
-    width: 24px;
-    height: 10px;
-    border-radius: 3px;
-    margin-left: -10px;
-  }
-
+  /* ---- Legacy helpers (pre design-system views). New code: components/ui ---- */
   .panel {
-    @apply bg-surface-1 border border-surface-3 rounded-lg;
+    @apply bg-surface-1 border border-line rounded-lg;
   }
-
   .panel-header {
-    @apply px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 border-b border-surface-3;
+    @apply px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-fg-tertiary border-b border-line;
   }
-
   .btn {
-    @apply px-3 py-1.5 rounded text-sm font-medium transition-colors;
+    @apply inline-flex items-center justify-center gap-1.5 px-3 h-control-sm rounded text-sm font-medium transition-colors duration-fast;
   }
-
   .btn-primary {
-    @apply btn bg-accent hover:bg-accent-light text-white;
+    @apply btn bg-accent hover:bg-accent-hover text-on-accent;
   }
-
   .btn-secondary {
-    @apply btn bg-surface-3 hover:bg-surface-4 text-gray-200;
+    @apply btn bg-surface-3 hover:bg-surface-4 text-fg-primary;
   }
-
   .btn-danger {
-    @apply btn bg-red-900/50 hover:bg-red-800/50 text-red-300;
+    @apply btn bg-danger/15 hover:bg-danger/25 text-danger-fg;
   }
-
   .btn-ghost {
-    @apply btn bg-transparent hover:bg-surface-3 text-gray-300;
+    @apply btn bg-transparent hover:bg-surface-3 text-fg-secondary;
   }
-
   .input {
-    @apply bg-surface-2 border border-surface-4 rounded px-2 py-1 text-sm text-gray-200 outline-none focus:border-accent;
+    @apply bg-surface-0 border border-line-strong rounded px-2 h-control-sm text-sm text-fg-primary outline-none focus:border-info-fg;
   }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Scrollable but no visible bar (narrow rails) */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ---- Keyframes used by components ---- */
+@keyframes pb-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0.35; }
+}
+@keyframes pb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pb-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pb-toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pb-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes pb-fade-out {
+  to { opacity: 0; }
+}
+@keyframes pb-shimmer {
+  from { background-position: -200px 0; }
+  to { background-position: 200px 0; }
 }

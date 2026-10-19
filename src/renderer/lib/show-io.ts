@@ -248,7 +248,7 @@ async function adoptLoadResult(result: ShowLoadResult | null | undefined, label:
   if (warnings.length > 0) {
     status(`Loaded ${applied.show.name} — ${warnings[0]}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}`, 'info', 6000)
   } else {
-    status(`Loaded ✓ ${applied.show.name}`, 'success', 2500)
+    status(`Loaded ${applied.show.name}`, 'success', 2500)
   }
   return { status: 'ok', name: applied.show.name, path: result.path, warnings }
 }
@@ -308,7 +308,7 @@ export function saveShow(opts: SaveShowOptions = {}): Promise<ShowIoResult> {
     const ui = useUiStore.getState()
     ui.setShowName(name)
     ui.setDirty(false)
-    status(`Saved ✓ ${name}`, 'success', 2500)
+    status(`Saved ${name}`, 'success', 2500)
     return { status: 'ok', name, path: result.path }
   })
 }

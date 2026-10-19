@@ -1,8 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type React from 'react'
+import { LuChevronRight } from 'react-icons/lu'
+import { cn } from '@renderer/components/ui'
+import { COMMAND_LINE_ID } from '@renderer/hooks/useKeyboardShortcuts'
 import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { usePlaybackStore } from '../../stores/playback-store'
-import { useUiStore } from '../../stores/ui-store'
 import { setProgrammerChannel, clearProgrammer } from '../../lib/dmx-mixer'
 
 // ============================================================
@@ -260,71 +263,77 @@ function applyChannelByName(
 
 // ---- Component ----
 
+const HISTORY_MAX = 50
+/** Kept across remounts (executor bar / status bar re-layout) */
+const history: string[] = []
+
 export function CommandLine() {
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<CommandResult | null>(null)
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIdx, setHistoryIdx] = useState(-1)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const historyIdx = useRef(-1)
+  const draft = useRef('')
 
-  // Clear feedback after 3s
+  // Feedback fades after a few seconds
   useEffect(() => {
     if (!feedback) return
-    const timer = setTimeout(() => setFeedback(null), 3000)
+    const timer = setTimeout(() => setFeedback(null), feedback.ok ? 3000 : 5000)
     return () => clearTimeout(timer)
   }, [feedback])
 
-  const handleSubmit = useCallback(() => {
-    if (!input.trim()) return
-    const result = executeCommand(input)
-    setFeedback(result)
-    setHistory(h => [input, ...h.slice(0, 49)])
-    setHistoryIdx(-1)
+  const submit = () => {
+    const cmd = input.trim()
+    if (!cmd) return
+    setFeedback(executeCommand(cmd))
+    if (history[0] !== cmd) history.unshift(cmd)
+    history.length = Math.min(history.length, HISTORY_MAX)
+    historyIdx.current = -1
     setInput('')
-  }, [input])
+  }
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+  const recall = (dir: 1 | -1) => {
+    const next = historyIdx.current + dir
+    if (next < -1 || next >= history.length) return
+    if (historyIdx.current === -1) draft.current = input
+    historyIdx.current = next
+    setInput(next === -1 ? draft.current : history[next])
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit() }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); recall(1) }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); recall(-1) }
+    else if (e.key === 'Escape') {
       e.preventDefault()
-      handleSubmit()
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      const newIdx = Math.min(historyIdx + 1, history.length - 1)
-      if (newIdx >= 0 && history[newIdx]) {
-        setHistoryIdx(newIdx)
-        setInput(history[newIdx])
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      const newIdx = historyIdx - 1
-      if (newIdx < 0) {
-        setHistoryIdx(-1)
-        setInput('')
-      } else {
-        setHistoryIdx(newIdx)
-        setInput(history[newIdx])
-      }
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
+      e.stopPropagation()
       setInput('')
-      inputRef.current?.blur()
+      historyIdx.current = -1
+      e.currentTarget.blur()
     }
-  }, [handleSubmit, history, historyIdx])
+  }
 
   return (
-    <div className="flex items-center gap-2 min-w-[250px]">
-      <span className="text-[10px] text-gray-600 font-mono">&gt;</span>
-      <input
-        ref={inputRef}
-        className="bg-surface-0 border border-surface-3 rounded px-2 py-0.5 text-[11px] font-mono text-gray-300 w-48 focus:border-accent focus:outline-none placeholder:text-gray-700"
-        value={input}
-        onChange={e => { setInput(e.target.value); setHistoryIdx(-1) }}
-        onKeyDown={handleKeyDown}
-        placeholder="Fixture 1 Thru 5 At 80"
-        spellCheck={false}
-      />
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <label
+        className={cn(
+          'flex h-control-xs w-full max-w-[420px] min-w-[200px] items-center gap-1 rounded-sm border bg-surface-0 pl-1.5 pr-2 font-mono text-xs transition-colors duration-fast',
+          'border-line focus-within:border-accent/70 focus-within:ring-1 focus-within:ring-accent/30'
+        )}
+      >
+        <LuChevronRight size={14} aria-hidden className="shrink-0 text-accent-fg" />
+        <input
+          id={COMMAND_LINE_ID}
+          className="h-full min-w-0 flex-1 bg-transparent text-fg-primary outline-none placeholder:text-fg-disabled"
+          value={input}
+          onChange={(e) => { setInput(e.target.value); historyIdx.current = -1 }}
+          onKeyDown={onKeyDown}
+          placeholder="Fixture 1 thru 4 at 80   (press /)"
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="Command line"
+        />
+      </label>
       {feedback && (
-        <span className={`text-[10px] truncate max-w-[200px] ${feedback.ok ? 'text-green-400' : 'text-red-400'}`}>
+        <span role="status" className={cn('min-w-0 truncate text-xs', feedback.ok ? 'text-go-fg' : 'text-danger-fg')}>
           {feedback.message}
         </span>
       )}

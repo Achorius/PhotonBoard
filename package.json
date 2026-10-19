@@ -19,9 +19,11 @@
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "screenshots": "electron-vite build && xvfb-run -a -s \"-screen 0 1600x1000x24\" node scripts/dev/screenshot.mjs screenshots"
+    "screenshots": "electron-vite build && xvfb-run -a -s \"-screen 0 1920x1080x24\" node scripts/dev/screenshot.mjs screenshots"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@types/three": "^0.183.1",
     "@types/ws": "^8.18.1",
     "adm-zip": "^0.6.1",

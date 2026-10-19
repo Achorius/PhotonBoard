@@ -1,27 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-density="compact">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <!-- No pinch / double-tap zoom of the whole console (touchscreens, tablets) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0e10" />
   <title>PhotonBoard</title>
   <style>
-    * { touch-action: none; -webkit-user-select: none; user-select: none; }
-    body {
-      margin: 0;
-      padding: 0;
-      background: #0a0a0f;
-      color: #e0e0e0;
-      overflow: hidden;
-      cursor: default;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    }
-    /* Electron drag region */
-    .titlebar-drag {
-      -webkit-app-region: drag;
-    }
-    .titlebar-no-drag {
-      -webkit-app-region: no-drag;
-    }
+    /* Painted before the bundle loads: no white flash */
+    html, body { margin: 0; background: #0d0e10; }
   </style>
 </head>
 <body>
