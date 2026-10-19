@@ -1,26 +1,73 @@
 // ============================================================
 // PhotonBoard — Procedural Gobo Textures
-// Generates gobo patterns as Three.js DataTextures using Canvas.
+// Generates gobo patterns as Three.js textures using Canvas.
 // White = light passes through, Black = blocked.
+// Textures are cached and shared by every fixture: never dispose them
+// from a material — call disposeGoboTextures() when the 3D engine dies.
 // ============================================================
 
 import * as THREE from 'three'
 
 const GOBO_SIZE = 256
-const GOBO_COUNT = 7
+export const GOBO_COUNT = 7
 
 let _cache: THREE.CanvasTexture[] | null = null
+let _open: THREE.CanvasTexture | null = null
+let _glow: THREE.CanvasTexture | null = null
 
 /**
  * Get gobo texture by index (1-7). Returns null for 0 (open).
  */
 export function getGoboTexture(index: number): THREE.CanvasTexture | null {
   if (index <= 0 || index > GOBO_COUNT) return null
-  if (!_cache) {
-    _cache = generateAllGobos()
-    console.log(`[Gobo] Generated ${_cache.length} gobo textures`)
-  }
+  if (!_cache) _cache = generateAllGobos()
   return _cache[index - 1]
+}
+
+/** Texture for an open beam (soft-edged disc) — lets materials always keep a map */
+export function getOpenBeamTexture(): THREE.CanvasTexture {
+  if (_open) return _open
+  const { canvas, ctx } = createCanvas()
+  const g = ctx.createRadialGradient(C, C, 0, C, C, R)
+  g.addColorStop(0, '#fff')
+  g.addColorStop(0.55, '#f2f2f2')
+  g.addColorStop(0.85, '#9a9a9a')
+  g.addColorStop(1, '#000')
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.arc(C, C, R, 0, Math.PI * 2)
+  ctx.fill()
+  _open = canvasToTexture(canvas)
+  return _open
+}
+
+/** Soft radial glow for lens flares and selection halos (white, alpha in the texture) */
+export function getGlowTexture(): THREE.CanvasTexture {
+  if (_glow) return _glow
+  const size = 128
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(0.18, 'rgba(255,255,255,0.75)')
+  g.addColorStop(0.45, 'rgba(255,255,255,0.18)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, size, size)
+  _glow = canvasToTexture(canvas)
+  return _glow
+}
+
+/** Free every cached texture (GPU memory) — the next call regenerates them */
+export function disposeGoboTextures(): void {
+  _cache?.forEach((t) => t.dispose())
+  _cache = null
+  _open?.dispose()
+  _open = null
+  _glow?.dispose()
+  _glow = null
 }
 
 /**
@@ -78,6 +125,7 @@ function canvasToTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   tex.wrapT = THREE.ClampToEdgeWrapping
   tex.magFilter = THREE.LinearFilter
   tex.minFilter = THREE.LinearFilter
+  tex.userData.shared = true // cached: owners must not dispose it
   return tex
 }
 

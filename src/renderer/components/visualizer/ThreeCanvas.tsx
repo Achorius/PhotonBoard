@@ -1,26 +1,45 @@
-import React, { useRef } from 'react'
-import { usePatchStore } from '@renderer/stores/patch-store'
-import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { useEffect, useRef } from 'react'
+import { LuMonitorX, LuRefreshCw, LuTriangleAlert } from 'react-icons/lu'
+import { Button, EmptyState, Spinner } from '@renderer/components/ui'
+import { useUiStore } from '@renderer/stores/ui-store'
 import { useThreeScene } from './useThreeScene'
-import { useFixtureObjects } from './useFixtureObjects'
-import { useDmxAnimation } from './useDmxAnimation'
+import type { VisualizerEngine } from './scene/VisualizerEngine'
 
-export function ThreeCanvas() {
+/** Host element for the shared WebGL canvas, with loading / unsupported / lost states */
+export function ThreeCanvas({ onEngine }: { onEngine?: (engine: VisualizerEngine | null) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { patch, fixtures } = usePatchStore()
-  const { roomConfig } = useVisualizerStore()
+  const { engine, status, error, restart } = useThreeScene(containerRef)
 
-  const { sceneRef, cameraRef, rendererRef, controlsRef } = useThreeScene(containerRef)
-
-  const objectMapRef = useFixtureObjects(sceneRef, patch, fixtures, roomConfig)
-
-  useDmxAnimation(sceneRef, cameraRef, rendererRef, controlsRef, objectMapRef, patch, fixtures)
+  useEffect(() => {
+    onEngine?.(status === 'ready' ? engine : null)
+  }, [engine, status, onEngine])
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full"
-      style={{ background: '#07070d', cursor: 'grab', minHeight: '200px', position: 'relative' }}
-    />
+    <div className="absolute inset-0">
+      <div ref={containerRef} className="absolute inset-0 touch-none select-none" />
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center"><Spinner /></div>
+      )}
+      {status === 'unsupported' && (
+        <div className="absolute inset-0 bg-surface-0">
+          <EmptyState
+            icon={LuMonitorX}
+            title="3D is not available here"
+            description={`This device could not start WebGL${error ? ` (${error})` : ''}. The stage layout shows the same rig in 2D.`}
+            action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>Open stage layout</Button>}
+          />
+        </div>
+      )}
+      {status === 'lost' && (
+        <div className="absolute inset-0 bg-surface-0">
+          <EmptyState
+            icon={LuTriangleAlert}
+            title="The 3D view was interrupted"
+            description="The graphics context was lost (GPU reset or memory pressure). Restart the 3D view to continue."
+            action={<Button variant="primary" icon={LuRefreshCw} onClick={restart}>Restart 3D</Button>}
+          />
+        </div>
+      )}
+    </div>
   )
 }

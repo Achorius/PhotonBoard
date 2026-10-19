@@ -1,114 +1,150 @@
+// ============================================================
+// Room: floor with the stage deck, grid, walls + ceiling, outline and
+// the truss bars. Origin = centre of the floor; the audience is at -Z
+// (the open side). Rebuilt (and the old one disposed) whenever the
+// room config changes — it is a handful of meshes.
+// ============================================================
+
 import * as THREE from 'three'
 import type { RoomConfig, TrussBar } from '@shared/types'
+import { palette } from '@renderer/components/ui/tokens'
 
-/**
- * Build the room geometry: floor, ceiling, 3 walls, grid helper.
- * Origin is at the centre of the stage floor (Y = 0).
- */
+// Surfaces are Lambert-shaded, so the UI surface tokens read a touch darker in 3D
+const FLOOR = palette.surface1
+const STAGE = palette.surface2
+const WALL = palette.surface1
+const CEILING = palette.surface0
+const TRUSS = palette.fgDisabled
+
 export function buildRoom(config: RoomConfig): THREE.Group {
-  const { width, depth, height } = config
+  const { width: w, depth: d, height: h } = config
   const group = new THREE.Group()
   group.name = 'room'
+  const stageZ = THREE.MathUtils.clamp(config.stageEdgeZ ?? 0, -d / 2, d / 2)
 
-  // ---- Floor ---- (StandardMaterial so SpotLight.map gobo projections appear)
-  const floorGeo = new THREE.PlaneGeometry(width, depth)
-  floorGeo.rotateX(-Math.PI / 2)
-  const floorMat = new THREE.MeshStandardMaterial({
-    color: 0x181822,
-    roughness: 0.85,
-    metalness: 0.0,
-    side: THREE.FrontSide
-  })
-  const floor = new THREE.Mesh(floorGeo, floorMat)
+  // ---- Floor (audience side) + stage deck ----
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
+    new THREE.MeshLambertMaterial({ color: FLOOR })
+  )
   floor.receiveShadow = true
   floor.name = 'floor'
   group.add(floor)
 
-  // ---- Grid ----
-  const gridHelper = new THREE.GridHelper(Math.max(width, depth), Math.max(width, depth) * 2, 0x1a1a2e, 0x16162a)
-  gridHelper.name = 'grid'
-  group.add(gridHelper)
+  const deckDepth = d / 2 - stageZ
+  if (deckDepth > 0.05) {
+    const deck = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, deckDepth).rotateX(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: STAGE })
+    )
+    deck.position.set(0, 0.003, stageZ + deckDepth / 2)
+    deck.receiveShadow = true
+    deck.name = 'stage'
+    group.add(deck)
+  }
 
-  // ---- Ceiling ----
-  const ceilGeo = new THREE.PlaneGeometry(width, depth)
-  ceilGeo.rotateX(Math.PI / 2)
-  const ceilMat = new THREE.MeshStandardMaterial({
-    color: 0x141420,
-    roughness: 0.9,
-    metalness: 0.0,
-    side: THREE.FrontSide
-  })
-  const ceiling = new THREE.Mesh(ceilGeo, ceilMat)
-  ceiling.position.y = height
-  ceiling.receiveShadow = true
-  ceiling.name = 'ceiling'
-  group.add(ceiling)
-
-  // ---- Back wall (upstage, +Z) ----
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c1c28, roughness: 0.9, metalness: 0.0, side: THREE.FrontSide })
-  const backGeo = new THREE.PlaneGeometry(width, height)
-  const backWall = new THREE.Mesh(backGeo, wallMat)
-  backWall.position.set(0, height / 2, depth / 2)
-  backWall.rotation.y = Math.PI
-  backWall.receiveShadow = true
-  backWall.name = 'wall-back'
-  group.add(backWall)
-
-  // ---- Left wall ----
-  const leftGeo = new THREE.PlaneGeometry(depth, height)
-  const leftWall = new THREE.Mesh(leftGeo, wallMat.clone())
-  leftWall.position.set(-width / 2, height / 2, 0)
-  leftWall.rotation.y = Math.PI / 2
-  leftWall.receiveShadow = true
-  leftWall.name = 'wall-left'
-  group.add(leftWall)
-
-  // ---- Right wall ----
-  const rightGeo = new THREE.PlaneGeometry(depth, height)
-  const rightWall = new THREE.Mesh(rightGeo, wallMat.clone())
-  rightWall.position.set(width / 2, height / 2, 0)
-  rightWall.rotation.y = -Math.PI / 2
-  rightWall.receiveShadow = true
-  rightWall.name = 'wall-right'
-  group.add(rightWall)
-
-  // ---- Stage edge line ----
-  const edgePts = [
-    new THREE.Vector3(-width / 2, 0.01, 0),
-    new THREE.Vector3(width / 2, 0.01, 0)
-  ]
-  const edgeLine = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(edgePts),
-    new THREE.LineBasicMaterial({ color: 0xe85d04, opacity: 0.5, transparent: true })
+  // Stage edge
+  const edge = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-w / 2, 0.012, stageZ), new THREE.Vector3(w / 2, 0.012, stageZ)]),
+    new THREE.LineBasicMaterial({ color: palette.accent, transparent: true, opacity: 0.75 })
   )
-  edgeLine.name = 'stage-edge'
-  group.add(edgeLine)
+  edge.name = 'stage-edge'
+  group.add(edge)
 
-  // ---- Truss pipe outlines along ceiling ----
-  addTruss(group, config.trussBars, width)
+  // ---- Grid: 1 m, major every 5 m from the centre ----
+  const minor: number[] = []
+  const major: number[] = []
+  for (let x = Math.ceil(-w / 2); x <= Math.floor(w / 2); x++) {
+    ;(x % 5 === 0 ? major : minor).push(x, 0.008, -d / 2, x, 0.008, d / 2)
+  }
+  for (let z = Math.ceil(-d / 2); z <= Math.floor(d / 2); z++) {
+    ;(z % 5 === 0 ? major : minor).push(-w / 2, 0.008, z, w / 2, 0.008, z)
+  }
+  const grid = new THREE.Group()
+  grid.name = 'grid'
+  grid.add(lines(minor, palette.surface4, 0.7))
+  grid.add(lines(major, palette.lineStrong, 0.8))
+  group.add(grid)
+
+  // ---- Walls + ceiling (toggle "Room") ----
+  const walls = new THREE.Group()
+  walls.name = 'walls'
+  const wallMat = new THREE.MeshLambertMaterial({ color: WALL })
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat)
+  back.position.set(0, h / 2, d / 2)
+  back.rotation.y = Math.PI
+  const left = new THREE.Mesh(new THREE.PlaneGeometry(d, h), wallMat)
+  left.position.set(-w / 2, h / 2, 0)
+  left.rotation.y = Math.PI / 2
+  const right = new THREE.Mesh(new THREE.PlaneGeometry(d, h), wallMat)
+  right.position.set(w / 2, h / 2, 0)
+  right.rotation.y = -Math.PI / 2
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: CEILING }))
+  ceiling.position.y = h
+  for (const m of [back, left, right, ceiling]) {
+    m.receiveShadow = true
+    walls.add(m)
+  }
+  group.add(walls)
+
+  // ---- Outline of the room box (reads well when walls are hidden or seen from outside) ----
+  const outline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d).translate(0, h / 2, 0)),
+    new THREE.LineBasicMaterial({ color: palette.line, transparent: true, opacity: 0.9 })
+  )
+  outline.name = 'outline'
+  group.add(outline)
+
+  // ---- Truss ----
+  for (const bar of config.trussBars) group.add(buildTruss(bar, w))
 
   return group
 }
 
-function addTruss(group: THREE.Group, trussBars: TrussBar[], roomWidth: number): void {
-  const trussMat = new THREE.MeshBasicMaterial({ color: 0x555577 })
-  const pipeR = 0.03
-  for (const bar of trussBars) {
-    const barWidth = bar.width ?? roomWidth
-    const pipeGeo = new THREE.CylinderGeometry(pipeR, pipeR, barWidth, 6)
-    pipeGeo.rotateZ(Math.PI / 2)
-    const pipe = new THREE.Mesh(pipeGeo, trussMat.clone())
-    if (bar.color) (pipe.material as THREE.MeshBasicMaterial).color.setStyle(bar.color)
-    pipe.position.set(0, bar.y, bar.z)
-    pipe.name = `truss-${bar.id}`
-    group.add(pipe)
+/** Flat ladder truss (two chords + zig-zag lacing), fixtures hang under it */
+function buildTruss(bar: TrussBar, roomWidth: number): THREE.Group {
+  const len = Math.max(0.5, bar.width ?? roomWidth)
+  const g = new THREE.Group()
+  g.name = `truss-${bar.id}`
+  g.position.set(0, bar.y + 0.03, bar.z)
+  const mat = new THREE.MeshLambertMaterial({ color: bar.color ?? TRUSS })
+  const chordGeo = new THREE.CylinderGeometry(0.025, 0.025, len, 8).rotateZ(Math.PI / 2)
+  for (const z of [-0.13, 0.13]) {
+    const chord = new THREE.Mesh(chordGeo, mat)
+    chord.position.z = z
+    chord.castShadow = true
+    g.add(chord)
   }
+  const lacing: number[] = []
+  const step = 0.4
+  const n = Math.max(1, Math.round(len / step))
+  for (let i = 0; i < n; i++) {
+    const x0 = -len / 2 + (i * len) / n
+    const x1 = -len / 2 + ((i + 1) * len) / n
+    const z0 = i % 2 === 0 ? -0.13 : 0.13
+    lacing.push(x0, 0, z0, x1, 0, -z0)
+  }
+  const lace = lines(lacing, bar.color ?? TRUSS, 1)
+  g.add(lace)
+  // Ends
+  const endGeo = new THREE.BoxGeometry(0.06, 0.06, 0.32)
+  for (const x of [-len / 2, len / 2]) {
+    const end = new THREE.Mesh(endGeo, mat)
+    end.position.x = x
+    g.add(end)
+  }
+  return g
 }
 
-/**
- * Show/hide the grid helper.
- */
-export function setGridVisible(room: THREE.Group, visible: boolean): void {
+function lines(points: number[], color: string, opacity: number): THREE.LineSegments {
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+  return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity }))
+}
+
+export function setRoomVisibility(room: THREE.Group, opts: { walls: boolean; grid: boolean }): void {
+  const walls = room.getObjectByName('walls')
+  if (walls) walls.visible = opts.walls
   const grid = room.getObjectByName('grid')
-  if (grid) grid.visible = visible
+  if (grid) grid.visible = opts.grid
 }
