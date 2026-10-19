@@ -436,6 +436,12 @@ function normalizeTimeline(raw: unknown, cuelistIds: Set<string>, warnings: stri
     }
     const color = optStr(c.color)
     if (color) clip.color = color
+    const name = optStr(c.name)
+    if (name) clip.name = name
+    const fadeIn = num(c.fadeIn, 0, 0)
+    if (fadeIn > 0) clip.fadeIn = Math.min(fadeIn, clip.duration)
+    const fadeOut = num(c.fadeOut, 0, 0)
+    if (fadeOut > 0) clip.fadeOut = Math.min(fadeOut, clip.duration)
     clips.push(clip)
   }
   const markerIds = new IdRegistry('timeline marker', warnings)

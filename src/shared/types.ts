@@ -453,6 +453,11 @@ export interface TimelineClip {
   startTime: number       // seconds from timeline start
   duration: number        // seconds
   color?: string          // UI color for the clip block
+  /** Label shown on the clip (default: the scene name) */
+  name?: string
+  /** Fade-in / fade-out (seconds) applied to the clip's level */
+  fadeIn?: number
+  fadeOut?: number
 }
 
 export interface TimelineMarker {

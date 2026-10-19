@@ -113,7 +113,8 @@ interface FollowState extends FollowConfig {
   addFixture: (id: string) => void
   removeFixture: (id: string) => void
   setTarget: (x: number, y: number, z: number) => void
-  activate: () => void
+  /** Start tracking. `keepTarget`: aim at the current target instead of centre stage. */
+  activate: (opts?: { keepTarget?: boolean }) => void
   deactivate: () => void
   reset: () => void
   toggleActive: () => void
@@ -157,7 +158,7 @@ export const useFollowStore = create<FollowState>((set, get) => ({
     if (get().active) applyFollowDmx(get())
   },
 
-  activate: () => {
+  activate: (opts) => {
     try {
       const state = get()
       if (state.active || state.fixtureIds.length === 0) return
@@ -169,8 +170,9 @@ export const useFollowStore = create<FollowState>((set, get) => ({
         if (!(key in saved)) saved[key] = getProgrammerValue(ch.universe, ch.channel) ?? null
       }
 
-      // Start from centre stage floor
-      set({ active: true, targetX: 0, targetY: 0, targetZ: 0, savedChannels: saved })
+      // Start from centre stage floor (or where the operator placed the target)
+      if (opts?.keepTarget) set({ active: true, savedChannels: saved })
+      else set({ active: true, targetX: 0, targetY: 0, targetZ: 0, savedChannels: saved })
       applyFollowDmx(get())
     } catch (e) {
       console.error('[Follow] activate() error:', e)
