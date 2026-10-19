@@ -1,362 +1,91 @@
-import React, { useState, useEffect } from 'react'
-import { useUiStore } from '../../stores/ui-store'
-import type { ArtNetConfig, UsbDmxConfig, UsbDmxDriver, SerialPortInfo } from '@shared/types'
+// ============================================================
+// Settings — machine & per-device configuration.
+//   Outputs        DMX outputs (machine config, dmxOutputs API)
+//   Remote access  web remote URL + QR, PIN, Companion API
+//   Display        density, executor bar, sidebar, 3D quality
+//   Show           current file, save / open, backups, MIDI & timecode links
+//   About          version, platform, credits
+// ============================================================
 
-const USB_DRIVERS: { value: UsbDmxDriver; label: string }[] = [
-  { value: 'enttec-open-dmx', label: 'ENTTEC Open DMX USB' },
-  { value: 'enttec-pro', label: 'ENTTEC DMX USB Pro' },
-  { value: 'eurolite', label: 'Eurolite USB-DMX512 (Open DMX)' },
-  { value: 'eurolite-pro', label: 'Eurolite USB-DMX512 PRO' },
-  { value: 'showtec', label: 'Showtec Quick DMX' },
-  { value: 'beamz', label: 'Beamz DMX60 / DMX70' },
-  { value: 'velleman', label: 'Velleman VM116 / K8062' },
-  { value: 'stairville', label: 'Stairville USB-DMX' },
-  { value: 'udmx', label: 'uDMX / Anyma / Clone' },
-  { value: 'generic-ftdi', label: 'Generic FTDI Adapter' },
+import { useState } from 'react'
+import type { IconType } from 'react-icons'
+import { LuCable, LuFileText, LuInfo, LuMonitor, LuSettings, LuSmartphone } from 'react-icons/lu'
+import { StatusDot, cn, type Tone } from '@renderer/components/ui'
+import { outputHealth, useOutputStatus, type OutputHealth } from '@renderer/hooks/useOutputStatus'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { OutputsSettings } from './OutputsSettings'
+import { RemoteAccessSettings } from './RemoteAccessSettings'
+import { AboutSettings, DisplaySettings, ShowSettings } from './GeneralSettings'
+
+type SectionId = 'outputs' | 'remote' | 'display' | 'show' | 'about'
+
+const SECTIONS: { id: SectionId; label: string; hint: string; icon: IconType }[] = [
+  { id: 'outputs', label: 'Outputs', hint: 'Art-Net · USB DMX', icon: LuCable },
+  { id: 'remote', label: 'Remote access', hint: 'Phone · tablet · Companion', icon: LuSmartphone },
+  { id: 'display', label: 'Display', hint: 'Density · layout', icon: LuMonitor },
+  { id: 'show', label: 'Show', hint: 'File · backups · inputs', icon: LuFileText },
+  { id: 'about', label: 'About', hint: 'Version · credits', icon: LuInfo }
 ]
 
+const HEALTH_TONE: Record<OutputHealth, Tone> = { ok: 'go', degraded: 'warning', error: 'danger', none: 'warning', unknown: 'neutral' }
+
 export function SettingsView() {
-  const { showName, setShowName } = useUiStore()
-  const [artnetConfigs, setArtnetConfigs] = useState<ArtNetConfig[]>([
-    { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
-    { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
-    { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 }
-  ])
-  const [artnetStatus, setArtnetStatus] = useState<{ connected: boolean; senders: any[] }>({ connected: false, senders: [] })
-  const [saved, setSaved] = useState(false)
-
-  // USB DMX state
-  const [usbConfigs, setUsbConfigs] = useState<UsbDmxConfig[]>([])
-  const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([])
-  const [usbStatus, setUsbStatus] = useState<{ available: boolean; outputs: any[] }>({ available: false, outputs: [] })
-  const [scanning, setScanning] = useState(false)
-
-  useEffect(() => {
-    window.photonboard.artnet.getStatus().then(setArtnetStatus).catch(() => {})
-    refreshUsbStatus()
-  }, [])
-
-  const refreshUsbStatus = async () => {
-    try {
-      const status = await window.photonboard.dmxOutputs.getStatus()
-      setUsbStatus(status.usbDmx)
-    } catch (e) { /* ignore */ }
-  }
-
-  const scanUsb = async () => {
-    setScanning(true)
-    try {
-      const ports = await window.photonboard.dmxOutputs.scanUsb()
-      setSerialPorts(ports)
-    } catch (e) {
-      console.error('Failed to scan USB ports:', e)
-    }
-    setScanning(false)
-  }
-
-  const applyArtnet = async () => {
-    await window.photonboard.artnet.configure(artnetConfigs)
-    const status = await window.photonboard.artnet.getStatus()
-    setArtnetStatus(status)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const addUsbOutput = () => {
-    setUsbConfigs([...usbConfigs, {
-      driver: 'enttec-open-dmx',
-      portPath: serialPorts[0]?.path || '',
-      universe: 0,
-      label: `USB DMX ${usbConfigs.length + 1}`
-    }])
-  }
-
-  const removeUsbOutput = (index: number) => {
-    setUsbConfigs(usbConfigs.filter((_, i) => i !== index))
-  }
-
-  const applyUsb = async () => {
-    const configs = usbConfigs.map((uc, i) => ({
-      id: `usb-${i}`,
-      type: 'usb-dmx' as const,
-      enabled: true,
-      usbDmx: uc
-    }))
-    await window.photonboard.dmxOutputs.configure(configs)
-    await refreshUsbStatus()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const handleSaveShow = async () => {
-    const show = await window.photonboard.show.new()
-    show.name = showName
-    show.artnetConfig = artnetConfigs
-    await window.photonboard.show.save(show)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  // Always opens on Outputs (the output-health popover links here)
+  const [section, setSection] = useState<SectionId>('outputs')
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header — same as other views */}
-      <div className="panel-header flex items-center justify-between">
-        <span>Settings</span>
-        {saved && <span className="text-[10px] text-green-400 normal-case tracking-normal">Saved!</span>}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid grid-cols-2 gap-4">
-
-          {/* ====== LEFT COLUMN ====== */}
-          <div className="space-y-4">
-
-            {/* Show */}
-            <section className="panel p-3 space-y-3">
-              <h2 className="text-[10px] text-gray-500 uppercase font-semibold">Show</h2>
-              <div>
-                <label className="text-[9px] text-gray-600 uppercase">Show Name</label>
-                <input
-                  className="input w-full mt-0.5"
-                  value={showName}
-                  onChange={e => setShowName(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button className="btn-primary text-xs" onClick={handleSaveShow}>Save Show</button>
-                <button className="btn-secondary text-xs" onClick={() => window.photonboard.show.load()}>Load Show</button>
-                <button className="btn-secondary text-xs" onClick={() => window.photonboard.show.new()}>New Show</button>
-              </div>
-            </section>
-
-            {/* USB DMX */}
-            <section className="panel p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[10px] text-gray-500 uppercase font-semibold">USB DMX Output</h2>
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full ${usbStatus.available ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                  <span className="text-[9px] text-gray-500">
-                    {usbStatus.available ? `${usbStatus.outputs.length} connected` : 'serialport not found'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Scan */}
-              <div className="flex gap-2 items-center">
-                <button className="btn-secondary text-xs" onClick={scanUsb} disabled={scanning}>
-                  {scanning ? 'Scanning...' : 'Scan USB Ports'}
-                </button>
-                {serialPorts.length > 0 && (
-                  <span className="text-[9px] text-gray-500">{serialPorts.length} port(s)</span>
-                )}
-              </div>
-
-              {/* Detected ports */}
-              {serialPorts.length > 0 && (
-                <div className="bg-surface-2 rounded p-2 space-y-1">
-                  <span className="text-[9px] text-gray-600 uppercase">Detected Ports</span>
-                  {serialPorts.map((port, i) => (
-                    <div key={i} className="flex items-center gap-2 text-[9px] text-gray-400">
-                      <span className="font-mono text-blue-400">{port.path}</span>
-                      {port.manufacturer && <span className="text-gray-600">{port.manufacturer}</span>}
-                      {port.vendorId && <span className="text-gray-600">VID:{port.vendorId}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* USB outputs list */}
-              {usbConfigs.map((config, i) => (
-                <div key={i} className="bg-surface-2 rounded p-2.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-300">{config.label || `USB DMX ${i + 1}`}</span>
-                    <button
-                      className="text-[9px] text-red-400 hover:text-red-300"
-                      onClick={() => removeUsbOutput(i)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[9px] text-gray-600">Adapter</label>
-                      <select
-                        className="input w-full text-xs"
-                        value={config.driver}
-                        onChange={e => {
-                          const u = [...usbConfigs]
-                          u[i] = { ...config, driver: e.target.value as UsbDmxDriver }
-                          setUsbConfigs(u)
-                        }}
-                      >
-                        {USB_DRIVERS.map(d => (
-                          <option key={d.value} value={d.value}>{d.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-gray-600">Port</label>
-                      {serialPorts.length > 0 ? (
-                        <select
-                          className="input w-full text-xs"
-                          value={config.portPath}
-                          onChange={e => {
-                            const u = [...usbConfigs]
-                            u[i] = { ...config, portPath: e.target.value }
-                            setUsbConfigs(u)
-                          }}
-                        >
-                          <option value="">Select...</option>
-                          {serialPorts.map((p, pi) => (
-                            <option key={pi} value={p.path}>
-                              {p.path} {p.manufacturer ? `(${p.manufacturer})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          className="input w-full text-xs"
-                          value={config.portPath}
-                          onChange={e => {
-                            const u = [...usbConfigs]
-                            u[i] = { ...config, portPath: e.target.value }
-                            setUsbConfigs(u)
-                          }}
-                          placeholder="/dev/tty.usbserial-XXX"
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-gray-600">Universe</label>
-                      <input
-                        className="input w-full text-xs"
-                        type="number"
-                        min={0} max={15}
-                        value={config.universe}
-                        onChange={e => {
-                          const u = [...usbConfigs]
-                          u[i] = { ...config, universe: parseInt(e.target.value) || 0 }
-                          setUsbConfigs(u)
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <div className="flex gap-2">
-                <button className="btn-secondary text-xs" onClick={addUsbOutput}>
-                  + Add USB DMX Output
-                </button>
-                {usbConfigs.length > 0 && (
-                  <button className="btn-primary text-xs" onClick={applyUsb}>
-                    Apply USB Config
-                  </button>
-                )}
-              </div>
-
-              {/* Active USB status */}
-              {usbStatus.outputs.length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-[9px] text-gray-600 uppercase">Active USB Outputs</span>
-                  {usbStatus.outputs.map((out, i) => (
-                    <div key={i} className="flex items-center gap-2 text-[9px]">
-                      <div className={`w-1.5 h-1.5 rounded-full ${out.connected ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <span className="text-gray-400">
-                        Universe {out.universe + 1} — {out.driver} on {out.port}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          {/* ====== RIGHT COLUMN ====== */}
-          <div className="space-y-4">
-
-            {/* ArtNet */}
-            <section className="panel p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[10px] text-gray-500 uppercase font-semibold">ArtNet Output</h2>
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full ${artnetStatus.connected ? 'bg-green-500' : 'bg-red-500'}`} />
-                  <span className="text-[9px] text-gray-500">{artnetStatus.connected ? 'Connected' : 'Offline'}</span>
-                </div>
-              </div>
-
-              {artnetConfigs.map((config, i) => (
-                <div key={i} className="bg-surface-2 rounded p-2 space-y-1">
-                  <span className="text-[10px] text-gray-500">Universe {i + 1}</span>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="col-span-1">
-                      <label className="text-[9px] text-gray-600">IP Address</label>
-                      <input
-                        className="input w-full"
-                        value={config.host}
-                        onChange={e => {
-                          const c = [...artnetConfigs]
-                          c[i] = { ...config, host: e.target.value }
-                          setArtnetConfigs(c)
-                        }}
-                        placeholder="255.255.255.255"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-gray-600">Port</label>
-                      <input
-                        className="input w-full"
-                        type="number"
-                        value={config.port}
-                        onChange={e => {
-                          const c = [...artnetConfigs]
-                          c[i] = { ...config, port: parseInt(e.target.value) || 6454 }
-                          setArtnetConfigs(c)
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-gray-600">Subnet</label>
-                      <input
-                        className="input w-full"
-                        type="number"
-                        min={0} max={15}
-                        value={config.subnet}
-                        onChange={e => {
-                          const c = [...artnetConfigs]
-                          c[i] = { ...config, subnet: parseInt(e.target.value) || 0 }
-                          setArtnetConfigs(c)
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-gray-600">Net</label>
-                      <input
-                        className="input w-full"
-                        type="number"
-                        min={0} max={127}
-                        value={config.net}
-                        onChange={e => {
-                          const c = [...artnetConfigs]
-                          c[i] = { ...config, net: parseInt(e.target.value) || 0 }
-                          setArtnetConfigs(c)
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <button className="btn-primary text-xs" onClick={applyArtnet}>
-                Apply ArtNet Config
-              </button>
-            </section>
-          </div>
-
+    <div className="flex h-full flex-col bg-surface-0">
+      <header className="flex h-control-lg shrink-0 items-center gap-2 border-b border-line bg-surface-1 px-3">
+        <LuSettings size={16} aria-hidden className="text-fg-tertiary" />
+        <h1 className="text-sm font-semibold text-fg-primary">Settings</h1>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <nav
+          aria-label="Settings sections"
+          className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface-1 p-2 [[data-density=touch]_&]:w-64"
+        >
+          {SECTIONS.map((s) => (
+            <NavItem key={s.id} section={s} active={section === s.id} onSelect={() => setSection(s.id)} />
+          ))}
+        </nav>
+        <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto" key={section}>
+          {section === 'outputs' && <OutputsSettings />}
+          {section === 'remote' && <RemoteAccessSettings />}
+          {section === 'display' && <DisplaySettings />}
+          {section === 'show' && <ShowSettings />}
+          {section === 'about' && <AboutSettings />}
         </div>
       </div>
     </div>
   )
+}
+
+function NavItem({ section: s, active, onSelect }: { section: (typeof SECTIONS)[number]; active: boolean; onSelect: () => void }) {
+  const Icon = s.icon
+  return (
+    <button
+      type="button"
+      aria-current={active ? 'page' : undefined}
+      onClick={onSelect}
+      className={cn(
+        'relative flex min-h-control-lg items-center gap-3 rounded-md px-2.5 py-1.5 text-left transition-colors duration-fast',
+        active ? 'bg-surface-3 text-fg-primary' : 'text-fg-secondary hover:bg-surface-2 hover:text-fg-primary'
+      )}
+    >
+      {active && <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent" />}
+      <Icon size={18} aria-hidden className={cn('shrink-0', active ? 'text-accent-fg' : 'text-fg-tertiary')} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-medium">{s.label}</span>
+        <span className="truncate text-2xs text-fg-tertiary">{s.hint}</span>
+      </span>
+      {s.id === 'outputs' && <OutputsNavDot />}
+    </button>
+  )
+}
+
+/** Output health next to the Outputs entry (shared 1 Hz poll) */
+function OutputsNavDot() {
+  const { health } = outputHealth(useOutputStatus())
+  if (health === 'unknown') return null
+  return <StatusDot tone={HEALTH_TONE[health]} pulse={health === 'error'} label={`Outputs: ${health}`} />
 }

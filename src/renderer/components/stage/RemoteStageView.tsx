@@ -1,531 +1,343 @@
 // ============================================================
-// PhotonBoard — Remote Stage View
-// Full-screen stage control UI for browser/mobile/tablet.
-// Mirrors the Electron Stage window: 8×4 colored scene grid,
-// long-press drag-to-reorder. Falls back to a 4×2 paged grid
-// on phone-sized screens.
+// PhotonBoard — Remote Stage View (browser: phone / tablet).
+// Same surface as the Electron Stage window, fed by the stores the
+// remote bridge mirrors from the console. Store actions forward
+// themselves to the console in remote mode (lib/runtime.ts).
+//
+//   phone  (< 640 px): 2 executor columns per page, GM bar + masters
+//                      docked at the bottom for the thumb
+//   tablet / desktop:  masters column + full 8 × 4 grid
 // ============================================================
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LuClapperboard, LuHand, LuLayoutDashboard, LuMove, LuSlidersVertical } from 'react-icons/lu'
+import { Button, EmptyState, SegmentedControl, StatusDot, cn } from '@renderer/components/ui'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
-import { useExecutorStore, COLUMN_COUNT, ROWS_PER_COLUMN } from '@renderer/stores/executor-store'
-import { isRemote } from '@renderer/hooks/useRemoteSync'
+import { useExecutorStore } from '@renderer/stores/executor-store'
+import { useRemoteConnection } from '@renderer/hooks/useRemoteConnection'
+import { sendRemoteCommand } from '@renderer/lib/runtime'
+import { SceneGrid, STAGE_COLUMNS, type Cell, type SceneMode, type StageGridMode, type StageScene } from './SceneGrid'
+import { GrandMasterBar, GrandMasterFader, GroupStrip, MasterButtons, PlaybackButtons, StageClock, type StageGroup } from './StageControls'
 
-const pb = () => (window as any).photonboard
-
-function sendCommand(type: string, payload?: any) {
-  if (isRemote()) {
-    pb()?.remote?.sendCommand(type, payload)
-  } else {
-    pb()?.stage?.sendCommand?.({ type, payload })
-  }
-}
-
-const LONG_PRESS_MS = 350
 const PHONE_BREAKPOINT = 640
-
-// Phone view splits the full 8×4 matrix into 4 pages of 4×2:
-//   page 0 → cols 0-3, rows 0-1 (top-left quadrant)
-//   page 1 → cols 4-7, rows 0-1 (top-right)
-//   page 2 → cols 0-3, rows 2-3 (bottom-left)
-//   page 3 → cols 4-7, rows 2-3 (bottom-right)
-const PHONE_PAGES = [
-  { colStart: 0, rowStart: 0, label: '1' },
-  { colStart: 4, rowStart: 0, label: '2' },
-  { colStart: 0, rowStart: 2, label: '3' },
-  { colStart: 4, rowStart: 2, label: '4' }
-]
-
-// ── Hooks ───────────────────────────────────────────────────
+const COLUMNS_PER_PAGE = 2
+const PAGE_COUNT = STAGE_COLUMNS / COLUMNS_PER_PAGE
 
 function useIsPhone(): boolean {
-  const [isPhone, setIsPhone] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth < PHONE_BREAKPOINT
-  )
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.innerWidth < PHONE_BREAKPOINT)
   useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth < PHONE_BREAKPOINT)
+    const onResize = () => setPhone(window.innerWidth < PHONE_BREAKPOINT)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-  return isPhone
+  return phone
 }
 
-// ── Grand Master Fader ──────────────────────────────────────
+// ---- Actions (forwarded to the console by the stores) ----
 
-function GrandMaster() {
-  const grandMaster = useDmxStore(s => s.grandMaster)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const dragging = useRef(false)
+const fire = (scene: StageScene, mode: SceneMode, phase: 'down' | 'up') => {
+  const pb = usePlaybackStore.getState()
+  if (mode === 'flash') pb.flashCuelist(scene.id, phase === 'down')
+  else if (mode === 'trigger') {
+    if (phase === 'down') pb.goCuelist(scene.id)
+    else pb.stopCuelist(scene.id)
+  } else if (phase === 'down') {
+    if (scene.isPlaying) pb.stopCuelist(scene.id)
+    else pb.goCuelist(scene.id)
+  }
+}
+const setLevel = (id: string, level: number) => usePlaybackStore.getState().setCuelistFader(id, level)
+const swap = (from: Cell, to: Cell) => useExecutorStore.getState().swapCells(from, to)
+const dmx = () => useDmxStore.getState()
 
-  const compute = useCallback((e: React.PointerEvent) => {
-    if (!trackRef.current) return
-    const rect = trackRef.current.getBoundingClientRect()
-    const ratio = 1 - (e.clientY - rect.top) / rect.height
-    const val = Math.max(0, Math.min(255, Math.round(ratio * 255)))
-    sendCommand('set-grand-master', val)
+// ---- Data hooks (narrow selectors) ----
+
+function useStageScenes(): ReadonlyMap<string, StageScene> {
+  const cuelists = usePlaybackStore((s) => s.cuelists)
+  return useMemo(() => new Map(cuelists.map((c) => [c.id, {
+    id: c.id,
+    name: c.name,
+    isPlaying: c.isPlaying,
+    faderLevel: c.faderLevel,
+    currentCueIndex: c.currentCueIndex,
+    cueCount: c.cues.length,
+    cueName: c.isPlaying ? c.cues[c.currentCueIndex]?.name : undefined,
+    flash: c.flash
+  }])), [cuelists])
+}
+
+function useGroupSelection() {
+  const groups = usePatchStore((s) => s.groups)
+  const selection = usePatchStore((s) => s.selectedFixtureIds)
+  const stageGroups = useMemo<StageGroup[]>(
+    () => groups.filter((g) => !g.parentGroupId).map((g) => ({ id: g.id, name: g.name, color: g.color, fixtureCount: g.fixtureIds.length })),
+    [groups]
+  )
+  // A group is "active" when the selection is exactly its fixtures
+  const activeGroupId = useMemo(() => {
+    if (selection.length === 0) return null
+    const sel = new Set(selection)
+    return groups.find((g) => !g.parentGroupId && g.fixtureIds.length === sel.size && g.fixtureIds.every((id) => sel.has(id)))?.id ?? null
+  }, [groups, selection])
+
+  const selectGroup = useCallback((id: string) => {
+    const g = usePatchStore.getState().groups.find((x) => x.id === id)
+    if (g) usePatchStore.setState({ selectedFixtureIds: [...g.fixtureIds] }) // local feedback
+    sendRemoteCommand('select-group', id)
   }, [])
+  const selectAll = useCallback(() => {
+    usePatchStore.getState().selectAll()
+    sendRemoteCommand('select-all')
+  }, [])
+  const clear = useCallback(() => {
+    usePatchStore.getState().clearSelection()
+    sendRemoteCommand('clear-selection')
+  }, [])
+  return { groups: stageGroups, activeGroupId, selectionCount: selection.length, selectGroup, selectAll, clear }
+}
 
-  const pct = Math.round((grandMaster / 255) * 100)
+// ---- Pieces ----
 
+function ConnectionDot() {
+  const state = useRemoteConnection()
+  const ok = state === 'open'
   return (
-    <div className="flex flex-col items-center gap-1 p-2 flex-1">
-      <span className="text-[10px] text-gray-500 uppercase tracking-wider">Grand Master</span>
-      <span className="text-lg font-bold tabular-nums text-white">{pct}%</span>
-      <div
-        ref={trackRef}
-        className="relative flex-1 rounded-lg cursor-pointer"
-        style={{ width: 40, backgroundColor: '#0f0f18', border: '1px solid #333', touchAction: 'none' }}
-        onPointerDown={(e) => { dragging.current = true; (e.target as HTMLElement).setPointerCapture(e.pointerId); compute(e) }}
-        onPointerMove={(e) => { if (dragging.current) compute(e) }}
-        onPointerUp={() => { dragging.current = false }}
-      >
-        <div className="absolute bottom-0 left-0 right-0 rounded-b-lg" style={{
-          height: `${pct}%`,
-          background: 'linear-gradient(to top, #e85d04, #f59e0b)',
-          opacity: 0.7,
-        }} />
-        <div className="absolute left-0 right-0" style={{
-          bottom: `calc(${pct}% - 4px)`,
-          height: 8,
-          backgroundColor: '#e85d04',
-          borderRadius: 3,
-          border: '1px solid rgba(255,255,255,0.3)',
-          boxShadow: '0 0 6px #e85d0488',
-        }} />
-      </div>
+    <StatusDot
+      tone={ok ? 'go' : state === 'auth-required' ? 'danger' : 'warning'}
+      pulse={!ok}
+      size="md"
+      label={ok ? 'Connected to the console' : state === 'auth-required' ? 'PIN required' : 'Reconnecting to the console'}
+    />
+  )
+}
+
+function ShowTitle({ className }: { className?: string }) {
+  const showName = useUiStore((s) => s.showName)
+  return <h1 className={cn('min-w-0 truncate font-semibold text-fg-primary', className)}>{showName}</h1>
+}
+
+function BlackoutStrip() {
+  const blackout = useDmxStore((s) => s.blackout)
+  if (!blackout) return null
+  return (
+    <div role="alert" className="flex h-8 shrink-0 items-center justify-center gap-2 bg-danger text-xs font-bold uppercase tracking-[0.14em] text-on-danger">
+      <span aria-hidden className="h-2 w-2 rounded-full bg-white animate-blink" />
+      Blackout
     </div>
   )
 }
 
-// ── Master Buttons ──────────────────────────────────────────
-
-function MasterButtons() {
-  const blackout = useDmxStore(s => s.blackout)
-
+function GridModeSwitch({ value, onChange, compact }: { value: StageGridMode; onChange: (m: StageGridMode) => void; compact?: boolean }) {
   return (
-    <div className="flex flex-col gap-1.5 p-2 border-t border-surface-3">
-      <button
-        className="py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-colors"
-        style={{
-          backgroundColor: blackout ? '#dc2626' : '#1a1a2e',
-          color: blackout ? '#fff' : '#888',
-          border: `1px solid ${blackout ? '#dc2626' : '#333'}`,
-          boxShadow: blackout ? '0 0 12px #dc262688' : 'none',
-        }}
-        onClick={() => sendCommand('toggle-blackout')}
-      >
-        Blackout
-      </button>
-      <button
-        className="py-2 rounded-md text-xs font-bold uppercase tracking-wider"
-        style={{ backgroundColor: '#1a1a2e', color: '#888', border: '1px solid #333' }}
-        onClick={() => sendCommand('clear-programmer')}
-      >
-        Clear
-      </button>
-    </div>
+    <SegmentedControl<StageGridMode>
+      aria-label="Scene grid mode"
+      size={compact ? 'sm' : 'md'}
+      value={value}
+      onChange={onChange}
+      items={[
+        { value: 'play', label: compact ? undefined : 'Play', icon: LuHand, title: 'Play' },
+        { value: 'levels', label: compact ? undefined : 'Levels', icon: LuSlidersVertical, title: 'Levels' },
+        { value: 'arrange', label: compact ? undefined : 'Arrange', icon: LuMove, title: 'Arrange' }
+      ]}
+    />
   )
 }
 
-// ── Group Buttons ───────────────────────────────────────────
-
-function GroupBar() {
-  const groups = usePatchStore(s => s.groups).filter(g => !g.parentGroupId)
-  if (groups.length === 0) return null
-
+function Masters({ layout }: { layout: 'column' | 'row' }) {
+  const blackout = useDmxStore((s) => s.blackout)
+  const blinder = useDmxStore((s) => s.blinder)
+  const strobe = useDmxStore((s) => s.strobe)
   return (
-    <div className="flex gap-1 p-1.5 overflow-x-auto border-b border-surface-3 shrink-0">
-      {groups.map(g => (
-        <button
-          key={g.id}
-          className="px-2.5 py-1 rounded text-[10px] font-medium whitespace-nowrap"
-          style={{ backgroundColor: g.color || '#333', color: '#fff', border: 'none', opacity: 0.8 }}
-          onClick={() => sendCommand('select-group', g.id)}
-        >
-          {g.name}
-        </button>
-      ))}
-      <button
-        className="px-2.5 py-1 rounded text-[10px] text-gray-400"
-        style={{ backgroundColor: '#1a1a2e', border: '1px solid #333' }}
-        onClick={() => sendCommand('clear-selection')}
-      >
-        Clear
-      </button>
-    </div>
+    <MasterButtons
+      layout={layout}
+      blackout={blackout}
+      blinder={blinder}
+      strobe={strobe}
+      onBlackout={() => dmx().toggleBlackout()}
+      onBlinder={(on) => dmx().toggleBlinder(on)}
+      onStrobe={(on) => dmx().toggleStrobe(on)}
+    />
   )
 }
 
-// ── Scene Cell (button + fader, colored per column) ─────────
-
-interface SceneCellProps {
-  cuelist: { id: string; name: string; isPlaying: boolean; faderLevel: number; currentCueIndex: number; cueCount: number } | null
-  col: number
-  row: number
-  color: string
-  isDragSource: boolean
-  isDragOver: boolean
-  compact: boolean
-  onGo: () => void
-  onStop: () => void
-  onFader: (level: number) => void
-  onLongPressStart: (col: number, row: number, target: Element, pointerId: number) => void
+function GrandMaster({ variant }: { variant: 'fader' | 'bar' }) {
+  const gm = useDmxStore((s) => s.grandMaster)
+  const set = useCallback((v: number) => dmx().setGrandMaster(v), [])
+  return variant === 'bar' ? <GrandMasterBar value={gm} onChange={set} /> : <GrandMasterFader value={gm} onChange={set} />
 }
 
-function SceneCell({
-  cuelist, col, row, color, isDragSource, isDragOver, compact,
-  onGo, onStop, onFader, onLongPressStart
-}: SceneCellProps) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const faderDragging = useRef(false)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressFired = useRef(false)
-  const downPos = useRef<{ x: number; y: number } | null>(null)
+function ReleaseClear() {
+  const anyPlaying = usePlaybackStore((s) => s.cuelists.some((c) => c.isPlaying) || s.chases.some((c) => c.isPlaying))
+  return (
+    <PlaybackButtons
+      anyPlaying={anyPlaying}
+      onClear={() => sendRemoteCommand('clear-programmer')}
+      onReleaseAll={() => usePlaybackStore.getState().releaseAll()}
+    />
+  )
+}
 
-  const handleFader = useCallback((e: React.PointerEvent) => {
-    if (!trackRef.current) return
-    const rect = trackRef.current.getBoundingClientRect()
-    const ratio = 1 - (e.clientY - rect.top) / rect.height
-    onFader(Math.max(0, Math.min(255, Math.round(ratio * 255))))
-  }, [onFader])
-
-  const onFaderDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation() // exclusive: fader controls fader, not drag
-    faderDragging.current = true
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-    handleFader(e)
-  }, [handleFader])
-  const onFaderMove = useCallback((e: React.PointerEvent) => {
-    if (faderDragging.current) handleFader(e)
-  }, [handleFader])
-  const onFaderUp = useCallback(() => { faderDragging.current = false }, [])
-
-  const onCellDown = useCallback((e: React.PointerEvent) => {
-    if (!cuelist) return
-    longPressFired.current = false
-    downPos.current = { x: e.clientX, y: e.clientY }
-    if (longPressTimer.current) clearTimeout(longPressTimer.current)
-    const target = e.target as Element
-    const pointerId = e.pointerId
-    longPressTimer.current = setTimeout(() => {
-      longPressFired.current = true
-      try { target.releasePointerCapture?.(pointerId) } catch { /* noop */ }
-      onLongPressStart(col, row, target, pointerId)
-    }, LONG_PRESS_MS)
-  }, [cuelist, col, row, onLongPressStart])
-
-  const onCellMove = useCallback((e: React.PointerEvent) => {
-    if (longPressFired.current || !downPos.current || !longPressTimer.current) return
-    const dx = e.clientX - downPos.current.x
-    const dy = e.clientY - downPos.current.y
-    if (Math.hypot(dx, dy) > 8) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-  }, [])
-
-  const onCellUp = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-    downPos.current = null
-  }, [])
-
-  if (!cuelist) {
+function Grid({ mode, size, visibleColumns, className }: { mode: StageGridMode; size: 'sm' | 'md'; visibleColumns?: number[]; className?: string }) {
+  const grid = useExecutorStore((s) => s.grid)
+  const columns = useExecutorStore((s) => s.columns)
+  const modes = useExecutorStore((s) => s.modes)
+  const scenes = useStageScenes()
+  if (scenes.size === 0) {
     return (
-      <div
-        data-cell-col={col}
-        data-cell-row={row}
-        className="rounded-md border border-dashed transition-colors"
-        style={{
-          borderColor: isDragOver ? color + 'aa' : color + '30',
-          backgroundColor: isDragOver ? color + '20' : 'rgba(15,15,24,0.4)'
-        }}
-      />
+      <div className={cn('flex min-h-0 flex-1 rounded-lg border border-dashed border-line', className)}>
+        <EmptyState
+          icon={LuClapperboard}
+          title="No scenes in this show"
+          description="Scenes recorded on the console appear here automatically."
+        />
+      </div>
     )
   }
-
-  const pct = Math.round((cuelist.faderLevel / 255) * 100)
-  const isActive = cuelist.isPlaying
-
-  const nameSize = compact ? 'text-[12px]' : 'text-[11px]'
-  const goSize = compact ? 'text-xs py-2' : 'text-[11px] py-1.5'
-  const faderWidth = compact ? 'w-8' : 'w-6'
-
   return (
-    <div
-      data-cell-col={col}
-      data-cell-row={row}
-      className={`flex flex-col rounded-md overflow-hidden border transition-all min-h-0 select-none ${
-        isDragSource ? 'opacity-40 scale-95' : ''
-      } ${isDragOver ? 'ring-2' : ''}`}
-      style={{
-        backgroundColor: isActive ? color + '30' : color + '12',
-        borderColor: isActive ? color + 'aa' : color + '40',
-        boxShadow: isActive ? `0 0 10px ${color}55` : undefined,
-        // @ts-expect-error tailwind ringColor via CSS var
-        '--tw-ring-color': color,
-        touchAction: 'none'
-      }}
-      onPointerDown={onCellDown}
-      onPointerMove={onCellMove}
-      onPointerUp={onCellUp}
-    >
-      <div className="px-1 py-1 text-center border-b shrink-0" style={{ borderColor: color + '40' }}>
-        <div className={`${nameSize} font-bold truncate leading-tight`} style={{ color: isActive ? '#fff' : color + 'dd' }}>
-          {cuelist.name}
-        </div>
-        {cuelist.cueCount > 1 && (
-          <div className="text-[8px] text-gray-500 leading-none">
-            {cuelist.currentCueIndex + 1}/{cuelist.cueCount}
-          </div>
-        )}
-      </div>
+    <SceneGrid
+      className={className}
+      size={size}
+      grid={grid}
+      columns={columns}
+      modes={modes}
+      scenes={scenes}
+      mode={mode}
+      visibleColumns={visibleColumns}
+      onFire={fire}
+      onLevel={setLevel}
+      onSwap={swap}
+    />
+  )
+}
 
-      <div className="flex-1 flex items-stretch px-1 py-1 min-h-0">
-        <div
-          ref={trackRef}
-          className={`${faderWidth} mx-auto rounded relative cursor-pointer overflow-hidden touch-none`}
-          style={{ background: '#0f0f18', border: `1px solid ${color}55` }}
-          onPointerDown={onFaderDown}
-          onPointerMove={onFaderMove}
-          onPointerUp={onFaderUp}
-        >
-          <div
-            className="absolute bottom-0 left-0 right-0 transition-[height] duration-75"
-            style={{ height: `${pct}%`, background: `linear-gradient(to top, ${color}, ${color}cc)` }}
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[9px] font-bold text-white/85 font-mono drop-shadow">{pct}</span>
-          </div>
-        </div>
-      </div>
+function ModeHint({ mode }: { mode: StageGridMode }) {
+  if (mode === 'play') return null
+  return (
+    <p className={cn('shrink-0 text-center text-xs', mode === 'arrange' ? 'text-info-fg' : 'text-fg-tertiary')}>
+      {mode === 'arrange' ? 'Arrange — drag a scene onto another cell. Nothing fires.' : 'Levels — scene master faders. Double-tap = full.'}
+    </p>
+  )
+}
 
-      <button
-        className={`shrink-0 ${goSize} mx-1 mb-1 rounded font-black uppercase tracking-wide transition-all active:scale-95 text-white`}
-        style={{
-          backgroundColor: isActive ? '#dc2626' : color,
-          boxShadow: isActive ? '0 0 8px #dc262666' : `0 0 6px ${color}66`,
-          touchAction: 'none'
-        }}
-        onClick={(e) => {
-          e.stopPropagation()
-          if (longPressFired.current) {
-            longPressFired.current = false
-            return
-          }
-          isActive ? onStop() : onGo()
-        }}
-      >
-        {isActive ? 'STOP' : 'GO'}
-      </button>
+// ---- Phone ----
+
+function PageTabs({ page, onChange }: { page: number; onChange: (p: number) => void }) {
+  const columns = useExecutorStore((s) => s.columns)
+  return (
+    <div role="tablist" aria-label="Executor columns" className="grid grid-cols-4 gap-1 rounded-lg bg-surface-0 p-1 ring-1 ring-inset ring-line">
+      {Array.from({ length: PAGE_COUNT }, (_, p) => {
+        const cols = [p * COLUMNS_PER_PAGE, p * COLUMNS_PER_PAGE + 1]
+        const active = p === page
+        return (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-label={`Columns ${cols[0] + 1} and ${cols[1] + 1}`}
+            onClick={() => onChange(p)}
+            className={cn(
+              'flex h-control flex-col items-center justify-center gap-1 rounded-md transition-colors duration-fast',
+              active ? 'bg-surface-3 text-fg-primary shadow-raised' : 'text-fg-tertiary active:bg-surface-2'
+            )}
+          >
+            <span className="flex gap-1">
+              {cols.map((c) => <span key={c} aria-hidden className="h-1.5 w-4 rounded-full" style={{ backgroundColor: columns[c]?.color, opacity: active ? 1 : 0.55 }} />)}
+            </span>
+            <span className="font-mono text-2xs tabular">{cols[0] + 1}–{cols[1] + 1}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-// ── Executor Grid ───────────────────────────────────────────
-
-function ExecutorGridRemote({ phone, page }: { phone: boolean; page: number }) {
-  const cuelists = usePlaybackStore(s => s.cuelists)
-  const grid = useExecutorStore(s => s.grid)
-  const columns = useExecutorStore(s => s.columns)
-  const swapCellsLocal = useExecutorStore(s => s.swapCells)
-
-  const cuelistById = new Map(cuelists.map(cl => [cl.id, cl]))
-
-  const [dragSource, setDragSource] = useState<{ col: number; row: number } | null>(null)
-  const [dragOver, setDragOver] = useState<{ col: number; row: number } | null>(null)
-  const dragSourceRef = useRef<{ col: number; row: number } | null>(null)
-
-  const onLongPressStart = useCallback((col: number, row: number, _target: Element, _pointerId: number) => {
-    dragSourceRef.current = { col, row }
-    setDragSource({ col, row })
-    setDragOver({ col, row })
-  }, [])
-
-  // While drag is active, listen for pointer movement at document level
-  // and use elementFromPoint to find the cell under the finger.
-  // The executor-store subscription in useRemoteSync will forward the
-  // resulting layout change to the Pi.
-  useEffect(() => {
-    if (!dragSource) return
-
-    const findCell = (x: number, y: number) => {
-      const el = document.elementFromPoint(x, y) as HTMLElement | null
-      if (!el) return null
-      const cell = el.closest('[data-cell-col]') as HTMLElement | null
-      if (!cell) return null
-      const col = parseInt(cell.dataset.cellCol || '', 10)
-      const row = parseInt(cell.dataset.cellRow || '', 10)
-      if (Number.isNaN(col) || Number.isNaN(row)) return null
-      return { col, row }
-    }
-
-    const onMove = (e: PointerEvent) => {
-      const cell = findCell(e.clientX, e.clientY)
-      setDragOver(cell)
-    }
-
-    const finish = (e: PointerEvent) => {
-      const cell = findCell(e.clientX, e.clientY)
-      const src = dragSourceRef.current
-      if (src && cell && (cell.col !== src.col || cell.row !== src.row)) {
-        swapCellsLocal(src, cell)
-      }
-      dragSourceRef.current = null
-      setDragSource(null)
-      setDragOver(null)
-    }
-
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', finish)
-    document.addEventListener('pointercancel', finish)
-    return () => {
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', finish)
-      document.removeEventListener('pointercancel', finish)
-    }
-  }, [dragSource, swapCellsLocal])
-
-  // Decide bounds based on phone vs full mode
-  const visibleCols = phone ? 4 : COLUMN_COUNT
-  const visibleRows = phone ? 2 : ROWS_PER_COLUMN
-  const colStart = phone ? PHONE_PAGES[page].colStart : 0
-  const rowStart = phone ? PHONE_PAGES[page].rowStart : 0
-
-  const cells: React.ReactNode[] = []
-  for (let r = 0; r < visibleRows; r++) {
-    for (let c = 0; c < visibleCols; c++) {
-      const col = colStart + c
-      const row = rowStart + r
-      const sceneId = grid[col]?.[row] ?? null
-      const cuelist = sceneId ? cuelistById.get(sceneId) ?? null : null
-      const color = columns[col]?.color ?? '#888'
-      const isSrc = dragSource?.col === col && dragSource?.row === row
-      const isOver = dragSource !== null && dragOver?.col === col && dragOver?.row === row && !isSrc
-      cells.push(
-        <SceneCell
-          key={`${col}-${row}`}
-          cuelist={cuelist
-            ? { id: cuelist.id, name: cuelist.name, isPlaying: cuelist.isPlaying, faderLevel: cuelist.faderLevel, currentCueIndex: cuelist.currentCueIndex, cueCount: cuelist.cues.length }
-            : null}
-          col={col}
-          row={row}
-          color={color}
-          isDragSource={isSrc}
-          isDragOver={isOver}
-          compact={phone}
-          onGo={() => cuelist && sendCommand('go-cuelist', cuelist.id)}
-          onStop={() => cuelist && sendCommand('stop-cuelist', cuelist.id)}
-          onFader={(level) => cuelist && sendCommand('set-cuelist-fader', { id: cuelist.id, level })}
-          onLongPressStart={onLongPressStart}
+function PhoneStage() {
+  const [page, setPage] = useState(0)
+  const [mode, setMode] = useState<StageGridMode>('play')
+  const groups = useGroupSelection()
+  const visible = useMemo(() => [page * COLUMNS_PER_PAGE, page * COLUMNS_PER_PAGE + 1], [page])
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden bg-surface-0">
+      <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1 px-3 pt-[env(safe-area-inset-top)]">
+        <ConnectionDot />
+        <ShowTitle className="flex-1 text-base" />
+        <StageClock size="sm" seconds={false} />
+        <GridModeSwitch value={mode} onChange={setMode} compact />
+      </header>
+      <BlackoutStrip />
+      <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
+        <PageTabs page={page} onChange={setPage} />
+        <GroupStrip
+          groups={groups.groups}
+          activeGroupId={groups.activeGroupId}
+          selectionCount={groups.selectionCount}
+          onSelectGroup={groups.selectGroup}
+          onSelectAll={groups.selectAll}
+          onClear={groups.clear}
         />
-      )
-    }
-  }
-
-  return (
-    <div className="flex-1 p-2 min-h-0 overflow-hidden">
-      <div
-        className="grid gap-1.5 h-full"
-        style={{
-          gridTemplateColumns: `repeat(${visibleCols}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${visibleRows}, minmax(0, 1fr))`
-        }}
-      >
-        {cells}
       </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2">
+        <Grid mode={mode} size="sm" visibleColumns={visible} />
+        <ModeHint mode={mode} />
+      </div>
+      <footer className="flex shrink-0 flex-col gap-3 border-t border-line bg-surface-1 px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <GrandMaster variant="bar" />
+        <Masters layout="row" />
+      </footer>
     </div>
   )
 }
 
-// ── Phone-only page navigation ──────────────────────────────
+// ---- Tablet / desktop browser ----
 
-function PageNav({ page, onPrev, onNext }: { page: number; onPrev: () => void; onNext: () => void }) {
+function TabletStage() {
+  const [mode, setMode] = useState<StageGridMode>('play')
+  const groups = useGroupSelection()
   return (
-    <div className="flex items-center justify-between px-2 py-1 border-b border-surface-3 shrink-0 bg-surface-1">
-      <button
-        className="w-9 h-9 rounded-md bg-surface-2 active:bg-surface-3 text-white text-lg font-bold disabled:opacity-30"
-        onClick={onPrev}
-        disabled={page === 0}
-      >
-        ‹
-      </button>
-      <div className="flex items-center gap-1 text-xs text-gray-300">
-        {PHONE_PAGES.map((_, i) => (
-          <span
-            key={i}
-            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === page ? 'bg-orange-500' : 'bg-gray-600'}`}
+    <div className="flex h-full w-full overflow-hidden bg-surface-0">
+      <aside aria-label="Masters" className="flex w-[200px] shrink-0 flex-col gap-3 border-r border-line bg-surface-1 p-3 lg:w-[232px]">
+        <GrandMaster variant="fader" />
+        <Masters layout="column" />
+        <ReleaseClear />
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-[68px] shrink-0 items-center gap-3 border-b border-line bg-surface-1 px-4">
+          <ConnectionDot />
+          <ShowTitle className="flex-1 text-lg" />
+          <GridModeSwitch value={mode} onChange={setMode} compact={typeof window !== 'undefined' && window.innerWidth < 1100} />
+          <StageClock size="md" />
+          <Button
+            variant="secondary"
+            icon={LuLayoutDashboard}
+            onClick={() => useUiStore.getState().setStageMode(false)}
+            labelClassName="hidden lg:inline"
+            aria-label="Full console"
+          >
+            Full console
+          </Button>
+        </header>
+        <BlackoutStrip />
+        <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+          <GroupStrip
+            groups={groups.groups}
+            activeGroupId={groups.activeGroupId}
+            selectionCount={groups.selectionCount}
+            onSelectGroup={groups.selectGroup}
+            onSelectAll={groups.selectAll}
+            onClear={groups.clear}
           />
-        ))}
-        <span className="ml-2 font-mono">{PHONE_PAGES[page].label}/4</span>
+          <Grid mode={mode} size="md" />
+          <ModeHint mode={mode} />
+        </div>
       </div>
-      <button
-        className="w-9 h-9 rounded-md bg-surface-2 active:bg-surface-3 text-white text-lg font-bold disabled:opacity-30"
-        onClick={onNext}
-        disabled={page === PHONE_PAGES.length - 1}
-      >
-        ›
-      </button>
     </div>
   )
 }
-
-// ── Main Component ──────────────────────────────────────────
 
 export function RemoteStageView() {
-  const showName = useUiStore(s => s.showName)
-  const isPhone = useIsPhone()
-  const [page, setPage] = useState(0)
-
-  if (isPhone) {
-    return (
-      <div className="flex flex-col h-full w-full bg-surface-0 overflow-hidden">
-        {/* Top bar: show name + page nav (replaces left sidebar on phone) */}
-        <div className="flex items-center gap-1 px-2 py-1 bg-surface-1 border-b border-surface-3 shrink-0">
-          <span className="text-[10px] text-gray-500 truncate flex-1">{showName}</span>
-          <button
-            className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-surface-2 text-gray-300 active:bg-red-600 active:text-white"
-            onClick={() => sendCommand('toggle-blackout')}
-          >
-            BO
-          </button>
-          <button
-            className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-surface-2 text-gray-300"
-            onClick={() => sendCommand('clear-programmer')}
-          >
-            Clr
-          </button>
-        </div>
-        <PageNav
-          page={page}
-          onPrev={() => setPage((p) => Math.max(0, p - 1))}
-          onNext={() => setPage((p) => Math.min(PHONE_PAGES.length - 1, p + 1))}
-        />
-        <GroupBar />
-        <ExecutorGridRemote phone page={page} />
-      </div>
-    )
-  }
-
-  // Tablet / desktop: same layout as Stage window
-  return (
-    <div className="flex h-full w-full bg-surface-0 overflow-hidden">
-      <div className="w-20 shrink-0 flex flex-col border-r border-surface-3 bg-surface-1">
-        <div className="p-1.5 text-center border-b border-surface-3">
-          <div className="text-[9px] text-gray-500 truncate">{showName}</div>
-        </div>
-        <GrandMaster />
-        <MasterButtons />
-      </div>
-      <div className="flex-1 flex flex-col min-w-0">
-        <GroupBar />
-        <ExecutorGridRemote phone={false} page={0} />
-      </div>
-    </div>
-  )
+  return useIsPhone() ? <PhoneStage /> : <TabletStage />
 }
