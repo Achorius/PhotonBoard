@@ -164,7 +164,7 @@ export default function App() {
               variant="secondary"
               icon={LuLayoutDashboard}
               onClick={() => useUiStore.getState().setStageMode(false)}
-              className="fixed right-3 top-3 z-popover"
+              className="!fixed right-3 top-3 z-popover"
             >
               Full console
             </Button>
