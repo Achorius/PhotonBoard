@@ -7,29 +7,29 @@
 import { create } from 'zustand'
 import { gamepadManager, XBOX_BUTTONS, XBOX_AXES, type GamepadState } from '@renderer/lib/gamepad-manager'
 import { usePatchStore } from './patch-store'
-import { useDmxStore } from './dmx-store'
-import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
+import { setProgrammerChannel, clearProgrammerChannel, getProgrammerValue } from '@renderer/lib/dmx-mixer'
 import { useVisualizerStore } from './visualizer-store'
-import { resolveChannels } from '@renderer/lib/dmx-channel-resolver'
+import { unitToDmx16 } from '@renderer/lib/dmx-channel-resolver'
+import type { FixtureDefinition } from '@shared/types'
 
 // ── IK helpers ──────────────────────────────────────────────────────
 
-/** Convert pan degrees to 16-bit DMX (coarse + fine) */
-function panDegToDmx(degrees: number, range = 540): { coarse: number; fine: number } {
-  const raw = Math.max(0, Math.min(1, (degrees + range / 2) / range))
-  const dmx16 = raw * 65535
-  const coarse = Math.min(255, Math.floor(dmx16 / 256))
-  const fine = Math.min(255, Math.round(dmx16 % 256))
-  return { coarse, fine }
+const DEFAULT_PAN_RANGE = 540
+const DEFAULT_TILT_RANGE = 270
+
+/** Convert degrees (centred on 0) to 16-bit DMX for a given travel range */
+export function degreesToDmx16(degrees: number, range: number): { coarse: number; fine: number } {
+  const r = Number.isFinite(range) && range > 0 ? range : 360
+  return unitToDmx16((degrees + r / 2) / r)
 }
 
-/** Convert tilt degrees to 16-bit DMX (coarse + fine) */
-function tiltDegToDmx(degrees: number, range = 270): { coarse: number; fine: number } {
-  const raw = Math.max(0, Math.min(1, (degrees + range / 2) / range))
-  const dmx16 = raw * 65535
-  const coarse = Math.min(255, Math.floor(dmx16 / 256))
-  const fine = Math.min(255, Math.round(dmx16 % 256))
-  return { coarse, fine }
+function panTiltRanges(def: FixtureDefinition | undefined): { pan: number; tilt: number } {
+  const pan = Number(def?.physical?.panRange)
+  const tilt = Number(def?.physical?.tiltRange)
+  return {
+    pan: Number.isFinite(pan) && pan > 0 ? pan : DEFAULT_PAN_RANGE,
+    tilt: Number.isFinite(tilt) && tilt > 0 ? tilt : DEFAULT_TILT_RANGE
+  }
 }
 
 /**
@@ -68,13 +68,11 @@ function calcPanTilt(
 
 // ── Types ───────────────────────────────────────────────────────────
 
-interface SavedFixtureChannels {
-  pan: number
-  panFine: number
-  tilt: number
-  tiltFine: number
-  dimmer: number
-}
+/**
+ * Programmer value a follow channel had before follow took it over
+ * ("universe:channel" → value, or null when the programmer did not hold it).
+ */
+type SavedProgrammer = Record<string, number | null>
 
 export interface FollowConfig {
   /** Fixture IDs in the follow group */
@@ -107,8 +105,8 @@ interface FollowState extends FollowConfig {
   /** Gamepad info */
   gamepadConnected: boolean
   gamepadName: string
-  /** Saved channel values before follow override (for restore) */
-  savedChannels: Record<string, SavedFixtureChannels>
+  /** Programmer values of the follow channels before activation (restored on release) */
+  savedChannels: SavedProgrammer
 
   // Actions
   setConfig: (config: Partial<FollowConfig>) => void
@@ -117,6 +115,7 @@ interface FollowState extends FollowConfig {
   setTarget: (x: number, y: number, z: number) => void
   activate: () => void
   deactivate: () => void
+  reset: () => void
   toggleActive: () => void
 }
 
@@ -153,51 +152,26 @@ export const useFollowStore = create<FollowState>((set, get) => ({
     fixtureIds: s.fixtureIds.filter(f => f !== id)
   })),
 
-  setTarget: (x, y, z) => set({ targetX: x, targetY: y, targetZ: z }),
+  setTarget: (x, y, z) => {
+    set({ targetX: x, targetY: y, targetZ: z })
+    if (get().active) applyFollowDmx(get())
+  },
 
   activate: () => {
     try {
       const state = get()
-      console.log('[Follow] activate() called, fixtureIds:', state.fixtureIds, 'already active:', state.active)
       if (state.active || state.fixtureIds.length === 0) return
 
-      // Save current pan/tilt/dimmer for each fixture
-      const patchStore = usePatchStore.getState()
-      const dmxStore = useDmxStore.getState()
-      const saved: Record<string, SavedFixtureChannels> = {}
-
-      for (const fid of state.fixtureIds) {
-        const entry = patchStore.patch.find(p => p.id === fid)
-        if (!entry) continue
-        const def = patchStore.getFixtureDef(entry.fixtureDefId)
-        if (!def) continue
-        const ch = resolveChannels(entry, def, dmxStore.values)
-        saved[fid] = {
-          pan: ch.pan, panFine: ch.panFine,
-          tilt: ch.tilt, tiltFine: ch.tiltFine,
-          dimmer: ch.dimmer
-        }
-        console.log(`[Follow] saved ${entry.name}: pan=${ch.pan} tilt=${ch.tilt} dim=${ch.dimmer} pos3D=`, entry.position3D)
+      // Remember what the programmer held on the channels follow is about to drive
+      const saved: SavedProgrammer = {}
+      for (const ch of followChannels(state.fixtureIds)) {
+        const key = `${ch.universe}:${ch.channel}`
+        if (!(key in saved)) saved[key] = getProgrammerValue(ch.universe, ch.channel) ?? null
       }
 
-      // Reset target to center stage floor
-      const targetX = 0
-      const targetY = 0
-      const targetZ = 0
-      console.log(`[Follow] Initial target: center stage floor (${targetX}, ${targetY}, ${targetZ})`)
-
-      set({
-        active: true,
-        targetX,
-        targetY,
-        targetZ,
-        savedChannels: saved
-      })
-
-      // Apply IK to all follow fixtures immediately
-      const newState = get()
-      console.log('[Follow] Applying initial DMX, active:', newState.active)
-      applyFollowDmx(newState)
+      // Start from centre stage floor
+      set({ active: true, targetX: 0, targetY: 0, targetZ: 0, savedChannels: saved })
+      applyFollowDmx(get())
     } catch (e) {
       console.error('[Follow] activate() error:', e)
     }
@@ -207,19 +181,18 @@ export const useFollowStore = create<FollowState>((set, get) => ({
     const state = get()
     if (!state.active) return
 
-    // Turn off follow fixtures (dimmer to 0) but keep pan/tilt position
-    const patchStore = usePatchStore.getState()
-    const dmxStore = useDmxStore.getState()
-    for (const fid of state.fixtureIds) {
-      const entry = patchStore.patch.find(p => p.id === fid)
-      if (!entry) continue
-      const channels = patchStore.getFixtureChannels(entry)
-      const dimCh = channels.find(c => c.name.toLowerCase() === 'dimmer' || c.name.toLowerCase() === 'intensity')
-      if (dimCh) setProgrammerChannel(entry.universe, dimCh.absoluteChannel, 0)
+    // Give the channels back: restore what the programmer held before, release the rest
+    for (const [key, value] of Object.entries(state.savedChannels)) {
+      const [u, ch] = key.split(':').map(Number)
+      if (!Number.isInteger(u) || !Number.isInteger(ch)) continue
+      if (value === null) clearProgrammerChannel(u, ch)
+      else setProgrammerChannel(u, ch, value)
     }
-
-    set({ active: false })
+    set({ active: false, savedChannels: {} })
   },
+
+  /** Drop follow without touching DMX (show load: the programmer is cleared anyway). */
+  reset: () => set({ active: false, savedChannels: {} }),
 
   toggleActive: () => {
     const state = get()
@@ -230,59 +203,72 @@ export const useFollowStore = create<FollowState>((set, get) => ({
 
 // ── DMX output ──────────────────────────────────────────────────────
 
+interface FollowChannel {
+  universe: number
+  channel: number
+}
+
+function findChannels(fixtureId: string) {
+  const patchStore = usePatchStore.getState()
+  const entry = patchStore.patch.find(p => p.id === fixtureId)
+  if (!entry) return null
+  const channels = patchStore.getFixtureChannels(entry)
+  const byName = (...names: string[]) => channels.find(c => names.includes(c.name.toLowerCase()))
+  return {
+    entry,
+    def: patchStore.getFixtureDef(entry.fixtureDefId),
+    pan: byName('pan'),
+    panFine: byName('pan fine', 'pan 16-bit', 'pan (fine)'),
+    tilt: byName('tilt'),
+    tiltFine: byName('tilt fine', 'tilt 16-bit', 'tilt (fine)'),
+    dimmer: byName('dimmer', 'intensity')
+  }
+}
+
+/** Every DMX channel follow writes for these fixtures. */
+function followChannels(fixtureIds: string[]): FollowChannel[] {
+  const out: FollowChannel[] = []
+  for (const fid of fixtureIds) {
+    const f = findChannels(fid)
+    if (!f) continue
+    for (const ch of [f.pan, f.panFine, f.tilt, f.tiltFine, f.dimmer]) {
+      if (ch) out.push({ universe: f.entry.universe, channel: ch.absoluteChannel })
+    }
+  }
+  return out
+}
+
 /** Apply pan/tilt/dimmer DMX values for all follow fixtures aiming at the target */
 function applyFollowDmx(state: FollowState) {
-  const patchStore = usePatchStore.getState()
-  const dmxStore = useDmxStore.getState()
-
   for (const fid of state.fixtureIds) {
-    const entry = patchStore.patch.find(p => p.id === fid)
-    if (!entry) continue
-    const def = patchStore.getFixtureDef(entry.fixtureDefId)
-    if (!def) continue
+    const f = findChannels(fid)
+    if (!f) continue
+    const pos = f.entry.position3D
+    if (!pos) continue // no 3D position: cannot aim
 
-    // Fixture 3D position
-    const pos = entry.position3D
-    if (!pos) {
-      console.warn(`[Follow] ${entry.name} has no position3D — skipping IK`)
-      continue
-    }
-
-    const fixturePos = { x: pos.x, y: pos.y, z: pos.z }
-    const target = { x: state.targetX, y: state.targetY, z: state.targetZ }
-
-    // Calculate required pan/tilt
     const { panDeg, tiltDeg } = calcPanTilt(
-      fixturePos, target,
-      entry.panInvert ?? false,
-      entry.tiltInvert ?? false
+      pos,
+      { x: state.targetX, y: state.targetY, z: state.targetZ },
+      f.entry.panInvert ?? false,
+      f.entry.tiltInvert ?? false
     )
+    const ranges = panTiltRanges(f.def)
+    const panDmx = degreesToDmx16(panDeg, ranges.pan)
+    const tiltDmx = degreesToDmx16(tiltDeg, ranges.tilt)
+    const u = f.entry.universe
 
-    // Convert to DMX
-    const panDmx = panDegToDmx(panDeg)
-    const tiltDmx = tiltDegToDmx(tiltDeg)
-
-    // Find channel addresses
-    const channels = patchStore.getFixtureChannels(entry)
-    const panCh = channels.find(c => c.name.toLowerCase() === 'pan')
-    const panFineCh = channels.find(c => c.name.toLowerCase() === 'pan fine')
-    const tiltCh = channels.find(c => c.name.toLowerCase() === 'tilt')
-    const tiltFineCh = channels.find(c => c.name.toLowerCase() === 'tilt fine')
-    const dimCh = channels.find(c => c.name.toLowerCase() === 'dimmer' || c.name.toLowerCase() === 'intensity')
-
-    // Write DMX
-    console.log(`[Follow] ${entry.name}: pan=${panDeg.toFixed(1)}° tilt=${tiltDeg.toFixed(1)}° → DMX pan=${panDmx.coarse}/${panDmx.fine} tilt=${tiltDmx.coarse}/${tiltDmx.fine} pos3D=${pos ? `${pos.x},${pos.y},${pos.z}` : 'NONE'} target=${state.targetX.toFixed(2)},${state.targetY.toFixed(2)},${state.targetZ.toFixed(2)} panCh=${panCh?.absoluteChannel} tiltCh=${tiltCh?.absoluteChannel}`)
-    if (panCh) setProgrammerChannel(entry.universe, panCh.absoluteChannel, panDmx.coarse)
-    if (panFineCh) setProgrammerChannel(entry.universe, panFineCh.absoluteChannel, panDmx.fine)
-    if (tiltCh) setProgrammerChannel(entry.universe, tiltCh.absoluteChannel, tiltDmx.coarse)
-    if (tiltFineCh) setProgrammerChannel(entry.universe, tiltFineCh.absoluteChannel, tiltDmx.fine)
-    if (dimCh) setProgrammerChannel(entry.universe, dimCh.absoluteChannel, state.followDimmer)
+    if (f.pan) setProgrammerChannel(u, f.pan.absoluteChannel, panDmx.coarse)
+    if (f.panFine) setProgrammerChannel(u, f.panFine.absoluteChannel, panDmx.fine)
+    if (f.tilt) setProgrammerChannel(u, f.tilt.absoluteChannel, tiltDmx.coarse)
+    if (f.tiltFine) setProgrammerChannel(u, f.tiltFine.absoluteChannel, tiltDmx.fine)
+    if (f.dimmer) setProgrammerChannel(u, f.dimmer.absoluteChannel, state.followDimmer)
   }
 }
 
 // ── Gamepad loop ────────────────────────────────────────────────────
 
 let lastTimestamp = 0
+let lastButtonPressed = false
 let unsubGamepad: (() => void) | null = null
 
 function onGamepadFrame(gpState: GamepadState) {
@@ -300,21 +286,18 @@ function onGamepadFrame(gpState: GamepadState) {
   if (!btn) return
 
   if (store.activateMode === 'hold') {
-    // Hold to activate
-    if (btn.pressed && !store.active) {
-      console.log('[Follow] Gamepad trigger pressed — activating')
-      store.activate()
-    } else if (!btn.pressed && store.active) {
-      console.log('[Follow] Gamepad trigger released — deactivating')
-      store.deactivate()
-    }
-  } else {
-    // Toggle on press (rising edge)
-    // We'd need edge detection — skip for now, hold mode is primary
+    // Hold to activate (edges only, so a follow started from the UI is not cancelled)
+    if (btn.pressed && !lastButtonPressed && !store.active) store.activate()
+    else if (!btn.pressed && lastButtonPressed && store.active) store.deactivate()
+  } else if (btn.pressed && !lastButtonPressed) {
+    // Toggle on the rising edge
+    store.toggleActive()
   }
+  lastButtonPressed = btn.pressed
 
-  if (!store.active) {
-    lastTimestamp = gpState.timestamp
+  const current = useFollowStore.getState()
+  if (!current.active) {
+    lastTimestamp = 0
     return
   }
 
@@ -330,20 +313,18 @@ function onGamepadFrame(gpState: GamepadState) {
   const leftY = gpState.axes[XBOX_AXES.LEFT_Y] ?? 0
   const rightY = gpState.axes[XBOX_AXES.RIGHT_Y] ?? 0
 
-  const speed = store.sensitivity
-  const dx = (store.invertX ? -leftX : leftX) * speed * dt
-  const dy = (store.invertY ? -leftY : leftY) * speed * dt   // left stick Y → height
-  const dz = (store.invertZ ? -rightY : rightY) * speed * dt // right stick Y → depth
+  const speed = current.sensitivity
+  const dx = (current.invertX ? -leftX : leftX) * speed * dt
+  const dy = (current.invertY ? -leftY : leftY) * speed * dt   // left stick Y → height
+  const dz = (current.invertZ ? -rightY : rightY) * speed * dt // right stick Y → depth
 
   if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001 || Math.abs(dz) > 0.001) {
     const { roomConfig } = useVisualizerStore.getState()
-    const newX = Math.max(-roomConfig.width / 2, Math.min(roomConfig.width / 2, store.targetX + dx))
-    const newY = Math.max(0, Math.min(roomConfig.height, store.targetY + dy))
-    const newZ = Math.max(-roomConfig.depth / 2, Math.min(roomConfig.depth / 2, store.targetZ + dz))
+    const newX = Math.max(-roomConfig.width / 2, Math.min(roomConfig.width / 2, current.targetX + dx))
+    const newY = Math.max(0, Math.min(roomConfig.height, current.targetY + dy))
+    const newZ = Math.max(-roomConfig.depth / 2, Math.min(roomConfig.depth / 2, current.targetZ + dz))
     useFollowStore.setState({ targetX: newX, targetY: newY, targetZ: newZ })
-
-    // Apply to DMX
-    applyFollowDmx({ ...store, targetX: newX, targetY: newY, targetZ: newZ })
+    applyFollowDmx(useFollowStore.getState())
   }
 }
 

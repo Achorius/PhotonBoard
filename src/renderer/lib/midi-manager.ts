@@ -2,17 +2,16 @@ import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn, se
 import { useDmxStore } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
-import { setProgrammerChannel } from './dmx-mixer'
-import { midiToDmx } from './dmx-utils'
-import { startTimeline, stopTimeline, toggleTimeline, rewindTimeline, setTimelineTime } from './timeline-engine'
+import { useEffectsStore } from '../stores/effects-store'
+import { setProgrammerChannel, clearProgrammerChannel, getProgrammerValue, getMixValue } from './dmx-mixer'
+import { toggleTimeline, rewindTimeline, setTimelineTime, stopTimeline } from './timeline-engine'
 import { processMidiForTimecode } from './timecode-engine'
-import type { MidiMapping } from '@shared/types'
+import { relativeDelta } from './midi-learn'
+import { clockNow } from './runtime'
+import type { MidiMapping, MidiSourceType } from '@shared/types'
 
 let tapTempoTimes: number[] = []
 let tapTempoCallback: ((bpm: number) => void) | null = null
-
-// Track current accumulated values for relative encoders (keyed by mapping id)
-const relativeValues: Record<string, number> = {}
 
 // Track toggle states for toggle behavior (keyed by mapping id)
 const toggleStates: Record<string, boolean> = {}
@@ -23,86 +22,71 @@ export function initMidiRouting(): void {
     processMidiForTimecode(status, data1, data2)
   })
 
-  setMidiRouter((type, channel, number, value) => {
-    const mappings = useMidiStore.getState().mappings
-
-    for (const mapping of mappings) {
-      if (mapping.source.type !== type) continue
-      if (mapping.source.channel !== channel) continue
-      if (mapping.source.number !== number) continue
-
-      routeMidiToTarget(mapping, value)
+  setMidiRouter((type, channel, number, value, deviceName) => {
+    for (const mapping of useMidiStore.getState().mappings) {
+      if (!mappingMatches(mapping, type, channel, number, deviceName)) continue
+      try {
+        routeMidiToTarget(mapping, value)
+      } catch (e) {
+        console.error('[MIDI] mapping failed:', mapping.name, e)
+      }
     }
   })
 
-  // Register cleanup: reset target value to 0 when a mapping is removed
+  // Register cleanup: release the target when a mapping is removed
   setMappingResetFn((mapping: MidiMapping) => {
     const { target } = mapping
     switch (target.type) {
       case 'channel': {
-        if (!target.id || !target.parameter) break
-        const patchStore = usePatchStore.getState()
-        const entry = patchStore.patch.find(p => p.id === target.id)
-        if (!entry) break
-        const channels = patchStore.getFixtureChannels(entry)
-        const ch = channels.find(c => c.name === target.parameter)
-        if (ch) setProgrammerChannel(entry.universe, ch.absoluteChannel, 0)
+        const addr = resolveChannelTarget(mapping)
+        if (addr) clearProgrammerChannel(addr.universe, addr.channel)
         break
       }
       case 'master':
         useDmxStore.getState().setGrandMaster(255)
         break
-      case 'cuelist_fader':
-        if (target.id) usePlaybackStore.getState().setCuelistFader(target.id, 0)
-        break
     }
   })
 
-  // Clean up internal state maps
   setMappingCleanupFn((mappingId: string) => {
     delete toggleStates[mappingId]
-    delete relativeValues[mappingId]
   })
 }
 
-function resolveValue(mapping: MidiMapping, rawValue: number): number {
+/** Does an incoming message match a mapping's source? (device filter when set) */
+export function mappingMatches(
+  mapping: MidiMapping,
+  type: MidiSourceType,
+  channel: number,
+  number: number,
+  deviceName?: string
+): boolean {
+  const src = mapping.source
+  if (src.type !== type || src.channel !== channel || src.number !== number) return false
+  if (src.deviceName && deviceName && src.deviceName !== deviceName) return false
+  return true
+}
+
+/**
+ * Value for a continuous control. Absolute: scale 0-127 to min..max.
+ * Relative encoder: add the delta to `current` (the target's present value).
+ */
+export function resolveValue(mapping: MidiMapping, rawValue: number, current: number): number {
   const { options } = mapping
-  const encoding = options?.encoding || 'absolute'
+  const min = Number.isFinite(options?.min) ? options.min : 0
+  const max = Number.isFinite(options?.max) ? options.max : 255
+  const lo = Math.min(min, max)
+  const hi = Math.max(min, max)
 
-  if (encoding === 'relative') {
-    // Relative encoder: two's complement
-    // 1-63 = clockwise (increment), 65-127 = counter-clockwise (decrement)
-    let delta: number
-    if (rawValue <= 63) {
-      delta = rawValue // positive increment
-    } else {
-      delta = rawValue - 128 // negative (127 → -1, 126 → -2, etc.)
-    }
-
-    // Scale delta: multiply by 2 for faster response
-    delta *= 2
-
-    // Get or init current accumulated value
-    const current = relativeValues[mapping.id] ?? 0
-    let newVal = current + delta
-
-    // Clamp to min/max
-    newVal = Math.max(options.min, Math.min(options.max, newVal))
-    if (options.inverted) newVal = options.max - (newVal - options.min)
-    relativeValues[mapping.id] = options.inverted ? (options.max - (newVal - options.min)) : newVal
-
-    // Store the uninverted value for next iteration
-    relativeValues[mapping.id] = current + delta
-    relativeValues[mapping.id] = Math.max(options.min, Math.min(options.max, relativeValues[mapping.id]))
-
-    return Math.round(options.inverted ? (options.max - (relativeValues[mapping.id] - options.min)) : relativeValues[mapping.id])
+  if (options?.encoding === 'relative') {
+    // Encoders move 2 DMX steps per detent; inverted turns the direction
+    const delta = relativeDelta(rawValue) * 2 * (options.inverted ? -1 : 1)
+    return Math.round(Math.max(lo, Math.min(hi, current + delta)))
   }
 
-  // Absolute: scale raw 0-127 to min-max range
-  const range = options.max - options.min
-  let value = options.min + (rawValue / 127) * range
-  if (options.inverted) value = options.max - (value - options.min)
-  return Math.round(value)
+  let value = min + (Math.max(0, Math.min(127, rawValue)) / 127) * (max - min)
+  if (options?.inverted) value = max - (value - min)
+  return Math.round(Math.max(lo, Math.min(hi, value)))
 }
 
 /**
@@ -114,125 +98,117 @@ function applyBehavior(mapping: MidiMapping, rawValue: number): number | null {
 
   switch (behavior) {
     case 'toggle': {
-      // Only react on note-on / CC > 0 (button press)
       if (rawValue === 0) return null
       const wasOn = toggleStates[mapping.id] ?? false
       toggleStates[mapping.id] = !wasOn
       return wasOn ? mapping.options.min : mapping.options.max
     }
-    case 'trigger': {
-      // On while held, off on release
+    case 'trigger':
       return rawValue > 0 ? mapping.options.max : mapping.options.min
-    }
-    case 'flash': {
-      // Full value while held, 0 on release
+    case 'flash':
       return rawValue > 0 ? 255 : 0
-    }
     case 'direct':
     default:
-      return null // handled by resolveValue
+      return null
   }
+}
+
+function resolveChannelTarget(mapping: MidiMapping): { universe: number; channel: number } | undefined {
+  const { target } = mapping
+  if (!target.id || !target.parameter) return undefined
+  const patchStore = usePatchStore.getState()
+  const entry = patchStore.patch.find(p => p.id === target.id)
+  if (!entry) return undefined
+  const ch = patchStore.getFixtureChannels(entry).find(c => c.name === target.parameter)
+  return ch ? { universe: entry.universe, channel: ch.absoluteChannel } : undefined
+}
+
+function continuousValue(mapping: MidiMapping, rawValue: number, current: number): number | null {
+  if ((mapping.options?.behavior || 'direct') !== 'direct') return applyBehavior(mapping, rawValue)
+  return resolveValue(mapping, rawValue, current)
 }
 
 function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
   const { target, options } = mapping
-  const behavior = options?.behavior || 'direct'
+  const playback = usePlaybackStore.getState()
 
   switch (target.type) {
     case 'channel': {
-      if (!target.id || !target.parameter) break
-      const patchStore = usePatchStore.getState()
-      const entry = patchStore.patch.find(p => p.id === target.id)
-      if (!entry) break
-      const channels = patchStore.getFixtureChannels(entry)
-      const ch = channels.find(c => c.name === target.parameter)
-      if (ch) {
-        let dmxValue: number
-        if (behavior !== 'direct') {
-          const bval = applyBehavior(mapping, rawValue)
-          if (bval === null) break // ignore (e.g. note-off in toggle mode)
-          dmxValue = bval
-        } else {
-          dmxValue = resolveValue(mapping, rawValue)
-        }
-        setProgrammerChannel(entry.universe, ch.absoluteChannel, dmxValue)
-      }
+      const addr = resolveChannelTarget(mapping)
+      if (!addr) break
+      const current = getProgrammerValue(addr.universe, addr.channel) ?? getMixValue(addr.universe, addr.channel) ?? 0
+      const v = continuousValue(mapping, rawValue, current)
+      if (v !== null) setProgrammerChannel(addr.universe, addr.channel, v)
       break
     }
 
     case 'cuelist_go': {
+      if (!target.id) break
       const goBehavior = options?.behavior || 'toggle'
       if (goBehavior === 'trigger') {
-        // Trigger: GO on press, STOP on release (play while held)
-        if (rawValue > 0) {
-          usePlaybackStore.getState().goCuelist(target.id!)
-        } else {
-          usePlaybackStore.getState().stopCuelist(target.id!)
-        }
+        // Play while held
+        if (rawValue > 0) playback.goCuelist(target.id)
+        else playback.stopCuelist(target.id)
       } else if (goBehavior === 'flash') {
-        // Flash: full fader while held
-        usePlaybackStore.getState().flashCuelist(target.id!, rawValue > 0)
-      } else {
-        // Toggle (default): press = GO if stopped, STOP if playing
-        if (rawValue > 0) {
-          const scene = usePlaybackStore.getState().cuelists.find(c => c.id === target.id)
-          if (scene?.isPlaying) {
-            usePlaybackStore.getState().stopCuelist(target.id!)
-          } else {
-            usePlaybackStore.getState().goCuelist(target.id!)
-          }
-        }
+        playback.flashCuelist(target.id, rawValue > 0)
+      } else if (goBehavior === 'direct') {
+        // Plain GO button
+        if (rawValue > 0) playback.goCuelist(target.id)
+      } else if (rawValue > 0) {
+        // Toggle (default): GO if stopped, STOP if playing
+        const scene = playback.cuelists.find(c => c.id === target.id)
+        if (scene?.isPlaying) playback.stopCuelist(target.id)
+        else playback.goCuelist(target.id)
       }
       break
     }
 
     case 'cuelist_fader': {
-      if (behavior !== 'direct') {
-        const bval = applyBehavior(mapping, rawValue)
-        if (bval !== null) usePlaybackStore.getState().setCuelistFader(target.id!, bval)
-      } else {
-        const faderVal = resolveValue(mapping, rawValue)
-        usePlaybackStore.getState().setCuelistFader(target.id!, faderVal)
-      }
+      if (!target.id) break
+      const current = playback.cuelists.find(c => c.id === target.id)?.faderLevel ?? 0
+      const v = continuousValue(mapping, rawValue, current)
+      if (v !== null) playback.setCuelistFader(target.id, v)
       break
     }
 
     case 'chase_toggle': {
-      if (rawValue > 0) {
-        usePlaybackStore.getState().toggleChase(target.id!)
-      }
+      if (rawValue > 0 && target.id) playback.toggleChase(target.id)
       break
     }
 
     case 'chase_bpm': {
-      const encoding = options?.encoding || 'absolute'
-      if (encoding === 'relative') {
-        const current = relativeValues[mapping.id] ?? 120
-        let delta = rawValue <= 63 ? rawValue : rawValue - 128
-        relativeValues[mapping.id] = Math.max(30, Math.min(300, current + delta))
-        usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(relativeValues[mapping.id]))
+      if (!target.id) break
+      const chase = playback.chases.find(c => c.id === target.id)
+      if (!chase) break
+      if (options?.encoding === 'relative') {
+        playback.setChaseBpm(target.id, Math.max(30, Math.min(300, chase.bpm + relativeDelta(rawValue))))
       } else {
-        const bpm = 30 + (rawValue / 127) * 270
-        usePlaybackStore.getState().setChaseBpm(target.id!, Math.round(bpm))
+        playback.setChaseBpm(target.id, Math.round(30 + (Math.max(0, Math.min(127, rawValue)) / 127) * 270))
       }
       break
     }
 
     case 'master': {
-      if (behavior !== 'direct') {
-        const bval = applyBehavior(mapping, rawValue)
-        if (bval !== null) useDmxStore.getState().setGrandMaster(bval)
-      } else {
-        const masterVal = resolveValue(mapping, rawValue)
-        useDmxStore.getState().setGrandMaster(masterVal)
+      const v = continuousValue(mapping, rawValue, useDmxStore.getState().grandMaster)
+      if (v !== null) useDmxStore.getState().setGrandMaster(v)
+      break
+    }
+
+    case 'effect_toggle': {
+      if (!target.id) break
+      const effects = useEffectsStore.getState()
+      const behavior = options?.behavior || 'toggle'
+      if (behavior === 'trigger' || behavior === 'flash') {
+        // Run while held
+        effects.setEffectRunning(target.id, rawValue > 0)
+      } else if (rawValue > 0) {
+        effects.toggleEffect(target.id)
       }
       break
     }
 
     case 'blackout': {
-      if (rawValue > 0) {
-        useDmxStore.getState().toggleBlackout()
-      }
+      if (rawValue > 0) useDmxStore.getState().toggleBlackout()
       break
     }
 
@@ -249,19 +225,17 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
     }
 
     case 'reset': {
-      if (rawValue > 0) {
-        useDmxStore.getState().resetAll()
-      }
+      if (rawValue > 0) useDmxStore.getState().resetAll()
       break
     }
 
     case 'flash': {
-      usePlaybackStore.getState().flashCuelist(target.id!, rawValue > 0)
+      if (target.id) playback.flashCuelist(target.id, rawValue > 0)
       break
     }
 
     case 'tap_tempo': {
-      if (rawValue > 0) handleTapTempo()
+      if (rawValue > 0) handleTapTempo(target.id)
       break
     }
 
@@ -282,8 +256,7 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
 
     case 'timeline_goto_marker': {
       if (rawValue > 0 && target.id) {
-        const markers = usePlaybackStore.getState().timelineMarkers
-        const marker = markers.find(m => m.id === target.id)
+        const marker = playback.timelineMarkers.find(m => m.id === target.id)
         if (marker) setTimelineTime(marker.time)
       }
       break
@@ -291,8 +264,7 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
 
     case 'timeline_goto_zone': {
       if (rawValue > 0 && target.id) {
-        const zones = usePlaybackStore.getState().timelineZones
-        const zone = zones.find(z => z.id === target.id)
+        const zone = playback.timelineZones.find(z => z.id === target.id)
         if (zone) setTimelineTime(zone.startTime)
       }
       break
@@ -300,30 +272,32 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
   }
 }
 
-function handleTapTempo(): void {
-  const now = performance.now()
+/** Average the last taps into a BPM (null until two taps within 3 s). */
+export function computeTapTempo(times: number[]): number | null {
+  if (times.length < 2) return null
+  const intervals: number[] = []
+  for (let i = 1; i < times.length; i++) intervals.push(times[i] - times[i - 1])
+  const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length
+  if (!(avg > 0)) return null
+  return Math.round(60000 / avg)
+}
+
+/**
+ * Register a tap. Applies the tempo to `chaseId`, or to every playing chase
+ * when no chase is given, and notifies the tap-tempo callback.
+ */
+export function handleTapTempo(chaseId?: string, now = clockNow()): void {
+  const last = tapTempoTimes[tapTempoTimes.length - 1]
+  if (last !== undefined && now - last > 3000) tapTempoTimes = []
   tapTempoTimes.push(now)
-
-  // Keep only last 8 taps
   if (tapTempoTimes.length > 8) tapTempoTimes.shift()
-  // Reset if gap > 3 seconds
-  if (tapTempoTimes.length >= 2) {
-    const lastGap = tapTempoTimes[tapTempoTimes.length - 1] - tapTempoTimes[tapTempoTimes.length - 2]
-    if (lastGap > 3000) {
-      tapTempoTimes = [now]
-      return
-    }
-  }
 
-  if (tapTempoTimes.length >= 2) {
-    const intervals: number[] = []
-    for (let i = 1; i < tapTempoTimes.length; i++) {
-      intervals.push(tapTempoTimes[i] - tapTempoTimes[i - 1])
-    }
-    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
-    const bpm = Math.round(60000 / avgInterval)
-    if (tapTempoCallback) tapTempoCallback(bpm)
-  }
+  const bpm = computeTapTempo(tapTempoTimes)
+  if (bpm === null) return
+  const playback = usePlaybackStore.getState()
+  const targets = chaseId ? [chaseId] : playback.chases.filter(c => c.isPlaying).map(c => c.id)
+  for (const id of targets) playback.setChaseBpm(id, bpm)
+  tapTempoCallback?.(bpm)
 }
 
 export function setTapTempoCallback(cb: (bpm: number) => void): void {

@@ -3,6 +3,7 @@ import type { PatchEntry, FixtureDefinition } from '@shared/types'
 export interface ResolvedChannels {
   dimmer: number   // 0-255 (defaults to 255 for fixtures without a dedicated dimmer channel)
   hasDimmerChannel: boolean  // true only when the fixture definition has an actual dimmer channel
+  hasCmyChannels: boolean    // fixture mixes colour subtractively (cyan/magenta/yellow flags)
   red: number
   green: number
   blue: number
@@ -26,7 +27,7 @@ export interface ResolvedChannels {
 }
 
 const EMPTY: ResolvedChannels = {
-  dimmer: 0, hasDimmerChannel: false,
+  dimmer: 0, hasDimmerChannel: false, hasCmyChannels: false,
   red: 0, green: 0, blue: 0, white: 0,
   amber: 0, uv: 0, cyan: 0, magenta: 0, yellow: 0,
   colorWheel: -1,
@@ -34,8 +35,8 @@ const EMPTY: ResolvedChannels = {
   shutter: 255, zoom: 128, focus: 128, gobo: 0, goboRotation: 0, strobe: 0
 }
 
-// Numeric channel keys (excludes hasDimmerChannel which is boolean)
-type NumericChannelKey = Exclude<keyof ResolvedChannels, 'hasDimmerChannel'>
+// Numeric channel keys (excludes the boolean flags)
+type NumericChannelKey = Exclude<keyof ResolvedChannels, 'hasDimmerChannel' | 'hasCmyChannels'>
 
 // Name aliases for channel lookup (lowercase)
 const CHANNEL_ALIASES: Record<NumericChannelKey, string[]> = {
@@ -103,6 +104,8 @@ export function resolveChannels(
       }
     }
   }
+
+  result.hasCmyChannels = ['cyan', 'c', 'magenta', 'm', 'yellow', 'y'].some(a => a in channelValueMap)
 
   if (dimmerFound) {
     result.hasDimmerChannel = true
@@ -191,37 +194,33 @@ export function isColorWheelChannel(channelName: string): boolean {
 }
 
 export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number; b: number } {
-  const hasColorChannels = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
-                           ch.white > 0 || ch.amber > 0 || ch.uv > 0 ||
-                           ch.cyan > 0 || ch.magenta > 0 || ch.yellow > 0
+  const hasAdditive = ch.red > 0 || ch.green > 0 || ch.blue > 0 ||
+                      ch.white > 0 || ch.amber > 0 || ch.uv > 0
 
   // Apply master dimmer only if fixture actually has a dimmer channel
   const masterDim = ch.hasDimmerChannel ? ch.dimmer / 255 : 1.0
 
-  // Color wheel fixture (no RGB channels, but has a color wheel)
-  if (!hasColorChannels && ch.colorWheel >= 0) {
-    const cwColor = colorWheelToRgb3D(ch.colorWheel)
+  // CMY subtractive filters: cyan removes red, magenta green, yellow blue
+  const cyanPass = 1 - ch.cyan / 255
+  const magentaPass = 1 - ch.magenta / 255
+  const yellowPass = 1 - ch.yellow / 255
+
+  if (!hasAdditive) {
+    // White source (lamp / white LED), optionally through a colour wheel, then CMY
+    let base: { r: number; g: number; b: number }
+    if (ch.colorWheel >= 0) base = colorWheelToRgb3D(ch.colorWheel)
+    else if (ch.hasDimmerChannel || ch.hasCmyChannels) base = { r: 1, g: 1, b: 1 }
+    else return { r: 0, g: 0, b: 0 } // dimmer-less fixture with all emitters off
     return {
-      r: cwColor.r * masterDim,
-      g: cwColor.g * masterDim,
-      b: cwColor.b * masterDim
+      r: base.r * cyanPass * masterDim,
+      g: base.g * magentaPass * masterDim,
+      b: base.b * yellowPass * masterDim
     }
   }
 
-  if (!hasColorChannels) {
-    // No color channels active — only a dimmer (or nothing)
-    if (!ch.hasDimmerChannel) return { r: 0, g: 0, b: 0 }
-    const d = ch.dimmer / 255
-    return { r: d, g: d, b: d }
-  }
-
-  // CMY subtractive → additive RGB: cyan removes red, magenta removes green, yellow removes blue
-  const cyanSub = ch.cyan / 255
-  const magentaSub = ch.magenta / 255
-  const yellowSub = ch.yellow / 255
-  const r = Math.min(1, (ch.red / 255 + ch.white / 510 + ch.amber / 510) * (1 - cyanSub)) * masterDim
-  const g = Math.min(1, (ch.green / 255 + ch.white / 510) * (1 - magentaSub)) * masterDim
-  const b = Math.min(1, (ch.blue / 255 + ch.uv / 510) * (1 - yellowSub)) * masterDim
+  const r = Math.min(1, (ch.red / 255 + ch.white / 510 + ch.amber / 510) * cyanPass) * masterDim
+  const g = Math.min(1, (ch.green / 255 + ch.white / 510) * magentaPass) * masterDim
+  const b = Math.min(1, (ch.blue / 255 + ch.uv / 510) * yellowPass) * masterDim
   return { r, g, b }
 }
 
@@ -230,11 +229,22 @@ export function getEffectiveColor(ch: ResolvedChannels): { r: number; g: number;
  * Typical moving head: Pan 540°, Tilt 270°
  */
 export function dmxToPanDeg(coarse: number, fine: number, range = 540): number {
-  const raw = (coarse + fine / 255) / 255
-  return raw * range - range / 2
+  return dmx16ToUnit(coarse, fine) * range - range / 2
 }
 
 export function dmxToTiltDeg(coarse: number, fine: number, range = 270): number {
-  const raw = (coarse + fine / 255) / 255
-  return raw * range - range / 2
+  return dmx16ToUnit(coarse, fine) * range - range / 2
+}
+
+/** 16-bit DMX (coarse MSB + fine LSB) → 0..1 */
+export function dmx16ToUnit(coarse: number, fine: number): number {
+  const c = Math.max(0, Math.min(255, Math.round(coarse || 0)))
+  const f = Math.max(0, Math.min(255, Math.round(fine || 0)))
+  return (c * 256 + f) / 65535
+}
+
+/** 0..1 → 16-bit DMX split in coarse / fine */
+export function unitToDmx16(unit: number): { coarse: number; fine: number } {
+  const v = Math.round(Math.max(0, Math.min(1, Number.isFinite(unit) ? unit : 0)) * 65535)
+  return { coarse: v >> 8, fine: v & 0xff }
 }

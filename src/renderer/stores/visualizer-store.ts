@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
 import { DEFAULT_ROOM_CONFIG, type RoomConfig, type TrussBar } from '@shared/types'
 
 export type VisualizerSubTab = '3d' | 'layout'
@@ -35,7 +36,7 @@ interface VisualizerState {
   updateTrussBar: (id: string, updates: Partial<TrussBar>) => void
 }
 
-export const useVisualizerStore = create<VisualizerState>((set) => ({
+export const useVisualizerStore = create<VisualizerState>()(subscribeWithSelector((set) => ({
   subTab: '3d',
   selectedFixtureId: null,
   selectedTrussId: null,
@@ -85,4 +86,4 @@ export const useVisualizerStore = create<VisualizerState>((set) => ({
       trussBars: s.roomConfig.trussBars.map(t => t.id === id ? { ...t, ...updates } : t),
     },
   })),
-}))
+})))

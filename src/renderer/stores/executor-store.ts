@@ -8,41 +8,28 @@
 // ============================================================
 
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
+import type { ExecutorSceneMode, ShowExecutorLayout } from '@shared/types'
+import {
+  EXECUTOR_COLUMN_COUNT,
+  EXECUTOR_ROW_COUNT,
+  DEFAULT_EXECUTOR_COLUMN_COLORS,
+  defaultExecutorLayout,
+  normalizeExecutorLayout
+} from '@shared/show-format'
 
-export const COLUMN_COUNT = 8
-export const ROWS_PER_COLUMN = 4
+export const COLUMN_COUNT = EXECUTOR_COLUMN_COUNT
+export const ROWS_PER_COLUMN = EXECUTOR_ROW_COUNT
 export const TOTAL_SLOTS = COLUMN_COUNT * ROWS_PER_COLUMN
 
-export type SceneMode = 'toggle' | 'trigger' | 'flash'
+export type SceneMode = ExecutorSceneMode
 
 export interface ColumnMeta {
   title: string
   color: string
 }
 
-export const DEFAULT_COLUMN_COLORS = [
-  '#e85d04', '#22c55e', '#3b82f6', '#a855f7',
-  '#ef4444', '#eab308', '#06b6d4', '#f97316'
-]
-
-function emptyGrid(): (string | null)[][] {
-  return Array.from({ length: COLUMN_COUNT }, () =>
-    Array.from({ length: ROWS_PER_COLUMN }, () => null as string | null)
-  )
-}
-
-function defaultModes(): SceneMode[][] {
-  return Array.from({ length: COLUMN_COUNT }, () =>
-    Array.from({ length: ROWS_PER_COLUMN }, () => 'toggle' as SceneMode)
-  )
-}
-
-function defaultColumns(): ColumnMeta[] {
-  return Array.from({ length: COLUMN_COUNT }, (_, i) => ({
-    title: '',
-    color: DEFAULT_COLUMN_COLORS[i]
-  }))
-}
+export const DEFAULT_COLUMN_COLORS = DEFAULT_EXECUTOR_COLUMN_COLORS
 
 interface ExecutorState {
   grid: (string | null)[][]
@@ -60,6 +47,11 @@ interface ExecutorState {
   // Mode ops
   setMode: (col: number, row: number, mode: SceneMode) => void
 
+  /** Replace the whole layout (show load). Shape is normalised to 8×4. */
+  loadLayout: (layout: ShowExecutorLayout | undefined, cuelistIds?: string[]) => void
+  /** Current layout, for saving */
+  getLayout: () => ShowExecutorLayout
+
   // Bulk replace (used by remote-sync to apply state from Pi)
   applyRemote: (data: {
     grid?: (string | null)[][]
@@ -68,10 +60,12 @@ interface ExecutorState {
   }) => void
 }
 
-export const useExecutorStore = create<ExecutorState>((set) => ({
-  grid: emptyGrid(),
-  columns: defaultColumns(),
-  modes: defaultModes(),
+const initialLayout = defaultExecutorLayout()
+
+export const useExecutorStore = create<ExecutorState>()(subscribeWithSelector((set, get) => ({
+  grid: initialLayout.grid,
+  columns: initialLayout.columns,
+  modes: initialLayout.modes,
 
   swapCells: (from, to) => {
     if (from.col === to.col && from.row === to.row) return
@@ -146,11 +140,33 @@ export const useExecutorStore = create<ExecutorState>((set) => ({
     })
   },
 
+  loadLayout: (layout, cuelistIds) => {
+    const normalized = normalizeExecutorLayout(layout, cuelistIds ? new Set(cuelistIds) : undefined)
+    set({ grid: normalized.grid, columns: normalized.columns, modes: normalized.modes })
+  },
+
+  getLayout: () => {
+    const { grid, columns, modes } = get()
+    return {
+      grid: grid.map((c) => [...c]),
+      columns: columns.map((c) => ({ ...c })),
+      modes: modes.map((c) => [...c])
+    }
+  },
+
   applyRemote: (data) => {
-    set((state) => ({
-      grid: data.grid && Array.isArray(data.grid) ? data.grid : state.grid,
-      columns: data.columns && Array.isArray(data.columns) ? data.columns : state.columns,
-      modes: data.modes && Array.isArray(data.modes) ? data.modes : state.modes
-    }))
+    const state = get()
+    const normalized = normalizeExecutorLayout({
+      grid: Array.isArray(data.grid) ? data.grid : state.grid,
+      columns: Array.isArray(data.columns) ? data.columns : state.columns,
+      modes: Array.isArray(data.modes) ? data.modes : state.modes
+    })
+    // Keep references when nothing changed (no re-render, no echo)
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+    set({
+      grid: same(normalized.grid, state.grid) ? state.grid : normalized.grid,
+      columns: same(normalized.columns, state.columns) ? state.columns : normalized.columns,
+      modes: same(normalized.modes, state.modes) ? state.modes : normalized.modes
+    })
   }
-}))
+})))

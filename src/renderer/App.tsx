@@ -1,12 +1,9 @@
-import React, { useEffect, useCallback } from 'react'
+import React, { useEffect } from 'react'
 import { useUiStore, type ViewTab } from './stores/ui-store'
 import { usePatchStore } from './stores/patch-store'
 import { useDmxStore } from './stores/dmx-store'
 import { useMidiStore } from './stores/midi-store'
 import { usePlaybackStore } from './stores/playback-store'
-import { useExecutorStore } from './stores/executor-store'
-import { useVisualizerStore } from './stores/visualizer-store'
-import type { ShowFile } from '@shared/types'
 import { initMidiRouting } from './lib/midi-manager'
 import { startFollowGamepadLoop } from './stores/follow-store'
 import { Toolbar } from './components/layout/Toolbar'
@@ -20,7 +17,7 @@ import { MidiView } from './components/midi/MidiView'
 import { StageLayoutView } from './components/visualizer/StageLayoutView'
 import { RemoteStageView } from './components/stage/RemoteStageView'
 import { getDeviceProfile } from './lib/device-detect'
-import { isPhone, isTablet } from './stores/ui-store'
+import { isPhone } from './stores/ui-store'
 
 // Lazy-load 3D visualizer — never imported on ARM/mid-range devices
 const VisualizerView = React.lazy(() =>
@@ -31,15 +28,13 @@ import { LiveView } from './components/live/LiveView'
 import { ExecutorBar } from './components/layout/ExecutorBar'
 import { FollowPanel } from './components/follow/FollowPanel'
 import { usePlaybackController } from './hooks/usePlaybackController'
+import { useRemoteSync } from './hooks/useRemoteSync'
+import { useSelectionSync } from './hooks/useSelectionSync'
 import { startMixer, stopMixer, clearProgrammer } from './lib/dmx-mixer'
-import { getTimelineState, toggleTimeline } from './lib/timeline-engine'
-import { useRemoteSync, isRemote } from './hooks/useRemoteSync'
-
-const DEFAULT_ARTNET_CONFIG = [
-  { host: '255.255.255.255', port: 6454, universe: 0, subnet: 0, net: 0 },
-  { host: '255.255.255.255', port: 6454, universe: 1, subnet: 0, net: 0 },
-  { host: '255.255.255.255', port: 6454, universe: 2, subnet: 0, net: 0 },
-]
+import { getBridge, isRemoteMode } from './lib/runtime'
+import { handleCommand } from './lib/command-handler'
+import { startStateBroadcast } from './lib/state-snapshot'
+import { installDirtyTracking, loadLastShow, newShow, openShow, saveShow } from './lib/show-io'
 
 type WorkspaceTab = { id: ViewTab; label: string; shortcut: string }
 
@@ -56,417 +51,75 @@ const WORKSPACE_TABS: WorkspaceTab[] = [
   { id: 'settings',      label: 'Settings',     shortcut: '0' },
 ]
 
+/** Call an `on*` bridge listener and return its unsubscribe (older bridges return void). */
+function listen(off: unknown): () => void {
+  return () => { if (typeof off === 'function') off() }
+}
+
 export default function App() {
-  const { activeTab, setActiveTab, stageMode, setStageMode } = useUiStore()
-  const { loadFixtures } = usePatchStore()
-  const { initMidi } = useMidiStore()
+  const activeTab = useUiStore(s => s.activeTab)
+  const setActiveTab = useUiStore(s => s.setActiveTab)
+  const stageMode = useUiStore(s => s.stageMode)
+  const setStageMode = useUiStore(s => s.setStageMode)
 
   usePlaybackController()
   useRemoteSync()
+  useSelectionSync()
 
-  // Start the central DMX mixer (merges all sources: programmer, cues, chases, effects)
-  // In remote mode, DMX values come from the Pi — no local mixer needed.
+  // Central DMX mixer (programmer, scenes, chases, effects, timeline → output).
+  // In remote mode, DMX comes from the Pi — no local mixer.
   useEffect(() => {
-    if (isRemote()) return
+    if (isRemoteMode()) return
     startMixer()
     return () => stopMixer()
   }, [])
 
-  // ---- Save / Load helpers ----
-  const collectShowData = useCallback((): ShowFile => {
-    // Access store state directly at call time
-    const fullPatchState = usePatchStore.getState()
-    const patch = [...fullPatchState.patch] // shallow copy to ensure serializable
-    const groups = [...fullPatchState.groups]
-    const { cuelists, chases } = usePlaybackStore.getState()
-    const { showName } = useUiStore.getState()
-    const { roomConfig } = useVisualizerStore.getState()
-    return {
-      version: '1.0.0',
-      name: showName,
-      createdAt: new Date().toISOString(),
-      modifiedAt: new Date().toISOString(),
-      artnetConfig: DEFAULT_ARTNET_CONFIG,
-      patch,
-      groups,
-      presets: [],
-      cuelists: [...cuelists],
-      chases: [...chases],
-      effects: [],
-      midiMappings: [...useMidiStore.getState().mappings],
-      stageLayout: { width: 1200, height: 600, fixtures: [] },
-      roomConfig: { ...roomConfig },
-      timeline: {
-        clips: [...usePlaybackStore.getState().timelineClips],
-        markers: [...usePlaybackStore.getState().timelineMarkers],
-        zones: [...usePlaybackStore.getState().timelineZones],
-        trackCount: usePlaybackStore.getState().timelineTrackCount
-      }
-    }
-  }, [])
-
-  const applyShowData = useCallback((show: ShowFile) => {
-    usePatchStore.getState().setPatch(show.patch || [])
-    usePatchStore.getState().setGroups(show.groups || [])
-    usePlaybackStore.getState().setCuelists(show.cuelists || [])
-    usePlaybackStore.getState().setChases(show.chases || [])
-    useUiStore.getState().setShowName(show.name || 'New Show')
-    if (show.midiMappings && show.midiMappings.length > 0) useMidiStore.getState().setMappings(show.midiMappings)
-    if (show.roomConfig) useVisualizerStore.getState().setRoomConfig(show.roomConfig)
-    if (show.timeline) {
-      usePlaybackStore.getState().setTimelineClips(show.timeline.clips || [])
-      usePlaybackStore.getState().setTimelineMarkers(show.timeline.markers || [])
-      usePlaybackStore.getState().setTimelineZones(show.timeline.zones || [])
-      if (show.timeline.trackCount) usePlaybackStore.getState().setTimelineTrackCount(show.timeline.trackCount)
-    }
-    // Clear selections
-    usePatchStore.getState().clearSelection()
-    useVisualizerStore.getState().selectFixture(null)
-  }, [])
-
-  // Guards to prevent concurrent save/load operations
-  const isSaving = React.useRef(false)
-  const isLoading = React.useRef(false)
-
-  const handleSave = useCallback(async () => {
-    if (isSaving.current) return
-    isSaving.current = true
-    useUiStore.getState().showStatus('Saving…', 'info', 0)
-    try {
-      const show = collectShowData()
-      const result = await window.photonboard.show.save(show)
-      if (result && result.path) {
-        const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
-        useUiStore.getState().setShowName(fileName)
-        useUiStore.getState().showStatus(`Saved ✓ ${fileName}`, 'success', 2500)
-      } else {
-        useUiStore.getState().showStatus('Save cancelled', 'info', 2000)
-      }
-    } catch (e) {
-      console.error('[PhotonBoard] Save error:', e)
-      useUiStore.getState().showStatus('Save failed!', 'error', 3000)
-    } finally {
-      isSaving.current = false
-    }
-  }, [collectShowData])
-
-  const handleSaveAs = useCallback(async () => {
-    if (isSaving.current) return
-    isSaving.current = true
-    useUiStore.getState().showStatus('Save As…', 'info', 0)
-    try {
-      const show = collectShowData()
-      const result = await window.photonboard.show.saveAs(show)
-      if (result && result.path) {
-        const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
-        useUiStore.getState().setShowName(fileName)
-        useUiStore.getState().showStatus(`Saved ✓ ${fileName}`, 'success', 2500)
-      } else {
-        useUiStore.getState().showStatus('Save cancelled', 'info', 2000)
-      }
-    } catch (e) {
-      console.error('[PhotonBoard] SaveAs error:', e)
-      useUiStore.getState().showStatus('Save failed!', 'error', 3000)
-    } finally {
-      isSaving.current = false
-    }
-  }, [collectShowData])
-
-  const handleLoad = useCallback(async () => {
-    if (isLoading.current) return
-    isLoading.current = true
-    useUiStore.getState().showStatus('Opening…', 'info', 0)
-    try {
-      const result = await window.photonboard.show.load()
-      if (!result) {
-        useUiStore.getState().showStatus('Load cancelled', 'info', 2000)
-        return
-      }
-      // Handle both direct show object and wrapped result
-      const show = result.show || (result as any)
-      if (show && show.patch) {
-        // Use filename as show name if available
-        if (result.path) {
-          const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || show.name
-          show.name = fileName
-        }
-        applyShowData(show as ShowFile)
-        await usePatchStore.getState().loadFixtures()
-        usePatchStore.getState().initMovingHeadDefaults()
-        useUiStore.getState().showStatus(`Loaded ✓ ${show.name}`, 'success', 2500)
-      } else {
-        console.error('[PhotonBoard] Load failed - no show data in result:', JSON.stringify(result).slice(0, 200))
-        useUiStore.getState().showStatus('Load failed — empty file', 'error', 3000)
-      }
-    } catch (e) {
-      console.error('[PhotonBoard] Load error:', e)
-      useUiStore.getState().showStatus('Load failed!', 'error', 3000)
-    } finally {
-      isLoading.current = false
-    }
-  }, [applyShowData])
-
-  const handleNew = useCallback(async () => {
-    if (isLoading.current) return
-    isLoading.current = true
-    try {
-      const show = await window.photonboard.show.new()
-      if (show) {
-        applyShowData(show as ShowFile)
-      }
-    } catch (e) {
-      console.error('[PhotonBoard] New error:', e)
-    } finally {
-      isLoading.current = false
-    }
-  }, [applyShowData])
-
-  // Sync selection between patch-store (multi) and visualizer-store (single)
+  // One-time init: fixture library, MIDI, gamepad, last show
   useEffect(() => {
-    // When patch-store selection changes → update visualizer-store
-    const unsubPatch = usePatchStore.subscribe(
-      (s) => s.selectedFixtureIds,
-      (ids) => {
-        const vizId = useVisualizerStore.getState().selectedFixtureId
-        if (ids.length === 1 && ids[0] !== vizId) {
-          useVisualizerStore.getState().selectFixture(ids[0])
-        } else if (ids.length === 0 && vizId !== null) {
-          useVisualizerStore.getState().selectFixture(null)
-        }
-      }
-    )
-    // When visualizer-store selection changes → update patch-store
-    const unsubViz = useVisualizerStore.subscribe(
-      (s) => s.selectedFixtureId,
-      (id) => {
-        const patchIds = usePatchStore.getState().selectedFixtureIds
-        if (id && !patchIds.includes(id)) {
-          usePatchStore.getState().selectFixture(id, false)
-        } else if (!id && patchIds.length > 0) {
-          usePatchStore.getState().clearSelection()
-        }
-      }
-    )
-    return () => { unsubPatch(); unsubViz() }
-  }, [])
-
-  useEffect(() => {
+    let cancelled = false
     const init = async () => {
       try {
-        console.log('[Init] Loading fixtures…')
-        await loadFixtures()
-        console.log('[Init] Fixtures loaded:', usePatchStore.getState().fixtures.length)
+        await usePatchStore.getState().loadFixtures()
       } catch (e) {
         console.error('[Init] loadFixtures failed:', e)
       }
-
-      try { initMidi() } catch (e) { console.warn('[Init] MIDI init skipped:', e) }
+      if (cancelled) return
+      try { await useMidiStore.getState().initMidi() } catch (e) { console.warn('[Init] MIDI init skipped:', e) }
       try { initMidiRouting() } catch (e) { console.warn('[Init] MIDI routing skipped:', e) }
-      try { startFollowGamepadLoop() } catch (e) { console.warn('[Init] Gamepad init skipped:', e) }
-
-      try {
-        window.photonboard.artnet.configure(DEFAULT_ARTNET_CONFIG)
-      } catch (e) { console.warn('[Init] ArtNet config skipped:', e) }
-
-      // Auto-load the last saved show
-      try {
-        console.log('[Init] Loading last show…')
-        const result = await window.photonboard.show.loadLast()
-        console.log('[Init] loadLast result:', result?.success, 'patch:', result?.show?.patch?.length, 'cuelists:', result?.show?.cuelists?.length)
-        if (result && result.success && result.show) {
-          // Use filename as show name
-          if (result.path) {
-            const fileName = result.path.split('/').pop()?.replace('.pbshow', '') || result.show.name
-            result.show.name = fileName
-          }
-          applyShowData(result.show as ShowFile)
-          usePatchStore.getState().initMovingHeadDefaults()
-          console.log('[Init] Show applied:', result.show.name)
-        } else {
-          console.warn('[Init] No show to load, result:', result)
-        }
-      } catch (e) {
-        console.error('[PhotonBoard] Auto-load failed:', e)
+      if (!isRemoteMode()) {
+        try { startFollowGamepadLoop() } catch (e) { console.warn('[Init] Gamepad init skipped:', e) }
       }
+      // Console: reload the last show (DMX outputs are machine config, applied by main).
+      // Remote: fetch the console's show for display (patch, scenes, timeline…);
+      // live state then arrives with the state broadcasts.
+      await loadLastShow()
     }
-    init()
+    void init()
+    return () => { cancelled = true }
   }, [])
 
-  // Register menu event handlers — onMenuEvent replaces (not accumulates) handlers
+  // Console only: dirty tracking, menu, commands, state broadcast
   useEffect(() => {
-    window.photonboard.onMenuEvent('menu:new', handleNew)
-    window.photonboard.onMenuEvent('menu:save', handleSave)
-    window.photonboard.onMenuEvent('menu:save-as', handleSaveAs)
-    window.photonboard.onMenuEvent('menu:load', handleLoad)
-  }, [handleNew, handleSave, handleSaveAs, handleLoad])
-
-  // ---- Collect state snapshot (shared by stage window + API) ----
-  const collectState = () => {
-    const { grandMaster, blackout, blinder, strobe, values: dmxValues } = useDmxStore.getState()
-    const { cuelists } = usePlaybackStore.getState()
-    const { showName } = useUiStore.getState()
-    const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
-    const { grid: executorGrid, columns: executorColumns, modes: executorModes } = useExecutorStore.getState()
-    const timelineState = getTimelineState()
-
-    return {
-      grandMaster,
-      blackout,
-      blinder,
-      strobe,
-      dmxValues, // Raw DMX universes for remote 3D preview
-      timelinePlaying: timelineState.isPlaying,
-      showName,
-      // Full cuelist definitions so remote browsers can add/remove/rename scenes
-      // in real time. The JSON dedup in api-server/web-server avoids rebroadcast
-      // when nothing has changed, so the extra bytes only go on the wire when
-      // the user actually edits the show.
-      cuelists: cuelists.map(cl => ({
-        id: cl.id,
-        name: cl.name,
-        cues: cl.cues,
-        currentCueIndex: cl.currentCueIndex,
-        isPlaying: cl.isPlaying,
-        isLooping: cl.isLooping,
-        priority: cl.priority,
-        faderLevel: cl.faderLevel,
-        flash: cl.flash
+    if (isRemoteMode()) return
+    const bridge = getBridge()
+    if (!bridge) return
+    const offs = [
+      installDirtyTracking(),
+      listen(bridge.onMenuEvent('menu:new', () => { void newShow() })),
+      listen(bridge.onMenuEvent('menu:save', () => { void saveShow() })),
+      listen(bridge.onMenuEvent('menu:save-as', () => { void saveShow({ saveAs: true }) })),
+      listen(bridge.onMenuEvent('menu:load', () => { void openShow() })),
+      // Commands from the Stage window, remote browsers, Companion and main
+      listen(bridge.stage.onCommand((command) => {
+        try {
+          handleCommand(command)
+        } catch (e) {
+          console.error('[Command] failed:', command?.type, e)
+        }
       })),
-      groups: groups.filter(g => !g.parentGroupId).map(g => ({
-        id: g.id,
-        name: g.name,
-        color: g.color,
-        fixtureCount: g.fixtureIds.length
-      })),
-      selectedFixtureIds,
-      fixtureCount: patch.length,
-      executorGrid,
-      executorColumns,
-      executorModes
-    }
-  }
-
-  // ---- Stage Window state sync bridge ----
-  useEffect(() => {
-    // Respond to state requests from main process (for stage window sync)
-    window.photonboard.stage.onRequestState(() => {
-      window.photonboard.stage.sendState(collectState())
-    })
-
-    // Respond to API state requests (for Companion / external controllers)
-    window.photonboard.api.onRequestState(() => {
-      window.photonboard.api.sendState(collectState())
-    })
-
-    // Handle commands from stage window
-    window.photonboard.stage.onCommand((command: { type: string; payload?: any }) => {
-      switch (command.type) {
-        case 'set-grand-master':
-          useDmxStore.getState().setGrandMaster(command.payload)
-          break
-        case 'toggle-blackout':
-          useDmxStore.getState().toggleBlackout()
-          break
-        case 'set-blackout':
-          // Remote sync sends explicit value (not toggle) to avoid ping-pong
-          if (useDmxStore.getState().blackout !== command.payload) {
-            useDmxStore.getState().toggleBlackout()
-          }
-          break
-        case 'toggle-blinder':
-          useDmxStore.getState().toggleBlinder(command.payload)
-          break
-        case 'toggle-strobe':
-          useDmxStore.getState().toggleStrobe(command.payload)
-          break
-        case 'toggle-timeline':
-          toggleTimeline()
-          break
-        case 'go-cuelist':
-          usePlaybackStore.getState().goCuelist(command.payload)
-          break
-        case 'stop-cuelist':
-          usePlaybackStore.getState().stopCuelist(command.payload)
-          break
-        case 'set-cuelist-fader':
-          usePlaybackStore.getState().setCuelistFader(command.payload.id, command.payload.level)
-          break
-        case 'select-group': {
-          const { clearSelection, selectFixture } = usePatchStore.getState()
-          const group = usePatchStore.getState().groups.find(g => g.id === command.payload)
-          if (group) {
-            clearSelection()
-            for (const fid of group.fixtureIds) selectFixture(fid, true)
-          }
-          break
-        }
-        case 'select-all':
-          usePatchStore.getState().selectAll()
-          break
-        case 'clear-selection':
-          usePatchStore.getState().clearSelection()
-          break
-        case 'clear-programmer':
-          clearProgrammer()
-          break
-        case 'swap-cells': {
-          const p = command.payload
-          if (p && p.from && p.to
-              && typeof p.from.col === 'number' && typeof p.from.row === 'number'
-              && typeof p.to.col === 'number' && typeof p.to.row === 'number') {
-            useExecutorStore.getState().swapCells(p.from, p.to)
-          }
-          break
-        }
-        case 'set-executor-layout': {
-          // Remote pushed a full layout (grid + columns + modes).
-          const p = command.payload
-          if (p && typeof p === 'object') {
-            useExecutorStore.getState().applyRemote({
-              grid: Array.isArray(p.grid) ? p.grid : undefined,
-              columns: Array.isArray(p.columns) ? p.columns : undefined,
-              modes: Array.isArray(p.modes) ? p.modes : undefined
-            })
-          }
-          break
-        }
-        case 'apply-show': {
-          // Remote uploaded a show — apply it to all stores
-          const uploaded = command.payload
-          if (uploaded) {
-            applyShowData(uploaded)
-            usePatchStore.getState().loadFixtures().then(() => {
-              usePatchStore.getState().initMovingHeadDefaults()
-            })
-            useUiStore.getState().showStatus(`Show loaded: ${uploaded.name || 'Uploaded'}`, 'success', 3000)
-          }
-          break
-        }
-      }
-    })
-
-    // ---- Auto-broadcast state to web clients on every change ----
-    // This ensures Pi → Mac sync works even without a stage window.
-    // Throttled to ~30Hz to avoid flooding the WebSocket.
-    let broadcastTimer: ReturnType<typeof setTimeout> | null = null
-    const scheduleBroadcast = () => {
-      if (broadcastTimer) return
-      broadcastTimer = setTimeout(() => {
-        broadcastTimer = null
-        window.photonboard.api.sendState(collectState())
-      }, 33)
-    }
-
-    const unsubPlayback = usePlaybackStore.subscribe(scheduleBroadcast)
-    const unsubDmx = useDmxStore.subscribe(scheduleBroadcast)
-    const unsubExecutor = useExecutorStore.subscribe(scheduleBroadcast)
-
-    return () => {
-      unsubPlayback()
-      unsubDmx()
-      unsubExecutor()
-      if (broadcastTimer) clearTimeout(broadcastTimer)
-    }
+      startStateBroadcast()
+    ]
+    return () => { for (const off of offs) off() }
   }, [])
 
   useEffect(() => {
@@ -501,7 +154,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTab])
+  }, [activeTab, setActiveTab])
 
   const renderView = () => {
     switch (activeTab) {
@@ -532,7 +185,7 @@ export default function App() {
   // Phone: always stage, no way out
   // Tablet: stage by default, button to switch to full app
   // Desktop browser: full app, Stage button to switch
-  if (isRemote() && stageMode) {
+  if (isRemoteMode() && stageMode) {
     // Phone: stage only, no toggle
     if (isPhone()) {
       return (

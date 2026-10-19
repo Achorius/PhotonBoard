@@ -1,20 +1,46 @@
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
 import { v4 as uuidv4 } from 'uuid'
 import type { Effect } from '@shared/types'
-import { startEffect, stopEffect, stopAllEffects, consumeOneShotCompleted } from '../lib/effect-engine'
+import { startEffect, stopEffect, onEffectComplete } from '../lib/effect-engine'
+import { isRemoteMode, sendRemoteCommand, sendRemoteCommandThrottled } from '../lib/runtime'
 
 interface EffectsState {
   effects: Effect[]
 
   addEffect: (fixtureIds: string[]) => void
   removeEffect: (id: string) => void
+  /** Update parameters; a running effect keeps its phase (no restart) */
   updateEffect: (id: string, updates: Partial<Effect>) => void
+  /** Start (from phase 0) / stop */
   toggleEffect: (id: string) => void
+  setEffectRunning: (id: string, running: boolean) => void
+  stopAllEffects: () => void
+  /** Replace the list (show load). Never starts anything. */
   setEffects: (effects: Effect[]) => void
+  /** @deprecated one-shot completion is now pushed by the engine; kept as a no-op */
   checkOneShotCompleted: () => void
 }
 
-export const useEffectsStore = create<EffectsState>((set, get) => ({
+/** Run an effect on the engine (local) or on the Pi (remote). */
+function engineStart(effect: Effect, restart: boolean): void {
+  if (isRemoteMode()) {
+    if (restart) sendRemoteCommand('start-effect', effect)
+    else sendRemoteCommandThrottled(`effect:${effect.id}`, 'start-effect', effect, 60)
+    return
+  }
+  startEffect(effect, { restart })
+}
+
+function engineStop(id: string): void {
+  if (isRemoteMode()) {
+    sendRemoteCommand('stop-effect', id)
+    return
+  }
+  stopEffect(id)
+}
+
+export const useEffectsStore = create<EffectsState>()(subscribeWithSelector((set, get) => ({
   effects: [],
 
   addEffect: (fixtureIds) => {
@@ -35,44 +61,46 @@ export const useEffectsStore = create<EffectsState>((set, get) => ({
   },
 
   removeEffect: (id) => {
-    stopEffect(id)
+    engineStop(id)
     set({ effects: get().effects.filter(e => e.id !== id) })
   },
 
   updateEffect: (id, updates) => {
-    set({
-      effects: get().effects.map(e => {
-        if (e.id !== id) return e
-        const updated = { ...e, ...updates }
-        if (updated.isRunning) startEffect(updated)
-        return updated
-      })
-    })
+    const current = get().effects.find(e => e.id === id)
+    if (!current) return
+    const updated = { ...current, ...updates }
+    if (updated.isRunning) engineStart(updated, !current.isRunning)
+    else if (current.isRunning) engineStop(id)
+    set({ effects: get().effects.map(e => (e.id === id ? updated : e)) })
   },
 
   toggleEffect: (id) => {
-    set({
-      effects: get().effects.map(e => {
-        if (e.id !== id) return e
-        const running = !e.isRunning
-        const updated = { ...e, isRunning: running }
-        if (running) startEffect(updated)
-        else stopEffect(id)
-        return updated
-      })
-    })
+    const current = get().effects.find(e => e.id === id)
+    if (current) get().setEffectRunning(id, !current.isRunning)
   },
 
-  setEffects: (effects) => set({ effects }),
+  setEffectRunning: (id, running) => {
+    const current = get().effects.find(e => e.id === id)
+    if (!current) return
+    const updated = { ...current, isRunning: running }
+    if (running) engineStart(updated, true)
+    else engineStop(id)
+    set({ effects: get().effects.map(e => (e.id === id ? updated : e)) })
+  },
 
-  // Poll for one-shot effects that finished their cycle
-  checkOneShotCompleted: () => {
-    const completed = consumeOneShotCompleted()
-    if (completed.length === 0) return
-    set({
-      effects: get().effects.map(e =>
-        completed.includes(e.id) ? { ...e, isRunning: false } : e
-      )
-    })
-  }
-}))
+  stopAllEffects: () => {
+    for (const e of get().effects) if (e.isRunning) engineStop(e.id)
+    set({ effects: get().effects.map(e => (e.isRunning ? { ...e, isRunning: false } : e)) })
+  },
+
+  setEffects: (effects) => set({ effects: effects.map(e => (e.isRunning ? { ...e, isRunning: false } : e)) }),
+
+  checkOneShotCompleted: () => {}
+})))
+
+// One-shot effects stop themselves in the engine: reflect it in the store
+onEffectComplete((id) => {
+  const { effects } = useEffectsStore.getState()
+  if (!effects.some(e => e.id === id && e.isRunning)) return
+  useEffectsStore.setState({ effects: effects.map(e => (e.id === id ? { ...e, isRunning: false } : e)) })
+})

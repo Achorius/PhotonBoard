@@ -1,10 +1,14 @@
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
+import { isElectronRuntime } from '@renderer/lib/runtime'
 
 // ---- Device type detection ----
 
-const _ua = navigator.userAgent.toLowerCase()
-const _isElectron = !!(window as any).__ELECTRON__ || !!(window as any).photonboard?.stage?.open
+const _ua = typeof navigator !== 'undefined' ? navigator.userAgent.toLowerCase() : ''
+// The Electron renderer always has "Electron/x.y" in its user agent; the remote
+// bridge (which also defines window.photonboard) never does — import order safe.
+const _isElectron = isElectronRuntime()
 
 /** True on phones (small screen, no room for full app) */
 export function isPhone(): boolean {
@@ -73,8 +77,13 @@ interface UiState {
   toggleBottomPanel: () => void
   openModal: (modal: string, data?: any) => void
   closeModal: () => void
+  /** Show a status message; duration 0 = until replaced. A newer message is never cleared by an older timer. */
   showStatus: (message: string, type?: 'info' | 'success' | 'error', duration?: number) => void
+  clearStatus: () => void
 }
+
+let statusToken = 0
+let statusTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useUiStore = create<UiState>((set) => ({
   activeTab: getDefaultTab(),
@@ -102,9 +111,38 @@ export const useUiStore = create<UiState>((set) => ({
   openModal: (modal, data = null) => set({ activeModal: modal, modalData: data }),
   closeModal: () => set({ activeModal: null, modalData: null }),
   showStatus: (message, type = 'info', duration = 3000) => {
+    const token = ++statusToken
+    if (statusTimer) {
+      clearTimeout(statusTimer)
+      statusTimer = null
+    }
     set({ statusMessage: message, statusType: type })
     if (duration > 0) {
-      setTimeout(() => set({ statusMessage: null }), duration)
+      statusTimer = setTimeout(() => {
+        statusTimer = null
+        if (token === statusToken) set({ statusMessage: null })
+      }, duration)
     }
+  },
+
+  clearStatus: () => {
+    statusToken++
+    if (statusTimer) {
+      clearTimeout(statusTimer)
+      statusTimer = null
+    }
+    set({ statusMessage: null })
   }
 }))
+
+// ---- Selector hooks ----
+
+/** Status toast (message + type). */
+export function useStatus() {
+  return useUiStore(useShallow((s) => ({ message: s.statusMessage, type: s.statusType })))
+}
+
+/** Show name + unsaved-changes flag. */
+export function useShowTitle() {
+  return useUiStore(useShallow((s) => ({ showName: s.showName, isDirty: s.isDirty })))
+}

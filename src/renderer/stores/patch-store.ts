@@ -1,7 +1,8 @@
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
 import { v4 as uuidv4 } from 'uuid'
 import type { PatchEntry, FixtureDefinition, Group, PixelLayout } from '@shared/types'
-import { useDmxStore } from './dmx-store'
 
 interface PatchState {
   patch: PatchEntry[]
@@ -30,7 +31,10 @@ interface PatchState {
   moveSubgroup: (subgroupId: string, newParentId: string | undefined) => void
   selectGroup: (groupId: string) => void
 
-  // Init defaults
+  /**
+   * @deprecated Pan/tilt centring (and every other channel default) is now
+   * produced by the mixer from the fixture definitions; kept as a no-op.
+   */
   initMovingHeadDefaults: () => void
 
   // Import
@@ -39,7 +43,7 @@ interface PatchState {
   setFixtures: (fixtures: FixtureDefinition[]) => void
 }
 
-export const usePatchStore = create<PatchState>((set, get) => ({
+export const usePatchStore = create<PatchState>()(subscribeWithSelector((set, get) => ({
   patch: [],
   fixtures: [],
   groups: [],
@@ -47,7 +51,7 @@ export const usePatchStore = create<PatchState>((set, get) => ({
 
   loadFixtures: async () => {
     const fixtures = await window.photonboard.fixtures.getAll()
-    set({ fixtures })
+    if (Array.isArray(fixtures)) set({ fixtures })
   },
 
   addFixture: (fixtureDefId, modeName, universe, address, name, count = 1, groupId?) => {
@@ -83,23 +87,16 @@ export const usePatchStore = create<PatchState>((set, get) => ({
         : state.groups
       return { patch: newPatch, groups: newGroups }
     })
-
-    // Set default DMX values: Pan & Tilt to 128 (center/neutral = pointing down)
-    const { setChannel } = useDmxStore.getState()
-    const centerChannels = ['pan', 'tilt']
-    for (const entry of newEntries) {
-      mode.channels.forEach((chName, index) => {
-        const n = chName.toLowerCase()
-        if (centerChannels.includes(n)) {
-          setChannel(entry.universe, entry.address - 1 + index, 128)
-        }
-      })
-    }
+    // No DMX writes here: the mixer outputs every channel's default
+    // (pan/tilt centred) as soon as the patch changes.
   },
 
   removeFixture: (id) => {
     set((state) => ({
       patch: state.patch.filter((p) => p.id !== id),
+      groups: state.groups.some((g) => g.fixtureIds.includes(id))
+        ? state.groups.map((g) => (g.fixtureIds.includes(id) ? { ...g, fixtureIds: g.fixtureIds.filter((f) => f !== id) } : g))
+        : state.groups,
       selectedFixtureIds: state.selectedFixtureIds.filter((sid) => sid !== id)
     }))
   },
@@ -238,29 +235,23 @@ export const usePatchStore = create<PatchState>((set, get) => ({
     }
   },
 
-  initMovingHeadDefaults: () => {
-    // Set Pan & Tilt DMX channels to 128 (center) for all moving-head fixtures
-    const { patch, fixtures } = get()
-    const { setChannel } = useDmxStore.getState()
-    const centerChannels = ['pan', 'tilt']
-    for (const entry of patch) {
-      const def = fixtures.find((f) => f.id === entry.fixtureDefId)
-      if (!def) continue
-      // Only apply to moving-head shape fixtures
-      if (def.physical?.type !== 'moving-head' && !def.modes.some(m => m.channels.some(c => c.toLowerCase() === 'pan'))) continue
-      const mode = def.modes.find((m) => m.name === entry.modeName)
-      if (!mode) continue
-      mode.channels.forEach((chName, index) => {
-        if (centerChannels.includes(chName.toLowerCase())) {
-          setChannel(entry.universe, entry.address - 1 + index, 128)
-        }
-      })
-    }
-  },
+  initMovingHeadDefaults: () => {},
 
   setPatch: (patch) => {
     set({ patch })
   },
   setGroups: (groups) => set({ groups }),
   setFixtures: (fixtures) => set({ fixtures })
-}))
+})))
+
+// ---- Selector hooks ----
+
+/** Selected fixture ids (re-renders only when the selection changes). */
+export function useSelectedFixtureIds(): string[] {
+  return usePatchStore((s) => s.selectedFixtureIds)
+}
+
+/** Patch + library + groups, without re-rendering on selection changes. */
+export function usePatchData() {
+  return usePatchStore(useShallow((s) => ({ patch: s.patch, fixtures: s.fixtures, groups: s.groups })))
+}

@@ -1,197 +1,214 @@
 // ============================================================
 // PhotonBoard — Cue Engine
-// Fade interpolation between cues using requestAnimationFrame.
-// Writes directly to DMX store.
+// Tracking crossfades for cuelists.
+//
+//  - Each cuelist keeps a persistent "current output" map. A GO
+//    crossfades from the CURRENT output (also mid-fade) to the new
+//    cue's tracked state (all cues up to it, later values win).
+//  - Intensity going up uses the cue's fade-in time, going down its
+//    fade-out time; non-intensity (LTP) channels use fade-in.
+//  - Intensity channels no longer in the tracked state fade to 0 and
+//    are then released; LTP channels hold their value.
+//  - The delay holds the current output (nothing is dropped) before
+//    the fade starts. Zero times snap.
+//  - Time is injected (`now` in ms) — no rAF, no performance.now().
 // ============================================================
 
 import type { Cue } from '@shared/types'
+import { blendValues, segmentProgress, smoothstep } from './fade-math'
+import { cueKey, type KeyMetaFn } from './fixture-index'
 
-export interface FadeState {
-  cuelistId: string
-  fromCue: Cue | null
-  toCue: Cue
-  startTime: number
+export interface CueTiming {
+  /** seconds */
   fadeIn: number
+  /** seconds */
   fadeOut: number
+  /** seconds */
   delay: number
-  progress: number // 0-1
-  complete: boolean
-  tracking: boolean // true = tracked channels persist, false = fade to 0
-  /** Accumulated tracked values from all previous cues in this cuelist */
-  trackedValues: Map<string, number>
 }
 
-const activeFades: Map<string, FadeState> = new Map()
-let animationFrame: number | null = null
-let onUpdate: ((values: Map<string, Map<string, number>>) => void) | null = null
-let onComplete: ((cuelistId: string) => void) | null = null
-
-export function setFadeUpdateCallback(cb: (values: Map<string, Map<string, number>>) => void): void {
-  onUpdate = cb
+export interface CueEngineOptions {
+  /** How a key behaves (intensity / 16-bit pair). */
+  meta: KeyMetaFn
+  /**
+   * Value a channel has right now when this cuelist does not control it yet
+   * (e.g. the live mix). Intensity channels always start from 0.
+   * Undefined → the channel snaps to its target.
+   */
+  startValue?: (key: string) => number | undefined
 }
 
-export function setFadeCompleteCallback(cb: (cuelistId: string) => void): void {
-  onComplete = cb
+interface FadeRun {
+  /** Output of the cuelist when the GO happened (held during the delay) */
+  held: Map<string, number>
+  /** Start value of every faded key */
+  from: Map<string, number>
+  to: Map<string, number>
+  /** keys to drop from the output once the fade completes (released intensity) */
+  release: Set<string>
+  start: number
+  delayMs: number
+  upMs: number
+  downMs: number
+  ltpMs: number
+  endMs: number
 }
 
-export function startFade(
-  cuelistId: string,
-  fromCue: Cue | null,
-  toCue: Cue,
-  tracking: boolean = true
-): void {
-  // Carry over tracked values from previous fade (accumulated state)
-  const prevFade = activeFades.get(cuelistId)
-  const trackedValues = prevFade ? new Map(prevFade.trackedValues) : new Map<string, number>()
+interface CuelistRun {
+  /** Output computed at the last update (or at the last GO) */
+  current: Map<string, number>
+  fade: FadeRun | null
+}
 
-  // Merge fromCue values into tracked state
-  if (fromCue) {
-    for (const cv of fromCue.values) {
-      trackedValues.set(`${cv.fixtureId}:${cv.channelName}`, cv.value)
+export interface CueUpdateResult {
+  /** Cuelists whose output changed this frame */
+  changed: Map<string, Map<string, number>>
+  /** Cuelists whose fade finished this frame */
+  completed: string[]
+}
+
+/** Tracked state of cue `index`: every value of cues 0..index, later cues win. */
+export function computeTrackedState(cues: Cue[], index: number): Map<string, number> {
+  const state = new Map<string, number>()
+  const last = Math.min(index, cues.length - 1)
+  for (let i = 0; i <= last; i++) {
+    for (const cv of cues[i]?.values ?? []) {
+      if (!cv || typeof cv.fixtureId !== 'string' || typeof cv.channelName !== 'string') continue
+      const v = Number(cv.value)
+      if (!Number.isFinite(v)) continue
+      state.set(cueKey(cv.fixtureId, cv.channelName), Math.max(0, Math.min(255, Math.round(v))))
     }
   }
-
-  activeFades.set(cuelistId, {
-    cuelistId,
-    fromCue,
-    toCue,
-    startTime: performance.now(),
-    fadeIn: toCue.fadeIn * 1000,
-    fadeOut: toCue.fadeOut * 1000,
-    delay: toCue.delay * 1000,
-    progress: 0,
-    complete: false,
-    tracking,
-    trackedValues
-  })
-
-  if (!animationFrame) {
-    animationFrame = requestAnimationFrame(updateFades)
-  }
+  return state
 }
 
-export function stopFade(cuelistId: string): void {
-  activeFades.delete(cuelistId)
-  if (activeFades.size === 0 && animationFrame) {
-    cancelAnimationFrame(animationFrame)
-    animationFrame = null
-  }
+function seconds(v: unknown): number {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : 0
 }
 
-export function stopAllFades(): void {
-  activeFades.clear()
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame)
-    animationFrame = null
-  }
-}
+export class CueEngine {
+  private readonly runs = new Map<string, CuelistRun>()
 
-function updateFades(): void {
-  const now = performance.now()
-  const allValues = new Map<string, Map<string, number>>()
+  constructor(private readonly opts: CueEngineOptions) {}
 
-  for (const [id, fade] of activeFades) {
-    const elapsed = now - fade.startTime
-    const delayedElapsed = elapsed - fade.delay
+  /**
+   * Crossfade a cuelist to `target` (its new tracked state), starting from
+   * whatever it outputs at `now`.
+   */
+  go(cuelistId: string, target: Map<string, number>, timing: CueTiming, now: number): void {
+    const run = this.runs.get(cuelistId)
+    const from = run ? this.valuesAt(run, now) : new Map<string, number>()
 
-    if (delayedElapsed < 0) {
-      // Still in delay phase — use from values
-      if (fade.fromCue) {
-        const vals = new Map<string, number>()
-        for (const cv of fade.fromCue.values) {
-          vals.set(`${cv.fixtureId}:${cv.channelName}`, cv.value)
-        }
-        allValues.set(id, vals)
-      }
-      continue
-    }
-
-    const fadeDuration = Math.max(fade.fadeIn, fade.fadeOut, 1)
-    const progress = Math.min(1, delayedElapsed / fadeDuration)
-    fade.progress = progress
-
-    const vals = new Map<string, number>()
-
-    // Build "from" lookup
-    const fromMap = new Map<string, number>()
-    if (fade.fromCue) {
-      for (const cv of fade.fromCue.values) {
-        fromMap.set(`${cv.fixtureId}:${cv.channelName}`, cv.value)
-      }
-    }
-
-    // Interpolate to "to" values
-    for (const cv of fade.toCue.values) {
-      const key = `${cv.fixtureId}:${cv.channelName}`
-      const fromVal = fromMap.get(key) ?? 0
-      const toVal = cv.value
-
-      // Ease function (smooth step)
-      const t = progress * progress * (3 - 2 * progress)
-      const value = fromVal + (toVal - fromVal) * t
-      vals.set(key, Math.round(value))
-      fromMap.delete(key)
-    }
-
-    // Channels in "from" but not in "to": tracking keeps them, non-tracking fades to 0
-    for (const [key, fromVal] of fromMap) {
-      if (fade.tracking) {
-        // Tracking: value persists unchanged
-        vals.set(key, fromVal)
+    const to = new Map(target)
+    const release = new Set<string>()
+    for (const [key, value] of from) {
+      if (to.has(key)) continue
+      if (this.opts.meta(key).intensity) {
+        to.set(key, 0)
+        release.add(key)
       } else {
-        const fadeOutProgress = Math.min(1, delayedElapsed / Math.max(fade.fadeOut, 1))
-        const t = fadeOutProgress * fadeOutProgress * (3 - 2 * fadeOutProgress)
-        vals.set(key, Math.round(fromVal * (1 - t)))
+        to.set(key, value) // LTP tracks: hold
       }
     }
 
-    // Also include accumulated tracked values not in current from/to
-    if (fade.tracking) {
-      for (const [key, val] of fade.trackedValues) {
-        if (!vals.has(key)) {
-          vals.set(key, val)
+    const delayMs = seconds(timing.delay) * 1000
+    const upMs = seconds(timing.fadeIn) * 1000
+    const downMs = seconds(timing.fadeOut) * 1000
+    const ltpMs = upMs
+    const fade: FadeRun = {
+      held: from,
+      from,
+      to,
+      release,
+      start: now,
+      delayMs,
+      upMs,
+      downMs,
+      ltpMs,
+      endMs: delayMs + Math.max(upMs, downMs, ltpMs)
+    }
+
+    // Initial values for channels this cuelist did not drive yet
+    const startFrom = new Map(from)
+    for (const key of to.keys()) {
+      if (startFrom.has(key)) continue
+      const m = this.opts.meta(key)
+      if (m.coarseKey && to.has(m.coarseKey)) continue // handled with its coarse key
+      const s = m.intensity ? 0 : this.opts.startValue?.(key)
+      if (s !== undefined) {
+        startFrom.set(key, s)
+        if (m.fineKey && !startFrom.has(m.fineKey)) {
+          const sf = m.intensity ? 0 : this.opts.startValue?.(m.fineKey)
+          if (sf !== undefined) startFrom.set(m.fineKey, sf)
         }
       }
     }
+    fade.from = startFrom
 
-    allValues.set(id, vals)
+    const next: CuelistRun = { current: from, fade }
+    next.current = this.valuesAt(next, now)
+    this.runs.set(cuelistId, next)
+  }
 
-    if (progress >= 1) {
-      fade.complete = true
-      activeFades.delete(id)
-      // Notify controller that this cuelist's fade finished
-      if (onComplete) onComplete(id)
+  /** Forget a cuelist (its layer is released by the caller). */
+  stop(cuelistId: string): void {
+    this.runs.delete(cuelistId)
+  }
+
+  stopAll(): void {
+    this.runs.clear()
+  }
+
+  has(cuelistId: string): boolean {
+    return this.runs.has(cuelistId)
+  }
+
+  isFading(cuelistId: string): boolean {
+    return !!this.runs.get(cuelistId)?.fade
+  }
+
+  /** Last computed output of a cuelist. */
+  getOutput(cuelistId: string): Map<string, number> | undefined {
+    return this.runs.get(cuelistId)?.current
+  }
+
+  /** Advance every running fade to `now`. */
+  update(now: number): CueUpdateResult {
+    const changed = new Map<string, Map<string, number>>()
+    const completed: string[] = []
+    for (const [id, run] of this.runs) {
+      if (!run.fade) continue
+      const values = this.valuesAt(run, now)
+      run.current = values
+      changed.set(id, values)
+      if (now - run.fade.start >= run.fade.endMs) {
+        for (const key of run.fade.release) values.delete(key)
+        run.fade = null
+        completed.push(id)
+      }
     }
+    return { changed, completed }
   }
 
-  if (onUpdate && allValues.size > 0) {
-    onUpdate(allValues)
+  private valuesAt(run: CuelistRun, now: number): Map<string, number> {
+    const fade = run.fade
+    if (!fade) return new Map(run.current)
+    const t = now - fade.start - fade.delayMs
+    if (t < 0) {
+      // Delay: hold the output of the GO moment — nothing dropped, nothing new yet
+      return new Map(fade.held)
+    }
+    const meta = this.opts.meta
+    return blendValues(
+      fade.from,
+      fade.to,
+      (key, fromValue, toValue) => {
+        const m = meta(key)
+        const ms = !m.intensity ? fade.ltpMs : toValue >= fromValue ? fade.upMs : fade.downMs
+        return smoothstep(segmentProgress(t, ms))
+      },
+      meta
+    )
   }
-
-  if (activeFades.size > 0) {
-    animationFrame = requestAnimationFrame(updateFades)
-  } else {
-    animationFrame = null
-  }
-}
-
-export function getActiveFades(): Map<string, FadeState> {
-  return new Map(activeFades)
-}
-
-export function snapToCue(cuelistId: string, cue: Cue): Map<string, number> {
-  // Preserve tracked values before deleting the fade
-  const prevFade = activeFades.get(cuelistId)
-  const trackedValues = prevFade ? new Map(prevFade.trackedValues) : new Map<string, number>()
-  activeFades.delete(cuelistId)
-
-  const vals = new Map<string, number>()
-  // Include tracked values first, then overlay current cue
-  for (const [key, val] of trackedValues) {
-    vals.set(key, val)
-  }
-  for (const cv of cue.values) {
-    vals.set(`${cv.fixtureId}:${cv.channelName}`, cv.value)
-  }
-  return vals
 }

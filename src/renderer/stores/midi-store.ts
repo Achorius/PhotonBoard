@@ -1,6 +1,18 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import type { MidiMapping, MidiDevice, MidiSourceType, MidiTargetType } from '@shared/types'
+import { detectCcEncoding } from '@renderer/lib/midi-learn'
+
+/** How long MIDI learn keeps listening after the first CC to tell faders from encoders */
+export const LEARN_CAPTURE_MS = 450
+
+interface LearnSource {
+  type: MidiSourceType
+  channel: number
+  number: number
+  value?: number
+  deviceName?: string
+}
 
 interface MidiLearnTarget {
   type: MidiTargetType
@@ -24,7 +36,12 @@ interface MidiState {
   initMidi: () => Promise<void>
   startLearn: (target: MidiLearnTarget) => void
   cancelLearn: () => void
-  completeLearn: (source: { type: MidiSourceType; channel: number; number: number; value?: number; deviceName?: string }) => void
+  /**
+   * Feed a message while learning. Notes / program changes complete at once;
+   * a CC completes after LEARN_CAPTURE_MS so its encoding can be detected from
+   * the following messages (absolute unless they clearly come from an encoder).
+   */
+  completeLearn: (source: LearnSource) => void
   addMapping: (mapping: Omit<MidiMapping, 'id'>) => void
   removeMapping: (id: string) => void
   updateMapping: (id: string, updates: Partial<MidiMapping>) => void
@@ -80,6 +97,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
         input.onmidimessage = (event: MIDIMessageEvent) => {
           if (!event.data || event.data.length < 1) return
           const [status, data1, data2] = event.data
+          const deviceName = input.name || undefined
 
           // Route system messages (MTC quarter frame 0xF1) to timecode engine
           if (status >= 0xf0) {
@@ -93,28 +111,23 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
           if (type === 0xb0) {
             // Control Change
-            const msg = { type: 'cc', channel, number: data1, value: data2 || 0 }
-            get().setLastMessage(msg)
-
-            if (get().isLearning) {
-              get().completeLearn({ type: 'cc', channel, number: data1, value: data2 || 0, deviceName: input.name || undefined })
-            }
-
-            // Route to mappings
-            handleMidiInput('cc', channel, data1, data2 || 0)
+            const value = data2 || 0
+            get().setLastMessage({ type: 'cc', channel, number: data1, value })
+            if (get().isLearning) get().completeLearn({ type: 'cc', channel, number: data1, value, deviceName })
+            handleMidiInput('cc', channel, data1, value, deviceName)
           } else if (type === 0x90 && data2 > 0) {
             // Note On
-            const msg = { type: 'note', channel, number: data1, value: data2 }
-            get().setLastMessage(msg)
-
-            if (get().isLearning) {
-              get().completeLearn({ type: 'note', channel, number: data1, deviceName: input.name || undefined })
-            }
-
-            handleMidiInput('note', channel, data1, data2)
+            get().setLastMessage({ type: 'note', channel, number: data1, value: data2 })
+            if (get().isLearning) get().completeLearn({ type: 'note', channel, number: data1, deviceName })
+            handleMidiInput('note', channel, data1, data2, deviceName)
           } else if (type === 0x80 || (type === 0x90 && data2 === 0)) {
             // Note Off
-            handleMidiInput('note', channel, data1, 0)
+            handleMidiInput('note', channel, data1, 0, deviceName)
+          } else if (type === 0xc0) {
+            // Program Change: momentary trigger (no release message exists)
+            get().setLastMessage({ type: 'program', channel, number: data1, value: 127 })
+            if (get().isLearning) get().completeLearn({ type: 'program', channel, number: data1, deviceName })
+            handleMidiInput('program', channel, data1, 127, deviceName)
           }
         }
       })
@@ -157,59 +170,40 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   },
 
   startLearn: (target) => {
-    console.log('[MIDI] startLearn:', target.label, target.type)
+    cancelLearnCapture()
     set({ isLearning: true, learnTarget: target })
   },
 
   cancelLearn: () => {
-    console.log('[MIDI] cancelLearn')
+    cancelLearnCapture()
     set({ isLearning: false, learnTarget: null })
   },
 
   completeLearn: (source) => {
     const { learnTarget } = get()
-    if (!learnTarget) {
-      console.log('[MIDI] completeLearn called but no learnTarget')
+    if (!learnTarget) return
+
+    if (source.type === 'cc') {
+      if (learnCapture) {
+        const c = learnCapture.source
+        if (c.type === 'cc' && c.channel === source.channel && c.number === source.number && c.deviceName === source.deviceName) {
+          if (source.value !== undefined) learnCapture.values.push(source.value)
+        }
+        return
+      }
+      learnCapture = {
+        source,
+        values: source.value !== undefined ? [source.value] : [],
+        timer: setTimeout(() => {
+          const capture = learnCapture
+          learnCapture = null
+          if (capture) finishLearn(capture.source, detectCcEncoding(capture.values))
+        }, LEARN_CAPTURE_MS)
+      }
       return
     }
-
-    // Auto-detect relative encoders: they send small values like 1-3 (CW) or 125-127 (CCW)
-    // Absolute faders/knobs send the full range 0-127
-    const isRelative = source.type === 'cc' && source.value !== undefined &&
-      (source.value <= 3 || source.value >= 125)
-    const encoding = isRelative ? 'relative' : 'absolute'
-
-    console.log('[MIDI] completeLearn:', source.type, 'ch', source.channel, '#', source.number,
-      'val:', source.value, 'encoding:', encoding, '→', learnTarget.label)
-
-    const mapping: MidiMapping = {
-      id: uuidv4(),
-      name: learnTarget.label,
-      source: {
-        deviceName: source.deviceName,
-        type: source.type,
-        channel: source.channel,
-        number: source.number
-      },
-      target: {
-        type: learnTarget.type,
-        id: learnTarget.id,
-        parameter: learnTarget.parameter
-      },
-      options: {
-        min: 0,
-        max: 255,
-        inverted: false,
-        encoding,
-        behavior: source.type === 'note' ? 'toggle' : 'direct'
-      }
-    }
-
-    set((state) => ({
-      mappings: [...state.mappings, mapping],
-      isLearning: false,
-      learnTarget: null
-    }))
+    if (learnCapture) return // a CC is being captured; ignore other messages
+    finishLearn(source, 'absolute')
   },
 
   addMapping: (mapping) => {
@@ -242,13 +236,55 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   setMappings: (mappings) => set({ mappings })
 }))
 
+// ---- MIDI learn capture ----
+
+let learnCapture: { source: LearnSource; values: number[]; timer: ReturnType<typeof setTimeout> } | null = null
+
+function cancelLearnCapture(): void {
+  if (learnCapture) clearTimeout(learnCapture.timer)
+  learnCapture = null
+}
+
+function finishLearn(source: LearnSource, encoding: 'absolute' | 'relative'): void {
+  const { learnTarget } = useMidiStore.getState()
+  if (!learnTarget) return
+  const mapping: MidiMapping = {
+    id: uuidv4(),
+    name: learnTarget.label,
+    source: {
+      deviceName: source.deviceName,
+      type: source.type,
+      channel: source.channel,
+      number: source.number
+    },
+    target: {
+      type: learnTarget.type,
+      id: learnTarget.id,
+      parameter: learnTarget.parameter
+    },
+    options: {
+      min: 0,
+      max: 255,
+      inverted: false,
+      encoding,
+      behavior: source.type === 'cc' ? 'direct' : 'toggle'
+    }
+  }
+  useMidiStore.setState((state) => ({
+    mappings: [...state.mappings, mapping],
+    isLearning: false,
+    learnTarget: null
+  }))
+}
+
 // Module-level debounce for device state changes (must persist across initMidi calls)
 let reinitTimeout: ReturnType<typeof setTimeout> | null = null
 // Track the current MIDIAccess to avoid re-registering listeners
 let currentMidiAccess: MIDIAccess | null = null
 
 // External MIDI routing function — will be connected to the cue/chase/dmx engines
-let midiRouter: ((type: string, channel: number, number: number, value: number) => void) | null = null
+export type MidiRouter = (type: MidiSourceType, channel: number, number: number, value: number, deviceName?: string) => void
+let midiRouter: MidiRouter | null = null
 
 // Timecode processor — routes system messages (0xF1 quarter frame) to timecode engine
 let timecodeProcessor: ((status: number, data1: number, data2: number) => void) | null = null
@@ -258,7 +294,7 @@ let mappingResetFn: ((mapping: MidiMapping) => void) | null = null
 // Callback to clean up module-level state (toggleStates, relativeValues) when mapping removed
 let mappingCleanupFn: ((mappingId: string) => void) | null = null
 
-export function setMidiRouter(fn: (type: string, channel: number, number: number, value: number) => void): void {
+export function setMidiRouter(fn: MidiRouter): void {
   midiRouter = fn
 }
 
@@ -274,9 +310,12 @@ export function setMappingCleanupFn(fn: (mappingId: string) => void): void {
   mappingCleanupFn = fn
 }
 
-function handleMidiInput(type: string, channel: number, number: number, value: number): void {
-  if (midiRouter) {
-    midiRouter(type, channel, number, value)
+function handleMidiInput(type: MidiSourceType, channel: number, number: number, value: number, deviceName?: string): void {
+  if (!midiRouter) return
+  try {
+    midiRouter(type, channel, number, value, deviceName)
+  } catch (e) {
+    console.error('[MIDI] routing failed:', e)
   }
 }
 
