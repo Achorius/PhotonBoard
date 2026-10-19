@@ -1,21 +1,44 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
-import { join, basename, resolve } from 'path'
+import { readFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, promises as fsp } from 'fs'
+import { join, basename, resolve, dirname, sep } from 'path'
 import { homedir } from 'os'
 import type { ShowFile, FixtureDefinition } from '../shared/types'
+import type { ShowLoadResult, ShowSaveResult } from '../shared/photonboard-api'
 import { DEFAULT_ROOM_CONFIG } from '../shared/types'
 import { BUILTIN_FIXTURES } from './fixture-library'
 import { parseFixtureFile } from './fixture-parsers'
+import { atomicWriteFile, atomicWriteFileSync, backupPathFor, isJsonContent } from './atomic-write'
+import { loadJsonConfig } from './config-store'
+import { Mutex } from './async-mutex'
+import {
+  MAX_SHOW_FILE_SIZE,
+  SHOW_EXTENSION,
+  checkShowObject,
+  describeReadError,
+  parseShowFileContent,
+  sanitizeShowName
+} from './show-validation'
 
+const MAX_RECENT = 10
+
+/**
+ * Show file I/O. Main does robust I/O only (atomic writes with a .bak of the
+ * previous version, readable error messages); schema normalisation/migration
+ * is done by the renderer (src/shared/show-format.ts).
+ *
+ * `currentFilePath` is the show the Pi renderer is running. It only changes on
+ * a successful load/save — remote read-only operations never touch it.
+ */
 export class ShowFileManager {
   private userDataPath: string
   private documentsShowsPath: string
   private currentFilePath: string | null = null
   private recentFiles: string[] = []
   private fixtureCache: Map<string, FixtureDefinition> = new Map()
+  private saveLock = new Mutex()
 
-  constructor(userDataPath: string) {
+  constructor(userDataPath: string, opts: { documentsShowsPath?: string } = {}) {
     this.userDataPath = userDataPath
-    this.documentsShowsPath = join(homedir(), 'Documents', 'PhotonBoard')
+    this.documentsShowsPath = opts.documentsShowsPath ?? join(homedir(), 'Documents', 'PhotonBoard')
     this.ensureDirectories()
     this.loadRecentFiles()
     this.loadBuiltinFixtures()
@@ -28,8 +51,11 @@ export class ShowFileManager {
       this.documentsShowsPath
     ]
     for (const dir of dirs) {
-      if (!existsSync(dir)) {
+      try {
         mkdirSync(dir, { recursive: true })
+      } catch (e) {
+        // A read-only Documents folder must not prevent the console from starting
+        console.error(`[Show] Cannot create ${dir}:`, (e as Error).message)
       }
     }
   }
@@ -38,173 +64,174 @@ export class ShowFileManager {
     return this.documentsShowsPath
   }
 
-  /** List all available .pbshow files (for remote UI without file dialogs) */
-  listShows(): { name: string; path: string }[] {
-    const results: { name: string; path: string }[] = []
-    const dirs = [this.documentsShowsPath, join(this.userDataPath, 'shows')]
-    for (const dir of dirs) {
-      if (!existsSync(dir)) continue
-      try {
-        const files = readdirSync(dir).filter(f => f.endsWith('.pbshow'))
-        for (const file of files) {
-          results.push({ name: basename(file, '.pbshow'), path: join(dir, file) })
-        }
-      } catch { /* skip */ }
-    }
-    return results
+  private showDirs(): string[] {
+    return [this.documentsShowsPath, join(this.userDataPath, 'shows')]
   }
 
-  /** Try to load the most recent show file at startup */
-  loadLastShow(): { success: boolean; show?: ShowFile; path?: string } {
-    // Try recent files first
-    const recentFiles = this.getRecent()
-    for (const filePath of recentFiles) {
-      const result = this.load(filePath)
-      if (result.success && result.show && result.show.patch && result.show.patch.length > 0) {
-        console.log('[Main] Auto-loaded last show:', filePath, 'patch:', result.show.patch.length)
-        return { success: true, show: result.show, path: filePath }
-      }
-    }
-
-    // Fallback: scan Documents/PhotonBoard and userData/shows for any .pbshow files
-    const dirs = [this.documentsShowsPath, join(this.userDataPath, 'shows')]
-    for (const dir of dirs) {
+  /** All available .pbshow files (for remote UI without file dialogs), by name */
+  listShows(): { name: string; path: string; modifiedAt: number }[] {
+    const byName = new Map<string, { name: string; path: string; modifiedAt: number }>()
+    for (const dir of this.showDirs()) {
       if (!existsSync(dir)) continue
       try {
-        const files = readdirSync(dir).filter(f => f.endsWith('.pbshow'))
+        const files = readdirSync(dir).filter(f => f.endsWith(SHOW_EXTENSION) && !f.startsWith('.'))
         for (const file of files) {
-          const filePath = join(dir, file)
-          const result = this.load(filePath)
-          if (result.success && result.show && result.show.patch && result.show.patch.length > 0) {
-            console.log('[Main] Auto-loaded show from scan:', filePath, 'patch:', result.show.patch.length)
-            return { success: true, show: result.show, path: filePath }
-          }
+          const name = basename(file, SHOW_EXTENSION)
+          if (byName.has(name)) continue // Documents/PhotonBoard wins over userData/shows
+          const path = join(dir, file)
+          let modifiedAt = 0
+          try { modifiedAt = statSync(path).mtimeMs } catch { /* vanished */ }
+          byName.set(name, { name, path, modifiedAt })
         }
-      } catch { /* skip */ }
+      } catch { /* skip unreadable dir */ }
+    }
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  listShowNames(): string[] {
+    return this.listShows().map(s => s.name)
+  }
+
+  /** Resolve a show name from listShowNames() to its path (never builds a path from input) */
+  findShowByName(name: unknown): string | null {
+    if (typeof name !== 'string' || !name) return null
+    return this.listShows().find(s => s.name === name)?.path ?? null
+  }
+
+  /** Path for a (sanitised) show name in the default shows folder */
+  pathForName(name: unknown): string {
+    const dir = resolve(this.documentsShowsPath)
+    const path = resolve(join(dir, `${sanitizeShowName(name)}${SHOW_EXTENSION}`))
+    if (!path.startsWith(dir + sep)) throw new Error('Invalid show name')
+    return path
+  }
+
+  // ---- Loading ----
+
+  /** Read and validate a show file. Never changes the current file / recent list. */
+  async readShow(filePath: string): Promise<ShowLoadResult> {
+    try {
+      const st = await fsp.stat(filePath)
+      if (!st.isFile()) return { success: false, error: describeReadError({ code: 'EISDIR' }), path: filePath }
+      if (st.size > MAX_SHOW_FILE_SIZE) {
+        return { success: false, error: `This show file is too large (${(st.size / 1024 / 1024).toFixed(1)} MB).`, path: filePath }
+      }
+      const text = await fsp.readFile(filePath, 'utf-8')
+      const parsed = parseShowFileContent(text)
+      if (!parsed.ok) return { success: false, error: parsed.error, path: filePath }
+      return { success: true, show: parsed.show, path: filePath }
+    } catch (e) {
+      return { success: false, error: describeReadError(e), path: filePath }
+    }
+  }
+
+  /**
+   * Read a show, falling back to its .bak if the file itself is unreadable.
+   * The result's `path` is always the original file.
+   */
+  async readWithBackup(filePath: string): Promise<ShowLoadResult> {
+    const result = await this.readShow(filePath)
+    if (result.success) return result
+    const backup = await this.readShow(backupPathFor(filePath))
+    if (backup.success) {
+      const name = basename(filePath, SHOW_EXTENSION)
+      console.warn(`[Show] ${filePath}: ${result.error} — loaded the backup copy`)
+      return {
+        success: true,
+        show: backup.show,
+        path: filePath,
+        warning: `"${name}" could not be read: ${result.error} The previous version was restored from the backup copy — save the show to repair the file.`
+      }
+    }
+    return result
+  }
+
+  /** Load a show and make it the current one (only on success) */
+  async load(filePath: string): Promise<ShowLoadResult> {
+    const result = await this.readWithBackup(filePath)
+    if (result.success) {
+      this.currentFilePath = filePath
+      this.addToRecent(filePath)
+    }
+    return result
+  }
+
+  /**
+   * The show to open at startup: the most recent one. If it is corrupt or
+   * missing we try its backup and otherwise REPORT the problem — never silently
+   * open an older show (the operator would run the wrong show).
+   * `readOnly` (remote clients): prefer the Pi's current file, change nothing.
+   */
+  async loadLastShow(opts: { readOnly?: boolean } = {}): Promise<ShowLoadResult> {
+    let candidate: string | null = null
+    if (opts.readOnly && this.currentFilePath) candidate = this.currentFilePath
+    if (!candidate) candidate = this.recentFiles[0] ?? null
+    if (!candidate) {
+      // No history (first run, or recent.json lost): newest show in the shows folders
+      const newest = this.listShows().sort((a, b) => b.modifiedAt - a.modifiedAt)[0]
+      candidate = newest?.path ?? null
+    }
+    if (!candidate) {
+      console.log('[Show] No existing show found to auto-load')
+      return { success: false }
     }
 
-    console.log('[Main] No existing show found to auto-load')
-    return { success: false }
+    const result = await this.readWithBackup(candidate)
+    if (!result.success) {
+      const name = basename(candidate, SHOW_EXTENSION)
+      console.error(`[Show] Last show ${candidate} could not be opened: ${result.error}`)
+      return { success: false, error: `The last show "${name}" could not be opened: ${result.error}`, path: candidate }
+    }
+    if (!opts.readOnly) {
+      this.currentFilePath = candidate
+      this.addToRecent(candidate)
+    }
+    console.log('[Show] Last show:', candidate, opts.readOnly ? '(read-only)' : '')
+    return result
+  }
+
+  // ---- Recent files ----
+
+  private recentPath(): string {
+    return join(this.userDataPath, 'config', 'recent.json')
   }
 
   private loadRecentFiles(): void {
-    const recentPath = join(this.userDataPath, 'config', 'recent.json')
-    if (existsSync(recentPath)) {
-      try {
-        this.recentFiles = JSON.parse(readFileSync(recentPath, 'utf-8'))
-      } catch {
-        this.recentFiles = []
-      }
-    }
+    const loaded = loadJsonConfig<string[]>(
+      this.recentPath(),
+      (raw) => Array.isArray(raw) && raw.every(f => typeof f === 'string')
+        ? { ok: true, value: raw as string[] }
+        : { ok: false, error: 'not a list of paths' },
+      () => []
+    )
+    this.recentFiles = loaded.value.slice(0, MAX_RECENT)
   }
 
   private saveRecentFiles(): void {
-    const recentPath = join(this.userDataPath, 'config', 'recent.json')
-    writeFileSync(recentPath, JSON.stringify(this.recentFiles.slice(0, 10)))
+    try {
+      atomicWriteFileSync(this.recentPath(), JSON.stringify(this.recentFiles.slice(0, MAX_RECENT)), {
+        backup: true,
+        isValidBackup: isJsonContent
+      })
+    } catch (e) {
+      console.error('[Show] Could not save recent files:', (e as Error).message)
+    }
   }
 
   private addToRecent(filePath: string): void {
-    this.recentFiles = [filePath, ...this.recentFiles.filter((f) => f !== filePath)].slice(0, 10)
+    this.recentFiles = [filePath, ...this.recentFiles.filter((f) => f !== filePath)].slice(0, MAX_RECENT)
     this.saveRecentFiles()
   }
 
-  private loadBuiltinFixtures(): void {
-    for (const fixture of BUILTIN_FIXTURES) {
-      this.fixtureCache.set(fixture.id, { ...fixture, source: 'builtin' as const })
-    }
+  getRecent(): string[] {
+    return this.recentFiles.filter((f) => existsSync(f))
   }
 
-  private _legacyLoadBuiltinFixtures_UNUSED(): void {
-    // REPLACED BY fixture-library.ts
-    const generics: FixtureDefinition[] = [
-      {
-        id: 'generic/dimmer',
-        name: 'Generic Dimmer',
-        manufacturer: 'Generic',
-        categories: ['Dimmer'],
-        channels: {
-          Intensity: {
-            name: 'Intensity',
-            type: 'intensity',
-            defaultValue: 0,
-            highlightValue: 255,
-            precedence: 'HTP',
-            capabilities: [{ dmxRange: [0, 255], type: 'Intensity', label: '0-100%' }]
-          }
-        },
-        modes: [{ name: 'Default', channels: ['Intensity'], channelCount: 1 }]
-      },
-      {
-        id: 'generic/rgb',
-        name: 'Generic RGB',
-        manufacturer: 'Generic',
-        categories: ['Color Changer'],
-        channels: {
-          Red: { name: 'Red', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Red 0-100%', color: '#ff0000' }] },
-          Green: { name: 'Green', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Green 0-100%', color: '#00ff00' }] },
-          Blue: { name: 'Blue', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Blue 0-100%', color: '#0000ff' }] }
-        },
-        modes: [{ name: '3ch', channels: ['Red', 'Green', 'Blue'], channelCount: 3 }]
-      },
-      {
-        id: 'generic/rgbw',
-        name: 'Generic RGBW',
-        manufacturer: 'Generic',
-        categories: ['Color Changer'],
-        channels: {
-          Red: { name: 'Red', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Red', color: '#ff0000' }] },
-          Green: { name: 'Green', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Green', color: '#00ff00' }] },
-          Blue: { name: 'Blue', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Blue', color: '#0000ff' }] },
-          White: { name: 'White', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'White', color: '#ffffff' }] }
-        },
-        modes: [{ name: '4ch', channels: ['Red', 'Green', 'Blue', 'White'], channelCount: 4 }]
-      },
-      {
-        id: 'generic/rgbwau',
-        name: 'Generic RGBWAU',
-        manufacturer: 'Generic',
-        categories: ['Color Changer'],
-        channels: {
-          Red: { name: 'Red', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Red', color: '#ff0000' }] },
-          Green: { name: 'Green', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Green', color: '#00ff00' }] },
-          Blue: { name: 'Blue', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Blue', color: '#0000ff' }] },
-          White: { name: 'White', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'White', color: '#ffffff' }] },
-          Amber: { name: 'Amber', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Amber', color: '#ffaa00' }] },
-          UV: { name: 'UV', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'UV', color: '#7700ff' }] }
-        },
-        modes: [{ name: '6ch', channels: ['Red', 'Green', 'Blue', 'White', 'Amber', 'UV'], channelCount: 6 }]
-      },
-      {
-        id: 'generic/moving-head-wash',
-        name: 'Generic Moving Head Wash',
-        manufacturer: 'Generic',
-        categories: ['Moving Head'],
-        channels: {
-          Pan: { name: 'Pan', type: 'pan', defaultValue: 128, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'Pan', label: 'Pan 0-540°' }] },
-          'Pan Fine': { name: 'Pan Fine', type: 'pan', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'PanFine', label: 'Pan Fine' }] },
-          Tilt: { name: 'Tilt', type: 'tilt', defaultValue: 128, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'Tilt', label: 'Tilt 0-270°' }] },
-          'Tilt Fine': { name: 'Tilt Fine', type: 'tilt', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'TiltFine', label: 'Tilt Fine' }] },
-          Dimmer: { name: 'Dimmer', type: 'intensity', defaultValue: 0, highlightValue: 255, precedence: 'HTP', capabilities: [{ dmxRange: [0, 255], type: 'Intensity', label: 'Dimmer' }] },
-          Red: { name: 'Red', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Red', color: '#ff0000' }] },
-          Green: { name: 'Green', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Green', color: '#00ff00' }] },
-          Blue: { name: 'Blue', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'Blue', color: '#0000ff' }] },
-          White: { name: 'White', type: 'color', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'ColorIntensity', label: 'White', color: '#ffffff' }] },
-          Shutter: { name: 'Shutter', type: 'shutter', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 19], type: 'ShutterClose', label: 'Closed' }, { dmxRange: [20, 24], type: 'ShutterOpen', label: 'Open' }, { dmxRange: [25, 255], type: 'StrobeSpeed', label: 'Strobe slow-fast' }] },
-          Speed: { name: 'Speed', type: 'speed', defaultValue: 0, precedence: 'LTP', capabilities: [{ dmxRange: [0, 255], type: 'PanTiltSpeed', label: 'Pan/Tilt Speed fast-slow' }] }
-        },
-        modes: [
-          { name: '11ch', channels: ['Pan', 'Pan Fine', 'Tilt', 'Tilt Fine', 'Dimmer', 'Red', 'Green', 'Blue', 'White', 'Shutter', 'Speed'], channelCount: 11 }
-        ]
-      }
-    ]
+  // ---- Saving ----
 
-    for (const fixture of generics) {
-      this.fixtureCache.set(fixture.id, fixture)
-    }
-  }
-
-  newShow(): ShowFile {
-    this.currentFilePath = null
+  /** Template for a new show. `resetCurrent` (local New Show) forgets the current file. */
+  newShow(opts: { resetCurrent?: boolean } = { resetCurrent: true }): ShowFile {
+    if (opts.resetCurrent) this.currentFilePath = null
     return {
       version: '1.0.0',
       name: 'New Show',
@@ -227,40 +254,58 @@ export class ShowFileManager {
     }
   }
 
-  save(show: ShowFile): { success: boolean; path?: string; error?: string; needsSaveAs?: boolean } {
+  /** Save to the current file; `needsSaveAs` when there is none yet */
+  async save(show: ShowFile): Promise<ShowSaveResult & { needsSaveAs?: boolean }> {
     if (!this.currentFilePath) {
-      // No file path yet — tell renderer to open a Save As dialog
+      // No file path yet — caller opens a Save As dialog
       return { success: false, needsSaveAs: true }
     }
     return this.saveAs(show, this.currentFilePath)
   }
 
-  saveAs(show: ShowFile, filePath: string): { success: boolean; path?: string; error?: string } {
-    try {
-      show.modifiedAt = new Date().toISOString()
-      writeFileSync(filePath, JSON.stringify(show, null, 2), 'utf-8')
-      this.currentFilePath = filePath
-      this.addToRecent(filePath)
-      return { success: true, path: filePath }
-    } catch (e) {
-      return { success: false, error: (e as Error).message }
-    }
+  /**
+   * Atomic save: <file>.tmp → fsync → rename, previous version kept as <file>.bak
+   * (only if it was a valid show, so a corrupt file never replaces a good backup).
+   */
+  saveAs(show: ShowFile, filePath: string): Promise<ShowSaveResult> {
+    return this.saveLock.run(async () => {
+      const check = checkShowObject(show)
+      if (!check.ok) return { success: false, error: `Refusing to save invalid show data: ${check.error}` }
+      try {
+        const data = JSON.stringify({ ...show, modifiedAt: new Date().toISOString() }, null, 2)
+        if (data.length > MAX_SHOW_FILE_SIZE) {
+          return { success: false, error: `The show is too large to save (${(data.length / 1024 / 1024).toFixed(1)} MB).` }
+        }
+        await fsp.mkdir(dirname(filePath), { recursive: true })
+        await atomicWriteFile(filePath, data, {
+          backup: true,
+          isValidBackup: (content) => parseShowFileContent(content.toString('utf-8')).ok
+        })
+        this.currentFilePath = filePath
+        this.addToRecent(filePath)
+        return { success: true, path: filePath }
+      } catch (e) {
+        const err = e as NodeJS.ErrnoException
+        const reason = err.code === 'ENOSPC' ? 'the disk is full'
+          : err.code === 'EACCES' || err.code === 'EPERM' ? 'permission denied'
+          : err.code === 'EROFS' ? 'the disk is read-only'
+          : err.message
+        console.error(`[Show] Save failed for ${filePath}:`, err.message)
+        return { success: false, error: `The show could not be saved (${reason}). The previous version is unchanged.`, path: filePath }
+      }
+    })
   }
 
-  load(filePath: string): { success: boolean; show?: ShowFile; error?: string } {
-    try {
-      const data = readFileSync(filePath, 'utf-8')
-      const show = JSON.parse(data) as ShowFile
-      this.currentFilePath = filePath
-      this.addToRecent(filePath)
-      return { success: true, show }
-    } catch (e) {
-      return { success: false, error: (e as Error).message }
-    }
+  getCurrentPath(): string | null {
+    return this.currentFilePath
   }
 
-  getRecent(): string[] {
-    return this.recentFiles.filter((f) => existsSync(f))
+  // ---- Fixtures ----
+
+  private loadBuiltinFixtures(): void {
+    for (const fixture of BUILTIN_FIXTURES) {
+      this.fixtureCache.set(fixture.id, { ...fixture, source: 'builtin' as const })
+    }
   }
 
   scanFixtures(dir: string): FixtureDefinition[] {
@@ -273,7 +318,7 @@ export class ShowFileManager {
           try {
             const raw = readFileSync(join(dir, entry.name), 'utf-8')
             const fixture = JSON.parse(raw) as FixtureDefinition
-            if (fixture.name && fixture.channels) {
+            if (fixture && typeof fixture.id === 'string' && fixture.name && fixture.channels) {
               this.fixtureCache.set(fixture.id, fixture)
               files.push(fixture)
             }
@@ -288,26 +333,29 @@ export class ShowFileManager {
     return Array.from(this.fixtureCache.values())
   }
 
-  getCurrentPath(): string | null {
-    return this.currentFilePath
-  }
-
   getFixturesDir(): string {
     return join(this.userDataPath, 'fixtures')
   }
 
+  /** Path of a user fixture file; null when the id would escape the fixtures dir */
+  private fixturePath(fixtureId: string): string | null {
+    if (!fixtureId || fixtureId.includes('\0')) return null
+    const destDir = resolve(this.getFixturesDir())
+    const safeId = fixtureId.replace(/[/\\]/g, '_').replace(/\.\./g, '_')
+    const destPath = resolve(join(destDir, `${safeId}.json`))
+    return destPath.startsWith(destDir + sep) ? destPath : null
+  }
+
   saveUserFixture(fixture: FixtureDefinition): { success: boolean; error?: string } {
     try {
+      if (!fixture || typeof fixture !== 'object' || typeof fixture.id !== 'string' || !fixture.channels) {
+        return { success: false, error: 'Invalid fixture definition' }
+      }
       if (!fixture.source) fixture.source = 'user'
       fixture.lastModified = new Date().toISOString()
-      const destDir = join(this.userDataPath, 'fixtures')
-      // Security: sanitize ID and verify path stays inside fixtures directory
-      const safeId = fixture.id.replace(/\//g, '_').replace(/\.\./g, '_').replace(/\0/g, '')
-      const destPath = resolve(join(destDir, `${safeId}.json`))
-      if (!destPath.startsWith(resolve(destDir) + '/')) {
-        return { success: false, error: 'Invalid fixture ID' }
-      }
-      writeFileSync(destPath, JSON.stringify(fixture, null, 2), 'utf-8')
+      const destPath = this.fixturePath(fixture.id)
+      if (!destPath) return { success: false, error: 'Invalid fixture ID' }
+      atomicWriteFileSync(destPath, JSON.stringify(fixture, null, 2))
       this.fixtureCache.set(fixture.id, fixture)
       return { success: true }
     } catch (e) {
@@ -327,16 +375,9 @@ export class ShowFileManager {
       if (fixture.source === 'builtin' || !fixture.source) {
         return { success: false, error: 'Cannot delete built-in fixtures' }
       }
-      const destDir = resolve(join(this.userDataPath, 'fixtures'))
-      const destPath = resolve(join(destDir, `${fixtureId.replace(/\//g, '_')}.json`))
-      // Security: verify resolved path is inside fixtures directory
-      if (!destPath.startsWith(destDir + '/')) {
-        return { success: false, error: 'Invalid fixture path' }
-      }
-      if (existsSync(destPath)) {
-        const { unlinkSync } = require('fs')
-        unlinkSync(destPath)
-      }
+      const destPath = this.fixturePath(fixtureId)
+      if (!destPath) return { success: false, error: 'Invalid fixture path' }
+      if (existsSync(destPath)) unlinkSync(destPath)
       this.fixtureCache.delete(fixtureId)
       return { success: true }
     } catch (e) {
@@ -348,97 +389,12 @@ export class ShowFileManager {
     try {
       // Use universal parser — supports OFL, GDTF, QLC+, Avolites, GrandMA, CSV, native JSON
       const fixture = parseFixtureFile(sourcePath)
-
-      // Ensure source is set
       if (!fixture.source) fixture.source = 'user'
-
-      // Save to user fixtures directory
-      const destDir = this.getFixturesDir()
-      const destPath = join(destDir, `${fixture.id.replace(/\//g, '_')}.json`)
-      writeFileSync(destPath, JSON.stringify(fixture, null, 2), 'utf-8')
-
-      // Add to cache
-      this.fixtureCache.set(fixture.id, fixture)
-
+      const saved = this.saveUserFixture(fixture)
+      if (!saved.success) return { success: false, error: saved.error }
       return { success: true, fixture }
     } catch (e) {
       return { success: false, error: (e as Error).message }
     }
-  }
-
-  private convertOFLToNative(ofl: any, manufacturer: string): FixtureDefinition {
-    const id = `${manufacturer.toLowerCase().replace(/\s+/g, '-')}/${(ofl.name || 'unknown').toLowerCase().replace(/\s+/g, '-')}`
-    const channels: Record<string, any> = {}
-
-    // Parse OFL availableChannels
-    if (ofl.availableChannels) {
-      for (const [name, chDef] of Object.entries(ofl.availableChannels) as any) {
-        const type = this.inferChannelType(name, chDef)
-        channels[name] = {
-          name,
-          type,
-          defaultValue: chDef?.defaultValue ?? (type === 'pan' || type === 'tilt' ? 128 : 0),
-          precedence: type === 'intensity' ? 'HTP' : 'LTP',
-          capabilities: (chDef?.capabilities || []).map((cap: any) => ({
-            dmxRange: cap.dmxRange || [0, 255],
-            type: cap.type || 'Generic',
-            label: cap.comment || cap.type || name
-          }))
-        }
-      }
-    }
-
-    // Parse modes
-    const modes = (ofl.modes || []).map((mode: any) => ({
-      name: mode.name || 'Default',
-      shortName: mode.shortName,
-      channels: mode.channels || [],
-      channelCount: (mode.channels || []).length
-    }))
-
-    if (modes.length === 0) {
-      modes.push({
-        name: 'Default',
-        channels: Object.keys(channels),
-        channelCount: Object.keys(channels).length
-      })
-    }
-
-    const categories: string[] = ofl.categories || ['Other']
-
-    return {
-      id,
-      name: ofl.name || 'Unknown Fixture',
-      manufacturer,
-      categories,
-      channels,
-      modes,
-      physical: ofl.physical ? {
-        dimensions: ofl.physical.dimensions,
-        weight: ofl.physical.weight,
-        power: ofl.physical.power,
-        bulb: ofl.physical.bulb,
-        lens: ofl.physical.lens ? {
-          degreesMinMax: ofl.physical.lens.degreesMinMax
-        } : undefined
-      } : undefined
-    }
-  }
-
-  private inferChannelType(name: string, _chDef: any): string {
-    const n = name.toLowerCase()
-    if (n.includes('dimmer') || n.includes('intensity') || n.includes('brightness')) return 'intensity'
-    if (n.includes('red') || n.includes('green') || n.includes('blue') || n.includes('white') ||
-        n.includes('amber') || n.includes('uv') || n.includes('cyan') || n.includes('magenta') ||
-        n.includes('yellow') || n.includes('color')) return 'color'
-    if (n === 'pan' || n.includes('pan fine')) return 'pan'
-    if (n === 'tilt' || n.includes('tilt fine')) return 'tilt'
-    if (n.includes('gobo')) return 'gobo'
-    if (n.includes('shutter') || n.includes('strobe')) return 'shutter'
-    if (n.includes('prism')) return 'prism'
-    if (n.includes('speed')) return 'speed'
-    if (n.includes('focus')) return 'generic'
-    if (n.includes('zoom')) return 'generic'
-    return 'generic'
   }
 }

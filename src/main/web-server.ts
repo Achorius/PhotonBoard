@@ -3,519 +3,323 @@
 // Serves the renderer as a web app and bridges WebSocket ↔ IPC
 // so the full UI (including 3D) runs in the Mac's browser.
 //
-// URL:  http://<pi-ip>:9091
+// URL:  http://<pi-ip>:9091   (add ?pin=XXXX when an access PIN is set)
 // Port 9090 stays for Companion (lightweight protocol).
+//
+// WebSocket protocol:
+//   → { type: 'auth-required' }                 PIN set and none given on the URL
+//   ← { type: 'auth', pin }                     answer (or reconnect with ?pin=)
+//   → { type: 'ready' }                         client admitted
+//   ← { id, type: 'invoke', channel, args }     → { id, type: 'result', data } | { id, type: 'result', error }
+//   ← { type: 'send', channel, args }           fire-and-forget
+//   → { type: 'event', channel: 'state', data } Pi state, max ~20 Hz, only on change
+//   Wrong/missing PIN → close code 4401.
 // ============================================================
 
 import http from 'node:http'
-import { readFileSync, existsSync } from 'node:fs'
-import { join, extname, resolve } from 'node:path'
+import { createReadStream, promises as fsp } from 'node:fs'
+import { join, extname, resolve, sep } from 'node:path'
 import { WebSocketServer, WebSocket } from 'ws'
-import { app, dialog } from 'electron'
-import type { BrowserWindow } from 'electron'
-import { ShowFileManager } from './show-file'
-import { DmxEngine } from './dmx-engine'
-import { DmxOutputManager } from './dmx-output-manager'
-import { OFLService } from './ofl-service'
-import { IPC } from '../shared/types'
+import type { RemoteServerStatus, RemoteSettings } from '../shared/photonboard-api'
+import { createRemoteInvokeHandler, handleRemoteSend, RemoteInputError, type RemoteInvokeDeps } from './remote-invoke'
+import { ThrottledBroadcaster } from './state-broadcast'
+import { makeVerifyClient, startClientAuth, type ClientAuth } from './remote-access'
+import { AuthFailureLimiter, WS_CLOSE_AUTH_FAILED } from './remote-auth'
+import { MAX_SHOW_FILE_SIZE } from './show-validation'
 
 const WEB_PORT = 9091
-const MAX_WS_MESSAGE_SIZE = 5 * 1024 * 1024 // 5 MB max WebSocket message
+// A show (≤16 MB) plus JSON/protocol overhead must fit in one message
+const MAX_WS_MESSAGE_SIZE = MAX_SHOW_FILE_SIZE + 4 * 1024 * 1024
 const WS_RATE_LIMIT = 200 // max messages per second per client
+const BROADCAST_INTERVAL_MS = 50 // web remote: max 20 Hz
+const MAX_BUFFERED_BYTES = 2 * 1024 * 1024 // skip state frames for clients on a slow link
+const LISTEN_RETRY_MS = 5000
+const LISTEN_MAX_RETRIES = 12
+
+export interface WebServerDeps extends RemoteInvokeDeps {
+  rendererPath: string
+  getRemoteSettings: () => RemoteSettings
+}
 
 let server: http.Server | null = null
 let wss: WebSocketServer | null = null
-let mainWindowRef: BrowserWindow | null = null
-let dmxEngineRef: DmxEngine | null = null
-let outputManagerRef: DmxOutputManager | null = null
-let showManagerRef: ShowFileManager | null = null
-let oflServiceRef: OFLService | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let retries = 0
+let status: RemoteServerStatus = { port: WEB_PORT, listening: false, clients: 0 }
+const clients = new Map<WebSocket, ClientAuth>()
+const limiter = new AuthFailureLimiter()
 
-// Last state from renderer (for immediate sync to new remote clients)
-let lastState: any = null
+const broadcaster = new ThrottledBroadcaster<unknown>(
+  BROADCAST_INTERVAL_MS,
+  (state) => JSON.stringify({ type: 'event', channel: 'state', data: state }),
+  (json) => {
+    for (const [client, auth] of clients) {
+      if (auth.authenticated && client.readyState === WebSocket.OPEN && client.bufferedAmount < MAX_BUFFERED_BYTES) {
+        client.send(json)
+      }
+    }
+  },
+  () => clients.size > 0
+)
 
 const MIME: Record<string, string> = {
-  '.html': 'text/html',
+  '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript',
+  '.mjs':  'application/javascript',
   '.css':  'text/css',
   '.json': 'application/json',
+  '.map':  'application/json',
   '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.webp': 'image/webp',
   '.svg':  'image/svg+xml',
   '.ico':  'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf':  'font/ttf',
+  '.wasm': 'application/wasm',
+  '.txt':  'text/plain; charset=utf-8',
 }
 
-export function startWebServer(
-  mainWindow: BrowserWindow,
-  dmxEngine: DmxEngine,
-  outputManager: DmxOutputManager,
-  showManager: ShowFileManager,
-  oflService: OFLService
-): void {
+export function startWebServer(deps: WebServerDeps): void {
   if (server) return
-  mainWindowRef = mainWindow
-  dmxEngineRef = dmxEngine
-  outputManagerRef = outputManager
-  showManagerRef = showManager
-  oflServiceRef = oflService
-
-  // ---- Renderer build path ----
-  // app.getAppPath() returns the correct base whether packaged (asar or unpacked app/)
-  // or in dev mode. Renderer is always at <appPath>/out/renderer.
-  const rendererPath = join(app.getAppPath(), 'out', 'renderer')
+  const handleInvoke = createRemoteInvokeHandler(deps)
 
   // ---- HTTP server: serve static renderer files ----
-  const canonicalRendererPath = resolve(rendererPath)
+  const canonicalRendererPath = resolve(deps.rendererPath)
 
-  server = http.createServer((req, res) => {
+  const httpServer = http.createServer((req, res) => {
     // Security headers
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('X-Frame-Options', 'DENY')
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'")
+    res.setHeader('Referrer-Policy', 'no-referrer')
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
 
-    // Only allow GET requests
-    if (req.method !== 'GET') {
+    // Only allow GET/HEAD requests
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405)
       res.end('Method Not Allowed')
       return
     }
 
-    let urlPath = req.url?.split('?')[0] || '/'
+    let urlPath: string
+    try {
+      urlPath = decodeURIComponent((req.url || '/').split('?')[0])
+    } catch {
+      res.writeHead(400)
+      res.end('Bad Request')
+      return
+    }
     if (urlPath === '/') urlPath = '/index.html'
 
-    // Reject null bytes and encoded traversal attempts
-    if (urlPath.includes('\0') || urlPath.includes('%00')) {
+    // Reject null bytes
+    if (urlPath.includes('\0')) {
       res.writeHead(400)
       res.end('Bad Request')
       return
     }
 
-    // Use resolve() for canonical path comparison (prevents symlink/.. traversal)
-    const filePath = resolve(join(rendererPath, urlPath))
-
-    // Security: canonical path must be inside renderer directory
-    if (!filePath.startsWith(canonicalRendererPath + '/') && filePath !== canonicalRendererPath) {
+    // Use resolve() for canonical path comparison (prevents .. traversal)
+    const filePath = resolve(join(canonicalRendererPath, urlPath))
+    if (!filePath.startsWith(canonicalRendererPath + sep)) {
       res.writeHead(403)
       res.end('Forbidden')
       return
     }
 
-    try {
-      const data = readFileSync(filePath)
-      const ext = extname(filePath)
-      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' })
-      res.end(data)
-    } catch {
-      // SPA fallback: serve index.html for any missing route
-      try {
-        const html = readFileSync(join(rendererPath, 'index.html'))
-        res.writeHead(200, { 'Content-Type': 'text/html' })
-        res.end(html)
-      } catch {
-        res.writeHead(404)
-        res.end('Not found')
+    // Async + streamed: never block the DMX output loop on disk I/O
+    serveFile(filePath, req, res).catch(async () => {
+      // SPA fallback for routes (no extension); a missing asset is a real 404
+      if (extname(urlPath) === '') {
+        const ok = await serveFile(join(canonicalRendererPath, 'index.html'), req, res).then(() => true, () => false)
+        if (ok) return
       }
-    }
+      if (!res.headersSent) res.writeHead(404)
+      res.end('Not found')
+    })
   })
+  server = httpServer
 
   // ---- WebSocket: bridge IPC ----
-  wss = new WebSocketServer({ server, maxPayload: MAX_WS_MESSAGE_SIZE })
+  const wsServer = new WebSocketServer({
+    server: httpServer,
+    maxPayload: MAX_WS_MESSAGE_SIZE,
+    verifyClient: makeVerifyClient('Web')
+  })
+  wss = wsServer
 
-  wss.on('connection', (ws) => {
-    console.log('[Web] Remote client connected')
+  // ws re-emits HTTP server errors (EADDRINUSE…): must be handled, never thrown
+  wsServer.on('error', (err) => {
+    console.error('[Web] WebSocket server error:', err.message)
+  })
+
+  wsServer.on('connection', (ws, req) => {
+    const address = req.socket.remoteAddress
+    console.log(`[Web] Remote client connected (${address})`)
 
     // Rate limiting state per client
     let messageCount = 0
-    let rateLimitResetTimer = setInterval(() => { messageCount = 0 }, 1000)
+    const rateLimitResetTimer = setInterval(() => { messageCount = 0 }, 1000)
 
-    // Send current state immediately
-    if (lastState) {
-      ws.send(JSON.stringify({ type: 'event', channel: 'state', data: lastState }))
+    ws.on('error', (err) => {
+      console.warn(`[Web] Client error (${address}):`, err.message)
+    })
+
+    const reply = (id: unknown, payload: { data?: unknown; error?: string }) => {
+      if (typeof id !== 'string' && typeof id !== 'number') return
+      if (ws.readyState !== WebSocket.OPEN) return
+      try {
+        ws.send(JSON.stringify({ id, type: 'result', ...payload }))
+      } catch (e) {
+        // Result not serialisable: still answer, so the client doesn't wait for a timeout
+        ws.send(JSON.stringify({ id, type: 'result', error: `Internal error: ${(e as Error).message}` }))
+      }
     }
 
+    const auth = startClientAuth(ws, req, {
+      serverName: 'Web',
+      settings: deps.getRemoteSettings(),
+      limiter,
+      onReady: () => {
+        if (ws.readyState !== WebSocket.OPEN) return
+        ws.send(JSON.stringify({ type: 'ready' }))
+        // Current state immediately
+        const last = broadcaster.getLastJson()
+        if (last) ws.send(last)
+      }
+    })
+    clients.set(ws, auth)
+    status = { ...status, clients: clients.size }
+
     ws.on('message', async (raw) => {
-      // Rate limiting: drop messages if client exceeds limit
+      let msg: any
+      try {
+        msg = JSON.parse(raw.toString())
+      } catch {
+        return // not JSON: nothing to answer
+      }
+      if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return
+      if (auth.handleMessage(msg)) return
+
+      // Rate limiting: invokes get an error reply instead of silence
       messageCount++
       if (messageCount > WS_RATE_LIMIT) {
-        return // silently drop
-      }
-
-      // Message size check (defense in depth — maxPayload already enforces this)
-      if (raw.toString().length > MAX_WS_MESSAGE_SIZE) {
+        if (msg.type === 'invoke') reply(msg.id, { error: 'Too many requests — slow down' })
         return
       }
 
-      try {
-        const msg = JSON.parse(raw.toString())
-
-        // Validate message structure
-        if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') {
+      if (msg.type === 'invoke') {
+        if (typeof msg.channel !== 'string') {
+          reply(msg.id, { error: 'Invalid request' })
           return
         }
-
-        if (msg.type === 'invoke') {
-          if (typeof msg.channel !== 'string') return
-          // Request-response (like ipcMain.handle)
-          const result = await handleInvoke(msg.channel, msg.args || [])
-          ws.send(JSON.stringify({ id: msg.id, type: 'result', data: result }))
-        } else if (msg.type === 'send') {
-          if (typeof msg.channel !== 'string') return
-          // Fire-and-forget (like ipcMain.on)
-          handleSend(msg.channel, msg.args || [])
+        const args = Array.isArray(msg.args) ? msg.args : []
+        try {
+          const data = await handleInvoke(msg.channel, args)
+          reply(msg.id, { data })
+        } catch (e) {
+          const err = e as Error
+          if (!(e instanceof RemoteInputError)) console.error(`[Web] ${msg.channel} failed:`, err.stack || err.message)
+          reply(msg.id, { error: err.message || 'Request failed' })
         }
-      } catch (e: any) {
-        console.error('[Web] Message error:', e.message)
+      } else if (msg.type === 'send') {
+        if (typeof msg.channel !== 'string') return
+        try {
+          if (!handleRemoteSend(deps, msg.channel, Array.isArray(msg.args) ? msg.args : [])) {
+            console.warn('[Web] Rejected send:', msg.channel.slice(0, 64))
+          }
+        } catch (e) {
+          console.error('[Web] Send handler failed:', (e as Error).message)
+        }
       }
     })
 
     ws.on('close', () => {
       clearInterval(rateLimitResetTimer)
-      console.log('[Web] Remote client disconnected')
+      auth.dispose()
+      clients.delete(ws)
+      status = { ...status, clients: clients.size }
+      console.log(`[Web] Remote client disconnected (${address})`)
     })
   })
 
-  server.listen(WEB_PORT, '0.0.0.0', () => {
+  httpServer.on('listening', () => {
+    retries = 0
+    status = { ...status, listening: true, error: undefined }
     console.log(`[Web] Remote UI available at http://0.0.0.0:${WEB_PORT}`)
   })
 
-  server.on('error', (err) => {
-    console.error('[Web] Server error:', err.message)
+  httpServer.on('error', (err: NodeJS.ErrnoException) => {
+    const msg = err.code === 'EADDRINUSE'
+      ? `Port ${WEB_PORT} is already in use by another program — the web remote is unavailable`
+      : err.message
+    console.error(`[Web] Server error: ${msg}`)
+    status = { ...status, listening: false, error: msg }
+    if (err.code === 'EADDRINUSE' && server === httpServer && retries < LISTEN_MAX_RETRIES) {
+      retries++
+      retryTimer = setTimeout(() => {
+        retryTimer = null
+        if (server === httpServer) httpServer.listen(WEB_PORT, '0.0.0.0')
+      }, LISTEN_RETRY_MS)
+    }
+  })
+
+  httpServer.listen(WEB_PORT, '0.0.0.0')
+}
+
+async function serveFile(filePath: string, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const st = await fsp.stat(filePath)
+  if (!st.isFile()) throw new Error('not a file')
+  const ext = extname(filePath)
+  const headers: Record<string, string | number> = {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Content-Length': st.size,
+    // Vite assets are content-hashed; index.html must always be revalidated
+    'Cache-Control': filePath.includes(`${sep}assets${sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache'
+  }
+  res.writeHead(200, headers)
+  if (req.method === 'HEAD') {
+    res.end()
+    return
+  }
+  await new Promise<void>((resolveStream) => {
+    const stream = createReadStream(filePath)
+    stream.on('error', () => { res.destroy(); resolveStream() })
+    stream.on('end', () => resolveStream())
+    stream.pipe(res)
   })
 }
 
 export function stopWebServer(): void {
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  broadcaster.dispose()
+  for (const client of clients.keys()) {
+    try { client.terminate() } catch { /* ignore */ }
+  }
+  clients.clear()
   if (wss) { wss.close(); wss = null }
   if (server) { server.close(); server = null }
-  mainWindowRef = null
+  status = { port: WEB_PORT, listening: false, clients: 0 }
   console.log('[Web] Server stopped')
 }
 
 /**
  * Called when renderer sends state — forward to remote web clients.
- * Throttled: only sends if state has changed since last broadcast.
+ * Throttled to 20 Hz, serialised once, sent only when changed.
  */
-let lastWebBroadcastJson = ''
+export function broadcastToWeb(state: unknown): void {
+  broadcaster.push(state)
+}
 
-export function broadcastToWeb(state: any): void {
-  lastState = state
-  if (!wss || wss.clients.size === 0) return
-  const msg = JSON.stringify({ type: 'event', channel: 'state', data: state })
-  // Skip if identical to last broadcast
-  if (msg === lastWebBroadcastJson) return
-  lastWebBroadcastJson = msg
-
-  for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg)
-    }
+/** Close every client so it must re-authenticate (PIN enabled or changed) */
+export function disconnectWebClients(reason: string): void {
+  for (const client of clients.keys()) {
+    try { client.close(WS_CLOSE_AUTH_FAILED, reason) } catch { /* ignore */ }
   }
 }
 
-/**
- * Forward a command from remote web client to the main renderer.
- */
-function relayToRenderer(channel: string, ...args: any[]): void {
-  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-    mainWindowRef.webContents.send(channel, ...args)
-  }
-}
-
-// Allowed invoke channels — reject anything not in this list
-const ALLOWED_INVOKE_CHANNELS = new Set([
-  IPC.DMX_GET_VALUES,
-  IPC.ARTNET_CONFIGURE, IPC.ARTNET_GET_STATUS,
-  IPC.DMX_OUTPUTS_CONFIGURE, IPC.DMX_OUTPUTS_GET_STATUS, IPC.DMX_OUTPUTS_SCAN_USB,
-  IPC.SHOW_NEW, IPC.SHOW_SAVE, IPC.SHOW_SAVE_AS, IPC.SHOW_LOAD,
-  IPC.SHOW_GET_RECENT, IPC.SHOW_LOAD_LAST, IPC.SHOW_GET_PATH, IPC.SHOW_REVEAL,
-  IPC.FIXTURES_SCAN, IPC.FIXTURES_GET_ALL, IPC.FIXTURES_IMPORT,
-  IPC.FIXTURES_OFL_SEARCH, IPC.FIXTURES_OFL_DOWNLOAD,
-  IPC.FIXTURES_SAVE, IPC.FIXTURES_DELETE,
-  IPC.APP_GET_VERSION,
-  'remote:load-show', 'remote:upload-show'
-])
-
-// ---- Handle invoke (request-response) ----
-async function handleInvoke(channel: string, args: any[]): Promise<any> {
-  if (!ALLOWED_INVOKE_CHANNELS.has(channel)) {
-    console.warn('[Web] Rejected unknown invoke channel:', channel)
-    return null
-  }
-  switch (channel) {
-    // DMX
-    case IPC.DMX_GET_VALUES:
-      return Array.from(dmxEngineRef!.getUniverse(args[0]))
-
-    // ArtNet
-    case IPC.ARTNET_CONFIGURE:
-      outputManagerRef!.configureArtnet(args[0])
-      return true
-    case IPC.ARTNET_GET_STATUS:
-      return outputManagerRef!.getArtnetStatus()
-
-    // DMX Outputs
-    case IPC.DMX_OUTPUTS_CONFIGURE:
-      await outputManagerRef!.configure(args[0])
-      return true
-    case IPC.DMX_OUTPUTS_GET_STATUS:
-      return outputManagerRef!.getStatus()
-    case IPC.DMX_OUTPUTS_SCAN_USB:
-      return outputManagerRef!.scanUsbPorts()
-
-    // Show
-    case IPC.SHOW_NEW:
-      return showManagerRef!.newShow()
-    case IPC.SHOW_SAVE: {
-      if (typeof args[0] !== 'string' || args[0].length > 10 * 1024 * 1024) {
-        return { success: false, error: 'Invalid or oversized show data' }
-      }
-      const show = JSON.parse(args[0])
-      if (!show || typeof show !== 'object' || !show.version || !Array.isArray(show.patch)) {
-        return { success: false, error: 'Invalid show structure' }
-      }
-      const saveResult = showManagerRef!.save(show)
-      if (saveResult.needsSaveAs) {
-        // Remote: auto-save to default path (no dialog available)
-        const defaultDir = showManagerRef!.getDefaultShowsDir()
-        const filename = `${(show.name || 'Show').replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`
-        const savePath = resolve(join(defaultDir, filename))
-        // Ensure path stays inside shows directory
-        if (!savePath.startsWith(resolve(defaultDir) + '/')) {
-          return { success: false, error: 'Invalid show name' }
-        }
-        return showManagerRef!.saveAs(show, savePath)
-      }
-      return saveResult
-    }
-    case IPC.SHOW_SAVE_AS: {
-      if (typeof args[0] !== 'string' || args[0].length > 10 * 1024 * 1024) {
-        return { success: false, error: 'Invalid or oversized show data' }
-      }
-      const show = JSON.parse(args[0])
-      if (!show || typeof show !== 'object' || !show.version || !Array.isArray(show.patch)) {
-        return { success: false, error: 'Invalid show structure' }
-      }
-      const defaultDir = showManagerRef!.getDefaultShowsDir()
-      const filename = `${(show.name || 'Show').replace(/[^a-zA-Z0-9-_ ]/g, '')}.pbshow`
-      const savePath = resolve(join(defaultDir, filename))
-      if (!savePath.startsWith(resolve(defaultDir) + '/')) {
-        return { success: false, error: 'Invalid show name' }
-      }
-      return showManagerRef!.saveAs(show, savePath)
-    }
-    case IPC.SHOW_LOAD: {
-      // Remote: return list of available shows for the client to pick
-      const shows = showManagerRef!.listShows()
-      return { type: 'show-list', shows }
-    }
-    case IPC.SHOW_GET_RECENT:
-      return showManagerRef!.getRecent()
-    case IPC.SHOW_LOAD_LAST:
-      return showManagerRef!.loadLastShow()
-    case IPC.SHOW_GET_PATH:
-      return showManagerRef!.getCurrentPath()
-    case IPC.SHOW_REVEAL:
-      return true // no-op remotely
-
-    // Fixtures
-    case IPC.FIXTURES_SCAN: {
-      const fixturesDir = join(app.getPath('userData'), 'fixtures')
-      return showManagerRef!.scanFixtures(fixturesDir)
-    }
-    case IPC.FIXTURES_GET_ALL: {
-      const fixtures = showManagerRef!.getAllFixtures()
-      const result: any[] = []
-      for (const f of fixtures) {
-        try { JSON.stringify(f); result.push(f) } catch { /* skip */ }
-      }
-      return JSON.stringify(result)
-    }
-    case IPC.FIXTURES_IMPORT:
-      return null // dialogs don't work remotely
-    case IPC.FIXTURES_OFL_SEARCH: {
-      // Validate search query
-      if (typeof args[0] !== 'string' || args[0].length > 200) {
-        return []
-      }
-      return oflServiceRef!.search(args[0])
-    }
-    case IPC.FIXTURES_OFL_DOWNLOAD: {
-      // Validate manufacturer/fixture keys (alphanumeric + hyphens only)
-      if (typeof args[0] !== 'string' || typeof args[1] !== 'string') return null
-      if (!/^[a-z0-9-]+$/i.test(args[0]) || !/^[a-z0-9-]+$/i.test(args[1])) {
-        return { success: false, error: 'Invalid fixture key' }
-      }
-      const fixture = await oflServiceRef!.download(args[0], args[1])
-      showManagerRef!.saveUserFixture(fixture)
-      return fixture
-    }
-    case IPC.FIXTURES_SAVE: {
-      if (typeof args[0] !== 'string' || args[0].length > MAX_WS_MESSAGE_SIZE) return { success: false, error: 'Invalid data' }
-      return showManagerRef!.saveUserFixture(JSON.parse(args[0]))
-    }
-    case IPC.FIXTURES_DELETE: {
-      // Validate fixture ID (prevent path traversal via fixture ID)
-      if (typeof args[0] !== 'string' || args[0].includes('..') || args[0].includes('\0')) {
-        return { success: false, error: 'Invalid fixture ID' }
-      }
-      return showManagerRef!.deleteUserFixture(args[0])
-    }
-
-    // App
-    case IPC.APP_GET_VERSION:
-      return app.getVersion()
-
-    // Remote-specific: load a specific show by path
-    case 'remote:load-show': {
-      const requestedPath = args[0]
-      if (typeof requestedPath !== 'string') {
-        return { success: false, error: 'Invalid path' }
-      }
-      // Security: validate path is inside allowed show directories
-      const canonicalPath = resolve(requestedPath)
-      const allowedDirs = [
-        resolve(showManagerRef!.getDefaultShowsDir()),
-        resolve(join(app.getPath('userData'), 'shows'))
-      ]
-      const isAllowed = allowedDirs.some(dir =>
-        canonicalPath.startsWith(dir + '/') || canonicalPath === dir
-      )
-      if (!isAllowed) {
-        console.warn('[Web] Blocked load attempt outside shows directory:', requestedPath)
-        return { success: false, error: 'Access denied: path outside allowed directories' }
-      }
-      // Validate file extension
-      if (!canonicalPath.endsWith('.pbshow')) {
-        return { success: false, error: 'Invalid file type' }
-      }
-      return showManagerRef!.load(canonicalPath)
-    }
-
-    // Remote-specific: upload a .pbshow file from the browser
-    case 'remote:upload-show': {
-      try {
-        const fileContent = args[0] as string   // JSON text
-        const fileName = (args[1] as string) || 'Uploaded Show.pbshow'
-
-        // Validate inputs are strings
-        if (typeof fileContent !== 'string' || typeof fileName !== 'string') {
-          return { success: false, error: 'Invalid input types' }
-        }
-
-        // Size limit: 10 MB max show file
-        if (fileContent.length > 10 * 1024 * 1024) {
-          return { success: false, error: 'Show file too large (max 10 MB)' }
-        }
-
-        // Validate JSON
-        let show: any
-        try {
-          show = JSON.parse(fileContent)
-        } catch {
-          return { success: false, error: 'Invalid JSON in show file' }
-        }
-
-        // Schema validation: must be a valid show file structure
-        if (!show || typeof show !== 'object' ||
-            typeof show.version !== 'string' ||
-            !Array.isArray(show.patch) ||
-            (show.cuelists && !Array.isArray(show.cuelists)) ||
-            (show.groups && !Array.isArray(show.groups)) ||
-            (show.name && typeof show.name !== 'string')) {
-          return { success: false, error: 'Not a valid .pbshow file' }
-        }
-
-        // Sanitize filename (keep accents/spaces, remove filesystem-unsafe chars and traversal)
-        const safeName = fileName
-          .replace(/\.pbshow$/i, '')
-          .replace(/[/\\:*?"<>|]/g, '_')
-          .replace(/\.\./g, '_')  // Remove directory traversal sequences
-          .trim() || 'Uploaded Show'
-        const destPath = resolve(join(showManagerRef!.getDefaultShowsDir(), `${safeName}.pbshow`))
-
-        // Security: verify resolved path is still inside shows directory
-        const allowedDir = resolve(showManagerRef!.getDefaultShowsDir())
-        if (!destPath.startsWith(allowedDir + '/')) {
-          return { success: false, error: 'Invalid filename' }
-        }
-
-        // Save to disk
-        const saveResult = showManagerRef!.saveAs(show, destPath)
-        if (!saveResult.success) {
-          return { success: false, error: saveResult.error || 'Failed to save file' }
-        }
-
-        // Load to set as current show (updates recent files, currentFilePath)
-        const loadResult = showManagerRef!.load(destPath)
-        if (!loadResult.success) {
-          return { success: false, error: loadResult.error || 'Saved but failed to load' }
-        }
-
-        // Tell Pi renderer to apply the uploaded show
-        relayToRenderer(IPC.STAGE_COMMAND, { type: 'apply-show', payload: loadResult.show })
-
-        console.log(`[Web] Show uploaded: ${safeName} (${destPath})`)
-        return { success: true, show: loadResult.show, path: destPath }
-      } catch (e: any) {
-        return { success: false, error: e.message }
-      }
-    }
-
-    default:
-      console.warn('[Web] Unknown invoke channel:', channel)
-      return null
-  }
-}
-
-// ---- Handle send (fire-and-forget) ----
-
-// Allowed send channels — reject anything not in this list
-const ALLOWED_SEND_CHANNELS = new Set([
-  IPC.DMX_SET_CHANNEL,
-  IPC.DMX_SET_CHANNELS,
-  IPC.DMX_BLACKOUT,
-  IPC.STAGE_COMMAND,
-  'api:state'
-])
-
-function handleSend(channel: string, args: any[]): void {
-  if (!ALLOWED_SEND_CHANNELS.has(channel)) {
-    console.warn('[Web] Rejected unknown send channel:', channel)
-    return
-  }
-
-  switch (channel) {
-    case IPC.DMX_SET_CHANNEL: {
-      // Validate DMX values: universe (0-15), channel (0-511), value (0-255)
-      const universe = typeof args[0] === 'number' ? Math.max(0, Math.min(15, args[0] | 0)) : 0
-      const ch = typeof args[1] === 'number' ? Math.max(0, Math.min(511, args[1] | 0)) : 0
-      const val = typeof args[2] === 'number' ? Math.max(0, Math.min(255, args[2] | 0)) : 0
-      dmxEngineRef!.setChannel(universe, ch, val)
-      break
-    }
-    case IPC.DMX_SET_CHANNELS: {
-      const universe = typeof args[0] === 'number' ? Math.max(0, Math.min(15, args[0] | 0)) : 0
-      if (args[1] && typeof args[1] === 'object') {
-        for (const [ch, val] of Object.entries(args[1])) {
-          const chNum = Math.max(0, Math.min(511, parseInt(ch) || 0))
-          const valNum = Math.max(0, Math.min(255, (typeof val === 'number' ? val : 0) | 0))
-          dmxEngineRef!.setChannel(universe, chNum, valNum)
-        }
-      }
-      break
-    }
-    case IPC.DMX_BLACKOUT:
-      dmxEngineRef!.blackout()
-      break
-    case IPC.STAGE_COMMAND:
-      // Validate command structure before relaying
-      if (args[0] && typeof args[0] === 'object' && typeof args[0].type === 'string') {
-        relayToRenderer(IPC.STAGE_COMMAND, args[0])
-      }
-      break
-    case 'api:state':
-      // Remote client sending state (if it's the active editor)
-      break
-  }
+export function getWebServerStatus(): RemoteServerStatus {
+  return { ...status, clients: clients.size }
 }

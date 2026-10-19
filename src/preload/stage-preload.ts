@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcRendererEvent } from 'electron'
 import { IPC } from '../shared/types'
 
 export interface StageCommand {
@@ -35,15 +36,15 @@ export interface StageState {
 }
 
 const api = {
-  // Receive state sync from main window
-  onStateSync: (callback: (state: StageState) => void) => {
-    ipcRenderer.on(IPC.STAGE_SYNC, (_event, state: StageState) => {
-      callback(state)
-    })
+  // Receive state sync from main window. Returns the unsubscribe function.
+  onStateSync: (callback: (state: StageState) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, state: StageState) => callback(state)
+    ipcRenderer.on(IPC.STAGE_SYNC, listener)
+    return () => { ipcRenderer.removeListener(IPC.STAGE_SYNC, listener) }
   },
 
-  // Send a command to the main window
-  sendCommand: (command: StageCommand) => {
+  // Send a command to the main window (see src/shared/remote-commands.ts)
+  sendCommand: (command: StageCommand): void => {
     ipcRenderer.send(IPC.STAGE_COMMAND, command)
   },
 
