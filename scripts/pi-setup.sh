@@ -1,261 +1,349 @@
 #!/usr/bin/env bash
 # ============================================================
 # PhotonBoard — Raspberry Pi Setup Script
-# Transforms a fresh CompanionPi image into a complete
-# PhotonBoard + Companion lighting station.
+# Transforms a fresh CompanionPi / Raspberry Pi OS (arm64) image into a
+# complete PhotonBoard + Companion lighting station.
 #
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Achorius/PhotonBoard/main/scripts/pi-setup.sh | bash
-#   # or copy to Pi and run:
-#   chmod +x pi-setup.sh && sudo ./pi-setup.sh
+# Usage (as the user that will run the kiosk, e.g. "aula"):
+#   curl -fsSL https://raw.githubusercontent.com/Achorius/PhotonBoard/main/scripts/pi-setup.sh | sudo bash
+#   curl -fsSL .../pi-setup.sh | sudo bash -s -- --hostname Salle1 --version 0.2.0
+#   # or from a copy / checkout of the repository:
+#   sudo ./pi-setup.sh [options]
+#
+# Safe to re-run (idempotent): it upgrades PhotonBoard when a newer release
+# exists and refreshes its own config without duplicating anything.
 #
 # Prerequisites:
-#   - Raspberry Pi 5 (4GB+ recommended)
-#   - CompanionPi image flashed to SD card
-#   - Internet connection for package downloads
+#   - Raspberry Pi 5 (4GB+ recommended), Raspberry Pi OS / CompanionPi arm64
+#   - Internet connection
 #
 # What this script does:
-#   1. Installs system dependencies (X11, openbox, unclutter)
-#   2. Installs PhotonBoard .deb package
+#   1. Installs system dependencies (X11, openbox, unclutter, ALSA, zenity...)
+#   2. Installs/updates the PhotonBoard .deb (GitHub release or local file)
 #   3. Installs companion-module-photonboard
-#   4. Configures auto-login + auto-start (X11 + kiosk mode)
-#   5. Configures network (hostname, mDNS)
-#   6. Creates default show directory
+#   4. Configures tty1 auto-login + X11 kiosk (+ touchscreen mapping helper)
+#   5. Configures network (hostname, mDNS, timezone, firewall ports)
+#   6. Creates the show directory
 # ============================================================
 
 set -euo pipefail
 
-# ---- Colors ----
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-log()  { echo -e "${GREEN}[PhotonBoard]${NC} $1"; }
-warn() { echo -e "${YELLOW}[PhotonBoard]${NC} $1"; }
-err()  { echo -e "${RED}[PhotonBoard]${NC} $1" >&2; }
-
-# ---- Checks ----
-
-if [[ $EUID -ne 0 ]]; then
-  err "This script must be run as root (sudo ./pi-setup.sh)"
-  exit 1
-fi
-
-ARCH=$(dpkg --print-architecture)
-if [[ "$ARCH" != "arm64" ]]; then
-  err "This script is for arm64 (Raspberry Pi 5). Detected: $ARCH"
-  exit 1
-fi
-
-# Detect the real user (when run with sudo)
-REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo pi)}"
-REAL_HOME=$(eval echo "~$REAL_USER")
-
-log "Setting up PhotonBoard for user: $REAL_USER ($REAL_HOME)"
-
-# Grant ALSA / MIDI / DMX-USB access without root. These group memberships
-# are required for Web MIDI (Chromium) to see USB MIDI controllers like the
-# Akai APC Mini, and for serialport access to USB-DMX adapters.
-usermod -a -G audio,plugdev,dialout "$REAL_USER" 2>/dev/null || true
-log "Added $REAL_USER to groups: audio, plugdev, dialout"
-
-# ---- Configuration ----
-
-# PhotonBoard version and download URL
-PB_VERSION="${PB_VERSION:-latest}"
+PROG=pi-setup.sh
+TAG=PhotonBoard
 PB_REPO="Achorius/PhotonBoard"
-PB_DEB_NAME="photonboard_*_arm64.deb"
-
-# Companion module
-COMPANION_MODULE_DEV="/opt/companion-module-dev"
+PB_REF="${PB_REF:-main}"
+PB_RAW_BASE="${PB_RAW_BASE:-https://raw.githubusercontent.com/$PB_REPO/$PB_REF/scripts}"
 MODULE_NAME="companion-module-photonboard"
+COMPANION_MODULE_DEV="/opt/companion-module-dev"
+KIOSK_BEGIN="# >>> PhotonBoard kiosk (managed by pi-setup.sh) >>>"
+KIOSK_END="# <<< PhotonBoard kiosk (managed by pi-setup.sh) <<<"
 
-# Hostname
-NEW_HOSTNAME="${PB_HOSTNAME:-PhotonBoard}"
-
-# ============================================================
-# Step 1: System dependencies
-# ============================================================
-
-log "Step 1/6: Installing system dependencies..."
-
-apt-get update -qq
-
-# X11 + window manager for kiosk mode
-DEPS=(
-  xserver-xorg
-  xserver-xorg-core
-  xinit
-  openbox
-  unclutter
-  libusb-1.0-0
-  libgbm1
-  libasound2t64      # ALSA runtime — required for Web MIDI (Chromium)
-  alsa-utils         # amidi / aplay -l for MIDI troubleshooting
-  zenity             # Native file-open/save dialogs for Electron on Linux
-  libgtk-3-0         # GTK runtime used by zenity/Electron dialogs
-  avahi-daemon       # mDNS for .local resolution
-  avahi-utils
-)
-
-apt-get install -y -qq "${DEPS[@]}" 2>/dev/null
-log "System dependencies installed."
-
-# ============================================================
-# Step 2: Install PhotonBoard
-# ============================================================
-
-log "Step 2/6: Installing PhotonBoard..."
-
-# Check if already installed
-if dpkg -l photonboard &>/dev/null; then
-  INSTALLED_VER=$(dpkg -s photonboard | grep '^Version:' | awk '{print $2}')
-  warn "PhotonBoard $INSTALLED_VER already installed."
-
-  if [[ "$PB_VERSION" == "latest" || "$PB_VERSION" == "$INSTALLED_VER" ]]; then
-    log "Skipping PhotonBoard install (already up to date)."
+_say() { # _say FD COLOUR MESSAGE...
+  local fd=$1 colour=$2
+  shift 2
+  if [[ -t $fd ]]; then
+    printf '\033[%sm[%s]\033[0m %s\n' "$colour" "$TAG" "$*" >&"$fd"
   else
-    log "Upgrading PhotonBoard to $PB_VERSION..."
+    printf '[%s] %s\n' "$TAG" "$*" >&"$fd"
   fi
-fi
+}
+info()  { _say 1 '0;32' "$@"; }
+warn()  { _say 2 '1;33' "WARNING: $*"; }
+error() { _say 2 '0;31' "ERROR: $*"; }
+die()   { error "$@"; exit 1; }
 
-# Download latest .deb from GitHub releases (if not already present)
-if [[ "$PB_VERSION" == "latest" ]] && ! dpkg -l photonboard &>/dev/null; then
-  log "Downloading PhotonBoard from GitHub..."
-  DEB_URL=$(curl -fsSL "https://api.github.com/repos/$PB_REPO/releases/latest" \
-    | grep -o "https://.*arm64\.deb" | head -1)
+usage() {
+  cat <<EOF
+Usage:
+  curl -fsSL $PB_RAW_BASE/pi-setup.sh | sudo bash [-s -- options]
+  sudo ./$PROG [options]
 
-  if [[ -z "$DEB_URL" ]]; then
-    # Fallback: check if .deb is in current directory
-    DEB_FILE=$(ls ./$PB_DEB_NAME 2>/dev/null | head -1)
-    if [[ -z "$DEB_FILE" ]]; then
-      err "Could not find PhotonBoard .deb package."
-      err "Either place the .deb in the current directory or publish a GitHub release."
-      err "To build: npm run package:linux  (on the dev machine)"
-      exit 1
-    fi
-  else
-    DEB_FILE="/tmp/photonboard_arm64.deb"
-    curl -fsSL -o "$DEB_FILE" "$DEB_URL"
-  fi
-
-  dpkg -i "$DEB_FILE" || apt-get install -f -y -qq
-  log "PhotonBoard installed."
-elif [[ ! "$PB_VERSION" == "latest" ]]; then
-  # Specific version requested — download from GitHub
-  DEB_FILE="/tmp/photonboard_arm64.deb"
-  curl -fsSL -o "$DEB_FILE" \
-    "https://github.com/$PB_REPO/releases/download/v$PB_VERSION/photonboard_${PB_VERSION}_arm64.deb"
-  dpkg -i "$DEB_FILE" || apt-get install -f -y -qq
-  log "PhotonBoard $PB_VERSION installed."
-fi
-
-# Verify installation
-if ! command -v photonboard &>/dev/null; then
-  # Check common install paths
-  if [[ -x /opt/PhotonBoard/photonboard ]]; then
-    ln -sf /opt/PhotonBoard/photonboard /usr/local/bin/photonboard
-    log "Symlinked PhotonBoard to /usr/local/bin/"
-  else
-    err "PhotonBoard binary not found after install!"
-    exit 1
-  fi
-fi
-
-log "PhotonBoard ready: $(which photonboard)"
+Options (each also settable as an environment variable after "sudo"):
+  --version X.Y.Z     PhotonBoard version to install (PB_VERSION, default: latest)
+  --deb FILE          Install this local .deb instead of downloading (PB_DEB)
+  --hostname NAME     Hostname (PB_HOSTNAME). Default: keep the current one,
+                      except a stock name (raspberrypi, companionpi...) which
+                      becomes "PhotonBoard"
+  --timezone TZ       Timezone (PB_TIMEZONE, default: Europe/Paris)
+  --user NAME         Kiosk user (PB_USER, default: the user who ran sudo)
+  --update-module     Re-install the Companion module even if present
+                      (PB_UPDATE_MODULE=1)
+  -h, --help          Show this help
+EOF
+}
 
 # ============================================================
-# Step 3: Companion module
+# Helpers
 # ============================================================
 
-log "Step 3/6: Installing companion-module-photonboard..."
+apt_has() { # apt_has PKG -> 0 if PKG has an installation candidate
+  apt-cache policy "$1" 2>/dev/null | grep -q 'Candidate: [^(]'
+}
 
-mkdir -p "$COMPANION_MODULE_DEV"
+pick_pkg() { # pick_pkg ALT1 ALT2... -> prints the first installable one
+  local p
+  for p in "$@"; do
+    if apt_has "$p"; then printf '%s\n' "$p"; return 0; fi
+  done
+  return 1
+}
 
-MODULE_DIR="$COMPANION_MODULE_DEV/$MODULE_NAME"
+installed_version() { # installed PhotonBoard version, empty if not installed
+  dpkg-query -W -f='${Status} ${Version}\n' photonboard 2>/dev/null \
+    | awk '$1=="install" && $3=="installed" {print $4}' || true
+}
 
-if [[ -d "$MODULE_DIR" ]]; then
-  warn "Companion module already installed at $MODULE_DIR"
-else
-  # Clone or copy the module
-  if [[ -d "/tmp/$MODULE_NAME" ]]; then
-    cp -r "/tmp/$MODULE_NAME" "$MODULE_DIR"
-  elif command -v git &>/dev/null; then
-    # Try to clone from the repo's subdirectory
-    TMP_REPO="/tmp/pb-repo-$$"
-    git clone --depth 1 "https://github.com/$PB_REPO.git" "$TMP_REPO" 2>/dev/null || true
-    if [[ -d "$TMP_REPO/$MODULE_NAME" ]]; then
-      cp -r "$TMP_REPO/$MODULE_NAME" "$MODULE_DIR"
-      rm -rf "$TMP_REPO"
+# Writes stdin into FILE between the KIOSK markers (replacing a previous
+# block, keeping everything else). Idempotent.
+replace_block() { # replace_block FILE  (block content on stdin)
+  local file=$1 tmp
+  tmp=$(mktemp)
+  if [[ -f $file ]]; then
+    awk -v b="$KIOSK_BEGIN" -v e="$KIOSK_END" '
+      $0 == b {skip=1; next}
+      $0 == e {skip=0; next}
+      !skip {print}' "$file" > "$tmp"
+  fi
+  {
+    printf '%s\n' "$KIOSK_BEGIN"
+    cat
+    printf '%s\n' "$KIOSK_END"
+  } >> "$tmp"
+  cat "$tmp" > "$file"
+  rm -f "$tmp"
+}
+
+# Location of this script when run from a file (empty when piped: curl | bash).
+script_dir() {
+  # Piped into bash, BASH_SOURCE[0] is unset at top level and "main" in functions.
+  local src=${BASH_SOURCE[0]:-}
+  if [[ -n $src && $src != main && -f $src ]]; then
+    (cd "$(dirname "$src")" && pwd -P)
+  fi
+}
+
+# ============================================================
+# Steps
+# ============================================================
+
+step_dependencies() {
+  info "Step 1/6: Installing system dependencies..."
+  apt-get update -q
+
+  # "a|b" = first available (package names differ between Bookworm and Trixie,
+  # e.g. libasound2 -> libasound2t64, libgtk-3-0 -> libgtk-3-0t64).
+  local -a wanted=(
+    xserver-xorg xserver-xorg-core xinit x11-xserver-utils xinput openbox
+    "unclutter|unclutter-xfixes"
+    libusb-1.0-0 libgbm1
+    "libasound2t64|libasound2"   # ALSA runtime — required for Web MIDI (Chromium)
+    alsa-utils                   # amidi / aplay -l for MIDI troubleshooting
+    zenity                       # native file dialogs for Electron on Linux
+    "libgtk-3-0t64|libgtk-3-0"   # GTK runtime used by zenity/Electron dialogs
+    avahi-daemon avahi-utils     # mDNS: <hostname>.local
+    curl ca-certificates git
+  )
+  local -a pkgs=() alts
+  local w p
+  for w in "${wanted[@]}"; do
+    IFS='|' read -r -a alts <<< "$w"
+    if p=$(pick_pkg "${alts[@]}"); then
+      pkgs+=("$p")
     else
-      rm -rf "$TMP_REPO"
-      err "Could not find companion module. Place it at /tmp/$MODULE_NAME and re-run."
-      exit 1
+      die "No installable package for: ${w//|/ or } (apt sources broken? try: sudo apt-get update)"
+    fi
+  done
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${pkgs[@]}" </dev/null
+  info "System dependencies installed."
+}
+
+download_deb() { # download_deb URL -> prints local path
+  local url=$1 dir
+  dir=$(mktemp -d /var/tmp/pb-deb.XXXXXX)
+  chmod 755 "$dir"     # readable by apt's _apt sandbox user
+  curl -fSL --retry 3 -o "$dir/photonboard_arm64.deb" "$url" >&2 \
+    || die "Download failed: $url"
+  chmod 644 "$dir/photonboard_arm64.deb"
+  printf '%s\n' "$dir/photonboard_arm64.deb"
+}
+
+find_local_deb() { # first photonboard_*_arm64.deb in CWD or next to the script
+  local d f
+  for d in "$PWD" "${SCRIPT_DIR:-}"; do
+    [[ -n $d ]] || continue
+    for f in "$d"/photonboard_*_arm64.deb; do
+      [[ -f $f ]] && { printf '%s\n' "$f"; return 0; }
+    done
+  done
+  return 1
+}
+
+step_photonboard() {
+  info "Step 2/6: Installing PhotonBoard..."
+  local installed want="" deb="" json url=""
+  installed=$(installed_version)
+  [[ -n $installed ]] && info "PhotonBoard $installed is installed."
+
+  if [[ -n $PB_DEB ]]; then
+    [[ -f $PB_DEB ]] || die "--deb $PB_DEB: file not found"
+    deb=$(cd "$(dirname "$PB_DEB")" && pwd -P)/$(basename "$PB_DEB")
+  elif [[ $PB_VERSION == latest ]]; then
+    if json=$(curl -fsSL --retry 2 "https://api.github.com/repos/$PB_REPO/releases/latest" 2>/dev/null); then
+      want=$(printf '%s\n' "$json" | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n1)
+      url=$(printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*_arm64\.deb"' \
+            | sed 's/.*"\(https[^"]*\)"$/\1/' | head -n1)
+    fi
+    if [[ -n $url ]]; then
+      if [[ -n $installed && $installed == "$want" ]]; then
+        info "PhotonBoard is up to date ($installed)."
+      else
+        info "Downloading PhotonBoard ${want:-latest}..."
+        deb=$(download_deb "$url")
+      fi
+    elif [[ -n $installed ]]; then
+      warn "Could not reach the GitHub release — keeping PhotonBoard $installed."
+    elif deb=$(find_local_deb); then
+      info "No GitHub release reachable — using local $deb"
+    else
+      die "Could not find a PhotonBoard .deb: no GitHub release reachable and no photonboard_*_arm64.deb in $PWD.
+       Build one on the dev machine with: npm run package:linux   (then: --deb path/to/file.deb)"
+    fi
+  else
+    if [[ $installed == "$PB_VERSION" ]]; then
+      info "PhotonBoard $PB_VERSION already installed."
+    else
+      info "Downloading PhotonBoard $PB_VERSION..."
+      deb=$(download_deb "https://github.com/$PB_REPO/releases/download/v$PB_VERSION/photonboard_${PB_VERSION}_arm64.deb")
     fi
   fi
-fi
 
-# Install module dependencies
-if [[ -f "$MODULE_DIR/package.json" ]]; then
-  log "Installing module dependencies..."
-  # Use fnm's node if available, otherwise system node
-  NODE_BIN=""
-  if [[ -d /opt/fnm/node-versions ]]; then
-    NODE_BIN=$(find /opt/fnm/node-versions -name node -type f | head -1)
-    NODE_DIR=$(dirname "$NODE_BIN")
-    export PATH="$NODE_DIR:$PATH"
+  if [[ -n $deb ]]; then
+    # apt (not dpkg -i) resolves the package's dependencies.
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-downgrades "$deb" </dev/null
+    case $deb in /var/tmp/pb-deb.*) rm -rf "$(dirname "$deb")" ;; esac
+    info "PhotonBoard $(installed_version) installed."
   fi
 
-  cd "$MODULE_DIR"
-  npm install --omit=dev 2>/dev/null || warn "npm install failed — module may still work if node_modules exists"
-  cd - >/dev/null
-fi
+  if ! command -v photonboard >/dev/null 2>&1; then
+    if [[ -x /opt/PhotonBoard/photonboard ]]; then
+      ln -sf /opt/PhotonBoard/photonboard /usr/local/bin/photonboard
+      info "Symlinked /opt/PhotonBoard/photonboard to /usr/local/bin/"
+    else
+      die "PhotonBoard binary not found after install!"
+    fi
+  fi
+  info "PhotonBoard ready: $(command -v photonboard)"
+}
 
-# Set ownership
-chown -R "$REAL_USER:$REAL_USER" "$MODULE_DIR" 2>/dev/null || true
+step_companion_module() {
+  info "Step 3/6: Installing $MODULE_NAME..."
+  local module_dir="$COMPANION_MODULE_DEV/$MODULE_NAME" src="" tmp=""
+  mkdir -p "$COMPANION_MODULE_DEV"
 
-log "Companion module installed at $MODULE_DIR"
+  if [[ -d $module_dir && $PB_UPDATE_MODULE != 1 ]]; then
+    info "Companion module already installed at $module_dir (--update-module to refresh)."
+  else
+    if [[ -d /tmp/$MODULE_NAME ]]; then
+      src=/tmp/$MODULE_NAME
+    elif [[ -n $SCRIPT_DIR && -d $SCRIPT_DIR/../$MODULE_NAME ]]; then
+      src=$SCRIPT_DIR/../$MODULE_NAME
+    else
+      tmp=$(mktemp -d /var/tmp/pb-repo.XXXXXX)
+      info "Fetching the module from github.com/$PB_REPO ($PB_REF)..."
+      git clone --quiet --depth 1 --branch "$PB_REF" "https://github.com/$PB_REPO.git" "$tmp/repo" </dev/null \
+        || { rm -rf "$tmp"; die "git clone failed. Copy $MODULE_NAME to /tmp/$MODULE_NAME and re-run."; }
+      src=$tmp/repo/$MODULE_NAME
+    fi
+    [[ -d $src ]] || { [[ -n $tmp ]] && rm -rf "$tmp"; die "Companion module not found in $src"; }
+    rm -rf "$module_dir.new"
+    cp -r "$src" "$module_dir.new"
+    rm -rf "$module_dir"
+    mv "$module_dir.new" "$module_dir"
+    [[ -n $tmp ]] && rm -rf "$tmp"
+  fi
 
-# ============================================================
-# Step 4: Auto-login + X11 auto-start
-# ============================================================
+  if [[ -f $module_dir/package.json ]]; then
+    # Prefer CompanionPi's fnm node if present, otherwise the system node.
+    local node_bin
+    if [[ -d /opt/fnm/node-versions ]]; then
+      node_bin=$(find /opt/fnm/node-versions -name node -type f -perm -u+x 2>/dev/null | sort -V | tail -n1 || true)
+      [[ -n $node_bin ]] && PATH="$(dirname "$node_bin"):$PATH"
+    fi
+    if command -v npm >/dev/null 2>&1; then
+      info "Installing module dependencies (npm)..."
+      (cd "$module_dir" && npm install --omit=dev --no-audit --no-fund </dev/null) \
+        || warn "npm install failed — the module may still work if node_modules exists."
+    elif [[ ! -d $module_dir/node_modules ]]; then
+      warn "npm not found: module dependencies not installed ($module_dir/node_modules missing)."
+    fi
+  fi
+  chown -R "$REAL_USER:" "$module_dir"
+  info "Companion module installed at $module_dir"
+  MODULE_DIR=$module_dir
+}
 
-log "Step 4/6: Configuring auto-login and auto-start..."
+install_touch_helper() {
+  local dst=/usr/local/bin/photonboard-map-touch tmp
+  if [[ -n $SCRIPT_DIR && -f $SCRIPT_DIR/photonboard-map-touch.sh ]]; then
+    install -m 0755 "$SCRIPT_DIR/photonboard-map-touch.sh" "$dst"
+  else
+    # Piped install (curl | sudo bash): fetch the helper from the same place.
+    tmp=$(mktemp)
+    if curl -fsSL --retry 2 -o "$tmp" "$PB_RAW_BASE/photonboard-map-touch.sh" \
+       && head -n1 "$tmp" | grep -q '^#!' && bash -n "$tmp"; then
+      install -m 0755 "$tmp" "$dst"
+    else
+      rm -f "$tmp"
+      warn "Could not install the touchscreen mapping helper ($PB_RAW_BASE/photonboard-map-touch.sh)."
+      warn "Touchscreens may be mapped to the wrong screen. Re-run pi-setup.sh later to retry."
+      return 0
+    fi
+    rm -f "$tmp"
+  fi
+  info "Installed $dst"
+}
 
-# Auto-login on tty1
-mkdir -p /etc/systemd/system/getty@tty1.service.d/
-cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << EOF
+step_kiosk() {
+  info "Step 4/6: Configuring auto-login and kiosk mode..."
+
+  if systemctl is-enabled --quiet display-manager.service 2>/dev/null; then
+    warn "A desktop display manager is enabled: it will conflict with the tty1 kiosk."
+    warn "Disable it with: sudo systemctl disable display-manager.service (or raspi-config > Boot > Console Autologin)."
+  fi
+
+  mkdir -p /etc/systemd/system/getty@tty1.service.d
+  cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
 EOF
+  systemctl daemon-reload
 
-# Install touchscreen mapping script (maps wch.cn touchscreens to HDMI outputs
-# by stable USB port path — survives reboots regardless of xinput enumeration).
-SCRIPT_SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_SRC_DIR/photonboard-map-touch.sh" ]; then
-  install -m 0755 "$SCRIPT_SRC_DIR/photonboard-map-touch.sh" /usr/local/bin/photonboard-map-touch
-  log "Installed /usr/local/bin/photonboard-map-touch"
-else
-  warn "photonboard-map-touch.sh not found alongside pi-setup.sh — touch mapping may be wrong"
-fi
-
-# Optional touch mapping config (SWAP=1 to invert left/right)
-mkdir -p /etc/photonboard
-if [ ! -f /etc/photonboard/touch-map.conf ]; then
-  cat > /etc/photonboard/touch-map.conf << 'TOUCHCONF'
-# PhotonBoard touchscreen mapping
+  # Touchscreen mapping helper (maps the wch.cn touchscreens to their HDMI
+  # output by stable USB port path).
+  install_touch_helper
+  mkdir -p /etc/photonboard
+  if [[ ! -f /etc/photonboard/touch-map.conf ]]; then
+    cat > /etc/photonboard/touch-map.conf <<'TOUCHCONF'
+# PhotonBoard touchscreen mapping (see photonboard-map-touch --help)
 # Set SWAP=1 if the left/right touchscreens are inverted.
 SWAP=0
+# Optional overrides:
+#TOUCH_NAME='wch.cn TouchScreen'
+#OUTPUTS="HDMI-1 HDMI-2"
+#PORT_MAP="1-1=HDMI-1 1-2=HDMI-2"
 TOUCHCONF
-fi
+  fi
 
-# .xinitrc — kiosk mode with PhotonBoard
-cat > "$REAL_HOME/.xinitrc" << 'XINITRC'
+  # .xinitrc — fully managed by this script (previous custom file backed up once).
+  local xinitrc="$REAL_HOME/.xinitrc"
+  if [[ -f $xinitrc ]] && ! grep -q 'PhotonBoard kiosk' "$xinitrc"; then
+    cp -p "$xinitrc" "$xinitrc.pb-backup"
+    warn "Existing $xinitrc saved as $xinitrc.pb-backup"
+  fi
+  cat > "$xinitrc" <<'XINITRC'
 #!/bin/bash
-# PhotonBoard kiosk mode
+# PhotonBoard kiosk mode (managed by pi-setup.sh — re-running it overwrites this file)
 
 # Hide mouse cursor after 3s idle
 unclutter -idle 3 -root &
@@ -269,21 +357,33 @@ xset s noblank
 openbox --sm-disable &
 sleep 0.5
 
-# Map touchscreens to their physical HDMI outputs (background — script waits for X)
-[ -x /usr/local/bin/photonboard-map-touch ] && /usr/local/bin/photonboard-map-touch &
+# Map touchscreens to their HDMI outputs (background — never blocks X)
+if [ -x /usr/local/bin/photonboard-map-touch ]; then
+  /usr/local/bin/photonboard-map-touch &
+fi
 
 # Launch PhotonBoard
 exec photonboard --no-sandbox --ignore-gpu-blocklist --use-gl=egl --start-fullscreen
 XINITRC
-chmod +x "$REAL_HOME/.xinitrc"
-chown "$REAL_USER:$REAL_USER" "$REAL_HOME/.xinitrc"
+  chmod 0755 "$xinitrc"
+  chown "$REAL_USER:" "$xinitrc"
 
-# .bash_profile — auto-start X on tty1 if display connected
-cat > "$REAL_HOME/.bash_profile" << 'BASHPROFILE'
+  # .bash_profile — only our marked block is managed; the rest is preserved.
+  local profile="$REAL_HOME/.bash_profile"
+  if [[ -f $profile ]] && grep -q '^# Auto-start X and PhotonBoard on console login' "$profile" \
+     && ! grep -qF "$KIOSK_BEGIN" "$profile"; then
+    # File entirely written by an older pi-setup.sh: replace it.
+    mv "$profile" "$profile.pb-old"
+  fi
+  if [[ ! -f $profile ]]; then
+    # bash skips ~/.profile when ~/.bash_profile exists: keep loading it.
+    printf '%s\n' '# ~/.bash_profile' '[ -f ~/.profile ] && . ~/.profile' > "$profile"
+  fi
+  replace_block "$profile" <<'BASHPROFILE'
 # Auto-start X and PhotonBoard on console login (tty1 only)
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-  # Only start X if a display is connected
-  if ls /sys/class/drm/card*-*/status 2>/dev/null | xargs grep -l "connected" >/dev/null 2>&1; then
+  # Only start X if a display is connected (exact "connected" status)
+  if grep -qsx connected /sys/class/drm/card*-*/status; then
     startx -- -keeptty 2>/tmp/startx.log
   else
     echo "No display connected — skipping PhotonBoard GUI."
@@ -292,92 +392,172 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
   fi
 fi
 BASHPROFILE
-chown "$REAL_USER:$REAL_USER" "$REAL_HOME/.bash_profile"
+  chown "$REAL_USER:" "$profile"
+  rm -f "$profile.pb-old"
 
-log "Auto-login and kiosk mode configured."
+  info "Auto-login and kiosk mode configured."
+}
+
+step_network() {
+  info "Step 5/6: Configuring network..."
+  local current new
+  current=$(hostname)
+  if [[ -n $PB_HOSTNAME ]]; then
+    new=$PB_HOSTNAME
+  else
+    case ${current,,} in
+      raspberrypi|companionpi|localhost|"") new=PhotonBoard ;;
+      *) new=$current ;;
+    esac
+  fi
+  [[ $new =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] \
+    || die "Invalid hostname '$new' (letters, digits and '-' only, max 63)."
+
+  if [[ $current != "$new" ]]; then
+    hostnamectl set-hostname "$new"
+    info "Hostname set to $new (was: $current)"
+  else
+    info "Hostname: $new (unchanged; use --hostname to change it)"
+  fi
+  # Only the 127.0.1.1 line maps the hostname (never touch other entries).
+  if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
+    sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1\t$new/" /etc/hosts
+  else
+    printf '127.0.1.1\t%s\n' "$new" >> /etc/hosts
+  fi
+  NEW_HOSTNAME=$new
+
+  if [[ -f /usr/share/zoneinfo/$PB_TIMEZONE ]]; then
+    if timedatectl set-timezone "$PB_TIMEZONE"; then
+      info "Timezone set to $PB_TIMEZONE"
+    else
+      warn "Could not set timezone $PB_TIMEZONE"
+    fi
+  else
+    warn "Timezone $PB_TIMEZONE not found — leaving system default"
+  fi
+
+  systemctl enable --now avahi-daemon >/dev/null 2>&1 || warn "Could not enable avahi-daemon (mDNS)."
+
+  # No firewall by default on Raspberry Pi OS, but just in case
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow 9090/tcp comment "PhotonBoard API (Companion)" >/dev/null || true
+    ufw allow 9091/tcp comment "PhotonBoard Web Remote"       >/dev/null || true
+    ufw allow 8000/tcp comment "Companion Web UI"             >/dev/null || true
+  fi
+  info "Network configured. Device will be reachable at ${NEW_HOSTNAME}.local"
+}
+
+step_directories() {
+  info "Step 6/6: Setting up default directories..."
+  SHOWS_DIR="$REAL_HOME/Documents/PhotonBoard"
+  # Electron userData on Linux = ~/.config/<productName>
+  local cfg="$REAL_HOME/.config/PhotonBoard"
+  mkdir -p "$SHOWS_DIR" "$cfg/config"
+  chown "$REAL_USER:" "$REAL_HOME/Documents" "$SHOWS_DIR" "$REAL_HOME/.config" "$cfg" "$cfg/config"
+  info "Show directory: $SHOWS_DIR"
+}
+
+print_summary() {
+  local companion
+  companion=$(systemctl is-active companion 2>/dev/null || true)
+  echo ""
+  echo "============================================================"
+  echo "  PhotonBoard installation complete!"
+  echo "============================================================"
+  echo ""
+  echo "  PhotonBoard:  $(command -v photonboard) ($(installed_version))"
+  echo "  Companion:    ${companion:-not found}"
+  echo "  Module:       $MODULE_DIR"
+  echo "  Hostname:     ${NEW_HOSTNAME}.local"
+  echo "  Shows:        $SHOWS_DIR"
+  echo ""
+  echo "  Ports:"
+  echo "    9090  PhotonBoard API (Companion module)"
+  echo "    9091  PhotonBoard Web Remote (3D preview)"
+  echo "    8000  Companion Web UI"
+  echo ""
+  echo "  Access:"
+  echo "    Mac browser:  http://${NEW_HOSTNAME}.local:9091"
+  echo "    Companion:    http://${NEW_HOSTNAME}.local:8000"
+  echo "    SSH:          ssh $REAL_USER@${NEW_HOSTNAME}.local"
+  echo ""
+  echo "  Reboot to start PhotonBoard automatically:"
+  echo "    sudo reboot"
+  echo ""
+}
 
 # ============================================================
-# Step 5: Network configuration
+# Main (everything is inside functions so that "curl | sudo bash" reads the
+# whole script before running anything)
 # ============================================================
 
-log "Step 5/6: Configuring network..."
+main() {
+  PB_VERSION="${PB_VERSION:-latest}"
+  PB_DEB="${PB_DEB:-}"
+  PB_HOSTNAME="${PB_HOSTNAME:-}"
+  PB_TIMEZONE="${PB_TIMEZONE:-Europe/Paris}"
+  PB_USER="${PB_USER:-}"
+  PB_UPDATE_MODULE="${PB_UPDATE_MODULE:-0}"
 
-# Set hostname
-CURRENT_HOSTNAME=$(hostname)
-if [[ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ]]; then
-  hostnamectl set-hostname "$NEW_HOSTNAME"
-  sed -i "s/$CURRENT_HOSTNAME/$NEW_HOSTNAME/g" /etc/hosts 2>/dev/null || true
-  log "Hostname set to $NEW_HOSTNAME (was: $CURRENT_HOSTNAME)"
-else
-  log "Hostname already set to $NEW_HOSTNAME"
-fi
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --version)       [[ $# -ge 2 ]] || die "--version needs a value"; PB_VERSION=${2#v}; shift 2 ;;
+      --deb)           [[ $# -ge 2 ]] || die "--deb needs a value"; PB_DEB=$2; shift 2 ;;
+      --hostname)      [[ $# -ge 2 ]] || die "--hostname needs a value"; PB_HOSTNAME=$2; shift 2 ;;
+      --timezone)      [[ $# -ge 2 ]] || die "--timezone needs a value"; PB_TIMEZONE=$2; shift 2 ;;
+      --user)          [[ $# -ge 2 ]] || die "--user needs a value"; PB_USER=$2; shift 2 ;;
+      --update-module) PB_UPDATE_MODULE=1; shift ;;
+      -h|--help)       usage; exit 0 ;;
+      *)               error "Unknown option: $1"; usage >&2; exit 1 ;;
+    esac
+  done
 
-# Set timezone (default: Europe/Paris — override with PB_TIMEZONE env var)
-PB_TIMEZONE="${PB_TIMEZONE:-Europe/Paris}"
-if [ -f "/usr/share/zoneinfo/$PB_TIMEZONE" ]; then
-  timedatectl set-timezone "$PB_TIMEZONE" 2>/dev/null || true
-  log "Timezone set to $PB_TIMEZONE"
-else
-  warn "Timezone $PB_TIMEZONE not found — leaving system default"
-fi
+  if [[ $EUID -ne 0 ]]; then
+    die "This script must be run as root:
+       curl -fsSL $PB_RAW_BASE/pi-setup.sh | sudo bash
+       or: sudo ./$PROG"
+  fi
 
-# Enable and start avahi (mDNS — makes <hostname>.local work)
-systemctl enable avahi-daemon 2>/dev/null || true
-systemctl start avahi-daemon 2>/dev/null || true
+  local arch
+  arch=$(dpkg --print-architecture)
+  [[ $arch == arm64 ]] || die "This script is for arm64 (Raspberry Pi 5). Detected: $arch"
 
-# Ensure Companion and PhotonBoard ports are accessible
-# (no firewall by default on Raspberry Pi OS, but just in case)
-if command -v ufw &>/dev/null; then
-  ufw allow 9090/tcp comment "PhotonBoard API (Companion)" 2>/dev/null || true
-  ufw allow 9091/tcp comment "PhotonBoard Web Remote"       2>/dev/null || true
-  ufw allow 8000/tcp comment "Companion Web UI"             2>/dev/null || true
-fi
+  SCRIPT_DIR=$(script_dir)
 
-log "Network configured. Device will be accessible at ${NEW_HOSTNAME}.local"
+  # The kiosk user: --user, else whoever ran sudo, else the first regular user.
+  REAL_USER=${PB_USER:-${SUDO_USER:-}}
+  if [[ -z $REAL_USER || $REAL_USER == root ]]; then
+    REAL_USER=$(getent passwd 1000 | cut -d: -f1 || true)
+  fi
+  if [[ -z $REAL_USER ]] || ! id "$REAL_USER" >/dev/null 2>&1; then
+    die "Cannot determine the kiosk user: run with sudo from that user, or pass --user NAME."
+  fi
+  REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+  [[ -d $REAL_HOME ]] || die "Home directory of $REAL_USER not found ($REAL_HOME)."
+  info "Setting up PhotonBoard for user: $REAL_USER ($REAL_HOME)"
 
-# ============================================================
-# Step 6: Show files directory + defaults
-# ============================================================
+  # ALSA / MIDI / DMX-USB / touchscreen access without root. Required for Web
+  # MIDI (Chromium) to see USB MIDI controllers like the Akai APC Mini, and
+  # for serialport access to USB-DMX adapters.
+  local g groups=()
+  for g in audio plugdev dialout video render input; do
+    getent group "$g" >/dev/null && groups+=("$g")
+  done
+  usermod -a -G "$(IFS=,; echo "${groups[*]}")" "$REAL_USER"
+  info "Added $REAL_USER to groups: ${groups[*]}"
 
-log "Step 6/6: Setting up default directories..."
+  NEW_HOSTNAME=$(hostname)
+  MODULE_DIR="$COMPANION_MODULE_DEV/$MODULE_NAME"
+  SHOWS_DIR="$REAL_HOME/Documents/PhotonBoard"
 
-# Create show files directory
-SHOWS_DIR="$REAL_HOME/Documents/PhotonBoard"
-mkdir -p "$SHOWS_DIR"
-chown -R "$REAL_USER:$REAL_USER" "$SHOWS_DIR"
+  step_dependencies
+  step_photonboard
+  step_companion_module
+  step_kiosk
+  step_network
+  step_directories
+  print_summary
+}
 
-# Create PhotonBoard config directory
-PB_CONFIG="$REAL_HOME/.config/photonboard"
-mkdir -p "$PB_CONFIG/config"
-chown -R "$REAL_USER:$REAL_USER" "$PB_CONFIG"
-
-log "Show directory: $SHOWS_DIR"
-
-# ============================================================
-# Done!
-# ============================================================
-
-echo ""
-echo -e "${CYAN}============================================================${NC}"
-echo -e "${CYAN}  PhotonBoard installation complete!${NC}"
-echo -e "${CYAN}============================================================${NC}"
-echo ""
-echo -e "  ${GREEN}PhotonBoard:${NC}  $(which photonboard)"
-echo -e "  ${GREEN}Companion:${NC}    $(systemctl is-active companion 2>/dev/null || echo 'not found')"
-echo -e "  ${GREEN}Module:${NC}       $MODULE_DIR"
-echo -e "  ${GREEN}Hostname:${NC}     ${NEW_HOSTNAME}.local"
-echo -e "  ${GREEN}Shows:${NC}        $SHOWS_DIR"
-echo ""
-echo -e "  ${YELLOW}Ports:${NC}"
-echo -e "    9090  PhotonBoard API (Companion module)"
-echo -e "    9091  PhotonBoard Web Remote (3D preview)"
-echo -e "    8000  Companion Web UI"
-echo ""
-echo -e "  ${YELLOW}Access:${NC}"
-echo -e "    Mac browser:  http://${NEW_HOSTNAME}.local:9091"
-echo -e "    Companion:    http://${NEW_HOSTNAME}.local:8000"
-echo -e "    SSH:          ssh $REAL_USER@${NEW_HOSTNAME}.local"
-echo ""
-echo -e "  ${YELLOW}Reboot to start PhotonBoard automatically:${NC}"
-echo -e "    sudo reboot"
-echo ""
+main "$@"
