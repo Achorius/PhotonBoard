@@ -10,12 +10,14 @@ import type { Cuelist, MidiMapping } from '@shared/types'
 import { useExecutorStore, type SceneMode } from '@renderer/stores/executor-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { cueKey } from '@renderer/lib/fixture-index'
+import { t } from '@renderer/i18n'
 
+/** Short button-mode badges: kept as-is in every language (see GLOSSARY.md) */
 export const MODE_LABEL: Record<SceneMode, string> = { toggle: 'TOG', trigger: 'TRIG', flash: 'FLASH' }
-export const MODE_HINT: Record<SceneMode, string> = {
-  toggle: 'Tap = GO / Stop',
-  trigger: 'Plays while held',
-  flash: 'Full level while held'
+
+/** "Tap = GO / Stop"… (current language) */
+export function modeHint(mode: SceneMode): string {
+  return t(`scenes.modeHint.${mode}`)
 }
 
 export interface ExecutorSlot {
@@ -71,8 +73,9 @@ export function formatMidiSource(m: MidiMapping): string {
 }
 
 export function describeMidiSource(m: MidiMapping): string {
-  const kind = m.source.type === 'note' ? 'Note' : m.source.type === 'cc' ? 'CC' : 'Program'
-  return `${kind} ${m.source.number} · channel ${m.source.channel}${m.source.deviceName ? ` · ${m.source.deviceName}` : ''}`
+  const kind = t(`scenes.midiSource.${m.source.type === 'note' ? 'note' : m.source.type === 'cc' ? 'cc' : 'program'}`)
+  const params = { kind, number: m.source.number, channel: m.source.channel, device: m.source.deviceName ?? '' }
+  return m.source.deviceName ? t('scenes.midiSource.describeDevice', params) : t('scenes.midiSource.describe', params)
 }
 
 /** MIDI-learn a scene's GO with the cell's button mode (replaces the scene's previous GO mapping) */

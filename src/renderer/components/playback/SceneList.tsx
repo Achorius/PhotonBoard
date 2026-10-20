@@ -3,7 +3,8 @@
 // Rows: number, executor colour, name, status (cue x/y, fade
 // progress), level, executor slot & mode, MIDI badge, quick GO/Stop.
 // Keyboard (list focused): ↑ ↓ Home End select, Space = GO (global
-// shortcut), Enter selects.
+// shortcut); Delete / Mod+D / F2 / Enter act on the selected scene
+// (selection actions registered by PlaybackView).
 // ============================================================
 
 import { memo, useMemo, useState } from 'react'
@@ -11,12 +12,14 @@ import type React from 'react'
 import { LuClapperboard, LuPlay, LuPlus, LuSearch, LuSearchX, LuSparkles, LuSquare } from 'react-icons/lu'
 import type { Cuelist, MidiMapping } from '@shared/types'
 import { Badge, Button, EmptyState, IconButton, TextInput, cn, formatCuePosition, formatPercent } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { FadeProgress } from './FadeProgress'
 import { MODE_LABEL, formatMidiSource, formatSlot, useExecutorSlots, useLearningSceneId, useSceneMidi, type ExecutorSlot } from './scene-meta'
 import { createEmptyScene } from './record'
 
 export function SceneList({ selectedId, onRecord }: { selectedId: string | null; onRecord: () => void }) {
+  const t = useT()
   const cuelists = usePlaybackStore((s) => s.cuelists)
   const slots = useExecutorSlots()
   const midi = useSceneMidi()
@@ -50,21 +53,21 @@ export function SceneList({ selectedId, onRecord }: { selectedId: string | null;
   }
 
   return (
-    <section aria-label="Scenes" className="flex min-h-0 flex-1 flex-col">
+    <section aria-label={t('common.scenes')} className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-control-lg shrink-0 items-center gap-2 pl-3 pr-1.5">
-        <h2 className="text-sm font-semibold text-fg-primary">Scenes</h2>
+        <h2 className="text-sm font-semibold text-fg-primary">{t('common.scenes')}</h2>
         <span className="text-xs tabular text-fg-tertiary">{cuelists.length}</span>
-        {playing > 0 && <Badge tone="go" size="xs">{playing} LIVE</Badge>}
+        {playing > 0 && <Badge tone="go" size="xs">{t('scenes.liveCount', { count: playing })}</Badge>}
         <div className="flex-1" />
-        <IconButton icon={LuPlus} label="New empty scene" size="sm" onClick={() => createEmptyScene()} />
+        <IconButton icon={LuPlus} label={t('scenes.list.newEmpty')} size="sm" onClick={() => createEmptyScene()} />
       </header>
       {cuelists.length > 6 && (
         <div className="shrink-0 border-b border-line-subtle px-2.5 pb-2.5">
           <TextInput
             size="sm"
             icon={LuSearch}
-            placeholder="Find scene by name or number"
-            aria-label="Find scene"
+            placeholder={t('scenes.list.searchPlaceholder')}
+            aria-label={t('scenes.list.searchAria')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onClear={() => setQuery('')}
@@ -74,7 +77,8 @@ export function SceneList({ selectedId, onRecord }: { selectedId: string | null;
       )}
       <div
         role="listbox"
-        aria-label="Scenes"
+        aria-label={t('common.scenes')}
+        data-scene-list=""
         onKeyDown={onKeyDown}
         className={cn('min-h-0 flex-1 overflow-y-auto p-1.5', cuelists.length <= 6 && 'border-t border-line-subtle')}
       >
@@ -82,20 +86,20 @@ export function SceneList({ selectedId, onRecord }: { selectedId: string | null;
           <EmptyState
             size="sm"
             icon={LuClapperboard}
-            title="No scenes yet"
-            description="Set a look in Fixtures, then record it. Scenes play from here, the executor bar and MIDI."
+            title={t('scenes.list.emptyTitle')}
+            description={t('scenes.list.emptyText')}
             action={<>
-              <Button variant="primary" size="sm" onClick={onRecord}>Record scene</Button>
-              <Button variant="ghost" size="sm" icon={LuPlus} onClick={() => createEmptyScene()}>Empty scene</Button>
+              <Button variant="primary" size="sm" onClick={onRecord}>{t('scenes.list.recordScene')}</Button>
+              <Button variant="ghost" size="sm" icon={LuPlus} onClick={() => createEmptyScene()}>{t('scenes.list.emptyScene')}</Button>
             </>}
           />
         ) : shown.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuSearchX}
-            title="No matching scene"
-            description={`Nothing is named “${query}”.`}
-            action={<Button variant="ghost" size="sm" onClick={() => setQuery('')}>Clear search</Button>}
+            title={t('scenes.list.noMatchTitle')}
+            description={t('common.nothingMatches', { query })}
+            action={<Button variant="ghost" size="sm" onClick={() => setQuery('')}>{t('scenes.list.clearSearch')}</Button>}
           />
         ) : (
           <div className="flex flex-col gap-1">
@@ -127,6 +131,7 @@ const SceneRow = memo(function SceneRow({ cuelist: cl, number, selected, slot, m
   learning: boolean
   onSelect: (id: string) => void
 }) {
+  const t = useT()
   const playing = cl.isPlaying
   const cue = playing ? cl.cues[cl.currentCueIndex] : undefined
   const fx = cl.effectSnapshots?.length ?? 0
@@ -141,7 +146,6 @@ const SceneRow = memo(function SceneRow({ cuelist: cl, number, selected, slot, m
       tabIndex={selected ? 0 : -1}
       onClick={() => onSelect(cl.id)}
       onFocus={() => { if (!selected) onSelect(cl.id) }}
-      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSelect(cl.id) } }}
       className={cn(
         'group relative flex min-h-[52px] cursor-pointer select-none items-center gap-2.5 overflow-hidden rounded-md border pl-3 pr-1.5 outline-offset-[-2px] transition-colors duration-fast',
         '[[data-density=touch]_&]:min-h-[64px]',
@@ -160,18 +164,22 @@ const SceneRow = memo(function SceneRow({ cuelist: cl, number, selected, slot, m
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-fg-primary">{cl.name || 'Untitled'}</span>
-          {fx > 0 && <LuSparkles size={12} aria-label={`${fx} effects`} className="shrink-0 text-fg-tertiary" />}
+          <span className="truncate text-sm font-medium text-fg-primary">{cl.name || t('common.untitled')}</span>
+          {fx > 0 && <LuSparkles size={12} aria-label={t('scenes.effectCount', { count: fx })} className="shrink-0 text-fg-tertiary" />}
         </span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs">
           {playing ? (
             <>
               <span className="shrink-0 font-mono tabular text-go-fg">{formatCuePosition(cl.currentCueIndex, cl.cues.length)}</span>
               <span className="truncate text-fg-secondary">{cue?.name}</span>
-              {cl.flash && <Badge tone="warning" size="xs">FLASH</Badge>}
+              {cl.flash && <Badge tone="warning" size="xs">{t('scenes.flashBadge')}</Badge>}
             </>
           ) : (
-            <span className="truncate text-fg-tertiary">{cl.cues.length === 0 ? 'No cues' : `${cl.cues.length} cue${cl.cues.length === 1 ? '' : 's'}`}{cl.isLooping ? ' · loop' : ''}</span>
+            <span className="truncate text-fg-tertiary">
+              {cl.cues.length === 0
+                ? t('scenes.noCues')
+                : cl.isLooping ? t('scenes.list.cuesLoop', { cues: t('common.cueCount', { count: cl.cues.length }) }) : t('common.cueCount', { count: cl.cues.length })}
+            </span>
           )}
           {level < 255 && <span className="shrink-0 font-mono tabular text-fg-tertiary">{formatPercent(level)}</span>}
         </span>
@@ -179,21 +187,21 @@ const SceneRow = memo(function SceneRow({ cuelist: cl, number, selected, slot, m
       <span className="flex shrink-0 flex-col items-end gap-1">
         <span className="flex items-center gap-1">
           {learning ? (
-            <Badge tone="midi" variant="solid" size="xs" className="animate-pulse">LEARN</Badge>
+            <Badge tone="midi" variant="solid" size="xs" className="animate-pulse">{t('scenes.learnBadge')}</Badge>
           ) : midi ? (
             <Badge tone="midi" size="xs" mono title={`MIDI ${formatMidiSource(midi)}`}>{formatMidiSource(midi)}</Badge>
           ) : null}
           {slot && slot.mode !== 'toggle' && <Badge tone={slot.mode === 'flash' ? 'warning' : 'info'} size="xs">{MODE_LABEL[slot.mode]}</Badge>}
         </span>
-        {slot && <span className="font-mono text-2xs tabular text-fg-tertiary" title={`Executor column ${slot.col + 1}, row ${slot.row + 1}`}>EX {formatSlot(slot)}</span>}
+        {slot && <span className="font-mono text-2xs tabular text-fg-tertiary" title={t('scenes.slotTitle', { col: slot.col + 1, row: slot.row + 1 })}>{t('scenes.slotShort', { slot: formatSlot(slot) })}</span>}
       </span>
       <span className="flex shrink-0 items-center gap-1">
         {playing && (
-          <IconButton icon={LuSquare} label={`Stop ${cl.name}`} size="sm" onClick={() => usePlaybackStore.getState().stopCuelist(cl.id)} />
+          <IconButton icon={LuSquare} label={t('scenes.list.stopNamed', { name: cl.name })} size="sm" onClick={() => usePlaybackStore.getState().stopCuelist(cl.id)} />
         )}
         <IconButton
           icon={LuPlay}
-          label={`GO ${cl.name}`}
+          label={t('scenes.list.goNamed', { name: cl.name })}
           size="sm"
           variant="secondary"
           disabled={cl.cues.length === 0}

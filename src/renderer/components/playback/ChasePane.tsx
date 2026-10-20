@@ -1,43 +1,55 @@
 // ============================================================
 // Chases: list + editor (BPM with tap tempo, crossfade, direction,
 // loop, priority, level) and a step editor (look preview, hold
-// time, reorder, update from programmer).
+// time, reorder, update from programmer). Header: visible Duplicate /
+// Delete buttons; the step table registers the step selection actions.
 // ============================================================
 
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import {
-  LuArrowDown, LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuArrowUp, LuCircleDot, LuEllipsis, LuGripVertical, LuListMusic, LuPiano,
-  LuPlay, LuPlus, LuRefreshCw, LuReplace, LuShuffle, LuSquare, LuTrash2, LuX
+  LuArrowDown, LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuArrowUp, LuCircleDot, LuCopy, LuEllipsis, LuGripVertical, LuListMusic, LuPencil,
+  LuPiano, LuPlay, LuPlus, LuRefreshCw, LuReplace, LuShuffle, LuSquare, LuTrash2, LuX
 } from 'react-icons/lu'
 import type { Chase, ChaseStep, CueChannelValue } from '@shared/types'
 import {
   Badge, Button, DropdownMenu, EmptyState, IconButton, NumberField, SegmentedControl, Slider, Switch, TBody, THead, Table, Td, Th, Tr,
-  cn, confirm, formatBpm, formatPercent, formatSeconds, toast, type MenuEntry
+  cn, formatBpm, formatPercent, formatSeconds, toast, type MenuEntry
 } from '@renderer/components/ui'
+import { t as translate, useT, type TFunction } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { handleTapTempo } from '@renderer/lib/midi-manager'
 import { isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
-import { capture, countFixtures, createEmptyChase, recordAddStep, recordUpdateStep } from './record'
+import { useSelectionActions } from '@renderer/lib/selection-actions'
+import { capture, captureSummary, countFixtures, createEmptyChase, recordAddStep, recordUpdateStep } from './record'
 import { formatMidiSource } from './scene-meta'
 import { dropIndicator, useReorder, type ReorderState } from './useReorder'
+import {
+  chaseSelectionActions, deleteChase, deleteStep, duplicateChase, duplicateStep, focusNameField, stepSelectionActions
+} from './actions'
 
 type Direction = Chase['direction']
 
-const DIRECTIONS: { value: Direction; label: string; icon: typeof LuArrowRight; title: string }[] = [
-  { value: 'forward', label: 'Fwd', icon: LuArrowRight, title: 'Forward: 1 → n' },
-  { value: 'backward', label: 'Back', icon: LuArrowLeft, title: 'Backward: n → 1' },
-  { value: 'bounce', label: 'Bounce', icon: LuArrowLeftRight, title: 'Bounce: 1 → n → 1' },
-  { value: 'random', label: 'Random', icon: LuShuffle, title: 'Random step order' }
-]
+const DIRECTION_ICONS: Record<Direction, typeof LuArrowRight> = {
+  forward: LuArrowRight,
+  backward: LuArrowLeft,
+  bounce: LuArrowLeftRight,
+  random: LuShuffle
+}
+const DIRECTION_ORDER: Direction[] = ['forward', 'backward', 'bounce', 'random']
+
+function directionItem(d: Direction, t: TFunction) {
+  return { value: d, icon: DIRECTION_ICONS[d], label: t(`scenes.chase.direction.${d}`), title: t(`scenes.chase.directionTitle.${d}`) }
+}
 
 // ---------------------------------------------------------------
 // List
 // ---------------------------------------------------------------
 
 export function ChaseList({ selectedId, onRecord }: { selectedId: string | null; onRecord: () => void }) {
+  const t = useT()
   const chases = usePlaybackStore((s) => s.chases)
   const select = (id: string, focus = false) => {
     usePlaybackStore.getState().selectChase(id)
@@ -59,24 +71,24 @@ export function ChaseList({ selectedId, onRecord }: { selectedId: string | null;
   const playing = chases.reduce((n, c) => n + (c.isPlaying ? 1 : 0), 0)
 
   return (
-    <section aria-label="Chases" className="flex min-h-0 flex-1 flex-col">
+    <section aria-label={t('common.chases')} className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-control-lg shrink-0 items-center gap-2 border-b border-line-subtle pl-3 pr-1.5">
-        <h2 className="text-sm font-semibold text-fg-primary">Chases</h2>
+        <h2 className="text-sm font-semibold text-fg-primary">{t('common.chases')}</h2>
         <span className="text-xs tabular text-fg-tertiary">{chases.length}</span>
-        {playing > 0 && <Badge tone="go" size="xs">{playing} LIVE</Badge>}
+        {playing > 0 && <Badge tone="go" size="xs">{t('scenes.liveCount', { count: playing })}</Badge>}
         <div className="flex-1" />
-        <IconButton icon={LuPlus} label="New empty chase" size="sm" onClick={() => createEmptyChase()} />
+        <IconButton icon={LuPlus} label={t('scenes.chaseList.newEmpty')} size="sm" onClick={() => createEmptyChase()} />
       </header>
-      <div role="listbox" aria-label="Chases" onKeyDown={onKeyDown} className="min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div role="listbox" aria-label={t('common.chases')} data-chase-list="" onKeyDown={onKeyDown} className="min-h-0 flex-1 overflow-y-auto p-1.5">
         {chases.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuListMusic}
-            title="No chases yet"
-            description="A chase steps through looks to the beat. Record each look as a step."
+            title={t('scenes.chaseList.emptyTitle')}
+            description={t('scenes.chaseList.emptyText')}
             action={<>
-              <Button variant="primary" size="sm" onClick={onRecord}>Record chase</Button>
-              <Button variant="ghost" size="sm" icon={LuPlus} onClick={() => createEmptyChase()}>Empty chase</Button>
+              <Button variant="primary" size="sm" onClick={onRecord}>{t('scenes.chaseList.recordChase')}</Button>
+              <Button variant="ghost" size="sm" icon={LuPlus} onClick={() => createEmptyChase()}>{t('scenes.chaseList.emptyChase')}</Button>
             </>}
           />
         ) : (
@@ -97,8 +109,8 @@ const ChaseRow = memo(function ChaseRow({ chase: ch, number, selected, onSelect 
   selected: boolean
   onSelect: (id: string) => void
 }) {
-  const dir = DIRECTIONS.find((d) => d.value === ch.direction) ?? DIRECTIONS[0]
-  const DirIcon = dir.icon
+  const t = useT()
+  const DirIcon = DIRECTION_ICONS[ch.direction] ?? LuArrowRight
   return (
     <div
       role="option"
@@ -123,19 +135,19 @@ const ChaseRow = memo(function ChaseRow({ chase: ch, number, selected, onSelect 
         {number}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium text-fg-primary">{ch.name || 'Untitled'}</span>
+        <span className="truncate text-sm font-medium text-fg-primary">{ch.name || t('common.untitled')}</span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-fg-tertiary">
           {ch.isPlaying
             ? <span className="font-mono tabular text-go-fg">{Math.min(ch.currentStepIndex, ch.steps.length - 1) + 1}/{ch.steps.length}</span>
-            : <span>{ch.steps.length} step{ch.steps.length === 1 ? '' : 's'}</span>}
+            : <span className="truncate">{t('scenes.stepCount', { count: ch.steps.length })}</span>}
           <span aria-hidden>·</span>
-          <span className="font-mono tabular">{formatBpm(ch.bpm)}</span>
-          <DirIcon size={12} aria-label={dir.title} className="shrink-0" />
+          <span className="shrink-0 font-mono tabular">{formatBpm(ch.bpm)}</span>
+          <DirIcon size={12} aria-label={t(`scenes.chase.directionTitle.${ch.direction}`)} className="shrink-0" />
         </span>
       </span>
       <IconButton
         icon={ch.isPlaying ? LuSquare : LuPlay}
-        label={ch.isPlaying ? `Stop ${ch.name}` : `Play ${ch.name}`}
+        label={ch.isPlaying ? t('scenes.list.stopNamed', { name: ch.name }) : t('scenes.chaseList.playNamed', { name: ch.name })}
         size="sm"
         variant="secondary"
         active={ch.isPlaying}
@@ -163,67 +175,95 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
   selectedStepId: string | null
   onSelectStep: (id: string | null) => void
 }) {
+  const t = useT()
   const pb = usePlaybackStore.getState
+  const stepScope = useRef<HTMLDivElement>(null)
   const mapping = useMidiStore((s) => s.mappings.find((m) => m.target.type === 'chase_toggle' && m.target.id === ch.id))
   const learning = useMidiStore((s) => s.isLearning && s.learnTarget?.type === 'chase_toggle' && s.learnTarget.id === ch.id)
   const [tapFlash, setTapFlash] = useState(0)
   const selectedIndex = ch.steps.findIndex((s) => s.id === selectedStepId)
   const beat = 60 / (ch.bpm > 0 ? ch.bpm : 120)
+  const selectedStep = selectedIndex >= 0 ? ch.steps[selectedIndex] : undefined
+
+  // Delete / Mod+D in the step table: the selected step (else the chase)
+  useSelectionActions(
+    selectedStep ? stepSelectionActions(ch.id, selectedStep, selectedIndex, onSelectStep) : chaseSelectionActions(ch),
+    { scope: stepScope }
+  )
 
   const addStep = () => {
     const cap = capture(true)
     if (cap.channelCount === 0) {
-      toast.warning('Nothing to record', { description: 'Set levels in Fixtures (programmer) first.' })
+      toast.warning(t('scenes.record.nothing'), { description: t('scenes.record.nothingHint') })
       return
     }
     recordAddStep(ch.id, cap)
     const after = usePlaybackStore.getState().chases.find((c) => c.id === ch.id)
     const last = after?.steps[after.steps.length - 1]
     if (last) onSelectStep(last.id)
-    toast.success(`Step ${ch.steps.length + 1} added to “${ch.name}”`, { description: `${cap.fixtureCount} fixtures · ${cap.channelCount} channels` })
-  }
-
-  const deleteChase = async () => {
-    const ok = await confirm({
-      title: `Delete chase “${ch.name}”?`,
-      message: `Its ${ch.steps.length} step${ch.steps.length === 1 ? '' : 's'} are removed. This cannot be undone.`,
-      confirmLabel: 'Delete chase',
-      tone: 'danger'
-    })
-    if (!ok) return
-    const list = pb().chases
-    const at = list.findIndex((c) => c.id === ch.id)
-    const neighbour = list[at + 1] ?? list[at - 1]
-    pb().removeChase(ch.id)
-    pb().selectChase(neighbour?.id ?? null)
+    toast.success(t('scenes.toast.stepAdded', { n: ch.steps.length + 1, name: ch.name }), { description: captureSummary(cap) })
   }
 
   const menu = (): MenuEntry[] => [
-    { type: 'label', label: ch.name },
+    { type: 'label', label: ch.name || translate('common.untitled') },
+    { label: translate('common.renameEllipsis'), icon: LuPencil, shortcut: 'F2', onSelect: () => focusNameField(`chase:${ch.id}`) },
+    { label: translate('scenes.chase.duplicate'), icon: LuCopy, shortcut: 'Mod+D', onSelect: () => { duplicateChase(ch) } },
     learning
-      ? { label: 'Cancel MIDI learn', icon: LuX, onSelect: () => useMidiStore.getState().cancelLearn() }
-      : { label: mapping ? 'Re-learn MIDI start/stop…' : 'MIDI learn start/stop…', icon: LuPiano, description: 'Then press a MIDI key or pad', onSelect: () => useMidiStore.getState().startLearn({ type: 'chase_toggle', id: ch.id, label: ch.name }) },
+      ? { label: translate('scenes.midi.cancelLearn'), icon: LuX, onSelect: () => useMidiStore.getState().cancelLearn() }
+      : { label: mapping ? translate('scenes.midi.relearnChase') : translate('scenes.midi.learnChase'), icon: LuPiano, description: translate('scenes.midi.learnHint'), onSelect: () => useMidiStore.getState().startLearn({ type: 'chase_toggle', id: ch.id, label: ch.name }) },
     { type: 'separator' },
-    { label: 'Delete chase…', icon: LuTrash2, danger: true, onSelect: () => void deleteChase() }
+    { label: translate('scenes.chase.deleteEllipsis'), icon: LuTrash2, danger: true, shortcut: 'Backspace', onSelect: () => void deleteChase(ch) }
   ]
 
   return (
-    <section aria-label={`Chase ${ch.name}`} className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <section aria-label={t('scenes.chase.aria', { name: ch.name })} data-chase-detail="" className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex min-h-control-lg shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-1.5">
-        <span className="shrink-0 font-mono text-xs tabular text-fg-tertiary">C{number}</span>
+        <span className="shrink-0 font-mono text-xs tabular text-fg-tertiary">{t('scenes.chase.numberShort', { n: number })}</span>
         <input
-          aria-label="Chase name"
+          aria-label={t('scenes.chase.nameAria')}
+          data-name-field={`chase:${ch.id}`}
           value={ch.name}
-          placeholder="Untitled chase"
+          placeholder={t('scenes.chase.namePlaceholder')}
           onChange={(e) => pb().updateChase(ch.id, { name: e.target.value })}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur() }}
           className="h-control-sm min-w-0 max-w-[360px] flex-1 truncate rounded bg-transparent px-1.5 text-base font-semibold text-fg-primary outline-none placeholder:text-fg-disabled hover:bg-surface-2 focus:bg-surface-0 focus:ring-1 focus:ring-info-fg"
         />
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-          {ch.isPlaying ? <Badge tone="go" variant="solid">LIVE</Badge> : <Badge>Stopped</Badge>}
-          {learning ? <Badge tone="midi" variant="solid" className="animate-pulse">MIDI learn…</Badge> : mapping && <Badge tone="midi" mono>{formatMidiSource(mapping)}</Badge>}
+          {ch.isPlaying ? <Badge tone="go" variant="solid">{t('scenes.liveBadge')}</Badge> : <Badge>{t('scenes.chase.stopped')}</Badge>}
+          {learning ? <Badge tone="midi" variant="solid" className="animate-pulse">{t('scenes.midi.learning')}</Badge> : mapping && <Badge tone="midi" mono>{formatMidiSource(mapping)}</Badge>}
         </div>
-        <DropdownMenu placement="bottom-end" items={menu} trigger={(p) => <IconButton {...p} icon={LuEllipsis} label="Chase actions" size="sm" />} />
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Visible (not only in the "…" menu): label from xl, icon + tooltip below */}
+          <Button
+            icon={LuCopy}
+            aria-label={t('scenes.chase.duplicate')}
+            tooltip={t('scenes.chase.duplicate')}
+            shortcut="Mod+D"
+            size="sm"
+            variant="ghost"
+            labelClassName="hidden xl:inline"
+            className="max-xl:w-control-sm max-xl:px-0"
+            data-chase-action="duplicate"
+            onClick={() => { duplicateChase(ch) }}
+          >
+            {t('common.duplicate')}
+          </Button>
+          <Button
+            icon={LuTrash2}
+            aria-label={t('scenes.chase.delete')}
+            tooltip={t('scenes.chase.delete')}
+            shortcut="Backspace"
+            size="sm"
+            variant="ghost"
+            labelClassName="hidden xl:inline"
+            className="text-danger-fg hover:bg-danger/15 max-xl:w-control-sm max-xl:px-0"
+            data-chase-action="delete"
+            onClick={() => void deleteChase(ch)}
+          >
+            {t('common.delete')}
+          </Button>
+          <DropdownMenu placement="bottom-end" items={menu} trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={t('scenes.chase.actions')} size="sm" />} />
+        </div>
       </header>
 
       {/* Playback */}
@@ -234,11 +274,11 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
               size="lg"
               icon={LuSquare}
               className="min-w-[120px] [[data-density=touch]_&]:min-w-[148px]"
-              tooltip="Stop the chase"
+              tooltip={t('scenes.chase.stopTooltip')}
               shortcut="Space"
               onClick={() => pb().toggleChase(ch.id, false)}
             >
-              Stop
+              {t('common.stop')}
             </Button>
           ) : (
             <Button
@@ -247,29 +287,29 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
               icon={LuPlay}
               disabled={ch.steps.length === 0}
               className="min-w-[120px] [[data-density=touch]_&]:min-w-[148px]"
-              tooltip="Start the chase"
+              tooltip={t('scenes.chase.playTooltip')}
               shortcut="Space"
               onClick={() => pb().toggleChase(ch.id, true)}
             >
-              Play
+              {t('scenes.chase.play')}
             </Button>
           )}
           <Button
             size="lg"
             variant="outline"
             className={cn('min-w-[92px] transition-colors', tapFlash % 2 === 1 && '!bg-accent/20')}
-            tooltip="Tap 2+ times to the beat"
+            tooltip={t('scenes.chase.tapTooltip')}
             onPress={() => { tapTempo(ch.id); setTapFlash((n) => n + 1) }}
             onRelease={() => setTapFlash((n) => (n % 2 === 1 ? n + 1 : n))}
           >
-            Tap
+            {t('scenes.chase.tap')}
           </Button>
         </div>
         <div className="flex items-center gap-2">
           <NumberField
             size="lg"
             className="w-[150px]"
-            label="BPM"
+            label={t('units.bpm')}
             value={Math.round(ch.bpm * 10) / 10}
             onChange={(v) => pb().setChaseBpm(ch.id, v)}
             min={1}
@@ -277,14 +317,14 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
             step={1}
             precision={ch.bpm % 1 === 0 ? 0 : 1}
           />
-          <span className="font-mono text-xs tabular text-fg-tertiary" title="Step time at this tempo">{formatSeconds(beat)} / step</span>
+          <span className="font-mono text-xs tabular text-fg-tertiary" title={t('scenes.chase.stepTimeTitle')}>{t('scenes.chase.perStep', { time: formatSeconds(beat) })}</span>
         </div>
         <div className="ml-auto flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1 [[data-density=touch]_&]:max-w-[320px]">
           <span className="flex items-baseline justify-between text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">
-            Level
+            {t('scenes.level')}
             <span className="font-mono text-xs normal-case tabular tracking-normal text-fg-secondary">{formatPercent(ch.faderLevel)}</span>
           </span>
-          <Slider aria-label="Chase level" value={ch.faderLevel} onChange={(v) => pb().setChaseFader(ch.id, v)} defaultValue={255} />
+          <Slider aria-label={t('scenes.chase.levelAria')} value={ch.faderLevel} onChange={(v) => pb().setChaseFader(ch.id, v)} defaultValue={255} />
         </div>
       </div>
 
@@ -292,48 +332,60 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-subtle px-3 py-2.5">
         <SegmentedControl<Direction>
           size="sm"
-          aria-label="Direction"
+          aria-label={t('scenes.chase.directionAria')}
           value={ch.direction}
           onChange={(d) => pb().updateChase(ch.id, { direction: d })}
-          items={DIRECTIONS.map((d) => ({ value: d.value, label: d.label, icon: d.icon, title: d.title }))}
+          items={DIRECTION_ORDER.map((d) => directionItem(d, t))}
         />
-        <NumberField size="sm" className="w-[132px]" label="Crossfade" value={ch.fadePercent} onChange={(v) => pb().updateChase(ch.id, { fadePercent: v })} min={0} max={100} step={1} unit="%" />
-        <NumberField size="sm" className="w-[104px]" label="Priority" value={ch.priority ?? 40} onChange={(v) => pb().updateChase(ch.id, { priority: v })} min={0} max={100} step={1} />
-        <Switch checked={ch.isLooping} onChange={(v) => pb().updateChase(ch.id, { isLooping: v })} label="Loop" className="min-h-0 gap-2" />
+        <NumberField size="sm" className="w-[132px]" label={t('scenes.chase.crossfade')} value={ch.fadePercent} onChange={(v) => pb().updateChase(ch.id, { fadePercent: v })} min={0} max={100} step={1} unit={t('units.percent')} />
+        <NumberField size="sm" className="w-[104px]" label={t('scenes.priority')} value={ch.priority ?? 40} onChange={(v) => pb().updateChase(ch.id, { priority: v })} min={0} max={100} step={1} />
+        <Switch checked={ch.isLooping} onChange={(v) => pb().updateChase(ch.id, { isLooping: v })} label={t('scenes.loop')} className="min-h-0 gap-2" />
       </div>
 
       {/* Steps toolbar */}
       <div className="flex h-control-lg shrink-0 items-center gap-1 border-b border-line px-3">
-        <h3 className="text-sm font-semibold text-fg-primary">Steps</h3>
+        <h3 className="text-sm font-semibold text-fg-primary">{t('common.steps')}</h3>
         <span className="text-xs tabular text-fg-tertiary">{ch.steps.length}</span>
         <div className="flex-1" />
-        {selectedIndex >= 0 && (
+        {selectedStep && (
           <>
-            <IconButton icon={LuArrowUp} size="sm" label="Move step up" disabled={selectedIndex <= 0} onClick={() => pb().moveChaseStep(ch.id, selectedIndex, selectedIndex - 1)} />
-            <IconButton icon={LuArrowDown} size="sm" label="Move step down" disabled={selectedIndex >= ch.steps.length - 1} onClick={() => pb().moveChaseStep(ch.id, selectedIndex, selectedIndex + 1)} />
+            <IconButton icon={LuArrowUp} size="sm" label={t('scenes.steps.moveUp')} disabled={selectedIndex <= 0} onClick={() => pb().moveChaseStep(ch.id, selectedIndex, selectedIndex - 1)} />
+            <IconButton icon={LuArrowDown} size="sm" label={t('scenes.steps.moveDown')} disabled={selectedIndex >= ch.steps.length - 1} onClick={() => pb().moveChaseStep(ch.id, selectedIndex, selectedIndex + 1)} />
+            <IconButton
+              icon={LuCopy}
+              size="sm"
+              label={t('scenes.steps.duplicate')}
+              shortcut="Mod+D"
+              data-step-action="duplicate"
+              onClick={() => { const id = duplicateStep(ch.id, selectedStep, selectedIndex); if (id) onSelectStep(id) }}
+            />
             <IconButton
               icon={LuTrash2}
               size="sm"
-              label="Delete step"
-              className="hover:!text-danger-fg"
-              onClick={async () => { if (await deleteStep(ch.id, ch.steps[selectedIndex], selectedIndex)) onSelectStep(null) }}
+              label={t('scenes.steps.delete')}
+              shortcut="Backspace"
+              data-step-action="delete"
+              className="hover:bg-danger/15 hover:text-danger-fg"
+              onClick={() => void deleteStep(ch.id, selectedStep, selectedIndex, onSelectStep)}
             />
-            <Button size="sm" variant="ghost" icon={LuRefreshCw} tooltip="Merge the programmer into the selected step" onClick={() => updateStepFromProgrammer(ch.id, ch.steps[selectedIndex], selectedIndex, 'merge')}>Update</Button>
+            <Button size="sm" variant="ghost" icon={LuRefreshCw} tooltip={t('scenes.steps.updateTooltip')} onClick={() => updateStepFromProgrammer(ch.id, selectedStep, selectedIndex, 'merge')}>{t('common.update')}</Button>
           </>
         )}
-        <Button size="sm" variant="secondary" icon={LuCircleDot} className="text-accent-fg" tooltip="Record the programmer as a new step at the end" onClick={addStep}>Add step</Button>
+        <Button size="sm" variant="secondary" icon={LuCircleDot} className="text-accent-fg" tooltip={t('scenes.steps.addTooltip')} onClick={addStep}>{t('scenes.steps.add')}</Button>
       </div>
 
       <div data-reorder-scroll="" className="min-h-0 flex-1 overflow-y-auto">
         {ch.steps.length === 0 ? (
           <EmptyState
             icon={LuListMusic}
-            title="No steps yet"
-            description="Set a look in Fixtures and record it as step 1, then change the look and add the next step."
-            action={<Button variant="primary" icon={LuCircleDot} onClick={addStep}>Record step 1</Button>}
+            title={t('scenes.steps.emptyTitle')}
+            description={t('scenes.steps.emptyText')}
+            action={<Button variant="primary" icon={LuCircleDot} onClick={addStep}>{t('scenes.steps.recordFirst')}</Button>}
           />
         ) : (
-          <StepTable chase={ch} selectedStepId={selectedStepId} onSelectStep={onSelectStep} beat={beat} />
+          <div ref={stepScope} data-step-table="">
+            <StepTable chase={ch} selectedStepId={selectedStepId} onSelectStep={onSelectStep} beat={beat} />
+          </div>
         )}
       </div>
     </section>
@@ -343,22 +395,11 @@ export function ChaseDetail({ chase: ch, number, selectedStepId, onSelectStep }:
 function updateStepFromProgrammer(chaseId: string, step: ChaseStep, index: number, mode: 'merge' | 'replace') {
   const cap = capture(true)
   if (cap.channelCount === 0) {
-    toast.warning('Nothing to record', { description: 'Set levels in Fixtures (programmer) first.' })
+    toast.warning(translate('scenes.record.nothing'), { description: translate('scenes.record.nothingHint') })
     return
   }
   recordUpdateStep(chaseId, step.id, cap, mode)
-  toast.success(`Step ${index + 1} ${mode === 'merge' ? 'updated' : 'replaced'}`, { description: `${cap.fixtureCount} fixtures · ${cap.channelCount} channels` })
-}
-
-async function deleteStep(chaseId: string, step: ChaseStep, index: number): Promise<boolean> {
-  const ok = await confirm({
-    title: `Delete step ${index + 1}?`,
-    message: `Its ${step.values.length} channel values are removed.`,
-    confirmLabel: 'Delete step',
-    tone: 'danger'
-  })
-  if (ok) usePlaybackStore.getState().removeChaseStep(chaseId, step.id)
-  return ok
+  toast.success(translate(mode === 'merge' ? 'scenes.toast.stepUpdated' : 'scenes.toast.stepReplaced', { n: index + 1 }), { description: captureSummary(cap) })
 }
 
 // ---------------------------------------------------------------
@@ -371,6 +412,7 @@ function StepTable({ chase: ch, selectedStepId, onSelectStep, beat }: {
   onSelectStep: (id: string) => void
   beat: number
 }) {
+  const t = useT()
   const { drag, handleProps } = useReorder((from, to) => usePlaybackStore.getState().moveChaseStep(ch.id, from, to))
   const patch = usePatchStore((s) => s.patch)
   const names = useMemo(() => new Map(patch.map((p) => [p.id, p.name])), [patch])
@@ -387,12 +429,12 @@ function StepTable({ chase: ch, selectedStepId, onSelectStep, beat }: {
       </colgroup>
       <THead>
         <Tr>
-          <Th className="px-0"><span className="sr-only">Reorder</span></Th>
-          <Th className="pl-2">Step</Th>
-          <Th className="pl-2">Look</Th>
-          <Th align="right" className="px-1.5">Contents</Th>
-          <Th className="px-1.5" title="Step time: one beat at the chase tempo, or a fixed hold time">Time</Th>
-          <Th className="px-0"><span className="sr-only">Actions</span></Th>
+          <Th className="px-0"><span className="sr-only">{t('scenes.table.reorder')}</span></Th>
+          <Th className="pl-2">{t('common.step')}</Th>
+          <Th className="pl-2">{t('scenes.steps.look')}</Th>
+          <Th align="right" className="px-1.5">{t('scenes.steps.contents')}</Th>
+          <Th className="px-1.5" title={t('scenes.steps.timeTitle')}>{t('scenes.steps.time')}</Th>
+          <Th className="px-0"><span className="sr-only">{t('scenes.table.actions')}</span></Th>
         </Tr>
       </THead>
       <TBody>
@@ -430,26 +472,29 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
   handleProps: ReturnType<typeof useReorder>['handleProps']
   onSelect: (id: string) => void
 }) {
+  const t = useT()
   const swatches = useMemo(() => lookSwatches(step.values), [step.values])
   const fixtures = useMemo(() => countFixtures(step.values), [step.values])
   const hold = step.holdTime && step.holdTime > 0 ? step.holdTime : null
   const pb = usePlaybackStore.getState
 
   const menu = (): MenuEntry[] => [
-    { type: 'label', label: `Step ${index + 1}` },
-    { label: 'Update from programmer', description: 'Merge: add / override channels', icon: LuRefreshCw, onSelect: () => updateStepFromProgrammer(chaseId, step, index, 'merge') },
-    { label: 'Replace with programmer', description: 'The step keeps only the new values', icon: LuReplace, onSelect: () => updateStepFromProgrammer(chaseId, step, index, 'replace') },
+    { type: 'label', label: translate('scenes.stepN', { n: index + 1 }) },
+    { label: translate('scenes.update.fromProgrammer'), description: translate('scenes.update.mergeDescription'), icon: LuRefreshCw, onSelect: () => updateStepFromProgrammer(chaseId, step, index, 'merge') },
+    { label: translate('scenes.update.replaceWithProgrammer'), description: translate('scenes.update.replaceStepDescription'), icon: LuReplace, onSelect: () => updateStepFromProgrammer(chaseId, step, index, 'replace') },
     { type: 'separator' },
-    { label: 'Move up', icon: LuArrowUp, disabled: index === 0, onSelect: () => pb().moveChaseStep(chaseId, index, index - 1) },
-    { label: 'Move down', icon: LuArrowDown, disabled: index >= count - 1, onSelect: () => pb().moveChaseStep(chaseId, index, index + 1) },
+    { label: translate('scenes.table.moveUp'), icon: LuArrowUp, disabled: index === 0, onSelect: () => pb().moveChaseStep(chaseId, index, index - 1) },
+    { label: translate('scenes.table.moveDown'), icon: LuArrowDown, disabled: index >= count - 1, onSelect: () => pb().moveChaseStep(chaseId, index, index + 1) },
     { type: 'separator' },
-    { label: 'Delete step…', icon: LuTrash2, danger: true, onSelect: () => void deleteStep(chaseId, step, index) }
+    { label: translate('scenes.steps.duplicate'), icon: LuCopy, shortcut: 'Mod+D', onSelect: () => { const id = duplicateStep(chaseId, step, index); if (id) onSelect(id) } },
+    { label: translate('scenes.steps.deleteEllipsis'), icon: LuTrash2, danger: true, shortcut: 'Backspace', onSelect: () => void deleteStep(chaseId, step, index) }
   ]
 
   return (
     <Tr
       data-reorder-index={index}
       selected={selected}
+      data-step-row={step.id}
       onClick={() => onSelect(step.id)}
       className={cn(
         'cursor-default',
@@ -461,8 +506,8 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
       <Td className="px-0">
         <button
           type="button"
-          aria-label={`Drag to reorder step ${index + 1}`}
-          title="Drag to reorder"
+          aria-label={t('scenes.steps.dragAria', { n: index + 1 })}
+          title={t('scenes.table.dragTitle')}
           {...handleProps(index)}
           className="flex h-row w-full cursor-grab touch-none items-center justify-center text-fg-tertiary hover:text-fg-primary active:cursor-grabbing"
         >
@@ -471,19 +516,19 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
       </Td>
       <Td className="pl-2 pr-1">
         <span className={cn('flex items-center gap-1 font-mono text-xs font-semibold tabular', current ? 'text-go-fg' : 'text-fg-primary')}>
-          {current ? <LuPlay size={12} aria-label="Playing" className="fill-current" /> : <span className="w-3" />}
+          {current ? <LuPlay size={12} aria-label={t('common.playing')} className="fill-current" /> : <span className="w-3" />}
           {index + 1}
         </span>
       </Td>
       <Td className="pl-2 pr-1.5">
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden" title={swatches.length ? 'Approximate colour / level of each fixture' : undefined}>
+        <span className="flex min-w-0 items-center gap-1 overflow-hidden" title={swatches.length ? t('scenes.steps.lookTitle') : undefined}>
           {swatches.length === 0 ? (
-            <span className="text-xs text-fg-tertiary">No colour or level (position / beam only)</span>
+            <span className="truncate text-xs text-fg-tertiary">{t('scenes.steps.noColour')}</span>
           ) : swatches.length <= 4 ? (
             swatches.map((s) => (
               <span key={s.id} className="flex min-w-0 shrink items-center gap-1.5 pr-2">
                 <span aria-hidden className="h-3.5 w-3.5 shrink-0 rounded-sm ring-1 ring-inset ring-line-strong [[data-density=touch]_&]:h-5 [[data-density=touch]_&]:w-5" style={{ backgroundColor: s.color }} />
-                <span className="truncate text-xs text-fg-secondary">{names.get(s.id) ?? 'Unpatched'}</span>
+                <span className="truncate text-xs text-fg-secondary">{names.get(s.id) ?? t('scenes.steps.unpatched')}</span>
               </span>
             ))
           ) : (
@@ -500,37 +545,37 @@ const StepRow = memo(function StepRow({ chaseId, step, index, count, current, se
           {swatches.length > 24 && <span className="text-xs text-fg-tertiary">+{swatches.length - 24}</span>}
         </span>
       </Td>
-      <Td mono align="right" className="px-1.5 text-fg-secondary">{fixtures} fix · {step.values.length} ch</Td>
+      <Td mono align="right" className="px-1.5 text-fg-secondary">{t('scenes.programmer.counts', { fixtures, channels: step.values.length })}</Td>
       <Td className="px-1.5">
         {hold === null ? (
           <Button
             variant="ghost"
             size="sm"
             className="w-full justify-start text-fg-tertiary"
-            tooltip="One beat at the chase tempo. Click to hold this step for a fixed time."
+            tooltip={t('scenes.steps.beatTooltip')}
             onClick={(e) => { e.stopPropagation(); pb().updateChaseStep(chaseId, step.id, { holdTime: Math.max(0.1, Math.round(beat * 10) / 10) }) }}
           >
-            1 beat · {formatSeconds(beat)}
+            <span className="truncate">{t('scenes.steps.oneBeat', { time: formatSeconds(beat) })}</span>
           </Button>
         ) : (
           <span className="flex items-center gap-0.5">
             <NumberField
               size="sm"
               className="min-w-0 flex-1"
-              label="Hold"
+              label={t('scenes.steps.hold')}
               value={hold}
               onChange={(v) => pb().updateChaseStep(chaseId, step.id, { holdTime: v })}
               min={0.1}
               max={600}
               step={0.1}
-              unit="s"
+              unit={t('units.seconds')}
             />
-            <IconButton icon={LuX} size="xs" label="Back to one beat" onClick={(e) => { e.stopPropagation(); pb().updateChaseStep(chaseId, step.id, { holdTime: undefined }) }} />
+            <IconButton icon={LuX} size="xs" label={t('scenes.steps.backToBeat')} onClick={(e) => { e.stopPropagation(); pb().updateChaseStep(chaseId, step.id, { holdTime: undefined }) }} />
           </span>
         )}
       </Td>
       <Td className="px-0 text-center" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu placement="bottom-end" items={menu} trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={`Step ${index + 1} actions`} size="sm" />} />
+        <DropdownMenu placement="bottom-end" items={menu} trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={t('scenes.steps.actionsAria', { n: index + 1 })} size="sm" />} />
       </Td>
     </Tr>
   )

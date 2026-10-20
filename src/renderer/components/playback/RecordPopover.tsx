@@ -13,12 +13,14 @@ import { LuCirclePlus, LuCircleDot, LuListPlus, LuRefreshCw, LuSparkles, LuTrian
 import {
   Button, Checkbox, Popover, SegmentedControl, Switch, TextInput, cn, toast
 } from '@renderer/components/ui'
+import { formatList, useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import {
-  capture, clearProgrammerAfterRecord, recordAddCue, recordAddStep, recordNewChase, recordNewScene, recordUpdateCue, recordUpdateStep,
+  capture, captureSummary, clearProgrammerAfterRecord, recordAddCue, recordAddStep, recordNewChase, recordNewScene, recordUpdateCue, recordUpdateStep,
   type Capture
 } from './record'
+import { formatCueNumber } from './actions'
 
 type Target = 'new' | 'add' | 'update'
 
@@ -57,6 +59,7 @@ export interface RecordPopoverProps {
 }
 
 export function RecordPopover(props: RecordPopoverProps) {
+  const t = useT()
   return (
     <Popover
       open={props.open}
@@ -64,7 +67,7 @@ export function RecordPopover(props: RecordPopoverProps) {
       anchor={props.anchor}
       placement="bottom-end"
       className="w-[400px] max-w-[calc(100vw-24px)] [[data-density=touch]_&]:w-[460px]"
-      aria-label="Record"
+      aria-label={t('common.record')}
     >
       {props.open && <RecordForm {...props} />}
     </Popover>
@@ -72,6 +75,7 @@ export function RecordPopover(props: RecordPopoverProps) {
 }
 
 function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCue }: RecordPopoverProps) {
+  const t = useT()
   const [prefs, setPrefs] = useState(readPrefs)
   const update = (p: Partial<RecordPrefs>) => setPrefs((cur) => {
     const next = { ...cur, ...p }
@@ -85,11 +89,11 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
   // The programmer can still change while the popover is open (≤ 4 Hz)
   useEffect(() => {
     setCap(capture(selectedOnly))
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       const next = capture(selectedOnly)
       setCap((cur) => (cur.channelCount === next.channelCount && cur.fixtureCount === next.fixtureCount && cur.source === next.source && cur.effects.length === next.effects.length ? cur : next))
     }, 300)
-    return () => clearInterval(t)
+    return () => clearInterval(timer)
   }, [selectedOnly, selectionCount])
 
   const scene = usePlaybackStore((s) => (pane === 'scenes' ? s.cuelists.find((c) => c.id === s.selectedCuelistId) ?? null : null))
@@ -117,37 +121,40 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
         const id = recordNewScene(fresh, { name, includeEffects: prefs.includeEffects })
         const cl = usePlaybackStore.getState().cuelists.find((c) => c.id === id)
         if (cl?.cues[0]) onRecordedCue?.(cl.cues[0].id)
-        message = `Scene “${cl?.name ?? ''}” recorded`
+        message = t('scenes.toast.sceneRecorded', { name: cl?.name ?? '' })
       } else if (target === 'add' && scene) {
         const cueId = recordAddCue(scene.id, fresh, name)
         if (cueId) onRecordedCue?.(cueId)
-        message = `Cue ${scene.cues.length + 1} added to “${scene.name}”`
+        message = t('scenes.toast.cueAdded', { number: scene.cues.length + 1, name: scene.name })
       } else if (target === 'update' && scene && updateCue) {
         recordUpdateCue(scene.id, updateCue.id, fresh, prefs.updateMode)
-        message = `Cue ${updateCue.number} ${prefs.updateMode === 'merge' ? 'updated' : 'replaced'}`
+        message = t(prefs.updateMode === 'merge' ? 'scenes.toast.cueUpdated' : 'scenes.toast.cueReplaced', { number: formatCueNumber(updateCue.number) })
       }
     } else {
       if (target === 'new') {
         const id = recordNewChase(fresh, name)
-        message = `Chase “${usePlaybackStore.getState().chases.find((c) => c.id === id)?.name ?? ''}” recorded`
+        message = t('scenes.toast.chaseRecorded', { name: usePlaybackStore.getState().chases.find((c) => c.id === id)?.name ?? '' })
       } else if (target === 'add' && chase) {
         recordAddStep(chase.id, fresh)
-        message = `Step ${chase.steps.length + 1} added to “${chase.name}”`
+        message = t('scenes.toast.stepAdded', { n: chase.steps.length + 1, name: chase.name })
       } else if (target === 'update' && chase && updateStep) {
         recordUpdateStep(chase.id, updateStep.id, fresh, prefs.updateMode)
-        message = `Step ${stepIndex + 1} ${prefs.updateMode === 'merge' ? 'updated' : 'replaced'}`
+        message = t(prefs.updateMode === 'merge' ? 'scenes.toast.stepUpdated' : 'scenes.toast.stepReplaced', { n: stepIndex + 1 })
       }
     }
-    if (prefs.clearAfter && fresh.source === 'programmer') clearProgrammerAfterRecord()
-    toast.success(message || 'Recorded', { description: `${fresh.fixtureCount} fixtures · ${fresh.channelCount} channels${prefs.clearAfter && fresh.source === 'programmer' ? ' · programmer cleared' : ''}` })
+    const cleared = prefs.clearAfter && fresh.source === 'programmer'
+    if (cleared) clearProgrammerAfterRecord()
+    toast.success(message || t('scenes.toast.recorded'), {
+      description: cleared ? t('scenes.toast.summaryCleared', { summary: captureSummary(fresh) }) : captureSummary(fresh)
+    })
     onClose()
   }
 
   const isScenes = pane === 'scenes'
   const showName = target !== 'update'
   const defaultName = isScenes
-    ? target === 'new' ? 'Scene name (optional)' : `Cue ${(scene?.cues.length ?? 0) + 1}`
-    : 'Chase name (optional)'
+    ? target === 'new' ? t('scenes.record.sceneNamePlaceholder') : t('scenes.defaults.cueName', { n: (scene?.cues.length ?? 0) + 1 })
+    : t('scenes.record.chaseNamePlaceholder')
 
   return (
     <form
@@ -156,28 +163,28 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
     >
       <header className="flex items-center gap-2 border-b border-line-subtle px-4 py-3">
         <LuCircleDot size={16} aria-hidden className="text-accent-fg" />
-        <h2 className="flex-1 text-base font-semibold text-fg-primary">Record {isScenes ? 'scene / cue' : 'chase / step'}</h2>
+        <h2 className="flex-1 text-base font-semibold text-fg-primary">{isScenes ? t('scenes.record.titleScenes') : t('scenes.record.titleChases')}</h2>
       </header>
 
       {/* What will be recorded */}
       <div className="flex flex-col gap-2 border-b border-line-subtle px-4 py-3">
-        <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Contents</div>
+        <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('scenes.record.contents')}</div>
         <div className={cn('flex items-center gap-3 rounded-lg px-3 py-2', empty ? 'bg-warning/10' : cap.source === 'programmer' ? 'bg-accent/10' : 'bg-surface-2')}>
           {empty ? <LuTriangleAlert size={16} aria-hidden className="shrink-0 text-warning-fg" /> : null}
           <div className="flex min-w-0 flex-1 flex-col">
             <span className={cn('text-sm font-medium', empty ? 'text-warning-fg' : 'text-fg-primary')}>
-              {empty ? 'Nothing to record' : cap.source === 'programmer' ? 'Programmer values' : 'Live output (programmer empty)'}
+              {empty ? t('scenes.record.nothing') : cap.source === 'programmer' ? t('scenes.record.sourceProgrammer') : t('scenes.record.sourceOutput')}
             </span>
             <span className="text-xs text-fg-tertiary">
               {empty
-                ? 'Set levels in Fixtures or turn on an effect first.'
-                : cap.source === 'programmer' ? 'Only the channels you touched are stored.' : 'Every channel above zero is stored.'}
+                ? t('scenes.record.nothingHintEffects')
+                : cap.source === 'programmer' ? t('scenes.record.sourceProgrammerHint') : t('scenes.record.sourceOutputHint')}
             </span>
           </div>
           {!empty && (
             <div className="flex shrink-0 flex-col items-end font-mono text-xs tabular text-fg-secondary">
-              <span>{cap.fixtureCount} fix</span>
-              <span>{cap.channelCount} ch</span>
+              <span>{t('scenes.record.fixturesShort', { count: cap.fixtureCount })}</span>
+              <span>{t('units.channelsShortValue', { count: cap.channelCount })}</span>
             </div>
           )}
         </div>
@@ -185,20 +192,20 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
           <Checkbox
             checked={selectedOnly}
             onChange={setSelectedOnly}
-            label={`Selected fixtures only (${selectionCount})`}
+            label={t('scenes.record.selectedOnly', { count: selectionCount })}
           />
         )}
       </div>
 
       {/* Target */}
-      <div role="radiogroup" aria-label="Record into" className="flex flex-col gap-1.5 px-4 py-3">
-        <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Record into</div>
+      <div role="radiogroup" aria-label={t('scenes.record.into')} className="flex flex-col gap-1.5 px-4 py-3">
+        <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('scenes.record.into')}</div>
         <TargetOption
           icon={LuCirclePlus}
           checked={target === 'new'}
           onSelect={() => update({ target: 'new' })}
-          title={isScenes ? 'New scene' : 'New chase'}
-          description={isScenes ? 'Creates a scene with this look as cue 1' : 'Creates a chase with this look as step 1'}
+          title={isScenes ? t('scenes.record.newScene') : t('scenes.record.newChase')}
+          description={isScenes ? t('scenes.record.newSceneHint') : t('scenes.record.newChaseHint')}
         />
         <TargetOption
           icon={LuListPlus}
@@ -206,11 +213,11 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
           disabled={!canAdd}
           onSelect={() => update({ target: 'add' })}
           title={isScenes
-            ? scene ? <>Add cue to <b className="font-semibold">{scene.name}</b></> : 'Add cue to selected scene'
-            : chase ? <>Add step to <b className="font-semibold">{chase.name}</b></> : 'Add step to selected chase'}
+            ? scene ? t.rich('scenes.record.addCueTo', { name: <b className="font-semibold">{scene.name}</b> }) : t('scenes.record.addCueSelected')
+            : chase ? t.rich('scenes.record.addStepTo', { name: <b className="font-semibold">{chase.name}</b> }) : t('scenes.record.addStepSelected')}
           description={isScenes
-            ? scene ? `Becomes cue ${(scene.cues[scene.cues.length - 1]?.number ?? 0) + 1}, after the last cue` : 'Select a scene first'
-            : chase ? `Becomes step ${chase.steps.length + 1}` : 'Select a chase first'}
+            ? scene ? t('scenes.record.becomesCue', { number: formatCueNumber((scene.cues[scene.cues.length - 1]?.number ?? 0) + 1) }) : t('scenes.record.selectSceneFirst')
+            : chase ? t('scenes.record.becomesStep', { n: chase.steps.length + 1 }) : t('scenes.record.selectChaseFirst')}
         />
         <TargetOption
           icon={LuRefreshCw}
@@ -218,21 +225,25 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
           disabled={!canUpdate}
           onSelect={() => update({ target: 'update' })}
           title={isScenes
-            ? updateCue ? <>Update cue {updateCue.number} <span className="text-fg-tertiary">{updateCue.name}</span></> : 'Update a cue'
-            : updateStep ? <>Update step {stepIndex + 1}</> : 'Update a step'}
+            ? updateCue
+              ? t.rich('scenes.record.updateCueN', { number: formatCueNumber(updateCue.number), name: <span className="text-fg-tertiary">{updateCue.name}</span> })
+              : t('scenes.record.updateACue')
+            : updateStep ? t('scenes.record.updateStepN', { n: stepIndex + 1 }) : t('scenes.record.updateAStep')}
           description={isScenes
-            ? updateCue ? `${updateCue.values.length} ch now · ${cueIndex >= 0 ? 'selected cue' : 'cue on stage'}` : 'Select a cue in the cue list'
-            : updateStep ? `${updateStep.values.length} ch now` : 'Select a step in the step list'}
+            ? updateCue
+              ? t(cueIndex >= 0 ? 'scenes.record.updateCueSelected' : 'scenes.record.updateCueOnStage', { count: updateCue.values.length })
+              : t('scenes.record.selectCueFirst')
+            : updateStep ? t('scenes.record.channelsNow', { count: updateStep.values.length }) : t('scenes.record.selectStepFirst')}
         >
           {target === 'update' && (
             <SegmentedControl
               size="xs"
-              aria-label="Update mode"
+              aria-label={t('scenes.record.updateModeAria')}
               value={prefs.updateMode}
               onChange={(v) => update({ updateMode: v })}
               items={[
-                { value: 'merge' as const, label: 'Merge', title: 'Add / override channels, keep the others' },
-                { value: 'replace' as const, label: 'Replace', title: 'The cue holds only the new values' }
+                { value: 'merge' as const, label: t('scenes.update.merge'), title: t('scenes.update.mergeTitle') },
+                { value: 'replace' as const, label: t('scenes.update.replace'), title: isScenes ? t('scenes.update.replaceCueDescription') : t('scenes.update.replaceStepDescription') }
               ]}
             />
           )}
@@ -244,7 +255,7 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
           <TextInput
             ref={nameInput}
             size="sm"
-            aria-label="Name"
+            aria-label={t('common.name')}
             placeholder={defaultName}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -255,22 +266,29 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
             checked={prefs.includeEffects && cap.effects.length > 0}
             disabled={cap.effects.length === 0}
             onChange={(v) => update({ includeEffects: v })}
-            label={<span className="inline-flex items-center gap-1.5"><LuSparkles size={14} aria-hidden className="text-fg-tertiary" />Include running effects</span>}
-            description={cap.effects.length > 0 ? `${cap.effects.length} running: ${cap.effects.slice(0, 3).map((e) => e.name).join(', ')}${cap.effects.length > 3 ? '…' : ''}` : 'No effect is running'}
+            label={<span className="inline-flex items-center gap-1.5"><LuSparkles size={14} aria-hidden className="text-fg-tertiary" />{t('scenes.record.includeEffects')}</span>}
+            description={cap.effects.length > 0
+              ? t('scenes.record.runningEffects', {
+                count: cap.effects.length,
+                names: cap.effects.length > 3 ? `${cap.effects.slice(0, 3).map((e) => e.name).join(', ')}…` : formatList(cap.effects.map((e) => e.name))
+              })
+              : t('scenes.record.noEffectRunning')}
           />
         )}
         <Switch
           checked={prefs.clearAfter}
           onChange={(v) => update({ clearAfter: v })}
-          label="Clear programmer after recording"
-          description="REC + Clear: release your manual values once stored"
+          label={t('scenes.record.clearAfter')}
+          description={t('scenes.record.clearAfterHint')}
         />
       </div>
 
       <footer className="flex items-center justify-end gap-2 border-t border-line-subtle px-4 py-3">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
         <Button type="submit" variant="primary" icon={LuCircleDot} disabled={empty} data-autofocus="">
-          {target === 'new' ? (isScenes ? 'Record scene' : 'Record chase') : target === 'add' ? (isScenes ? 'Record cue' : 'Record step') : 'Update'}
+          {target === 'new'
+            ? (isScenes ? t('scenes.list.recordScene') : t('scenes.chaseList.recordChase'))
+            : target === 'add' ? (isScenes ? t('scenes.record.recordCue') : t('scenes.record.recordStep')) : t('common.update')}
         </Button>
       </footer>
     </form>
