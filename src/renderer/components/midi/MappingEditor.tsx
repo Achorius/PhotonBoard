@@ -6,13 +6,18 @@ import { LuPiano, LuTrash2, LuX } from 'react-icons/lu'
 import {
   Button, Field, IconButton, NumberField, Section, SegmentedControl, Select, Switch, TextInput, cn
 } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import type { MidiMapping, MidiSourceType, MidiTargetType } from '@shared/types'
-import { BEHAVIORS, CATEGORY_LABEL, TARGETS, describeTarget, formatSourceNumber, refItems, useNameIndex, type Behavior, type TargetCategory } from './midi-model'
+import {
+  BEHAVIORS, TARGETS, behaviorDescription, behaviorLabel, categoryLabel, channelShort, describeTarget, formatSourceNumber, refItems,
+  targetDescription, targetLabel, useNameIndex, type Behavior
+} from './midi-model'
 import { deleteMapping } from './midi-actions'
 
 export function MappingEditor({ id, onClose }: { id: string; onClose: () => void }) {
+  const t = useT()
   const mapping = useMidiStore((s) => s.mappings.find((m) => m.id === id))
   const devices = useMidiStore((s) => s.devices)
   const index = useNameIndex()
@@ -45,76 +50,79 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
   const ref = meta.ref
   const inputNames = [...new Set(devices.filter((d) => d.type === 'input').map((d) => d.name))]
   if (mapping.source.deviceName && !inputNames.includes(mapping.source.deviceName)) inputNames.push(mapping.source.deviceName)
+  const behavior = (mapping.options.behavior || 'direct') as Behavior
+  const remove = () => { void deleteMapping(id).then((ok) => { if (ok) onClose() }) }
 
   return (
-    <aside aria-label="Edit mapping" className="flex h-full min-h-0 flex-col bg-surface-1">
+    <aside aria-label={t('midi.editor.region')} className="flex h-full min-h-0 flex-col bg-surface-1">
       <header className="flex min-h-control-lg shrink-0 items-center gap-2.5 border-b border-line-subtle py-1.5 pl-3 pr-1.5">
         <meta.icon size={16} aria-hidden className="shrink-0 text-midi-fg" />
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 className="truncate text-sm font-semibold">{mapping.name}</h2>
-          <p className="truncate font-mono text-xs text-fg-tertiary">{formatSourceNumber(mapping.source.type, mapping.source.number)} · ch {mapping.source.channel}</p>
+          <p className="truncate font-mono text-xs text-fg-tertiary">{formatSourceNumber(mapping.source.type, mapping.source.number)} · {channelShort(mapping.source.channel)}</p>
         </div>
-        <IconButton icon={LuX} label="Close" size="sm" onClick={onClose} />
+        <IconButton icon={LuTrash2} label={t('midi.editor.deleteMapping')} size="sm" className="text-fg-tertiary hover:text-danger-fg" onClick={remove} />
+        <IconButton icon={LuX} label={t('common.close')} size="sm" onClick={onClose} />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Mapping">
-          <Field label="Name"><NameInput value={mapping.name} onCommit={(name) => update({ name })} /></Field>
+        <Section title={t('midi.editor.mapping')}>
+          <Field label={t('common.name')}><NameInput value={mapping.name} onCommit={(name) => update({ name })} /></Field>
         </Section>
 
         <Section
-          title="Source"
+          title={t('midi.editor.source')}
           actions={
             <Button size="xs" variant="secondary" tone="midi" active={relearn} icon={LuPiano} onClick={() => setRelearn(!relearn)} className={cn(relearn && 'animate-pulse')}>
-              {relearn ? 'Move a control…' : 'Re-learn'}
+              {relearn ? t('midi.editor.moveControl') : t('midi.editor.relearn')}
             </Button>
           }
         >
-          <Field label="Device">
+          <Field label={t('midi.editor.device')}>
             {(fid) => (
               <Select
                 id={fid}
                 value={mapping.source.deviceName ?? ''}
                 onChange={(v) => setSource({ deviceName: v || undefined })}
-                options={[{ value: '', label: 'Any device' }, ...inputNames.map((n) => ({ value: n, label: n }))]}
+                options={[{ value: '', label: t('midi.editor.anyDevice') }, ...inputNames.map((n) => ({ value: n, label: n }))]}
               />
             )}
           </Field>
-          <Field label="Message">
+          <Field label={t('midi.editor.message')}>
             <SegmentedControl<MidiSourceType>
               fullWidth
-              aria-label="Message type"
+              aria-label={t('midi.editor.messageType')}
               value={mapping.source.type}
               onChange={(type) => setSource({ type })}
-              items={[{ value: 'cc', label: 'CC' }, { value: 'note', label: 'Note' }, { value: 'program', label: 'PC', title: 'Program change' }]}
+              items={[{ value: 'cc', label: 'CC' }, { value: 'note', label: t('midi.source.note') }, { value: 'program', label: 'PC', title: t('midi.editor.programChange') }]}
             />
           </Field>
-          <Field label="Channel"><NumberField aria-label="MIDI channel" value={mapping.source.channel} min={1} max={16} step={1} onChange={(channel) => setSource({ channel })} /></Field>
-          <Field label={mapping.source.type === 'note' ? 'Note' : mapping.source.type === 'program' ? 'Program' : 'Controller'}>
-            <NumberField aria-label="Number" value={mapping.source.number} min={0} max={127} step={1} onChange={(number) => setSource({ number })} />
+          <Field label={t('common.channel')}><NumberField aria-label={t('midi.editor.midiChannel')} value={mapping.source.channel} min={1} max={16} step={1} onChange={(channel) => setSource({ channel })} /></Field>
+          <Field label={mapping.source.type === 'note' ? t('midi.editor.note') : mapping.source.type === 'program' ? t('midi.editor.program') : t('midi.editor.controller')}>
+            <NumberField aria-label={t('midi.editor.number')} value={mapping.source.number} min={0} max={127} step={1} onChange={(number) => setSource({ number })} />
           </Field>
         </Section>
 
-        <Section title="Target">
-          <Field label="Control">
+        <Section title={t('midi.editor.target')}>
+          <Field label={t('midi.editor.control')}>
             {(fid) => (
               <Select<MidiTargetType>
                 id={fid}
                 value={mapping.target.type}
                 onChange={(type) => update({ target: { type, id: TARGETS[type].ref === TARGETS[mapping.target.type].ref ? mapping.target.id : undefined } })}
-                options={(Object.keys(TARGETS) as MidiTargetType[]).map((t) => ({ value: t, label: `${CATEGORY_LABEL[TARGETS[t].category as TargetCategory]} · ${TARGETS[t].label}` }))}
+                options={(Object.keys(TARGETS) as MidiTargetType[]).map((type) => ({ value: type, label: `${categoryLabel(TARGETS[type].category)} · ${targetLabel(type)}` }))}
               />
             )}
           </Field>
           {ref && (
-            <Field label={ref === 'cuelist' ? 'Scene' : ref === 'zone' ? 'Section' : ref[0].toUpperCase() + ref.slice(1)} error={target.missing ? 'Pick what this control drives' : undefined}>
+            <Field label={t(`midi.editor.ref.${ref}`)} error={target.missing ? t('midi.editor.pickTarget') : undefined}>
               {(fid) => (
                 <Select
                   id={fid}
                   value={mapping.target.id ?? ''}
                   onChange={(v) => update({ target: { type: mapping.target.type, id: v || undefined } })}
                   options={[
-                    { value: '', label: mapping.target.type === 'tap_tempo' ? 'Playing chases' : 'Choose…' },
-                    ...(mapping.target.id && !index.byRef[ref].has(mapping.target.id) ? [{ value: mapping.target.id, label: 'Missing' }] : []),
+                    { value: '', label: mapping.target.type === 'tap_tempo' ? t('midi.target.playingChases') : t('midi.editor.choose') },
+                    ...(mapping.target.id && !index.byRef[ref].has(mapping.target.id) ? [{ value: mapping.target.id, label: t('midi.target.missing') }] : []),
                     ...refItems(index, ref).map((it) => ({ value: it.id, label: it.name }))
                   ]}
                 />
@@ -124,45 +132,45 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
           {mapping.target.type === 'channel' && mapping.target.id && (
             <ChannelField fixtureId={mapping.target.id} value={mapping.target.parameter ?? ''} onChange={(parameter) => update({ target: { ...mapping.target, parameter } })} />
           )}
-          <p className="text-xs text-fg-tertiary">{meta.description}</p>
+          <p className="text-xs text-fg-tertiary">{targetDescription(mapping.target.type)}</p>
         </Section>
 
-        <Section title="Behaviour">
+        <Section title={t('midi.editor.behaviour')}>
           <SegmentedControl<Behavior>
             fullWidth
-            aria-label="Behaviour"
-            value={(mapping.options.behavior || 'direct') as Behavior}
-            onChange={(behavior) => setOptions({ behavior })}
-            items={BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
+            aria-label={t('midi.editor.behaviour')}
+            value={behavior}
+            onChange={(b) => setOptions({ behavior: b })}
+            items={BEHAVIORS.map((b) => ({ value: b, label: behaviorLabel(b) }))}
           />
-          <p className="text-xs text-fg-tertiary">{BEHAVIORS.find((b) => b.value === (mapping.options.behavior || 'direct'))?.description}</p>
+          <p className="text-xs text-fg-tertiary">{behaviorDescription(behavior)}</p>
           {mapping.source.type === 'cc' && (
-            <Field label="Encoding" hint={mapping.options.encoding === 'relative' ? 'Endless encoder: each step nudges the value' : 'Fader / knob: position = value'}>
+            <Field label={t('midi.editor.encoding')} hint={mapping.options.encoding === 'relative' ? t('midi.editor.encodingRelative') : t('midi.editor.encodingAbsolute')}>
               <SegmentedControl<'absolute' | 'relative'>
                 fullWidth
-                aria-label="Encoding"
+                aria-label={t('midi.editor.encoding')}
                 value={mapping.options.encoding}
                 onChange={(encoding) => setOptions({ encoding })}
-                items={[{ value: 'absolute', label: 'Absolute' }, { value: 'relative', label: 'Relative' }]}
+                items={[{ value: 'absolute', label: t('midi.editor.absolute') }, { value: 'relative', label: t('midi.editor.relative') }]}
               />
             </Field>
           )}
           {meta.continuous && (
             <>
-              <Field label="Range">
+              <Field label={t('midi.editor.range')}>
                 <div className="grid grid-cols-2 gap-2">
-                  <NumberField aria-label="Minimum" label="Min" value={mapping.options.min} min={0} max={255} step={1} onChange={(min) => setOptions({ min })} />
-                  <NumberField aria-label="Maximum" label="Max" value={mapping.options.max} min={0} max={255} step={1} onChange={(max) => setOptions({ max })} />
+                  <NumberField aria-label={t('midi.editor.minimum')} label={t('midi.editor.min')} value={mapping.options.min} min={0} max={255} step={1} onChange={(min) => setOptions({ min })} />
+                  <NumberField aria-label={t('midi.editor.maximum')} label={t('midi.editor.max')} value={mapping.options.max} min={0} max={255} step={1} onChange={(max) => setOptions({ max })} />
                 </div>
               </Field>
-              <Switch checked={mapping.options.inverted} onChange={(inverted) => setOptions({ inverted })} label="Inverted" description="Control up = value down" />
+              <Switch checked={mapping.options.inverted} onChange={(inverted) => setOptions({ inverted })} label={t('midi.editor.inverted')} description={t('midi.editor.invertedHint')} />
             </>
           )}
         </Section>
 
-        <Section title="Danger zone">
-          <Button size="sm" variant="danger-outline" icon={LuTrash2} className="self-start" onClick={() => { void deleteMapping(id).then((ok) => { if (ok) onClose() }) }}>
-            Delete mapping
+        <Section title={t('midi.editor.dangerZone')}>
+          <Button size="sm" variant="danger-outline" icon={LuTrash2} className="self-start" onClick={remove}>
+            {t('midi.editor.deleteMapping')}
           </Button>
         </Section>
       </div>
@@ -171,11 +179,13 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
 }
 
 function NameInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const t = useT()
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return (
     <TextInput
-      aria-label="Mapping name"
+      data-midi-mapping-name
+      aria-label={t('midi.editor.nameLabel')}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { const v = draft.trim(); if (v && v !== value) onCommit(v); else setDraft(value) }}
@@ -185,17 +195,18 @@ function NameInput({ value, onCommit }: { value: string; onCommit: (v: string) =
 }
 
 function ChannelField({ fixtureId, value, onChange }: { fixtureId: string; value: string; onChange: (v: string) => void }) {
+  const t = useT()
   const entry = usePatchStore((s) => s.patch.find((p) => p.id === fixtureId))
   const fixtures = usePatchStore((s) => s.fixtures)
   const channels = useMemo(() => (entry ? usePatchStore.getState().getFixtureChannels(entry).map((c) => c.name) : []), [entry, fixtures])
   return (
-    <Field label="Channel" error={value && !channels.includes(value) ? 'This channel no longer exists' : undefined}>
+    <Field label={t('common.channel')} error={value && !channels.includes(value) ? t('midi.editor.channelGone') : undefined}>
       {(fid) => (
         <Select
           id={fid}
           value={value}
           onChange={onChange}
-          options={[{ value: '', label: 'Choose…' }, ...(value && !channels.includes(value) ? [{ value, label: value }] : []), ...channels.map((c) => ({ value: c, label: c }))]}
+          options={[{ value: '', label: t('midi.editor.choose') }, ...(value && !channels.includes(value) ? [{ value, label: value }] : []), ...channels.map((c) => ({ value: c, label: c }))]}
         />
       )}
     </Field>
