@@ -89,8 +89,8 @@ export async function requestSaveAs(): Promise<boolean> {
 export async function requestUploadShow(file: File): Promise<void> {
   if (!(await resolveUnsaved(t('file.unsaved.replaceConsole')))) return
   const result = await uploadShowFile(file)
-  // main answers in English: "A show named … already exists"
-  if (result.status === 'error' && result.error?.includes('already exists')) {
+  // A show with that name exists on the console: ask, then overwrite
+  if (result.status === 'error' && result.exists) {
     const ok = await confirm({
       title: t('file.replace.consoleTitle'),
       message: t('file.replace.message'),

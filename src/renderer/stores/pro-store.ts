@@ -36,6 +36,13 @@ interface ProState {
   cliLog: CliLogEntry[]
   /** Executor GO / Back act on (null = the Scenes view selection) */
   selectedExecutor: ExecutorRef | null
+  /**
+   * What every column fader shows (0-255), key "page:col" (0-based), for
+   * the columns whose fader drives something. Computed on the console
+   * (lib/pro/column-fader-sync.ts: column levels, cell levels, GM, group
+   * and speed masters, rates), mirrored on remotes and the Stage window.
+   */
+  columnFaders: Record<string, number>
 
   setBlind: (on?: boolean) => void
   setHighlight: (on?: boolean) => void
@@ -44,6 +51,7 @@ interface ProState {
   appendCliLog: (entry: Omit<CliLogEntry, 'id' | 'time'> & { time?: number }) => CliLogEntry
   clearCliLog: () => void
   selectExecutor: (ref: ExecutorRef | null) => void
+  setColumnFaders: (values: Record<string, number>) => void
 }
 
 let logSeq = 0
@@ -61,6 +69,7 @@ export const useProStore = create<ProState>((set, get) => ({
   progTime: null,
   cliLog: [],
   selectedExecutor: null,
+  columnFaders: {},
 
   setBlind: (on) => {
     const blind = on ?? !get().blind
@@ -82,5 +91,11 @@ export const useProStore = create<ProState>((set, get) => ({
     const cur = get().selectedExecutor
     if (cur === ref || (cur && ref && cur.page === ref.page && cur.col === ref.col && cur.row === ref.row)) return
     set({ selectedExecutor: ref ? { page: ref.page, col: ref.col, row: ref.row } : null })
+  },
+  setColumnFaders: (values) => {
+    const cur = get().columnFaders
+    const keys = Object.keys(values)
+    if (keys.length === Object.keys(cur).length && keys.every((k) => cur[k] === values[k])) return
+    set({ columnFaders: values })
   }
 }))

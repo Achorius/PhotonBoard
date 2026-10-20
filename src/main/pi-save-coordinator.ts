@@ -11,6 +11,7 @@
 // ============================================================
 
 import type { ShowSaveResult } from '../shared/photonboard-api'
+import { mt } from './messages'
 
 export const PI_SAVE_TIMEOUT_MS = 15_000
 
@@ -34,20 +35,20 @@ export class PiSaveCoordinator {
   /** Ask the Pi renderer to save its show to `path`; resolves with the save result. */
   request(path: string, timeoutMs = PI_SAVE_TIMEOUT_MS): Promise<ShowSaveResult> {
     if (this.pending) {
-      return Promise.resolve({ success: false, error: 'Another save is already in progress — try again in a moment.' })
+      return Promise.resolve({ success: false, error: mt('saveInProgress') })
     }
     const id = `save-${Date.now().toString(36)}-${++this.counter}`
     return new Promise<ShowSaveResult>((resolve) => {
       const timer = setTimeout(() => {
         if (this.pending?.id !== id) return
         this.pending = null
-        resolve({ success: false, error: 'The PhotonBoard console did not answer the save request (is the main window open?).' })
+        resolve({ success: false, error: mt('consoleNoAnswer') })
       }, timeoutMs)
       this.pending = { id, path, resolve, timer }
       if (!this.sendCommand({ type: 'save-show', payload: { requestId: id } })) {
         clearTimeout(timer)
         this.pending = null
-        resolve({ success: false, error: 'The PhotonBoard console window is not running.' })
+        resolve({ success: false, error: mt('consoleNotRunning') })
       }
     })
   }
@@ -71,6 +72,6 @@ export class PiSaveCoordinator {
   }
 
   dispose(): void {
-    if (this.pending) this.complete(this.pending.id, { success: false, error: 'PhotonBoard is shutting down.' })
+    if (this.pending) this.complete(this.pending.id, { success: false, error: mt('shuttingDown') })
   }
 }

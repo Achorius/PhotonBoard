@@ -22,6 +22,7 @@ import { __resetFeedbackForTests, runFeedbackFrame, FadeTracker } from './midi-f
 import { FakeMidiAccess, installFakeWebMidi, type FakeMidiInput, type FakeMidiOutput } from './testing/fake-web-midi'
 import { abletonPalette } from './palette'
 import type { Cuelist } from '@shared/types'
+import { getColumnLevel, resetPlayback, setColumnLevel } from '@renderer/lib/playback-controller'
 
 const MK2 = 'APC mini mk2 Control'
 /** pad:col:row → note on the APC mini (note 0 bottom-left) */
@@ -64,6 +65,7 @@ beforeEach(() => {
   useDmxStore.setState({ grandMaster: 255, blackout: false, blinder: false, strobe: false })
   useProStore.setState({ selectedExecutor: null })
   useExecutorStore.getState().loadLayout(undefined)
+  resetPlayback() // column levels back to full
   A = addScene('A')
   B = addScene('B')
   C = addScene('C')
@@ -179,40 +181,52 @@ describe('controller runtime (fake Web MIDI)', () => {
     expect(useDmxStore.getState().strobe).toBe(false)
   })
 
+  // Column faders drive the COLUMN level (it scales the scenes fired from the column), not the scene's own fader
   it('soft takeover: a far fader picks up, ghost published meanwhile; jump mode applies at once', async () => {
     await boot()
-    usePlaybackStore.getState().setCuelistFader(A, 255)
-    apc.input.emit(cc(48, 0)) // fader 1 at the bottom, scene at full
-    expect(cl(A).faderLevel).toBe(255)
+    const col = () => getColumnLevel(0, 0)
+    expect(col()).toBe(255)
+    apc.input.emit(cc(48, 0)) // fader 1 at the bottom, column at full
+    expect(col()).toBe(255)
     expect(computeGhosts()).toEqual({ '0:0': 0 })
     apc.input.emit(cc(48, 100))
-    expect(cl(A).faderLevel).toBe(255)
+    expect(col()).toBe(255)
     apc.input.emit(cc(48, 126)) // within tolerance → picked up
-    expect(cl(A).faderLevel).toBe(253)
+    expect(col()).toBe(253)
     apc.input.emit(cc(48, 64))
-    expect(cl(A).faderLevel).toBe(129)
+    expect(col()).toBe(129)
+    expect(cl(A).faderLevel).toBe(255) // the scene's own fader is untouched
     expect(computeGhosts()).toEqual({})
     // page change re-arms
     const ex = useExecutorStore.getState()
     ex.addPage()
     ex.setPage(1)
     ex.setPage(0)
-    usePlaybackStore.getState().setCuelistFader(A, 0)
+    setColumnLevel(0, 0, 0)
     apc.input.emit(cc(48, 70))
-    expect(cl(A).faderLevel).toBe(0)
+    expect(col()).toBe(0)
     // jump mode
     useControllerStore.getState().updateSettings(MK2, { takeover: 'jump' })
     apc.input.emit(cc(48, 127))
-    expect(cl(A).faderLevel).toBe(255)
+    expect(col()).toBe(255)
+  })
+
+  it('a column fader set to a cell drives that scene\'s own fader', async () => {
+    await boot()
+    useExecutorStore.getState().setColumnFader(0, 0, { kind: 'cell', row: 0 })
+    usePlaybackStore.getState().setCuelistFader(A, 0)
+    useControllerStore.getState().updateSettings(MK2, { takeover: 'jump' })
+    apc.input.emit(cc(48, 64))
+    expect(cl(A).faderLevel).toBe(129)
+    expect(getColumnLevel(0, 0)).toBe(255)
   })
 
   it('fader positions reply: faders already in place are synced at connect', async () => {
     await boot()
-    usePlaybackStore.getState().setCuelistFader(A, 255)
     useDmxStore.getState().setGrandMaster(0)
     apc.input.emit([0xf0, 0x47, 0x7f, 0x4f, 0x61, 0x00, 0x09, 127, 0, 0, 0, 0, 0, 0, 0, 90, 0xf7])
     apc.input.emit(cc(48, 120)) // synced: applies
-    expect(cl(A).faderLevel).toBe(241)
+    expect(getColumnLevel(0, 0)).toBe(241)
     // faders 2-3 down while their scenes are full; GM fader up while the GM is at 0
     expect(computeGhosts()).toEqual({ '0:1': 0, '0:2': 0, gm: 181 })
     apc.input.emit(cc(56, 80)) // GM fader moves down, still above 0: no pickup

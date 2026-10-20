@@ -27,9 +27,10 @@ import {
 } from '@renderer/components/ui'
 import { t, useT } from '@renderer/i18n'
 import type { SurfaceActions } from './surface-actions'
-import { resolveCell, type ResolvedCell, type SurfaceIndex } from './surface-data'
+import { resolveCell, surfaceColumnFader, type ResolvedCell, type SurfaceIndex } from './surface-data'
+import { useColumnGhost, useGrandMasterGhost } from '../controller-ghosts'
 import {
-  columnFaderActive, columnFaderLevel, decodeColumnRef, decodeExecRef, isHoldFn, resolveExecPage, EXEC_ROWS
+  decodeColumnRef, decodeExecRef, isHoldFn, resolveExecPage, EXEC_ROWS
 } from '../executor-surface'
 import { KIND_ICON, cellName, fnBadge, fnBadgeTone } from '../cell-visuals'
 import { LevelBar } from '../SceneGrid'
@@ -278,7 +279,7 @@ function ExecutorTile({ cell, label, color, slot, selected, tall, ctx, onPhase }
 // Faders
 // ---------------------------------------------------------------
 
-function LevelControl({ value, onChange, color, label, vertical, disabled, big }: {
+function LevelControl({ value, onChange, color, label, vertical, disabled, big, ghost }: {
   value: number
   onChange: (v: number) => void
   color: string
@@ -286,21 +287,30 @@ function LevelControl({ value, onChange, color, label, vertical, disabled, big }
   vertical: boolean
   disabled?: boolean
   big: boolean
+  /** Unsynced MIDI fader position (pickup) */
+  ghost?: number | null
 }) {
   const [held, setHeld] = useHeldValue(value)
   const change = (v: number) => { setHeld(v); onChange(v) }
   if (vertical) {
     return (
       <div className="flex min-h-0 w-full flex-1 justify-center" data-no-swipe="">
-        <Fader value={held} onChange={change} defaultValue={255} color={color} ticks readout={false} disabled={disabled} aria-label={label} className={big ? 'w-full max-w-[112px]' : 'w-full max-w-[88px]'} />
+        <Fader value={held} onChange={change} defaultValue={255} color={color} ticks readout={false} disabled={disabled} ghost={ghost} aria-label={label} className={big ? 'w-full max-w-[112px]' : 'w-full max-w-[88px]'} />
       </div>
     )
   }
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col justify-end" data-no-swipe="">
-      <LevelBar value={held} color={color} label={label} onChange={disabled ? () => {} : change} />
+      <LevelBar value={held} color={color} label={label} ghost={ghost} onChange={disabled ? () => {} : change} />
     </div>
   )
+}
+
+/** Pickup ghost of a fader widget: column faders and the GM (console only; null elsewhere) */
+function useWidgetGhost(target: string, page: number, col: number): number | null {
+  const column = useColumnGhost(page, col)
+  const gm = useGrandMasterGhost()
+  return target === 'column' && col >= 0 ? column : target === 'gm' ? gm : null
 }
 
 function FaderWidget({ widget, ctx }: { widget: StageWidget; ctx: WidgetContext }) {
@@ -311,6 +321,8 @@ function FaderWidget({ widget, ctx }: { widget: StageWidget; ctx: WidgetContext 
   let value: number | null = null
   let color = widget.color || FALLBACK
   let onChange: ((v: number) => void) | undefined
+  let ghostPage = -1
+  let ghostCol = -1
   switch (target) {
     case 'cuelist':
     case 'chase': {
@@ -340,12 +352,9 @@ function FaderWidget({ widget, ctx }: { widget: StageWidget; ctx: WidgetContext 
         const col = page?.columns[ref.col]
         name = col?.title || t('stage.columnN', { n: ref.col + 1 })
         color = widget.color || col?.color || color
-        value = columnFaderActive(page, ref.col) ? columnFaderLevel(page, ref.col, {
-          cuelist: (id) => index.cuelists.get(id)?.faderLevel,
-          chase: (id) => index.chases.get(id)?.faderLevel,
-          group: (id) => index.groups.get(id)?.master,
-          grandMaster: index.data.grandMaster
-        }) ?? 255 : null
+        value = surfaceColumnFader(index.data, p, ref.col)
+        ghostPage = p
+        ghostCol = ref.col
         onChange = (v) => actions.columnFader(p, ref.col, v)
       }
       break
@@ -356,6 +365,7 @@ function FaderWidget({ widget, ctx }: { widget: StageWidget; ctx: WidgetContext 
       onChange = actions.grandMaster
       break
   }
+  const ghost = useWidgetGhost(target, ghostPage, ghostCol)
   if (value === null) return <Placeholder text={t('pro.stage.widget.notSet', { kind: t('pro.stage.widgetKinds.fader') })} />
   const label = widget.label || name
   return (
@@ -373,6 +383,7 @@ function FaderWidget({ widget, ctx }: { widget: StageWidget; ctx: WidgetContext 
         label={t('stage.sceneLevel', { name: label })}
         vertical={vertical}
         big={ctx.size === 'lg'}
+        ghost={ghost}
       />
     </Frame>
   )

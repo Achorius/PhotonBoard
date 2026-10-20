@@ -32,7 +32,8 @@ import { isProgrammerActive } from '@renderer/lib/dmx-mixer'
 import { clearProgrammerAll, programChannel, recordFromProgrammer } from '@renderer/lib/programmer-utils'
 import { historyStep, redo as historyRedo, undo as historyUndo } from '@renderer/lib/history'
 import { runMacro as cliRunMacro, stopMacro as cliStopMacro } from '@renderer/lib/cli'
-import type { AskChoice, ClearStage, ExecutorRef, ProApi, ProgTime, StoreCueResult } from './contracts'
+import type { AlignMode, AskChoice, ClearStage, ExecutorRef, ProApi, ProgTime, StoreCueResult } from './contracts'
+import { pauseCuelist } from '@renderer/lib/playback-controller'
 import {
   applyPreset as engineApplyPreset, getProgrammerMeta, isProgrammerFading, outputValuesOf, park as enginePark,
   releaseFixtures as engineRelease, setAttributeValues as engineSetValues, setHighlight as engineSetHighlight, setPresetRef,
@@ -51,6 +52,8 @@ import { tapSpeedMaster } from './speed-masters'
 export interface ProApiExtras {
   /** Current output (post-master) of every channel of these fixtures, for "Park" without a value */
   getOutputValues(fixtureIds: string[]): CueChannelValue[]
+  /** Fan alignment of the selection tools (cli/values AlignAwareApi) */
+  getAlign(): AlignMode | null
 }
 
 export interface ProApiOptions {
@@ -150,7 +153,8 @@ function setGroupFixtures(groupId: string, fixtureIds: string[]): void {
 
 async function dialogAsk(question: string, choices: AskChoice[]): Promise<string | null> {
   const { ask } = await import('@renderer/components/ui/dialogs')
-  return ask({ title: question, actions: choices.map(c => ({ id: c.id, label: c.label })) })
+  // Keypad-friendly: numbered choices, digits answer (the command line keypad has no mouse)
+  return ask({ title: question, numbered: true, actions: choices.map(c => ({ id: c.id, label: c.label })) })
 }
 
 /** The real ProApi over the app's stores. */
@@ -203,12 +207,17 @@ export function createProApi(options: ProApiOptions = {}): ProApi & ProApiExtras
 
     // ---------------------------------------------------------------- selection
     getSelection: () => [...usePatchStore.getState().selectedFixtureIds],
-    setSelection: (ids) => usePatchStore.getState().selectFixtures(ids),
+    setSelection: (ids) => {
+      usePatchStore.getState().selectFixtures(ids)
+      // A new selection starts on "all" again (Next / Prev restart)
+      useSelectionStore.getState().setStep(null)
+    },
     selectStep: (direction) => stepSelection(direction),
     getActiveSelection: () => getActiveSelection(),
     getMatricks: () => ({ ...useSelectionStore.getState().matricks }),
     setMatricks: (m) => useSelectionStore.getState().setMatricks(m),
     setAlign: (align) => useSelectionStore.getState().setAlign(align),
+    getAlign: () => useSelectionStore.getState().align,
 
     // ---------------------------------------------------------------- programmer
     setAttributeValues: (values, time) => engineSetValues(values, time),
@@ -423,7 +432,7 @@ export function createProApi(options: ProApiOptions = {}): ProApi & ProApiExtras
       return true
     },
     off: (id) => usePlaybackStore.getState().stopCuelist(id),
-    pause: () => { /* pause / resume of fades: P3 (cue engine) */ },
+    pause: (id) => { pauseCuelist(id) },
     releaseAll: () => usePlaybackStore.getState().releaseAll(),
 
     // ---------------------------------------------------------------- executors

@@ -26,7 +26,8 @@ import {
   controllerPortGone, handleControllerSysex, invalidateController, listControllers, rearmFaders, resyncControllers,
   routeControllerMessage, scheduleGhosts, syncControllers, updateOverrides
 } from './controller-runtime'
-import { invalidateMappingFeedback, requestFeedbackFrame, startFeedback, stopFeedback } from './midi-feedback'
+import { invalidateMappingFeedback, requestFeedbackFrame, setFadingProbe, startFeedback, stopFeedback } from './midi-feedback'
+import { isCuelistFading, isPlaybackControllerRunning } from '@renderer/lib/playback-controller'
 
 let stopAll: (() => void) | null = null
 
@@ -40,6 +41,8 @@ export function startMidiControllers(): () => void {
     portDisconnected: (name, type) => controllerPortGone(name, type)
   })
   startFeedback()
+  // "Fading" LEDs ask the cue engine (exact) instead of guessing from fade times
+  setFadingProbe((id) => (isPlaybackControllerRunning() ? isCuelistFading(id) : undefined))
 
   const changed = () => { requestFeedbackFrame(); scheduleGhosts() }
   const unsubs: (() => void)[] = []
@@ -57,7 +60,11 @@ export function startMidiControllers(): () => void {
   }))
   unsubs.push(usePatchStore.subscribe((s, p) => { if (s.groups !== p.groups) requestFeedbackFrame() }))
   unsubs.push(usePoolStore.subscribe((s, p) => { if (s.macros !== p.macros || s.groupMasters !== p.groupMasters) changed() }))
-  unsubs.push(useProStore.subscribe((s, p) => { if (s.selectedExecutor !== p.selectedExecutor) requestFeedbackFrame() }))
+  unsubs.push(useProStore.subscribe((s, p) => {
+    if (s.selectedExecutor !== p.selectedExecutor) requestFeedbackFrame()
+    // Column levels / rates moved elsewhere: pickup ghosts follow
+    if (s.columnFaders !== p.columnFaders) scheduleGhosts()
+  }))
   unsubs.push(useProgrammerStore.subscribe(() => requestFeedbackFrame()))
   unsubs.push(useMidiStore.subscribe((s, p) => {
     if (s.mappings !== p.mappings) {
@@ -85,6 +92,7 @@ export function startMidiControllers(): () => void {
   stopAll = () => {
     for (const u of unsubs) u()
     stopFeedback()
+    setFadingProbe(null)
     setMidiControllerHooks({})
     stopAll = null
   }

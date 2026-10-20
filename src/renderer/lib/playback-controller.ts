@@ -250,10 +250,9 @@ export function cuelistLayerFlags(cl: Pick<Cuelist, 'priorityMode'>, swap = fals
 
 type LayerFlagsSink = (layerId: string, flags: number) => void
 
-/** Default: the mixer's setLayerFlags (WP2) when it exists */
+/** Default: the mixer's layer flags */
 function defaultFlagsSink(layerId: string, flags: number): void {
-  const fn: unknown = Reflect.get(mixer, 'setLayerFlags')
-  if (typeof fn === 'function') (fn as LayerFlagsSink)(layerId, flags)
+  mixer.setLayerFlags(layerId, flags)
 }
 
 let flagsSink: LayerFlagsSink = defaultFlagsSink
@@ -602,8 +601,10 @@ export function noteFiredFrom(kind: ExecutorTargetKind, id: string, ref: Executo
 /** Runtime rate of a cuelist / chase (rate fader); 1 = none */
 export function setRuntimeRate(kind: 'cuelist' | 'chase', id: string, rate: number): void {
   const r = clampRate(rate)
+  if (r === (runtimeRates.get(rateKey(kind, id)) ?? 1)) return
   if (r === 1) runtimeRates.delete(rateKey(kind, id))
   else runtimeRates.set(rateKey(kind, id), r)
+  notifyColumns()
 }
 
 export function getRuntimeRate(kind: 'cuelist' | 'chase', id: string): number {
@@ -665,13 +666,20 @@ export function isChasePaused(id: string): boolean {
  * GO whose crossfade follows the fader (0→255 or 255→0); reaching the
  * other end completes it. Per-key timing keeps its proportions.
  */
+/** Last position (0-255) of a cuelist's X-fade fader (0 until moved) */
+export function getCrossfadeLevel(cuelistId: string): number {
+  return xfade.get(cuelistId)?.last ?? 0
+}
+
 export function crossfadeFader(cuelistId: string, level: number): void {
   const v = Math.max(0, Math.min(255, Number.isFinite(level) ? level : 0))
   const state = xfade.get(cuelistId)
   if (!state) {
     xfade.set(cuelistId, { last: v, dir: 0 })
+    notifyColumns()
     return
   }
+  if (state.last !== v) queueMicrotask(notifyColumns)
   const last = state.last
   state.last = v
   if (state.dir !== 0 && cueEngine.isManual(cuelistId)) {
@@ -736,6 +744,11 @@ export function startPlaybackController(): () => void {
   return stopFn
 }
 
+/** The controller runs (console, started): engine state is authoritative */
+export function isPlaybackControllerRunning(): boolean {
+  return stopFn !== null
+}
+
 /**
  * Release every cuelist and chase output immediately (show load / new show).
  * The store is not modified; the caller replaces it.
@@ -758,4 +771,9 @@ export function resetPlayback(): void {
   appliedFlags.clear()
   firedFrom.clear()
   columnScaleCache.clear()
+  // Column levels are runtime only: a new show starts with every column at full
+  if (columnLevels.size > 0) {
+    columnLevels.clear()
+    notifyColumns()
+  }
 }

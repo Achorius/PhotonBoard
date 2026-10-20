@@ -73,6 +73,8 @@ export interface SurfaceData {
   blackout: boolean
   blinder: boolean
   strobe: boolean
+  /** What each column fader shows: "page:col" → 0-255 (missing = drives nothing) */
+  columnFaders: Record<string, number>
 }
 
 /** Store slices buildSurfaceData reads */
@@ -95,6 +97,7 @@ export interface SurfaceSources {
   blackout: boolean
   blinder: boolean
   strobe: boolean
+  columnFaders: Readonly<Record<string, number>>
 }
 
 // ---------------------------------------------------------------
@@ -191,8 +194,15 @@ export function buildSurfaceData(s: SurfaceSources): SurfaceData {
     grandMaster: s.grandMaster,
     blackout: s.blackout,
     blinder: s.blinder,
-    strobe: s.strobe
+    strobe: s.strobe,
+    columnFaders: s.columnFaders as Record<string, number>
   }
+}
+
+/** Level a column fader shows (0-255), null = it drives nothing (hidden / disabled) */
+export function surfaceColumnFader(data: Pick<SurfaceData, 'columnFaders'>, page: number, col: number): number | null {
+  const v = data.columnFaders?.[`${page}:${col}`]
+  return typeof v === 'number' ? v : null
 }
 
 // ---------------------------------------------------------------
@@ -353,6 +363,8 @@ export interface SnapshotLike {
   pages?: { id: string; name: string }[]
   speedMasters?: { id: string; number: number; name: string; bpm: number }[]
   runningEffects?: string[]
+  groupMasters?: Record<string, number>
+  columnFaders?: Record<string, number>
 }
 
 const modeOf = (m: unknown): ExecutorSceneMode => (m === 'trigger' || m === 'flash' ? m : 'toggle')
@@ -394,7 +406,7 @@ export function surfaceFromSnapshot(s: SnapshotLike): SurfaceData {
     effects: (s.runningEffects ?? []).map((id) => ({ id, name: '', isRunning: true })),
     macros: [],
     presets: [],
-    groups: s.groups.map((g) => ({ ...g, master: 255 })),
+    groups: s.groups.map((g) => ({ ...g, master: s.groupMasters?.[g.id] ?? 255 })),
     activeGroupId: null,
     selectionCount: s.selectedFixtureIds.length,
     speedMasters: s.speedMasters ?? [],
@@ -402,6 +414,7 @@ export function surfaceFromSnapshot(s: SnapshotLike): SurfaceData {
     grandMaster: s.grandMaster,
     blackout: s.blackout,
     blinder: s.blinder,
-    strobe: s.strobe
+    strobe: s.strobe,
+    columnFaders: s.columnFaders ?? {}
   }
 }

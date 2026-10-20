@@ -6,8 +6,8 @@
 //   - button functions: which ones act while held (TRIG / FLASH…)
 //   - page labels, page stepping, swipe recognition
 //   - executor widget references ("page.col.row", 1-based, 0 = current page)
-//   - column faders: the level they show, and the existing remote
-//     commands they map to (Stage window: no store, only commands)
+//   - column faders: their function, the 'column-fader' remote command
+//     (what they show: SurfaceData.columnFaders, computed on the console)
 // ============================================================
 
 import type { ExecutorButtonFn, ExecutorCell, ExecutorColumnFader, ExecutorSceneMode, ExecutorTargetKind } from '@shared/types'
@@ -134,89 +134,19 @@ export interface ColumnPageLike {
   columns: { fader?: ExecutorColumnFader }[]
 }
 
-export interface LevelLookup {
-  cuelist(id: string): number | undefined
-  chase(id: string): number | undefined
-  group(id: string): number | undefined
-  grandMaster: number
-}
-
 /** Fader function of a column (default: the column's cells) */
 export function columnFaderOf(page: ColumnPageLike | undefined, col: number): ExecutorColumnFader {
   return page?.columns[col]?.fader ?? { kind: 'column' }
 }
 
-function cellLevel(cell: CellRefData | null | undefined, l: LevelLookup): number | undefined {
-  if (!cell) return undefined
-  if (cell.kind === 'cuelist') return l.cuelist(cell.id)
-  if (cell.kind === 'chase') return l.chase(cell.id)
-  if (cell.kind === 'group') return l.group(cell.id)
-  return undefined
-}
-
 /**
- * Level a column fader shows (0-255): the first fader-driven cell of the
- * column, the grand master, a group master. null = nothing to show
- * (empty column, speed / rate / x-fade functions).
+ * A column fader as a remote command (the Stage window has no store: it
+ * can only send commands). The console applies the column's fader
+ * function (lib/pro/executor-actions columnFader); what the fader shows
+ * comes back in the surface data (columnFaders).
  */
-export function columnFaderLevel(page: ColumnPageLike | undefined, col: number, lookup: LevelLookup): number | null {
-  if (!page) return null
-  const fader = columnFaderOf(page, col)
-  switch (fader.kind) {
-    case 'column': {
-      for (const cell of page.cells[col] ?? []) {
-        const v = cellLevel(cell, lookup)
-        if (v !== undefined) return v
-      }
-      return null
-    }
-    case 'cell': return cellLevel(page.cells[col]?.[fader.row], lookup) ?? null
-    case 'grandmaster': return lookup.grandMaster
-    case 'group': return lookup.group(fader.id) ?? 255
-    default: return null
-  }
-}
-
-/** Whether a column fader drives anything (empty columns hide their fader) */
-export function columnFaderActive(page: ColumnPageLike | undefined, col: number): boolean {
-  if (!page) return false
-  const fader = columnFaderOf(page, col)
-  switch (fader.kind) {
-    case 'column': return (page.cells[col] ?? []).some((c) => !!c && (c.kind === 'cuelist' || c.kind === 'chase' || c.kind === 'group'))
-    case 'cell': {
-      const c = page.cells[col]?.[fader.row]
-      return !!c && (c.kind === 'cuelist' || c.kind === 'chase' || c.kind === 'group')
-    }
-    default: return true
-  }
-}
-
-export interface SurfaceCommand {
-  type: string
-  payload?: unknown
-}
-
-/**
- * A column fader as EXISTING remote commands (the Stage window has no
- * store: it can only send commands). Group / speed / rate / x-fade have
- * no remote command yet: [].
- */
-export function columnFaderCommands(page: ColumnPageLike | undefined, col: number, level: number): SurfaceCommand[] {
-  if (!page) return []
-  const v = Math.max(0, Math.min(255, Math.round(Number.isFinite(level) ? level : 0)))
-  const forCell = (cell: CellRefData | null | undefined): SurfaceCommand | null => {
-    if (!cell) return null
-    if (cell.kind === 'cuelist') return { type: 'set-cuelist-fader', payload: { id: cell.id, level: v } }
-    if (cell.kind === 'chase') return { type: 'set-chase-fader', payload: { id: cell.id, level: v } }
-    return null
-  }
-  const fader = columnFaderOf(page, col)
-  switch (fader.kind) {
-    case 'column': return (page.cells[col] ?? []).map(forCell).filter((c): c is SurfaceCommand => !!c)
-    case 'cell': { const c = forCell(page.cells[col]?.[fader.row]); return c ? [c] : [] }
-    case 'grandmaster': return [{ type: 'set-grand-master', payload: v }]
-    default: return []
-  }
+export function columnFaderCommand(page: number, col: number, level: number): { type: 'column-fader'; payload: { page: number; col: number; level: number } } {
+  return { type: 'column-fader', payload: { page, col, level: Math.max(0, Math.min(255, Math.round(Number.isFinite(level) ? level : 0))) } }
 }
 
 /** Serialise a column fader function for a <select> */

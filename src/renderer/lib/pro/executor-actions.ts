@@ -44,9 +44,11 @@ import { useMidiStore } from '@renderer/stores/midi-store'
 import { runMacro, stopMacro } from '@renderer/lib/cli'
 import { setEffectPaused } from '@renderer/lib/effect-engine'
 import {
-  crossfadeFader, noteFiredFrom, pauseChase, pauseCuelist, setColumnLevel, setRuntimeRate, setSwapHold
+  crossfadeFader, getColumnLevel, getCrossfadeLevel, getRuntimeRate, noteFiredFrom, pauseChase, pauseCuelist, setColumnLevel,
+  setRuntimeRate, setSwapHold
 } from '@renderer/lib/playback-controller'
-import { rateFaderToRate, speedFaderToBpm, tapSpeedMaster } from './speed-masters'
+import { isRemoteMode, markLocalChange, sendRemoteCommandThrottled } from '@renderer/lib/runtime'
+import { bpmToSpeedFader, rateFaderToRate, rateToFader, speedFaderToBpm, tapSpeedMaster } from './speed-masters'
 import type { ExecutorRef } from './contracts'
 
 export type { ExecutorRef } from './contracts'
@@ -188,12 +190,26 @@ export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn
   }
 }
 
-/** Move a column fader (level 0-255) of a page */
+/** Key of a column fader in pro-store.columnFaders / controller ghosts ("page:col", 0-based) */
+export function columnFaderKey(page: number, col: number): string {
+  return `${page}:${col}`
+}
+
+/** Move a column fader (level 0-255) of a page. A remote browser sends it to the console ('column-fader'). */
 export function columnFader(page: number, col: number, level: number): void {
   const p = useExecutorStore.getState().pages[page]
   const column = p?.columns[col]
   if (!p || !column) return
   const v = Math.max(0, Math.min(255, Math.round(Number.isFinite(level) ? level : 0)))
+  if (isRemoteMode()) {
+    // The console owns column levels / rates: show the move here at once, hold it until the console echoes it
+    const key = columnFaderKey(page, col)
+    markLocalChange(`column:${key}`)
+    const pro = useProStore.getState()
+    if (key in pro.columnFaders) pro.setColumnFaders({ ...pro.columnFaders, [key]: v })
+    sendRemoteCommandThrottled(`column:${key}`, 'column-fader', { page, col, level: v })
+    return
+  }
   const fader = column.fader ?? { kind: 'column' as const }
   const setCellLevel = (cell: ExecutorCell | null) => {
     if (!cell) return
@@ -237,6 +253,67 @@ export function columnFader(page: number, col: number, level: number): void {
     default:
       break
   }
+}
+
+/** Master level of a cell that has one (scene, chase, group) */
+function faderCellLevel(cell: ExecutorCell | null | undefined): number | null {
+  if (!cell) return null
+  const pb = usePlaybackStore.getState()
+  if (cell.kind === 'cuelist') return pb.cuelists.find((c) => c.id === cell.id)?.faderLevel ?? null
+  if (cell.kind === 'chase') return pb.chases.find((c) => c.id === cell.id)?.faderLevel ?? null
+  if (cell.kind === 'group') return usePoolStore.getState().groupMasters[cell.id] ?? 255
+  return null
+}
+
+/**
+ * Level (0-255) a column fader shows / a MIDI fader must pick up, by
+ * function: the column level ('column', when the column holds a scene,
+ * chase or group), the cell's master, the Grand Master, a group master,
+ * a speed master's BPM, a runtime rate (centre = 1×), the X-fade
+ * position. null = the fader drives nothing (empty column / cell).
+ */
+export function columnFaderValue(page: number, col: number): number | null {
+  const p = useExecutorStore.getState().pages[page]
+  const column = p?.columns[col]
+  if (!p || !column) return null
+  const fader = column.fader ?? { kind: 'column' as const }
+  switch (fader.kind) {
+    case 'column':
+      return (p.cells[col] ?? []).some((c) => c && (c.kind === 'cuelist' || c.kind === 'chase' || c.kind === 'group'))
+        ? getColumnLevel(page, col)
+        : null
+    case 'cell': return faderCellLevel(p.cells[col]?.[fader.row])
+    case 'grandmaster': return useDmxStore.getState().grandMaster
+    case 'group': return usePoolStore.getState().groupMasters[fader.id] ?? 255
+    case 'speed': {
+      const m = usePoolStore.getState().speedMasters.find((x) => x.id === fader.id)
+      return m ? bpmToSpeedFader(m.bpm) : null
+    }
+    case 'rate': {
+      const cell = p.cells[col]?.[fader.row]
+      return cell?.kind === 'cuelist' || cell?.kind === 'chase' ? rateToFader(getRuntimeRate(cell.kind, cell.id)) : null
+    }
+    case 'xfade': {
+      const cell = p.cells[col]?.[fader.row]
+      return cell?.kind === 'cuelist' ? getCrossfadeLevel(cell.id) : null
+    }
+    default:
+      return null
+  }
+}
+
+/** Every column fader that drives something, all pages: { "page:col": level } */
+export function columnFaderValues(): Record<string, number> {
+  const out: Record<string, number> = {}
+  const pages = useExecutorStore.getState().pages
+  for (let page = 0; page < pages.length; page++) {
+    const cols = pages[page].columns.length
+    for (let col = 0; col < cols; col++) {
+      const v = columnFaderValue(page, col)
+      if (v !== null) out[columnFaderKey(page, col)] = v
+    }
+  }
+  return out
 }
 
 /** Executor GO / Back keys act on (null = the Scenes view selection) */

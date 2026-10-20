@@ -60,7 +60,7 @@ export const CliKeypad = memo(function CliKeypad({ onKey, onBackspace, onPlease,
   const t = useT()
   return (
     <div role="group" aria-label={t('pro.cliUi.keypadAria')} data-cli-keypad="" className={cn('flex gap-2', className)}>
-      <div className="grid min-w-0 flex-1 grid-cols-6 gap-1">
+      <div className="grid min-w-0 flex-1 grid-cols-6 content-start gap-1">
         {COMMAND_KEYS.map((k) => (
           <button
             key={k.key}
@@ -75,7 +75,7 @@ export const CliKeypad = memo(function CliKeypad({ onKey, onBackspace, onPlease,
           </button>
         ))}
       </div>
-      <div className="grid w-[150px] shrink-0 grid-cols-3 gap-1 [[data-density=touch]_&]:w-[204px]">
+      <div className="grid w-[150px] shrink-0 grid-cols-3 content-start gap-1 [[data-density=touch]_&]:w-[204px]">
         {DIGIT_KEYS.map((k) => (
           <button
             key={k.key}

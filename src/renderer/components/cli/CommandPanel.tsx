@@ -10,11 +10,11 @@
 
 import { useLayoutEffect, useState } from 'react'
 import type React from 'react'
-import { LuArrowRight, LuChevronRight, LuEraser, LuGrid3X3, LuTerminal, LuTriangleAlert, LuX } from 'react-icons/lu'
+import { LuArrowRight, LuBookOpen, LuChevronRight, LuEraser, LuGrid3X3, LuTerminal, LuTriangleAlert, LuX } from 'react-icons/lu'
 import { IconButton, ToggleButton, cn } from '@renderer/components/ui'
 import { Portal } from '@renderer/components/ui/Portal'
-import { hasTranslation, useT } from '@renderer/i18n'
-import type { CliParseResult } from '@renderer/lib/cli'
+import { hasTranslation, useT, type TranslationKey } from '@renderer/i18n'
+import { CLI_CHEATSHEET, type CliParseResult } from '@renderer/lib/cli'
 import { useProStore } from '@renderer/stores/pro-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { chipsFor, expectationHints, type CliChip } from './cli-model'
@@ -83,6 +83,7 @@ export function CommandPanel(props: CommandPanelProps) {
   const density = useUiStore((s) => s.density)
   const touch = density === 'touch'
   const [keypad, setKeypad] = useState(() => initialKeypadOpen(density))
+  const [syntax, setSyntax] = useState(false)
   const { left, width } = usePlacement(props.anchor, keypad, touch)
   const logCount = useProStore((s) => s.cliLog.length)
   // Keypad beside the log when there is room, else below
@@ -115,6 +116,17 @@ export function CommandPanel(props: CommandPanelProps) {
           >
             {t('pro.cliUi.keypad')}
           </ToggleButton>
+          <ToggleButton
+            size="xs"
+            tone="neutral"
+            pressed={syntax}
+            onPressedChange={setSyntax}
+            icon={LuBookOpen}
+            tooltip={syntax ? t('pro.cliUi.syntaxHide') : t('pro.cliUi.syntaxShow')}
+            data-cli-syntax-toggle=""
+          >
+            {t('pro.cliUi.syntax')}
+          </ToggleButton>
           <IconButton
             icon={LuEraser}
             size="xs"
@@ -125,6 +137,7 @@ export function CommandPanel(props: CommandPanelProps) {
           <IconButton icon={LuX} size="xs" label={t('pro.cliUi.collapse')} onClick={props.onClose} />
         </header>
 
+        {syntax && <CheatSheet onPick={props.onRecall} />}
         <div className={cn('flex min-h-0 gap-2', side ? 'flex-row' : 'flex-col')}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5">
             <CliLog
@@ -242,6 +255,39 @@ function Chips({ text, parsed, onChip }: { text: string; parsed: CliParseResult;
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** Syntax card (lib/cli CLI_CHEATSHEET): the syntax stays English, the explanations are translated; a line can be put on the command line */
+function CheatSheet({ onPick }: { onPick: (text: string) => void }) {
+  const t = useT()
+  return (
+    <div data-cli-cheatsheet="" className="max-h-[240px] shrink-0 overflow-y-auto rounded bg-surface-1 p-2 ring-1 ring-inset ring-line-subtle">
+      <p className="mb-2 text-xs text-fg-tertiary">{t('pro.cli.cheatsheet.intro')}</p>
+      <div className="grid gap-x-4 gap-y-2 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+        {CLI_CHEATSHEET.map((section) => (
+          <section key={section.id} className="min-w-0">
+            <h3 className="mb-0.5 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t(`pro.cli.cheatsheet.sections.${section.id}` as TranslationKey)}</h3>
+            <ul className="flex flex-col">
+              {section.lines.map((line) => (
+                <li key={line.key} className="flex min-w-0 items-baseline gap-2 text-xs">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="shrink-0 rounded-sm px-1 font-mono text-fg-primary hover:bg-surface-3"
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => onPick(line.syntax.split(' · ')[0])}
+                  >
+                    {line.syntax}
+                  </button>
+                  <span className="min-w-0 truncate text-fg-tertiary" title={t(`pro.cli.cheatsheet.lines.${line.key}` as TranslationKey)}>{t(`pro.cli.cheatsheet.lines.${line.key}` as TranslationKey)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     </div>
   )
 }

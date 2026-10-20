@@ -7,6 +7,7 @@
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { Cuelist, MidiMapping } from '@shared/types'
+import { useUiStore } from '@renderer/stores/ui-store'
 import { useExecutorStore, type SceneMode } from '@renderer/stores/executor-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { cueKey } from '@renderer/lib/fixture-index'
@@ -26,23 +27,30 @@ export interface ExecutorSlot {
   color: string
   title: string
   mode: SceneMode
+  /** Pro view: "page.slot" as the command line names it */
+  label?: string
 }
 
-/** Executor slot of every placed scene (one pass over the 8×4 grid) */
+/** Executor slot of every placed scene (one pass over the 8×4 grid of the current page) */
 export function useExecutorSlots(): Map<string, ExecutorSlot> {
-  const { grid, columns, modes } = useExecutorStore(useShallow((s) => ({ grid: s.grid, columns: s.columns, modes: s.modes })))
+  const { grid, columns, modes, page } = useExecutorStore(useShallow((s) => ({ grid: s.grid, columns: s.columns, modes: s.modes, page: s.currentPage })))
+  const pro = useUiStore((s) => s.proMode)
   return useMemo(() => {
     const map = new Map<string, ExecutorSlot>()
     grid.forEach((cells, col) => cells.forEach((id, row) => {
-      if (id) map.set(id, { col, row, color: columns[col]?.color ?? '#888888', title: columns[col]?.title ?? '', mode: modes[col]?.[row] ?? 'toggle' })
+      if (!id) return
+      const slot: ExecutorSlot = { col, row, color: columns[col]?.color ?? '#888888', title: columns[col]?.title ?? '', mode: modes[col]?.[row] ?? 'toggle' }
+      // Pro view: the command line's executor number (page.slot, slot = column × 4 + row + 1)
+      if (pro) slot.label = `${page + 1}.${col * 4 + row + 1}`
+      map.set(id, slot)
     }))
     return map
-  }, [grid, columns, modes])
+  }, [grid, columns, modes, page, pro])
 }
 
-/** "3.2" = executor column 3, row 2 */
+/** "3.2" = executor column 3, row 2 — Pro view: "1.10" = executor page 1, slot 10 (command line numbers) */
 export function formatSlot(slot: ExecutorSlot): string {
-  return `${slot.col + 1}.${slot.row + 1}`
+  return slot.label ?? `${slot.col + 1}.${slot.row + 1}`
 }
 
 /** Change a cell's button mode and keep the scene's MIDI GO mapping behaviour in step (scenes view, executor bar) */

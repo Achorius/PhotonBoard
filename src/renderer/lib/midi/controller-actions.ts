@@ -15,8 +15,9 @@ import { usePlaybackStore, selectGoTargetCuelistId } from '@renderer/stores/play
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { usePoolStore } from '@renderer/stores/pool-store'
+import { crossfadeFader, getCrossfadeLevel } from '@renderer/lib/playback-controller'
 import { useProStore } from '@renderer/stores/pro-store'
-import { columnFader, defaultButtonFn, executorCellAt, executorPress, selectExecutor, selectedExecutor } from '@renderer/lib/pro/executor-actions'
+import { columnFader, columnFaderValue, defaultButtonFn, executorCellAt, executorPress, selectExecutor, selectedExecutor } from '@renderer/lib/pro/executor-actions'
 import { applyPreset, clearProgrammerMeta } from '@renderer/lib/pro/programmer-engine'
 import { clearProgrammerAll } from '@renderer/lib/programmer-utils'
 import { isMacroRunning, runMacro, stopMacro } from '@renderer/lib/cli'
@@ -129,46 +130,42 @@ export function performButton(action: ControllerAction, clientId: string): (() =
     }
     case 'column-fader':
     case 'grand-master':
+    case 'xfade':
       return null
   }
 }
 
-/** Current level (0-255) a fader action drives; null = nothing to pick up */
+/** Scene the crossfader drives: the selected executor's scene, else the GO target */
+function xfadeTarget(): string | null {
+  const ref = selectedExecutor()
+  const cell = ref ? executorCellAt(ref) : null
+  if (cell?.kind === 'cuelist') return cell.id
+  return selectGoTargetCuelistId(usePlaybackStore.getState())
+}
+
+function xfadeLevel(): number | null {
+  const id = xfadeTarget()
+  return id ? getCrossfadeLevel(id) : null
+}
+
+/**
+ * Current level (0-255) a fader action drives — what the on-screen fader
+ * shows (executor-actions columnFaderValue: column level, cell master,
+ * GM, group / speed master, rate, X-fade); null = nothing to pick up.
+ */
 export function faderLogicalLevel(action: ControllerAction): number | null {
   if (action.type === 'grand-master') return useDmxStore.getState().grandMaster
+  if (action.type === 'xfade') return xfadeLevel()
   if (action.type !== 'column-fader') return null
-  const ex = useExecutorStore.getState()
-  const page = ex.pages[ex.currentPage]
-  const column = page?.columns[action.col]
-  if (!page || !column) return null
-  const fader = column.fader ?? { kind: 'column' as const }
-  const cellLevel = (row: number): number | null => {
-    const cell = page.cells[action.col]?.[row]
-    if (!cell) return null
-    const pb = usePlaybackStore.getState()
-    if (cell.kind === 'cuelist') return pb.cuelists.find((c) => c.id === cell.id)?.faderLevel ?? null
-    if (cell.kind === 'chase') return pb.chases.find((c) => c.id === cell.id)?.faderLevel ?? null
-    if (cell.kind === 'group') return usePoolStore.getState().groupMasters[cell.id] ?? 255
-    return null
-  }
-  switch (fader.kind) {
-    case 'column': {
-      const rows = page.cells[action.col]?.length ?? 0
-      for (let r = 0; r < rows; r++) {
-        const v = cellLevel(r)
-        if (v !== null) return v
-      }
-      return null
-    }
-    case 'cell': return cellLevel(fader.row)
-    case 'grandmaster': return useDmxStore.getState().grandMaster
-    case 'group': return usePoolStore.getState().groupMasters[fader.id] ?? 255
-    default: return null
-  }
+  return columnFaderValue(useExecutorStore.getState().currentPage, action.col)
 }
 
 /** Move a fader action to a level (0-255) */
 export function performFader(action: ControllerAction, level: number): void {
   if (action.type === 'grand-master') useDmxStore.getState().setGrandMaster(level)
   else if (action.type === 'column-fader') columnFader(useExecutorStore.getState().currentPage, action.col, level)
+  else if (action.type === 'xfade') {
+    const id = xfadeTarget()
+    if (id) crossfadeFader(id, level)
+  }
 }

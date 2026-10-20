@@ -4,6 +4,7 @@ import { LuChevronRight, LuChevronsDown, LuChevronsUp } from 'react-icons/lu'
 import { IconButton, cn } from '@renderer/components/ui'
 import { COMMAND_LINE_ID } from '@renderer/hooks/useKeyboardShortcuts'
 import { useT } from '@renderer/i18n'
+import { useUiStore } from '@renderer/stores/ui-store'
 import type { CliResult } from '@renderer/lib/cli'
 import {
   IMMEDIATE_ON_EMPTY, applyChip, backspace, chipsFor, insertKey, removeLastWord, stepHistory, type CliChip
@@ -30,6 +31,8 @@ export function CommandLine() {
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [expanded, setExpanded] = useState(false)
+  // The expanded panel (log, suggestions, keypad) belongs to the Pro view; the line itself is always there
+  const proMode = useUiStore((s) => s.proMode)
   const historyIdx = useRef(-1)
   const draft = useRef('')
   const field = useRef<HTMLLabelElement>(null)
@@ -38,7 +41,7 @@ export function CommandLine() {
   // Parsed on keystroke only (live feedback, chips, preview)
   const parsed = useMemo(() => safeParse(input), [input])
   const engine = useMemo(() => engineReady(), [input]) // eslint-disable-line react-hooks/exhaustive-deps
-  const preview = useMemo(() => (expanded && input.trim() ? previewLine(parsed) : ''), [expanded, input, parsed])
+  const preview = useMemo(() => (expanded && proMode && input.trim() ? previewLine(input) : ''), [expanded, proMode, input])
 
   // Feedback fades after a few seconds
   useEffect(() => {
@@ -121,7 +124,7 @@ export function CommandLine() {
           aria-label={tr('shell.commandLine.aria')}
         />
       </label>
-      <IconButton
+      {proMode && <IconButton
         icon={expanded ? LuChevronsDown : LuChevronsUp}
         size="xs"
         label={expanded ? tr('pro.cliUi.collapse') : tr('pro.cliUi.expand')}
@@ -131,7 +134,7 @@ export function CommandLine() {
         tone="neutral"
         onPointerDown={(e) => e.preventDefault()}
         onClick={() => setExpanded((v) => !v)}
-      />
+      />}
       {feedback && (
         <span
           role="status"
@@ -140,7 +143,7 @@ export function CommandLine() {
           {feedback.message}
         </span>
       )}
-      {expanded && (
+      {expanded && proMode && (
         <CommandPanel
           text={input}
           parsed={parsed}

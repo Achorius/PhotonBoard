@@ -685,6 +685,8 @@ export interface MidiMapping {
     inverted: boolean
     encoding: 'absolute' | 'relative' // absolute = 0-127 fader, relative = encoder (1=CW, 127=CCW)
     behavior: 'direct' | 'toggle' | 'trigger' | 'flash' // direct = continuous, toggle = on/off on press, trigger = momentary, flash = full while held
+    /** Echo the target's state to the device's output port: 'note' (pad LED on/off) or 'cc' (value: motor fader, LED ring) */
+    feedback?: 'note' | 'cc'
   }
 }
 

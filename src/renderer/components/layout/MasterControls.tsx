@@ -6,6 +6,7 @@ import type React from 'react'
 import { LuPower, LuSun, LuZap } from 'react-icons/lu'
 import type { MidiTargetType } from '@shared/types'
 import { Button, Slider, Tooltip, cn, formatPercent } from '@renderer/components/ui'
+import { useGrandMasterGhost } from '@renderer/components/stage/controller-ghosts'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useT } from '@renderer/i18n'
@@ -33,6 +34,8 @@ function GrandMaster() {
   const setGrandMaster = useDmxStore((s) => s.setGrandMaster)
   const midi = useMidiLearnTarget('master', t('common.grandMaster'))
   const pct = Math.round((grandMaster / 255) * 100)
+  // MIDI controller GM fader not picked up yet: where it is
+  const ghost = useGrandMasterGhost()
   return (
     <Tooltip content={t('shell.masters.gmTooltip')}>
       <div
@@ -45,6 +48,7 @@ function GrandMaster() {
           value={grandMaster}
           onChange={setGrandMaster}
           defaultValue={255}
+          ghost={ghost}
           color={pct < 100 ? 'rgb(var(--pb-warning))' : 'rgb(var(--pb-fg-secondary))'}
           className="w-20 xl:w-28 xl:[[data-density=touch]_&]:w-36"
         />

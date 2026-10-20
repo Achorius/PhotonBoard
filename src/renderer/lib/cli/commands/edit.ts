@@ -207,7 +207,7 @@ function copyOrMove(ast: CliAst, ctx: CliContext, move: boolean): CliResult {
     case 'executor': {
       const r = lookupExecutors(api, ref)
       if (!r.found.length) return notFound(ctx, r.missing)
-      const t = lookupExecutors(api, target)
+      const t = lookupExecutors(api, target, { newPages: true })
       if (!t.found.length) return notFound(ctx, t.missing)
       const dest = t.found[0]
       const cells = r.found.map(e => executorCell(api, e))
@@ -335,7 +335,7 @@ const assign: CliCommand = {
       default: return unsupported(ctx, ast, ref)
     }
     if (!source) return notFound(ctx, r.missing)
-    const t = lookupExecutors(api, ast.target)
+    const t = lookupExecutors(api, ast.target, { newPages: true })
     if (!t.found.length) return notFound(ctx, t.missing)
     const src: ExecutorTarget = source
     return mutate(ctx, ast, () => {

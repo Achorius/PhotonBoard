@@ -123,7 +123,11 @@ export const pools: Translation['pro']['pools'] = {
     emptyPatchTitle: 'Aucun projecteur patché',
     emptyPatchDescription: 'Les groupes contiennent des projecteurs : patchez-en d’abord.',
     openPatch: 'Ouvrir le patch',
-    current: 'Sélectionné'
+    current: 'Sélectionné',
+    subtitleMaster: '{fixtures} · {level}',
+    masterTitle: 'Master de groupe',
+    masterAria: 'Master du groupe {name}',
+    masterHint: 'Touchez un groupe pour régler son master (intensité de ses projecteurs, avant le Grand Master).'
   },
   macros: {
     lines: { zero: 'Aucune ligne', one: '{count} ligne', other: '{count} lignes' },

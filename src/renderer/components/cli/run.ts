@@ -1,12 +1,23 @@
 // ============================================================
-// Command line UI → engine glue: run a typed line (engine or legacy
-// fallback, both logged in pro-store.cliLog), live preview while
-// typing, and the persistent ↑ / ↓ history.
+// Command line UI → engine glue: run a typed line, live preview while
+// typing, and the ↑ / ↓ history (lib/cli: one history per machine,
+// localStorage 'photonboard.cli.history').
+//
+//   console        lib/cli runCommandLine (full grammar, undo, log)
+//   remote browser the line is sent to the console ('cli' command): it
+//                  runs there, its result comes back in the console's
+//                  command-line log (state snapshot)
+//   no context     the legacy commands (only before the pro layer is
+//                  installed: tests, an app without lib/pro/setup)
 // ============================================================
 
-import { getCliContext, getCommand, parse, runCommandLine, type CliParseResult, type CliResult } from '@renderer/lib/cli'
+import {
+  getCliContext, getCliHistory, parse, previewLine as enginePreview, runCommandLine, type CliParseResult, type CliResult
+} from '@renderer/lib/cli'
+import { isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
 import { useProStore } from '@renderer/stores/pro-store'
-import { HISTORY_KEY, chooseRunner, parseHistory, pushHistory } from './cli-model'
+import { t } from '@renderer/i18n'
+import { chooseRunner } from './cli-model'
 import { executeLegacyCommand } from './legacy-commands'
 
 /** Parse for live feedback; never throws */
@@ -19,31 +30,31 @@ export function safeParse(text: string): CliParseResult {
   }
 }
 
-/** One-line preview of what the line would do ("12 fixtures, Group 'Wash'"), or '' */
-export function previewLine(parsed: CliParseResult): string {
-  const ctx = getCliContext()
-  if (!ctx || !parsed.ast) return ''
-  try {
-    const command = getCommand(parsed.ast.action ?? 'select')
-    return command?.preview?.(parsed.ast, ctx) ?? ''
-  } catch {
-    return ''
-  }
+/** One-line preview of what the line would do ("→ 12 fixtures, Group 'Wash'"), or '' */
+export function previewLine(text: string): string {
+  return enginePreview(text)
 }
 
 /** Is the command-line engine wired (or are typed lines run by the legacy commands)? */
 export function engineReady(): boolean {
-  return getCliContext() !== null && safeParse('Clear').error?.code !== 'notImplemented'
+  return getCliContext() !== null
 }
+
+/** Remote page id + line counter for 'cli' commands (the console logs the origin) */
+let remoteSeq = 0
+const remoteOrigin = `remote-${Math.random().toString(36).slice(2, 8)}`
 
 /**
  * Run a line typed in this console (status-bar input, expanded panel,
- * keypad). The engine when it is wired, else the legacy commands; both are
- * logged with `origin`.
+ * keypad). Logged with `origin`.
  */
 export function runLine(text: string, origin?: string): CliResult {
   const line = text.trim()
   if (!line) return { ok: true, message: '', level: 'info' }
+  if (isRemoteMode()) {
+    sendRemoteCommand('cli', { text: line, origin: origin ?? remoteOrigin, seq: ++remoteSeq })
+    return { ok: true, message: t('pro.cliUi.sentToConsole'), level: 'info' }
+  }
   const runner = chooseRunner(line, { hasContext: getCliContext() !== null, parsed: safeParse(line) })
   if (runner === 'engine') return runCommandLine(line, origin)
   const legacy = executeLegacyCommand(line)
@@ -52,25 +63,12 @@ export function runLine(text: string, origin?: string): CliResult {
   return result
 }
 
-// ---------------------------------------------------------------- history (shared by every command-line input)
-
-let history: string[] | null = null
-
-function load(): string[] {
-  if (history) return history
-  try {
-    history = parseHistory(window.localStorage.getItem(HISTORY_KEY))
-  } catch {
-    history = []
-  }
-  return history
-}
+// ---------------------------------------------------------------- history (lib/cli: shared by every command-line input)
 
 export function getHistory(): readonly string[] {
-  return load()
+  return getCliHistory().lines()
 }
 
 export function addToHistory(line: string): void {
-  history = pushHistory(load(), line)
-  try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history)) } catch { /* private mode / quota */ }
+  getCliHistory().push(line)
 }

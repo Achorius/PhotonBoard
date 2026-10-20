@@ -21,15 +21,14 @@ import { formatList, useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
-import { isRemoteMode } from '@renderer/lib/runtime'
 import type { StoreMode } from '@renderer/lib/pro/store-ops'
 import {
-  capture, captureSummary, clearProgrammerAfterRecord, recordAddCue, recordAddStep, recordNewChase, recordNewScene, recordUpdateCue, recordUpdateStep,
+  capture, captureSummary, clearProgrammerAfterRecord, recordAddCue, recordAddStep, recordNewChase, recordNewScene, recordStoreMode, recordUpdateCue, recordUpdateStep,
   type Capture
 } from './record'
 import { formatCueNumber } from './actions'
 import { CUE_FEATURES, cleanFeatureFilter, toggleFeatureFilter } from './pro-cue'
-import { RECORD_STORE_MODES, applyFeatureFilter, storeIntoExistingCue } from './store-modes'
+import { RECORD_STORE_MODES, applyFeatureFilter } from './store-modes'
 import { featureLabel } from './feature-label'
 
 type Target = 'new' | 'add' | 'update'
@@ -63,9 +62,11 @@ function readPrefs(): RecordPrefs {
 
 /** The capture limited to the feature filter (Pro) */
 function filterCapture(cap: Capture, filter: CueFeature[]): Capture {
-  if (filter.length === 0 || cap.values.length === 0) return cap
+  if (filter.length === 0) return cap
+  // Remote browser: no values here (the console records): the filter travels with the capture
+  if (cap.values.length === 0) return { ...cap, filter }
   const values = applyFeatureFilter(cap.values, filter)
-  return { ...cap, values, channelCount: values.length, fixtureCount: new Set(values.map((v) => v.fixtureId)).size }
+  return { ...cap, values, channelCount: values.length, fixtureCount: new Set(values.map((v) => v.fixtureId)).size, filter }
 }
 
 function writePrefs(p: RecordPrefs): void {
@@ -122,8 +123,8 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
     return () => clearInterval(timer)
   }, [selectedOnly, selectionCount])
 
-  // Pro (console only: a remote's record runs on the console without these options)
-  const pro = useUiStore((s) => s.proMode) && pane === 'scenes' && !isRemoteMode()
+  // Pro (a remote browser sends the store mode / filter with its 'record' command)
+  const pro = useUiStore((s) => s.proMode) && pane === 'scenes'
   const filter = pro ? prefs.filter : []
   const shown = useMemo(() => filterCapture(cap, filter), [cap, filter])
 
@@ -159,7 +160,7 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
       message = mode === 'remove'
         ? t('pro.scenes.record.toastRemoved', { number, count: fresh.channelCount })
         : t(mode === 'overwrite' ? 'scenes.toast.cueReplaced' : 'scenes.toast.cueUpdated', { number })
-      storeIntoExistingCue(scene.id, updateCue.id, raw.values, { mode, ...(filter.length > 0 ? { filter } : {}) }, message)
+      recordStoreMode(scene.id, updateCue.id, raw, { mode, ...(filter.length > 0 ? { filter } : {}) }, message)
     } else if (pane === 'scenes') {
       if (target === 'new') {
         const id = recordNewScene(fresh, { name, includeEffects: prefs.includeEffects })
@@ -294,7 +295,7 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
               : t('scenes.record.selectCueFirst')
             : updateStep ? t('scenes.record.channelsNow', { count: updateStep.values.length }) : t('scenes.record.selectStepFirst')}
         >
-          {target === 'update' && pro && (
+          {target !== 'update' ? null : pro ? (
             <SegmentedControl
               size="xs"
               aria-label={t('pro.scenes.record.storeModeAria')}
@@ -303,8 +304,7 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
               data-record-store-mode=""
               items={RECORD_STORE_MODES.map((m) => ({ value: m, label: t(`pro.scenes.record.${m}`), title: t(`pro.scenes.record.${m}Title`) }))}
             />
-          )}
-          {target === 'update' && !pro && (
+          ) : (
             <SegmentedControl
               size="xs"
               aria-label={t('scenes.record.updateModeAria')}

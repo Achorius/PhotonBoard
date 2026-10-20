@@ -123,7 +123,11 @@ export const pools = {
     emptyPatchTitle: 'No fixtures patched',
     emptyPatchDescription: 'Groups hold fixtures: patch some first.',
     openPatch: 'Open Patch',
-    current: 'Selected'
+    current: 'Selected',
+    subtitleMaster: '{fixtures} · {level}',
+    masterTitle: 'Group master',
+    masterAria: 'Group master of {name}',
+    masterHint: 'Tap a group to set its master (its fixtures’ intensity, before the Grand Master).'
   },
   macros: {
     lines: { zero: 'No line', one: '{count} line', other: '{count} lines' },

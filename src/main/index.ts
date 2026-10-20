@@ -17,6 +17,7 @@ import { PiSaveCoordinator } from './pi-save-coordinator'
 import { lanAddresses } from './remote-access'
 import { parseShowArg } from './remote-invoke'
 import { sanitizeShowName, SHOW_EXTENSION } from './show-validation'
+import { mt, setMainLanguage } from './messages'
 
 /**
  * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
@@ -417,7 +418,7 @@ function registerIpcHandlers(): void {
     const saveResult = await showManager.save(show)
     if (saveResult.needsSaveAs) {
       const result = await showSaveDialog(event, {
-        filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+        filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
         defaultPath: defaultSavePath(show.name)
       })
       if (result.canceled || !result.filePath) return { success: false, canceled: true }
@@ -429,7 +430,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SHOW_LOAD, async (event): Promise<ShowLoadResult> => {
     const result = await showOpenDialog(event, {
-      filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+      filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
       defaultPath: showManager.getDefaultShowsDir(),
       properties: ['openFile']
     })
@@ -442,7 +443,7 @@ function registerIpcHandlers(): void {
     try { show = parseShowArg(showArg) } catch (e) { return { success: false, error: (e as Error).message } }
     const currentPath = showManager.getCurrentPath()
     const result = await showSaveDialog(event, {
-      filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+      filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
       defaultPath: typeof opts?.name === 'string' ? defaultSavePath(opts.name) : currentPath || defaultSavePath(show.name)
     })
     if (result.canceled || !result.filePath) return { success: false, canceled: true }
@@ -455,7 +456,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SHOW_LOAD_BY_NAME, async (_event, name: unknown): Promise<ShowLoadResult> => {
     const path = showManager.findShowByName(name)
-    if (!path) return { success: false, error: `No show named "${String(name)}" was found.` }
+    if (!path) return { success: false, error: mt('showNotFound', { name: String(name) }) }
     return showManager.load(path)
   })
 
@@ -487,14 +488,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.FIXTURES_IMPORT, async (event) => {
     const result = await showOpenDialog(event, {
       filters: [
-        { name: 'All Fixture Formats', extensions: ['json', 'gdtf', 'qxf', 'd4', 'r20', 'xml', 'csv', 'tsv'] },
-        { name: 'GDTF Files', extensions: ['gdtf'] },
-        { name: 'QLC+ Files', extensions: ['qxf'] },
-        { name: 'Avolites Personalities', extensions: ['d4', 'r20'] },
-        { name: 'XML Fixtures (GrandMA, etc.)', extensions: ['xml'] },
-        { name: 'JSON (OFL / PhotonBoard)', extensions: ['json'] },
-        { name: 'CSV / TSV', extensions: ['csv', 'tsv'] },
-        { name: 'All Files', extensions: ['*'] }
+        { name: mt('fixtureFilterAll'), extensions: ['json', 'gdtf', 'qxf', 'd4', 'r20', 'xml', 'csv', 'tsv'] },
+        { name: mt('fixtureFilterGdtf'), extensions: ['gdtf'] },
+        { name: mt('fixtureFilterQlc'), extensions: ['qxf'] },
+        { name: mt('fixtureFilterAvo'), extensions: ['d4', 'r20'] },
+        { name: mt('fixtureFilterXml'), extensions: ['xml'] },
+        { name: mt('fixtureFilterJson'), extensions: ['json'] },
+        { name: mt('fixtureFilterCsv'), extensions: ['csv', 'tsv'] },
+        { name: mt('allFiles'), extensions: ['*'] }
       ],
       properties: ['openFile', 'multiSelections']
     })
@@ -590,6 +591,8 @@ function registerIpcHandlers(): void {
   // Console UI language → native menus
   ipcMain.on(IPC.APP_SET_LANGUAGE, (_event, locale: unknown) => {
     const next: MenuLanguage = locale === 'fr' ? 'fr' : 'en'
+    // Dialogs, show file errors and remote answers follow it too
+    setMainLanguage(next)
     if (next === menuLanguage) return
     menuLanguage = next
     createMenu()
@@ -645,7 +648,7 @@ function createStageWindow(): void {
     fullscreen: true,
     frame: false,
     backgroundColor: '#0a0a0f',
-    title: 'PhotonBoard — Stage',
+    title: mt('stageWindowTitle'),
     webPreferences: {
       preload: join(__dirname, '../preload/stage-preload.mjs'),
       sandbox: false,

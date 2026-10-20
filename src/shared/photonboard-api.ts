@@ -36,6 +36,8 @@ export interface ShowLoadResult {
   show?: ShowFile
   path?: string
   error?: string
+  /** Remote upload refused: a show with that name exists (retry with overwrite:true) */
+  exists?: boolean
   warning?: string
   canceled?: boolean
 }

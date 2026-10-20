@@ -26,6 +26,7 @@ import { MAX_SHOW_FILE_SIZE, checkShowObject, parseShowFileContent, sanitizeShow
 import { isWebRemoteCommandType } from '../shared/remote-commands'
 import type { ShowFile } from '../shared/types'
 import type { ShowLoadResult, ShowSaveResult, RemoteStatus } from '../shared/photonboard-api'
+import { mt } from './messages'
 
 export interface RemoteInvokeDeps {
   dmxEngine: DmxEngine
@@ -88,7 +89,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
     success: false,
     exists: true,
     path,
-    error: `A show named "${name}" already exists. Choose another name or confirm overwriting it.`
+    error: mt('showExists', { name })
   })
 
   async function remoteSave(showArg: unknown, rawOpts: unknown, mode: 'save' | 'save-as'): Promise<ShowSaveResult> {
@@ -124,7 +125,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
     const name = sanitizeShowName(fileName, 'Uploaded Show')
     const destPath = showManager.pathForName(name)
     if (existsSync(destPath) && opts.overwrite !== true) {
-      return { success: false, path: destPath, error: `A show named "${name}" already exists. Confirm overwriting it, or rename the file.` }
+      return { success: false, exists: true, path: destPath, error: mt('showExistsUpload', { name }) }
     }
     // Fixture types the show uses but this console lacks come from the offline catalog
     await showManager.runShowReadHook(parsed.show)
@@ -140,7 +141,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
     const opts = optionsArg(rawOpts)
     if (typeof name !== 'string' || name.length === 0 || name.length > 200) throw new RemoteInputError('Invalid show name')
     const path = showManager.findShowByName(name)
-    if (!path) return { success: false, error: `No show named "${name}" was found.` }
+    if (!path) return { success: false, error: mt('showNotFound', { name: String(name) }) }
     if (opts.apply === true) {
       const result = await showManager.load(path)
       if (result.success && result.show) {
@@ -185,7 +186,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
       case IPC.SHOW_SAVE_AS:
         return remoteSave(args[0], args[1], 'save-as')
       case IPC.SHOW_LOAD:
-        return { success: false, error: 'There is no file dialog in the remote UI — pick a show from the list.' } satisfies ShowLoadResult
+        return { success: false, error: mt('noFileDialogRemote') } satisfies ShowLoadResult
       case IPC.SHOW_LIST:
         return showManager.listShowNames()
       case IPC.SHOW_LOAD_BY_NAME:

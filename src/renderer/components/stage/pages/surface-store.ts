@@ -52,7 +52,7 @@ export function getStoreActions(): SurfaceActions {
     executor: pressExecutor,
     columnFader: (page, col, level) => columnFader(page, col, level),
     level: (kind, id, level) => (kind === 'cuelist' ? pb().setCuelistFader(id, level) : pb().setChaseFader(id, level)),
-    groupMaster: isRemoteMode() ? undefined : (id, level) => usePoolStore.getState().setGroupMaster(id, level),
+    groupMaster: (id, level) => usePoolStore.getState().setGroupMaster(id, level),
     grandMaster: (v) => dmx().setGrandMaster(v),
     blackout: () => dmx().toggleBlackout(),
     blinder: (on) => dmx().toggleBlinder(on),
@@ -69,7 +69,7 @@ export function getStoreActions(): SurfaceActions {
       usePatchStore.getState().selectGroup(id)
       if (isRemoteMode()) sendRemoteCommand('select-group', id)
     },
-    speedTap: isRemoteMode() ? undefined : (id) => { tapSpeedMaster(id) },
+    speedTap: (id) => { tapSpeedMaster(id) },
     go: (id) => pb().goCuelist(id),
     back: (id) => pb().goBackCuelist(id),
     setPage: setExecutorPage
@@ -81,6 +81,7 @@ export function getStoreActions(): SurfaceActions {
 export function useSurfaceData(): SurfaceData {
   const { pages, currentPage } = useExecutorStore(useShallow((s) => ({ pages: s.pages, currentPage: s.currentPage })))
   const selectedExecutor = useProStore((s) => s.selectedExecutor)
+  const columnFaders = useProStore((s) => s.columnFaders)
   const { cuelists, chases, presets, selectedCuelistId } = usePlaybackStore(useShallow((s) => ({
     cuelists: s.cuelists, chases: s.chases, presets: s.presets, selectedCuelistId: s.selectedCuelistId
   })))
@@ -122,7 +123,8 @@ export function useSurfaceData(): SurfaceData {
     grandMaster,
     blackout,
     blinder,
-    strobe
+    strobe,
+    columnFaders
   }), [executorPages, currentPage, selectedExecutor, goTargetId, cuelistData, chaseData, effects, macros, presetData, groups, activeGroupId,
-    selection.length, speedMasters, stagePages, grandMaster, blackout, blinder, strobe])
+    selection.length, speedMasters, stagePages, grandMaster, blackout, blinder, strobe, columnFaders])
 }

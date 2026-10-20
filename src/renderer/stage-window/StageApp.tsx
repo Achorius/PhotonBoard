@@ -86,7 +86,7 @@ export function StageApp() {
   const [gridMode, setGridMode] = useState<StageGridMode>('play')
   const [view, setView] = useState<StageView>(readView)
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const [, setTick] = useState(0)
+  const [tick, setTick] = useState(0)
   const held = useRef(new Map<string, { value: number; t: number }>())
   const sendThrottled = useThrottledSend()
   /** What this window holds down right now (released when it closes) */
@@ -160,16 +160,25 @@ export function StageApp() {
       grandMaster: state.grandMaster,
       blackout: state.blackout,
       blinder: state.blinder,
-      strobe: state.strobe
+      strobe: state.strobe,
+      columnFaders: state.columnFaders ?? surface.columnFaders
     }
   }, [state, surface])
-  const index = useMemo(() => (data ? indexSurface(data) : null), [data])
-  const latestData = useRef(data)
-  latestData.current = data
+  // Column faders the operator is moving: shown where the finger is until the console catches up
+  const shownData = useMemo<SurfaceData | null>(() => {
+    if (!data) return null
+    let faders: Record<string, number> | null = null
+    for (const [key, v] of Object.entries(data.columnFaders)) {
+      const held = hold(`col:${key}`, v)
+      if (held !== v) (faders ??= { ...data.columnFaders })[key] = held
+    }
+    return faders ? { ...data, columnFaders: faders } : data
+  }, [data, tick]) // eslint-disable-line react-hooks/exhaustive-deps
+  const index = useMemo(() => (shownData ? indexSurface(shownData) : null), [shownData])
 
   // Actions as commands; holds are tracked for the window-close release
   const actions = useMemo<SurfaceActions>(() => {
-    const base = createCommandActions(send, sendThrottled, (p) => latestData.current?.executorPages[p])
+    const base = createCommandActions(send, sendThrottled)
     return {
       ...base,
       executor: (ref, phase) => {
@@ -189,7 +198,8 @@ export function StageApp() {
         base.strobe(on)
       },
       grandMaster: (v) => { setLocal('gm', v); base.grandMaster(v) },
-      level: (kind, id, v) => { setLocal(`level:${id}`, v); base.level(kind, id, v) }
+      level: (kind, id, v) => { setLocal(`level:${id}`, v); base.level(kind, id, v) },
+      columnFader: (p, col, v) => { setLocal(`col:${p}:${col}`, v); base.columnFader(p, col, v) }
     }
   }, [sendThrottled])
 

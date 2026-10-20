@@ -31,7 +31,9 @@ import { ClientHolds } from './client-holds'
 import { t } from '@renderer/i18n'
 import { getBridge } from './runtime'
 import { performRecord } from '@renderer/components/playback/record'
-import { defaultButtonFn, executorCellAt, executorPress } from './pro/executor-actions'
+import { columnFader, defaultButtonFn, executorCellAt, executorPress } from './pro/executor-actions'
+import { tapSpeedMaster } from './pro/speed-masters'
+import { usePoolStore } from '@renderer/stores/pool-store'
 import { runCommandLine, runMacro } from './cli'
 
 export interface Command {
@@ -190,6 +192,17 @@ function setExecutorPageFromPayload(p: unknown): void {
   if (Number.isInteger(p)) ex.setPage(p as number)
   else if (isObj(p) && Number.isInteger(p.page)) ex.setPage(p.page as number)
   else if (isObj(p) && (p.delta === 1 || p.delta === -1)) ex.setPage(ex.currentPage + (p.delta as number))
+}
+
+/** 'column-fader' { page, col, level }: the column's fader function, like the console's own fader */
+function columnFaderFromPayload(p: unknown): void {
+  if (!isObj(p) || !Number.isInteger(p.col)) return
+  const level = finite(p.level)
+  if (level === undefined) return
+  const ex = useExecutorStore.getState()
+  const page = p.page === 'current' || p.page === undefined ? ex.currentPage : Number.isInteger(p.page) ? (p.page as number) : -1
+  if (page < 0 || page >= ex.pages.length) return
+  columnFader(page, p.col as number, level)
 }
 
 function runMacroFromPayload(p: unknown): void {
@@ -361,6 +374,28 @@ export function handleCommand(cmd: Command): void {
     case 'executor':
       pressExecutorFromPayload(p, cmd.clientId)
       break
+    case 'column-fader':
+      columnFaderFromPayload(p)
+      break
+
+    // ---- Pro: group / speed masters ----
+    case 'set-group-master': {
+      const level = isObj(p) ? finite(p.level) : undefined
+      if (isObj(p) && isId(p.id) && level !== undefined && usePatchStore.getState().groups.some(g => g.id === p.id)) {
+        usePoolStore.getState().setGroupMaster(p.id, level)
+      }
+      break
+    }
+    case 'tap-speed-master': {
+      const id = isId(p) ? p : isObj(p) && isId(p.id) ? p.id : undefined
+      if (id && usePoolStore.getState().speedMasters.some(m => m.id === id)) tapSpeedMaster(id)
+      break
+    }
+    case 'set-speed-master-bpm': {
+      const bpm = isObj(p) ? finite(p.bpm) : undefined
+      if (isObj(p) && isId(p.id) && bpm !== undefined && bpm > 0) usePoolStore.getState().setSpeedMasterBpm(p.id, bpm)
+      break
+    }
 
     // ---- Pro: macros, command line ----
     case 'run-macro':

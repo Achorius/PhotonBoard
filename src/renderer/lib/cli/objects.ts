@@ -231,8 +231,13 @@ export function lookupCues(cuelist: Cuelist, ref: CliObjectRef): Lookup<Cue> {
 }
 
 /** Executors: `Executor 2.5` = page 2 slot 5; `Executor 5` = current page slot 5. Empty cells count. */
-export function lookupExecutors(api: ProApi, ref: CliObjectRef): Lookup<ExecutorRef> {
-  const pages = api.getExecutorPages().length
+/**
+ * Executors by page.slot. `opts.newPages`: a DESTINATION (Assign / Copy /
+ * Move … At Executor 3.1) may name a page that does not exist yet — the
+ * ProApi creates it (up to MAX_EXECUTOR_PAGES).
+ */
+export function lookupExecutors(api: ProApi, ref: CliObjectRef, opts: { newPages?: boolean } = {}): Lookup<ExecutorRef> {
+  const pages = opts.newPages ? MAX_EXECUTOR_PAGES : api.getExecutorPages().length
   const current = api.getCurrentExecutorPage()
   const items: Keyed<ExecutorRef>[] = []
   for (let page = 0; page < pages; page++) {

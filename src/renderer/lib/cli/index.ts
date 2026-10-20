@@ -24,6 +24,7 @@
 
 import { t } from '@renderer/i18n'
 import { usePoolStore } from '@renderer/stores/pool-store'
+import { isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
 import { useProStore, type CliLogEntry } from '@renderer/stores/pro-store'
 import { getCliContext, getCommand, key, type CliContext, type CliResult, type TFn } from './registry'
 import { parse } from './parser'
@@ -131,6 +132,11 @@ const macroRunner = createMacroRunner({
  * already running (a macro never starts itself twice).
  */
 export function runMacro(idOrNumber: string | number, opts: { ctx?: CliContext; origin?: string } = {}): boolean {
+  if (isRemoteMode() && !opts.ctx) {
+    // A remote browser: macros run on the console (its show, its programmer)
+    sendRemoteCommand('run-macro', typeof idOrNumber === 'number' ? { number: idOrNumber } : { id: idOrNumber })
+    return true
+  }
   const api = opts.ctx?.api
   const macros = typeof api?.getMacros === 'function' ? api.getMacros() : undefined
   return macroRunner.run(idOrNumber, (command, macroId) => {
@@ -141,6 +147,11 @@ export function runMacro(idOrNumber: string | number, opts: { ctx?: CliContext; 
 
 /** Stop a running macro ("Off Macro 3") */
 export function stopMacro(id: string): void {
+  if (isRemoteMode()) {
+    const m = usePoolStore.getState().macros.find(x => x.id === id)
+    if (m) sendRemoteCommand('cli', { text: `Off Macro ${m.number}` })
+    return
+  }
   macroRunner.stop(id)
 }
 

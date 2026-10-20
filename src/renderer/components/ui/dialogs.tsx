@@ -25,6 +25,11 @@ export interface AskOptions<T extends string = string> {
   actions: DialogAction<T>[]
   /** Esc / backdrop allowed → resolves null (default true) */
   dismissible?: boolean
+  /**
+   * Keypad-friendly (command line questions): numbered, large buttons;
+   * the digit keys 1-9 answer, Enter takes the default (last).
+   */
+  numbered?: boolean
 }
 
 export interface ConfirmOptions {
@@ -105,6 +110,23 @@ function AskDialog({ pending }: { pending: Extract<Pending, { kind: 'ask' }> }) 
   const { opts, resolve } = pending
   const done = (id: string | null) => { settle(); resolve(id) }
   const dismissible = opts.dismissible !== false
+  const numbered = !!opts.numbered
+  // Keypad answers: 1-9 pick a choice (digit row or numpad)
+  useEffect(() => {
+    if (!numbered) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
+      const n = /^[1-9]$/.test(e.key) ? Number(e.key) : 0
+      const a = n > 0 ? opts.actions[n - 1] : undefined
+      if (!a) return
+      e.preventDefault()
+      e.stopPropagation()
+      done(a.id)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numbered])
   return (
     <Modal
       open
@@ -115,10 +137,13 @@ function AskDialog({ pending }: { pending: Extract<Pending, { kind: 'ask' }> }) 
       footer={opts.actions.map((a, i) => (
         <Button
           key={a.id}
+          size={numbered ? 'lg' : undefined}
           variant={a.variant ?? (i === opts.actions.length - 1 ? 'primary' : 'secondary')}
           data-autofocus={i === opts.actions.length - 1 ? '' : undefined}
+          data-ask-choice={a.id}
           onClick={() => done(a.id)}
         >
+          {numbered && <span className="mr-1.5 font-mono text-xs opacity-70" aria-hidden>{i + 1}</span>}
           {a.label}
         </Button>
       ))}

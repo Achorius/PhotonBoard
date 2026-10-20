@@ -38,5 +38,9 @@ export const cliUi = {
   legacyNote: 'Basic commands (full syntax coming)',
   backspace: 'Delete the last character',
   please: 'Please',
-  pleaseTitle: 'Run the command (Enter)'
+  pleaseTitle: 'Run the command (Enter)',
+  sentToConsole: 'Sent to the console',
+  syntax: 'Syntax',
+  syntaxShow: 'Show the syntax card',
+  syntaxHide: 'Hide the syntax card'
 }

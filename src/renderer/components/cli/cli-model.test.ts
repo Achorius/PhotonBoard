@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  HISTORY_LIMIT, applyChip, backspace, chipsFor, chooseRunner, expectationHints, insertKey, parseHistory, partialWord, pushHistory, removeLastWord,
+  applyChip, backspace, chipsFor, chooseRunner, expectationHints, insertKey, partialWord, removeLastWord,
   stepHistory
 } from './cli-model'
 
@@ -115,36 +115,14 @@ describe('runner choice', () => {
     expect(chooseRunner('Fixture 1 At 50', { hasContext: true, parsed: { error: { code: 'notImplemented', at: 0 } } })).toBe('legacy')
   })
 
-  it('engine when it parses; legacy-only shortcuts fall back', () => {
+  it('engine as soon as it is wired (it reads the old shortcuts and reports syntax errors itself)', () => {
     expect(chooseRunner('Fixture 1 At 50', { hasContext: true, parsed: { ast: { options: [], source: '' } } })).toBe('engine')
-    expect(chooseRunner('Gobo 30', { hasContext: true, parsed: { error: { code: 'unknownWord', at: 0 } } })).toBe('legacy')
-    expect(chooseRunner('stop 2', { hasContext: true, parsed: { error: { code: 'unknownWord', at: 0 } } })).toBe('legacy')
-    // A real syntax error stays with the engine (it reports it)
+    expect(chooseRunner('Gobo 30', { hasContext: true, parsed: { ast: { options: [], source: '' } } })).toBe('engine')
     expect(chooseRunner('Fixture At At', { hasContext: true, parsed: { error: { code: 'unexpected', at: 8 } } })).toBe('engine')
   })
 })
 
 describe('history', () => {
-  it('newest first, no consecutive duplicates, limited', () => {
-    let h: string[] = []
-    h = pushHistory(h, 'Fixture 1')
-    h = pushHistory(h, ' Fixture 1 ')
-    h = pushHistory(h, 'Go')
-    h = pushHistory(h, '   ')
-    expect(h).toEqual(['Go', 'Fixture 1'])
-    let big: string[] = []
-    for (let i = 0; i < HISTORY_LIMIT + 20; i++) big = pushHistory(big, `L${i}`)
-    expect(big).toHaveLength(HISTORY_LIMIT)
-    expect(big[0]).toBe(`L${HISTORY_LIMIT + 19}`)
-  })
-
-  it('parseHistory tolerates garbage', () => {
-    expect(parseHistory(null)).toEqual([])
-    expect(parseHistory('{')).toEqual([])
-    expect(parseHistory('{"a":1}')).toEqual([])
-    expect(parseHistory('["a", 2, "", "b"]')).toEqual(['a', 'b'])
-  })
-
   it('stepHistory walks up and back to the draft', () => {
     const h = ['Go', 'Fixture 1']
     expect(stepHistory(h, -1, 1, 'dra')).toEqual({ index: 0, text: 'Go' })

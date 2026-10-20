@@ -10,6 +10,7 @@
 
 import type { CliAst, CliObjectRef, CliValueExpr } from './ast'
 import type { CliContext } from './registry'
+import { stripEmptyQuotes } from './commands/util'
 import { key } from './registry'
 import {
   cueSequence, executorText, lookupChases, lookupCues, lookupDmx, lookupEffects, lookupExecutors, lookupMacros, lookupPages,
@@ -23,7 +24,8 @@ const MAX_LISTED = 3
 const DEFAULT_SEQUENCE_ACTIONS = new Set(['go', 'go-', 'pause', 'store'])
 
 function p(ctx: CliContext, k: string, params?: TParams): string {
-  return ctx.t(key(`pro.cli.preview.${k}`), params)
+  const text = ctx.t(key(`pro.cli.preview.${k}`), params)
+  return params && params.name === '' ? stripEmptyQuotes(text) : text
 }
 
 function listed<T>(items: T[], fmt: (x: T) => string): string[] {

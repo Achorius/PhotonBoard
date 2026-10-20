@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { MidiMapping } from '@shared/types'
+
+// The UI store (scene-meta → Pro executor numbers) reads the window at import time
+vi.hoisted(() => {
+  const g = globalThis as Record<string, unknown>
+  g.window ??= {
+    innerWidth: 1400,
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })
+  }
+})
 import { detectCcEncoding, relativeDelta } from './midi-learn'
 import { resolveValue, mappingMatches, computeTapTempo } from './midi-manager'
 import { useMidiStore, LEARN_CAPTURE_MS, dedupeMappings } from '@renderer/stores/midi-store'

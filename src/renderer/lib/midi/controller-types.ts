@@ -78,6 +78,12 @@ export type ControllerAction =
   | { type: 'executor'; page: 'current' | 'next' | number; col: number; row: number }
   | { type: 'column-fader'; col: number }
   | { type: 'grand-master' }
+  /**
+   * Manual crossfade of the GO target (the selected executor's scene,
+   * else the selected scene): like a column fader set to X-fade
+   * (APC40 crossfader). Integrator addition.
+   */
+  | { type: 'xfade' }
   /** Page index (0-based), or step */
   | { type: 'page'; page: number | '+' | '-' }
   | { type: 'go-selected' | 'back-selected' | 'release-all' | 'clear' }

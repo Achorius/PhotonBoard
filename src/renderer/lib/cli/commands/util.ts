@@ -13,7 +13,14 @@ import { executorText, numberOf } from '../objects'
 
 /** Translate pro.cli.<k> */
 export function m(ctx: CliContext, k: string, params?: TParams): string {
-  return ctx.t(key(`pro.cli.${k}`), params)
+  const text = ctx.t(key(`pro.cli.${k}`), params)
+  // Unnamed objects (presets, macros… without a label): no empty quotes ("Stored preset 1.1")
+  return params && params.name === '' ? stripEmptyQuotes(text) : text
+}
+
+/** Remove empty “” / « » (and the space before them) from a message */
+export function stripEmptyQuotes(text: string): string {
+  return text.replace(/[ \u00a0\u202f]*(?:“[ \u00a0\u202f]*”|«[ \u00a0\u202f]*»)/g, '')
 }
 
 export function ok(message: string, extra: Partial<CliResult> = {}): CliResult {

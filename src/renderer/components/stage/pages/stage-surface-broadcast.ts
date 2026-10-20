@@ -47,7 +47,8 @@ export function collectSurfaceData(): SurfaceData {
     grandMaster: dmx.grandMaster,
     blackout: dmx.blackout,
     blinder: dmx.blinder,
-    strobe: dmx.strobe
+    strobe: dmx.strobe,
+    columnFaders: useProStore.getState().columnFaders
   })
 }
 
@@ -84,7 +85,7 @@ export function startStageSurfaceBroadcast(): () => void {
     useDmxStore.subscribe((s, p) => {
       if (s.grandMaster !== p.grandMaster || s.blackout !== p.blackout || s.blinder !== p.blinder || s.strobe !== p.strobe) markDirty()
     }),
-    useProStore.subscribe((s, p) => { if (s.selectedExecutor !== p.selectedExecutor) markDirty() })
+    useProStore.subscribe((s, p) => { if (s.selectedExecutor !== p.selectedExecutor || s.columnFaders !== p.columnFaders) markDirty() })
   ]
 
   const off = bridge.stage.onRequestState(() => {

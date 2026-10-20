@@ -1,7 +1,7 @@
 // ============================================================
 // Command line UI model (pure): keypad editing of the line,
 // autocomplete chips from the parser's `expected`, chip completion,
-// command history (↑ / ↓, 200 lines, localStorage) and the choice
+// history walking (↑ / ↓; storage: lib/cli history) and the choice
 // between the command-line engine (lib/cli) and the legacy commands.
 // No React, no stores: unit-tested in cli-model.test.ts.
 // ============================================================
@@ -133,52 +133,23 @@ export function applyChip(text: string, value: string): string {
 
 // ---------------------------------------------------------------- engine / legacy choice
 
-/** First words only the legacy command line understood (channel shortcuts, Stop, BO) */
-const LEGACY_ONLY = new Set([
-  'stop', 'bo', 'gobo', 'color', 'pan', 'tilt', 'zoom', 'focus', 'shutter', 'strobe', 'prism', 'red', 'green', 'blue', 'white', 'amber'
-])
-
 /**
  * Which implementation runs a line:
- *   'engine' — lib/cli (the full grammar),
- *   'legacy' — the previous ad-hoc commands, used while the engine is not
- *   wired (no context / parser not implemented) and for the few legacy-only
- *   shortcuts the grammar rejects ("Gobo 30", "Stop 2").
+ *   'engine' — lib/cli (the full grammar, old commands included: Gobo 30,
+ *   Stop 2, BO…), as soon as its context is set (lib/pro/setup),
+ *   'legacy' — the previous ad-hoc commands, only while the engine is not
+ *   wired (no context / parser not implemented).
  */
-export function chooseRunner(text: string, opts: { hasContext: boolean; parsed: Pick<CliParseResult, 'ast' | 'error'> }): 'engine' | 'legacy' {
+export function chooseRunner(_text: string, opts: { hasContext: boolean; parsed: Pick<CliParseResult, 'ast' | 'error'> }): 'engine' | 'legacy' {
   if (!opts.hasContext) return 'legacy'
   if (opts.parsed.error?.code === 'notImplemented') return 'legacy'
-  if (!opts.parsed.ast) {
-    const first = text.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
-    if (LEGACY_ONLY.has(first)) return 'legacy'
-  }
   return 'engine'
 }
 
 // ---------------------------------------------------------------- history
 
-export const HISTORY_LIMIT = 200
-export const HISTORY_KEY = 'photonboard.cli.history'
-
-/** Newest first, no consecutive duplicates, at most HISTORY_LIMIT lines */
-export function pushHistory(history: readonly string[], line: string, limit = HISTORY_LIMIT): string[] {
-  const text = line.trim()
-  if (!text) return [...history]
-  const next = history[0] === text ? [...history] : [text, ...history]
-  return next.length > limit ? next.slice(0, limit) : next
-}
-
-/** Parse what localStorage held (anything malformed → empty) */
-export function parseHistory(raw: string | null): string[] {
-  if (!raw) return []
-  try {
-    const v = JSON.parse(raw)
-    if (!Array.isArray(v)) return []
-    return v.filter((s): s is string => typeof s === 'string' && s.trim() !== '').slice(0, HISTORY_LIMIT)
-  } catch {
-    return []
-  }
-}
+// Lines are stored by lib/cli (getCliHistory: 200 lines, localStorage
+// 'photonboard.cli.history'); this only walks them.
 
 /**
  * ↑ / ↓ through the history. `index` -1 = the draft being typed.

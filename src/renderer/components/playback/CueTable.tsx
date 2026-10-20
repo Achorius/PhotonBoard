@@ -22,11 +22,10 @@ import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { isRemoteMode } from '@renderer/lib/runtime'
 import { trackedCounts } from './scene-meta'
-import { capture, captureSummary, recordUpdateCue } from './record'
+import { capture, captureSummary, recordStoreMode, recordUpdateCue } from './record'
 import { deleteCue, duplicateCue, focusNameField, formatCueNumber } from './actions'
 import { dropIndicator, useReorder, type ReorderState } from './useReorder'
 import { cueProInfo, hasProData, presetNames } from './pro-cue'
-import { storeIntoExistingCue } from './store-modes'
 import { featureLabel } from './feature-label'
 
 const MAX_TIME = 600
@@ -353,7 +352,7 @@ function cueMenu(cuelistId: string, cue: Cue, index: number, count: number, onSe
     const message = mode === 'remove'
       ? t('pro.scenes.record.toastRemoved', { number, count: cap.channelCount })
       : t('scenes.toast.cueUpdated', { number })
-    storeIntoExistingCue(cuelistId, cue.id, cap.values, { mode }, message)
+    recordStoreMode(cuelistId, cue.id, cap, { mode }, message)
     toast.success(message, { description: captureSummary(cap) })
   }
   return [
@@ -362,7 +361,7 @@ function cueMenu(cuelistId: string, cue: Cue, index: number, count: number, onSe
     { type: 'separator' },
     { label: t('scenes.update.fromProgrammer'), description: t('scenes.update.mergeDescription'), icon: LuRefreshCw, onSelect: () => fromProgrammer('merge') },
     { label: t('scenes.update.replaceWithProgrammer'), description: t('scenes.update.replaceCueDescription'), icon: LuReplace, onSelect: () => fromProgrammer('replace') },
-    ...(useUiStore.getState().proMode && !isRemoteMode() ? [
+    ...(useUiStore.getState().proMode ? [
       { label: t('pro.scenes.record.remove'), description: t('pro.scenes.record.removeTitle'), icon: LuEraser, onSelect: () => storeMode('remove') } satisfies MenuEntry,
       { label: t('pro.scenes.record.cueonly'), description: t('pro.scenes.record.cueonlyTitle'), icon: LuRefreshCwOff, onSelect: () => storeMode('cueonly') } satisfies MenuEntry
     ] : []),

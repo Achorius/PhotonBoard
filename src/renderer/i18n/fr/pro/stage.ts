@@ -19,7 +19,7 @@ export const stage: Translation['pro']['stage'] = {
     go: 'GO',
     goBack: 'Retour',
     flash: 'Flash',
-    temp: 'Temporaire',
+    temp: 'Trigger (temporaire)',
     off: 'Off',
     select: 'Sélection',
     swap: 'Swap',

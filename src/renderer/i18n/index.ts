@@ -323,6 +323,12 @@ export const t: TFunction = makeT(null)
 
 const boundT: Record<Locale, TFunction> = { fr: makeT('fr'), en: makeT('en') }
 
+// Scripted runs (scripts/dev/gallery.mjs, smoke tests) find controls by
+// their translated names in either language: read-only translator.
+try {
+  if (typeof window !== 'undefined') (window as unknown as { __pbI18n?: unknown }).__pbI18n = { t, getLocale }
+} catch { /* not a browser */ }
+
 /** Translator for a given locale (tests, exports in a fixed language). */
 export function getT(locale: Locale): TFunction {
   return boundT[locale]

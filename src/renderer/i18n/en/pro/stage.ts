@@ -20,7 +20,7 @@ export const stage = {
     go: 'GO',
     goBack: 'GO back',
     flash: 'Flash',
-    temp: 'Temp',
+    temp: 'Trigger (temp)',
     off: 'Off',
     select: 'Select',
     swap: 'Swap',

@@ -672,6 +672,7 @@ function normalizeMidiMapping(raw: Obj, id: string): MidiMapping | null {
   if (targetId) mapping.target.id = targetId
   const parameter = optStr(target.parameter)
   if (parameter) mapping.target.parameter = parameter
+  if (options.feedback === 'note' || options.feedback === 'cc') mapping.options.feedback = options.feedback
   return mapping
 }
 

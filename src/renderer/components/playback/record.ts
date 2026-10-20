@@ -13,7 +13,7 @@
 // ============================================================
 
 import { v4 as uuidv4 } from 'uuid'
-import type { CueChannelValue, Effect } from '@shared/types'
+import type { CueChannelValue, CueFeature, Effect } from '@shared/types'
 import type { RecordCommandPayload } from '@shared/remote-commands'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
@@ -29,6 +29,8 @@ import { isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
 import { summaryCounts, useConsoleProgrammer } from '@renderer/lib/console-programmer'
 import { runAsConsoleContent } from '@renderer/lib/content-sync'
 import { t } from '@renderer/i18n'
+import type { StoreOptions } from '@renderer/lib/pro/store-ops'
+import { applyFeatureFilter, storeIntoExistingCue } from './store-modes'
 
 export interface Capture {
   values: CueChannelValue[]
@@ -42,6 +44,11 @@ export interface Capture {
   selectedOnly: boolean
   /** The fixtures it is limited to (selectedOnly) */
   fixtureIds?: string[]
+  /**
+   * Pro store filter already applied to `values` — carried so a remote
+   * browser (whose capture has no values: the console records) sends it
+   */
+  filter?: CueFeature[]
 }
 
 export function countFixtures(values: CueChannelValue[]): number {
@@ -103,7 +110,28 @@ export function capture(selectedOnly: boolean, fixtureIds?: string[]): Capture {
 
 /** Remote: ask the console to record (with its own programmer / output) */
 function sendRecord(cap: Capture, payload: Omit<RecordCommandPayload, 'fixtureIds'>): void {
-  sendRemoteCommand('record', { ...payload, ...(cap.fixtureIds ? { fixtureIds: cap.fixtureIds } : {}) } satisfies RecordCommandPayload)
+  sendRemoteCommand('record', {
+    ...payload,
+    ...(cap.fixtureIds ? { fixtureIds: cap.fixtureIds } : {}),
+    ...(cap.filter && cap.filter.length > 0 && !payload.filter ? { filter: cap.filter } : {})
+  } satisfies RecordCommandPayload)
+}
+
+/**
+ * Pro store mode into an existing cue (Merge / Overwrite / Remove / Cue
+ * only, feature filter): one undo step on the console; a remote browser
+ * sends it as a 'record' command with the store options (the console
+ * stores its own programmer). `cap` = the unfiltered capture.
+ */
+export function recordStoreMode(cuelistId: string, cueId: string, cap: Capture, opts: StoreOptions, label: string): void {
+  if (isRemoteMode()) {
+    sendRecord(cap, {
+      action: 'update-cue', targetId: cuelistId, itemId: cueId, storeMode: opts.mode,
+      ...(opts.filter && opts.filter.length > 0 ? { filter: opts.filter } : {})
+    })
+    return
+  }
+  storeIntoExistingCue(cuelistId, cueId, cap.values, opts, label)
 }
 
 /** `overlay` wins on the channels both contain; the others are kept */
@@ -248,6 +276,8 @@ export function recordUpdateStep(chaseId: string, stepId: string, cap: Capture, 
 }
 
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128
+const CUE_FEATURES: readonly CueFeature[] = ['intensity', 'position', 'colour', 'beam', 'control']
+const STORE_MODES: readonly StoreOptions['mode'][] = ['merge', 'overwrite', 'remove', 'cueonly', 'block']
 
 /**
  * Console: execute a remote's 'record' command with the console's own
@@ -259,10 +289,22 @@ export function performRecord(raw: unknown): 'cuelists' | 'chases' | null {
   const p = raw as Partial<RecordCommandPayload>
   if (!isId(p.targetId)) return null
   const fixtureIds = Array.isArray(p.fixtureIds) ? p.fixtureIds.filter(isId) : undefined
-  const cap = capture(!!fixtureIds, fixtureIds && fixtureIds.length > 0 ? fixtureIds : undefined)
+  const rawCap = capture(!!fixtureIds, fixtureIds && fixtureIds.length > 0 ? fixtureIds : undefined)
   const name = typeof p.name === 'string' ? p.name.slice(0, 200) : undefined
   const itemId = isId(p.itemId) ? p.itemId : undefined
   const mode = p.mode === 'replace' ? 'replace' : 'merge'
+  // Pro options (remote Record popover in Pro view): store mode and feature filter
+  const filter = Array.isArray(p.filter) ? p.filter.filter((f): f is CueFeature => (CUE_FEATURES as readonly string[]).includes(f as string)) : []
+  const storeMode = STORE_MODES.includes(p.storeMode as StoreOptions['mode']) ? (p.storeMode as StoreOptions['mode']) : null
+  const filtered = filter.length > 0 ? applyFeatureFilter(rawCap.values, filter) : rawCap.values
+  const cap: Capture = filter.length > 0 ? { ...rawCap, values: filtered, channelCount: filtered.length, fixtureCount: countFixtures(filtered) } : rawCap
+  if (p.action === 'update-cue' && storeMode && itemId && rawCap.channelCount > 0) {
+    // store-ops applies the filter itself (and Remove / Cue only need the unfiltered capture)
+    const cue = usePlaybackStore.getState().cuelists.find((c) => c.id === p.targetId)?.cues.find((q) => q.id === itemId)
+    const label = t('scenes.toast.cueUpdated', { number: cue ? String(cue.number) : '' })
+    storeIntoExistingCue(p.targetId, itemId, rawCap.values, { mode: storeMode, ...(filter.length > 0 ? { filter } : {}) }, label)
+    return 'cuelists'
+  }
   if (cap.channelCount === 0) {
     console.warn('[Record] remote record: nothing to record on the console')
     return p.action === 'new-chase' || p.action === 'add-step' || p.action === 'update-step' ? 'chases' : 'cuelists'

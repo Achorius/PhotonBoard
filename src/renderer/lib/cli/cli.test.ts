@@ -674,6 +674,11 @@ describe('object editing', () => {
     expect(run('Assign Sequence 3').ok).toBe(false)
     expect(run('Assign Sequence 9 At Executor 1.1').ok).toBe(false)
     expect(run('Assign Fixture 1 At Executor 1.1').ok).toBe(false)
+    // A destination page that does not exist yet is created
+    expect(run('Assign Sequence 3 At Executor 4.1').ok).toBe(true)
+    expect(api.pages).toHaveLength(4)
+    expect(api.cell(3, 0, 0)).toMatchObject({ kind: 'cuelist', id: 'cl-chorus' })
+    expect(run('Assign Sequence 3 At Executor 17.1').ok).toBe(false)
   })
 })
 
@@ -949,3 +954,14 @@ describe('help', () => {
   })
 })
 
+
+describe('messages of unnamed objects', () => {
+  it('drop the empty quotes (EN “” and FR « »)', async () => {
+    const { stripEmptyQuotes } = await import('./commands/util')
+    expect(stripEmptyQuotes('Stored preset 1.1 “”')).toBe('Stored preset 1.1')
+    expect(stripEmptyQuotes('Macro 1 “” started')).toBe('Macro 1 started')
+    expect(stripEmptyQuotes('Preset 1.1 « » mémorisé')).toBe('Preset 1.1 mémorisé')
+    expect(stripEmptyQuotes('Preset 1.1 «  »')).toBe('Preset 1.1')
+    expect(stripEmptyQuotes('Scene “Wash”')).toBe('Scene “Wash”')
+  })
+})

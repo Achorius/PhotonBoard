@@ -208,6 +208,34 @@ function mirrorSpeedMasters(raw: unknown[]): void {
   if (changed) usePoolStore.setState({ speedMasters: next })
 }
 
+/** Group master levels (saved with the show, but moved live: mirrored like faders) */
+function mirrorGroupMasters(raw: unknown): void {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  const cur = usePoolStore.getState().groupMasters
+  const next: Record<string, number> = {}
+  for (const [id, v] of Object.entries(raw as Obj)) {
+    if (typeof v === 'number' && Number.isFinite(v)) next[id] = clampByte(v, 255)
+  }
+  for (const id of Object.keys(cur)) {
+    if (isLocallyHeld(`groupMaster:${id}`)) next[id] = cur[id]
+  }
+  const keys = Object.keys(next)
+  if (keys.length === Object.keys(cur).length && keys.every((k) => cur[k] === next[k])) return
+  usePoolStore.setState({ groupMasters: next })
+}
+
+/** What the console's column faders show (column levels, rates… live on the console only) */
+function mirrorColumnFaders(raw: unknown): void {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  const pro = useProStore.getState()
+  const next: Record<string, number> = {}
+  for (const [key, v] of Object.entries(raw as Obj)) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue
+    next[key] = isLocallyHeld(`column:${key}`) && key in pro.columnFaders ? pro.columnFaders[key] : clampByte(v, 255)
+  }
+  pro.setColumnFaders(next)
+}
+
 /** Apply one Pi state broadcast to the local stores. */
 export function applyRemoteState(data: unknown): void {
   if (!data || typeof data !== 'object') return
@@ -223,6 +251,8 @@ export function applyRemoteState(data: unknown): void {
       mirrorExecutorPage(d)
       mirrorPro(d)
       if (Array.isArray(d.speedMasters)) mirrorSpeedMasters(d.speedMasters)
+      if (d.groupMasters) mirrorGroupMasters(d.groupMasters)
+      if (d.columnFaders) mirrorColumnFaders(d.columnFaders)
       if (typeof d.timelinePlaying === 'boolean') {
         const local = getTimelineState()
         // Hold what this remote just did (Play / Stop / seek) until the console catches up

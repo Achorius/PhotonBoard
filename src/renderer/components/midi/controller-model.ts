@@ -71,6 +71,7 @@ export function actionLabel(a: ControllerAction, t: TFunction): string {
     case 'strobe': return t('pro.midi.map.action.strobe')
     case 'tap': return t('pro.midi.map.action.tap')
     case 'grand-master': return t('pro.midi.map.action.grandMaster')
+    case 'xfade': return t('pro.midi.map.action.xfade')
     case 'column-fader': return t('pro.midi.map.action.columnFader', { n: a.col + 1 })
     case 'group': {
       const g = resolveGroupRef(usePatchStore.getState().groups, a.id)
@@ -109,6 +110,7 @@ export function actionShort(a: ControllerAction, t: TFunction): string {
     case 'strobe': return t('pro.midi.map.short.strobe')
     case 'tap': return t('pro.midi.map.short.tap')
     case 'grand-master': return t('pro.midi.map.short.gm')
+    case 'xfade': return t('pro.midi.map.short.xfade')
     case 'column-fader': {
       const ex = useExecutorStore.getState()
       return ex.pages[ex.currentPage]?.columns[a.col]?.title || String(a.col + 1)

@@ -38,5 +38,9 @@ export const cliUi: Translation['pro']['cliUi'] = {
   legacyNote: 'Commandes de base (syntaxe complète à venir)',
   backspace: 'Effacer le dernier caractère',
   please: 'Please',
-  pleaseTitle: 'Exécuter la commande (Entrée)'
+  pleaseTitle: 'Exécuter la commande (Entrée)',
+  sentToConsole: 'Envoyée à la console',
+  syntax: 'Syntaxe',
+  syntaxShow: 'Afficher l’aide-mémoire',
+  syntaxHide: 'Masquer l’aide-mémoire'
 }

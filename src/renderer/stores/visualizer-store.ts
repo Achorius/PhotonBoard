@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { DEFAULT_ROOM_CONFIG, type RoomConfig, type TrussBar } from '@shared/types'
+import { t } from '@renderer/i18n'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 
 export type VisualizerSubTab = '3d' | 'layout'
@@ -86,11 +87,26 @@ interface VisualizerState {
   updateTrussBar: (id: string, updates: Partial<TrussBar>) => void
 }
 
+/**
+ * Default truss bar names ("Bar 1"… from shared/types defaultTrussBars,
+ * untouched) written in the operator's language — names are show data,
+ * so only a new / default room gets them.
+ */
+export function localizeDefaultRoom(room: RoomConfig): RoomConfig {
+  let changed = false
+  const trussBars = room.trussBars.map((b, i) => {
+    if (b.id !== `truss-${i}` || b.name !== `Bar ${i + 1}`) return b
+    changed = true
+    return { ...b, name: t('layout.defaults.barName', { n: i + 1 }) }
+  })
+  return changed ? { ...room, trussBars } : room
+}
+
 export const useVisualizerStore = create<VisualizerState>()(subscribeWithSelector((set) => ({
   subTab: '3d',
   selectedFixtureId: null,
   selectedTrussId: null,
-  roomConfig: { ...DEFAULT_ROOM_CONFIG, trussBars: DEFAULT_ROOM_CONFIG.trussBars.map(t => ({ ...t })) },
+  roomConfig: localizeDefaultRoom({ ...DEFAULT_ROOM_CONFIG, trussBars: DEFAULT_ROOM_CONFIG.trussBars.map(b => ({ ...b })) }),
   showBeams: true,
   showRoom: true,
   showGrid: true,
@@ -123,7 +139,7 @@ export const useVisualizerStore = create<VisualizerState>()(subscribeWithSelecto
     const { width, height, trussBars } = s.roomConfig
     const newBar: TrussBar = {
       id: crypto.randomUUID(),
-      name: `Bar ${trussBars.length + 1}`,
+      name: t('layout.defaults.barName', { n: trussBars.length + 1 }),
       z: 0,
       y: height - 0.05,
       width: width,

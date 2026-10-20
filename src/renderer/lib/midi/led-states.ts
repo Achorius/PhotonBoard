@@ -151,6 +151,7 @@ export function actionLed(action: ControllerAction, s: FeedbackSnapshot, held: b
     }
     case 'column-fader':
     case 'grand-master':
+    case 'xfade':
       return null
   }
 }

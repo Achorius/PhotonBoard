@@ -40,7 +40,11 @@ export const REMOTE_COMMANDS = [
   'set-executor-layout', // payload: { grid, columns, modes } (current executor page)
   'run-macro',           // payload: macro id | { id } | { number } (macro number)
   'set-executor-page',   // payload: page index (0-based) | { page } | { delta: +1 / -1 }
-  'executor'             // payload: ExecutorCommandPayload { page, col, row, phase }
+  'executor',            // payload: ExecutorCommandPayload { page, col, row, phase }
+  'column-fader',        // payload: ColumnFaderCommandPayload { page, col, level } (its column fader function)
+  'set-group-master',    // payload: { id, level } (group id, 0-255)
+  'tap-speed-master',    // payload: speed master id | { id }
+  'set-speed-master-bpm' // payload: { id, bpm }
 ] as const
 
 export type RemoteCommandType = (typeof REMOTE_COMMANDS)[number]
@@ -88,6 +92,18 @@ export interface ExecutorCommandPayload {
   phase: 'down' | 'up'
 }
 
+/**
+ * 'column-fader' command: move a column fader (0-255) the way the
+ * console's own fader does (column level, cell master, Grand Master,
+ * group / speed master, rate, X-fade: the column's fader function).
+ * `page` 0-based or 'current'; col 0-7.
+ */
+export interface ColumnFaderCommandPayload {
+  page: number | 'current'
+  col: number
+  level: number
+}
+
 /** 'cli' command: one command line typed on a web remote */
 export interface CliCommandPayload {
   text: string
@@ -130,6 +146,14 @@ export interface RecordCommandPayload {
   name?: string
   includeEffects?: boolean
   mode?: 'merge' | 'replace'
+  /**
+   * Pro store mode (add-cue / update-cue on scenes): merge / overwrite /
+   * remove / cue only / block, with an optional feature filter. When set
+   * it replaces `mode`.
+   */
+  storeMode?: 'merge' | 'overwrite' | 'remove' | 'cueonly' | 'block'
+  /** Pro store filter: only these features are stored */
+  filter?: ('intensity' | 'position' | 'colour' | 'beam' | 'control')[]
 }
 
 /** Per-section revision as published in the state snapshot */

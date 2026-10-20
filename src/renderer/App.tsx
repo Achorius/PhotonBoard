@@ -43,6 +43,7 @@ import { installDirtyTracking, loadLastShow } from './lib/show-io'
 import { installContentTracking, loadConsoleShow } from './lib/content-sync'
 import { installHistory, redo, undo } from './lib/history'
 import { getLocale, onLocaleChange, useT } from './i18n'
+import { installPro } from './lib/pro/setup'
 
 /** Text field focused: the Edit menu's Undo / Redo act on the text, not on the show */
 function isEditingText(): boolean {
@@ -90,6 +91,10 @@ export default function App() {
 
   // Undo / redo of show content (console and remote: each device undoes its own edits)
   useEffect(() => installHistory(), [])
+
+  // Pro layer: programmer engine (park, group masters, Blind), command line context
+  // (real ProApi), column fader values, runtime object numbers
+  useEffect(() => installPro(), [])
 
   // One-time init: fixture library, MIDI, gamepad, last show
   useEffect(() => {

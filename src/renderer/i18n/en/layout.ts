@@ -126,6 +126,11 @@ export const layout = {
     help: 'Select a fixture or a bar on the plan to edit it. Drag empty space to pan, pinch or scroll to zoom.'
   },
 
+  /** Default names (show data, written when created) */
+  defaults: {
+    barName: 'Bar {n}'
+  },
+
   bar: {
     deselect: 'Deselect bar',
     section: 'Bar',

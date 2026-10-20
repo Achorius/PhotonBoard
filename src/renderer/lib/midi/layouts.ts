@@ -98,5 +98,7 @@ export function buildBindings(profile: ControllerProfile, layout: ControllerLayo
     else if (ids.has(`encoder:${i}`)) out.push({ control: `encoder:${i}`, action: { type: 'column-fader', col: i } })
   }
   if (ids.has('fader:8')) out.push({ control: 'fader:8', action: { type: 'grand-master' } })
+  // Crossfader (APC40 mk2 & co.): manual X-fade of the GO target
+  if (ids.has('xfade')) out.push({ control: 'xfade', action: { type: 'xfade' } })
   return out
 }

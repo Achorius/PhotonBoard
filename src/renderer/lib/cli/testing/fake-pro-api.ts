@@ -444,6 +444,8 @@ export class FakeProApi implements ProApi {
     this.log('assignExecutor', ref, target, opts)
     this.edit('assignExecutor', () => {
       const pages = clone(this.pages)
+      // Like the real ProApi: assigning to a page that does not exist yet creates it
+      while (pages.length <= ref.page && pages.length < 16) pages.push(createExecutorPage(`page-${pages.length + 1}`))
       const page = pages[ref.page]
       if (!page) return
       let cell: ExecutorCell | null = null

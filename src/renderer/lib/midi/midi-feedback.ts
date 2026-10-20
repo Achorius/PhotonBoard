@@ -82,10 +82,11 @@ export class FadeTracker {
 }
 
 const fades = new FadeTracker()
-let fadingProbe: ((cuelistId: string) => boolean) | null = null
+/** Exact answer of the cue engine; undefined = unknown (the fade-time tracker answers) */
+let fadingProbe: ((cuelistId: string) => boolean | undefined) | null = null
 
-/** INTEGRATOR: wire the cue engine's exact answer (playback-controller cueEngine.isFading) */
-export function setFadingProbe(fn: ((cuelistId: string) => boolean) | null): void {
+/** The cue engine's exact answer (lib/midi/index wires playback-controller isCuelistFading) */
+export function setFadingProbe(fn: ((cuelistId: string) => boolean | undefined) | null): void {
   fadingProbe = fn
 }
 
@@ -140,7 +141,7 @@ function buildSnapshot(now: number): FeedbackSnapshot {
     tapOn,
     pagePlaying,
     anythingPlaying: pagePlaying.some(Boolean) || pb.cuelists.some((c) => c.isPlaying) || pb.chases.some((c) => c.isPlaying),
-    isFading: (id) => (fadingProbe ? fadingProbe(id) : fades.isFading(id, now)),
+    isFading: (id) => fadingProbe?.(id) ?? fades.isFading(id, now),
     isMacroRunning
   }
 }

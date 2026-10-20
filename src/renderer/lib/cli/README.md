@@ -79,7 +79,7 @@ channel, else its first coarse intensity channel.
 | Delete | `Delete Cue 3` · `Delete Sequence 4` · `Delete Preset 4.2` · `Delete Group 3` · `Delete Macro 2` · `Delete Executor 1.5` | never asks: `Oops` restores |
 | Copy / Move | `Copy Cue 2 At 5` · `Copy Cue 2 At Cue 5 Sequence 2` · `Copy Preset 4.1 At 4.5` · `Copy Group 1 At 6` · `Copy Macro 1 At 4` · `Copy Sequence 1 At 9` · `Copy Executor 1.1 At 2.1` · `Move Cue 2 At 2.5` · `Move Preset 4.1 At 4.8` · `Move Macro 1 At 7` · `Move Executor 1.1 At 2.1` | an occupied target needs `/overwrite` |
 | Label | `Label Group 3 "Wash"` | several objects: "Wash 1", "Wash 2"… (Group, Sequence, Cue, Preset, Macro) |
-| Assign | `Assign Sequence 3 At Executor 2.5 [/button=flash]` · `Assign Chase 1 At 1.4` · `Assign Executor 1.5 /button=go` | sources: Sequence, Chase, Effect, Macro, Group, Speed; buttons: toggle go goBack flash temp off select swap pause learn |
+| Assign | `Assign Sequence 3 At Executor 2.5 [/button=flash]` · `Assign Chase 1 At 1.4` · `Assign Executor 1.5 /button=go` | sources: Sequence, Chase, Effect, Macro, Group, Speed; buttons: toggle go goBack flash temp off select swap pause learn; a destination page that does not exist yet is created (up to 16) |
 | Go | `Go` · `Go 3` · `Go Sequence 3` · `Go Executor 2.5` · `Go Macro 2` · `Go Chase 1` · `Go Effect 1` · `Go Cue 3` | no object: the selected sequence (selected executor, else Scenes view), else the first |
 | Go- | `Go-` · `Go- 2` · `Go- Executor 1.1` | |
 | Goto | `Goto 5` · `Goto Cue 5 Sequence 2` | |
@@ -143,13 +143,17 @@ regression table in `cli.test.ts`): `Clear`, `Blackout`/`BO`, `Go [n]`,
 ### Context and ProApi
 
 Commands only talk to the show through `ProApi` (`lib/pro/contracts.ts`), so
-they are tested with `testing/fake-pro-api.ts`. The integrator calls
-`setCliContext({ api: createProApi(), t, now: Date.now })`.
+they are tested with `testing/fake-pro-api.ts`. The app wires the real one at
+start-up (`lib/pro/setup.ts` installPro: `setCliContext({ api: getProApi(), t,
+now: Date.now })`), on the console and on remote browsers. A remote browser
+uses it for the preview / autocomplete only: the lines it runs, and the
+macros it starts, are sent to the console (`cli`, `run-macro` commands) and
+come back in the console's command-line log.
 
 Optional extras the real API may provide:
 
 - `getAlign(): AlignMode | null` — the selection tools' align mode, used by
-  fans (without it fans run `<`).
+  fans (without it fans run `<`). The real ProApi provides it.
 - `CliContext.macro` is set by the macro runner: questions get their default
   answer (Store merges) and a macro cannot start itself.
 

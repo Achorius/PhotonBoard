@@ -22,7 +22,7 @@ import type { ShowLoadResult, ShowSaveResult } from '@shared/photonboard-api'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
-import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { localizeDefaultRoom, useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { useFollowStore } from '@renderer/stores/follow-store'
@@ -53,6 +53,8 @@ export interface ShowIoResult {
   error?: string
   /** Non-fatal remarks (recovered from backup, cleaned-up data…) */
   warnings?: string[]
+  /** A show with that name already exists (remote upload / save as: confirm, then retry with overwrite) */
+  exists?: boolean
 }
 
 let busy = false
@@ -288,6 +290,11 @@ async function adoptLoadResult(result: ShowLoadResult | null | undefined, op: Sh
     return { status: 'canceled' }
   }
   if (!result.success || !result.show) {
+    if (result.exists) {
+      // The caller asks before overwriting (file-actions requestUploadShow)
+      status(t('file.errors.exists'), 'info', 3000)
+      return { status: 'error', error: t('file.errors.exists'), exists: true }
+    }
     const error = result.error || t('file.errors.unreadable')
     status(t('file.failed', { op: opLabel(op), error }), 'error', 5000)
     return { status: 'error', error }
@@ -421,7 +428,10 @@ export function newShow(): Promise<ShowIoResult> {
       return { status: 'error', error }
     }
     const fresh = await requireBridge().show.new()
-    const { show } = applyShowData(fresh ?? createEmptyShow(t('file.defaultShowName')), { name: fresh?.name || t('file.defaultShowName') })
+    const data = fresh ?? createEmptyShow(t('file.defaultShowName'))
+    // Default truss bars named in the operator's language ("Pont 1")
+    if (data.roomConfig) data.roomConfig = localizeDefaultRoom(data.roomConfig)
+    const { show } = applyShowData(data, { name: fresh?.name || t('file.defaultShowName') })
     status(t('file.newShowDone'), 'success', 2000)
     return { status: 'ok', name: show.name }
   })

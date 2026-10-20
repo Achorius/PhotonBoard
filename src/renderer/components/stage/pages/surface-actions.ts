@@ -4,14 +4,13 @@
 //                               (shared/remote-commands.ts)
 // Store-bound actions (console + remote browser) live in
 // surface-store.ts so this file stays store-free (Stage window bundle).
-// Optional actions are missing where no command exists yet (group
-// masters, speed master taps from a Stage window): widgets disable
-// the control.
+// Optional actions (group masters, speed taps) are missing where a
+// surface cannot do them: widgets disable the control.
 // ============================================================
 
 import { PRESET_FAMILY_NUMBER, type PresetType } from '@shared/types'
 import type { ExecutorRef } from '@renderer/lib/pro/contracts'
-import { columnFaderCommands, type ColumnPageLike, type SurfaceCommand } from '../executor-surface'
+import { columnFaderCommand } from '../executor-surface'
 
 export interface SurfaceActions {
   /** Press / release an executor cell (button function semantics: lib/pro/executor-actions) */
@@ -47,20 +46,21 @@ export type SendCommand = (type: string, payload?: unknown) => void
 
 /**
  * Actions as remote commands (Stage window). `sendThrottled` (one slot per
- * key, leading + trailing) carries fader moves; `executorPage(p)` gives the
- * cells of a page for column faders.
+ * key, leading + trailing) carries fader moves.
  */
 export function createCommandActions(
   send: SendCommand,
-  sendThrottled: (key: string, type: string, payload: unknown) => void,
-  executorPage: (page: number) => ColumnPageLike | undefined
+  sendThrottled: (key: string, type: string, payload: unknown) => void
 ): SurfaceActions {
   return {
     executor: (ref, phase) => send('executor', { page: ref.page, col: ref.col, row: ref.row, phase }),
     columnFader: (page, col, level) => {
-      columnFaderCommands(executorPage(page), col, level).forEach((c: SurfaceCommand, i) => sendThrottled(`col:${page}:${col}:${i}`, c.type, c.payload))
+      const c = columnFaderCommand(page, col, level)
+      sendThrottled(`col:${page}:${col}`, c.type, c.payload)
     },
     level: (kind, id, level) => sendThrottled(`level:${id}`, kind === 'cuelist' ? 'set-cuelist-fader' : 'set-chase-fader', { id, level }),
+    groupMaster: (id, level) => sendThrottled(`group:${id}`, 'set-group-master', { id, level }),
+    speedTap: (id) => send('tap-speed-master', { id }),
     grandMaster: (level) => sendThrottled('gm', 'set-grand-master', level),
     blackout: () => send('toggle-blackout'),
     blinder: (on) => send('toggle-blinder', on),

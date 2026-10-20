@@ -108,6 +108,10 @@ export interface StateSnapshot {
   blind: boolean
   highlight: boolean
   speedMasters: { id: string; number: number; name: string; bpm: number }[]
+  /** Pro: group master levels (0-255; missing = 255) */
+  groupMasters: Record<string, number>
+  /** Pro: what each column fader shows, "page:col" → 0-255 (pro-store.columnFaders) */
+  columnFaders: Record<string, number>
   /** Last command lines run on the console (any origin), oldest first */
   cliLog: SnapshotCliLine[]
   /** Ids of the running effects (remote effect buttons) */
@@ -130,7 +134,7 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
   const { showName, isDirty } = useUiStore.getState()
   const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
   const { grid, columns, modes, currentPage, pages } = useExecutorStore.getState()
-  const { blind, highlight, cliLog } = useProStore.getState()
+  const { blind, highlight, cliLog, columnFaders } = useProStore.getState()
 
   cachedControl = {
     grandMaster,
@@ -191,6 +195,8 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
     blind,
     highlight,
     speedMasters: usePoolStore.getState().speedMasters.map(m => ({ id: m.id, number: m.number, name: m.name, bpm: m.bpm })),
+    groupMasters: usePoolStore.getState().groupMasters,
+    columnFaders,
     cliLog: cliLog.slice(-SNAPSHOT_CLI_LOG).map(l => {
       const line: SnapshotCliLine = { id: l.id, time: l.time, text: l.text, ok: l.ok, message: l.message, level: l.level }
       if (l.origin) line.origin = l.origin
@@ -351,10 +357,10 @@ export function startStateBroadcast(): () => void {
       if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes || s.pages !== p.pages || s.currentPage !== p.currentPage) onControlChange()
     }),
     useProStore.subscribe((s, p) => {
-      if (s.blind !== p.blind || s.highlight !== p.highlight || s.cliLog !== p.cliLog) onControlChange()
+      if (s.blind !== p.blind || s.highlight !== p.highlight || s.cliLog !== p.cliLog || s.columnFaders !== p.columnFaders) onControlChange()
     }),
     usePoolStore.subscribe((s, p) => {
-      if (s.speedMasters !== p.speedMasters) onControlChange()
+      if (s.speedMasters !== p.speedMasters || s.groupMasters !== p.groupMasters) onControlChange()
     }),
     usePatchStore.subscribe((s, p) => {
       if (s.patch !== p.patch || s.groups !== p.groups || s.selectedFixtureIds !== p.selectedFixtureIds) onControlChange()

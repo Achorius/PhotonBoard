@@ -40,7 +40,11 @@ export const COMMANDS = [
   'set-executor-layout',          // payload: { grid, columns, modes } (current executor page)
   'run-macro',                    // payload: macro id | { id } | { number } (macro number)
   'set-executor-page',            // payload: page index (0-based) | { page } | { delta: +1 / -1 }
-  'executor'                      // payload: { page, col, row, phase: 'down' | 'up' } (page 0-based or 'current')
+  'executor',                     // payload: { page, col, row, phase: 'down' | 'up' } (page 0-based or 'current')
+  'column-fader',                 // payload: { page, col, level } (page 0-based or 'current', level 0-255)
+  'set-group-master',             // payload: { id, level } (group id, 0-255)
+  'tap-speed-master',             // payload: speed master id | { id }
+  'set-speed-master-bpm'          // payload: { id, bpm }
 ]
 
 export function isCommand(type) {

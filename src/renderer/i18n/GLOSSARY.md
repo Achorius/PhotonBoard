@@ -48,7 +48,13 @@ Canal…) sont **à réutiliser** : `t('common.scene')`, `t('common.fixtureCount
 | Highlight, Locate, Blind, Park, Solo | inchangés | — | Fonctions grandMA, connues sous ce nom. |
 | Stage (fenêtre / vue) | Stage | la (« la vue Stage ») | Nom de la surface de jeu (deuxième écran, téléphone). « Scène » est déjà pris par les scènes. |
 | Live (bouton timeline) | Live | — | Court, parlant. |
-| TOG / TRIG / FLASH (modes de bouton) | inchangés | — | Badges de 4-5 lettres ; les noms longs sont traduits : Bascule, Trigger, Flash. |
+| Pools | Pools | les | Onglet Pro (presets, groupes, macros, masters de vitesse) : nom grandMA. |
+| MAtricks | MAtricks | les | Fonction grandMA (entrelacement, blocs, groupes, ailes). |
+| Speed master | Master de vitesse (onglet) / speed master (cellule, ligne de commande) | le | « Speed » reste le mot-clé de la ligne de commande. |
+| Macro | Macro | la | |
+| Store / Update / Assign / Oops (ligne de commande) | inchangés | — | Mots-clés anglais de la ligne de commande ; les menus disent Mémoriser, Mettre à jour, Affecter, Annuler. |
+| Locate, Flip, Full, Out | inchangés | — | Touches / fonctions de console (Full = plein feu dans une phrase). |
+| TOG / TRIG / FLASH (modes de bouton) | inchangés **partout** (badges des cellules, grilles Stage, menus courts) | — | Badges de 4-5 lettres, identiques en FR et en EN (comme les autres badges de fonction : GO, GO-, OFF, SEL, SWAP, PAUSE, LEARN). Les noms longs des menus sont traduits : Bascule, Trigger, Flash ; la fonction Pro *temp* s'appelle « Trigger (temporaire) » (badge TRIG). |
 | Fade in / Fade out / Delay | **Montée / Descente / Délai** dans les formulaires ; en-têtes de colonnes courts possibles : IN / OUT / DÉLAI | — | Vocabulaire des consoles françaises (temps de montée / descente). « Fondu » pour *fade* générique. |
 | Follow (temps de cue) | Enchaînement | le | « Enchaînement auto après 2 s ». |
 | Tracking | Tracking | le | Terme de console (valeurs suivies). |
@@ -97,7 +103,7 @@ Canal…) sont **à réutiliser** : `t('common.scene')`, `t('common.fixtureCount
 | Gamepad | manette | |
 | Stage layout (vue 2D) | **Plan de feu** (onglet : « Plan ») | Terme métier français. |
 | 3D visualiser | Visualiseur 3D | |
-| Truss | pont | « pont alu ». |
+| Truss | pont | « pont alu ». Nom par défaut : « Pont 1 ». |
 | Rig (3D) | implantation | |
 | Room | salle | |
 | Track (timeline) | piste | |
@@ -105,6 +111,37 @@ Canal…) sont **à réutiliser** : `t('common.scene')`, `t('common.fixtureCount
 | Playback (vue / section) | restitution | |
 | Shortcut | raccourci | |
 | Selected | sélectionné(s) | Accord en nombre via le pluriel. |
+| Fixture « moving head » | **lyre** (admis comme terme) | « lyre » est le mot du plateau pour une tête mobile ; « projecteur » reste le terme générique de l'interface. |
+| Stage left / right / upstage / downstage | **jardin / cour / lointain / face** | Directions de plateau françaises (jardin = gauche vu de la salle). « Nez de scène » = bord du plateau côté salle, « axe » = axe central, « plateau » = l'aire de jeu. |
+| Hang / hanging position | **accroche** | « Point d'accroche », « hauteur d'accroche ». |
+| Focus (position d'un faisceau) | **pointage** | Le *pointage* d'un projecteur ; l'attribut Focus garde son nom. |
+| Beam angle / aperture | **ouverture** | « Ouverture du faisceau ». |
+| Truss | **pont** | (voir plus haut) ; nom par défaut d'un pont créé : « Pont 1 », « Pont 2 »… |
+| Offline catalog | **Catalogue (hors ligne)** | Catalogue de projecteurs embarqué (Pi sans réseau). |
+| Merge mode (HTP / LTP) | **Fusion (HTP / LTP)** | HTP / LTP restent en anglais. |
+| Pan / Tilt range | **Course pan / tilt** | « Course » = amplitude mécanique. |
+| Spread / offset (patch, fan) | **Écart** | |
+| User / Built-in (bibliothèque) | **Utilisateur / Intégré** | |
+| Waveforms | Sinus, Triangle, Scie, Carré, Impulsion, Rebond, Paliers, Aléatoire, Perso, Maintien (constante) | Noms courts (boutons étroits). |
+| Size / Spread / Phase (effets) | **Amplitude / Répartition / Déphasage** | |
+| Once / Loop | **Une fois / Boucle** | |
+| Forward / Backward / Bounce / Random | **Avant / Arrière / Aller-retour / Aléatoire** | Sens de lecture des chases et effets. |
+| Crossfade / fade (générique) | **Fondu** | « Fondu de 2 s » ; les temps de cue restent Montée / Descente. X-fade (fader) : « fondu manuel ». |
+| Beat | **temps** | « 4 temps », « Mesures » pour *bars* (timeline). |
+| Hold | **Maintien** | Temps de maintien d'un pas. |
+| Merge / Replace (mémoriser) | **Fusionner / Remplacer** | Pro : Overwrite = **Écraser**, Remove = **Retirer**, Cue only = **Cue seule**, Block = **Cue bloquante**. |
+| Slot / row | **emplacement / rangée** | Cellules d'exécuteurs, pools. |
+| Section (timeline) | **section** | |
+| Snap / Free | **Magnétisme / Libre** | Timeline. |
+| Follow timecode | **Suivre le timecode** | |
+| Fine (réglage) | **« Précis »** | Mode fin d'un fader / encodeur. |
+| Executor page | **page** (« Page 2 ») | Pages d'exécuteurs ; les onglets 2 colonnes du téléphone sont des « paires de colonnes ». |
+| Stage page | **page Stage** | Pages de widgets tactiles. |
+| Group master | **master de groupe** | |
+| Programmer time | **temps du programmer** | Fondu / délai des nouvelles valeurs. |
+| Align | **Aligner** (Non / < / > / <> / ><) | Sens des dégradés (fans). |
+| Highlight / Blind / Park | inchangés ; verbes : « parker », « libérer » (unpark) | |
+| Pickup (MIDI soft takeover) | **Rattrapage** | Le fader physique reprend la main en atteignant la valeur ; un repère en pointillés montre où il est. |
 
 ## 3. Style et typographie
 

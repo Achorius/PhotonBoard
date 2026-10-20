@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Cuelist, ExecutorPage, StagePage } from '@shared/types'
 import {
-  cellFn, columnFaderActive, columnFaderCommands, columnFaderLevel, decodeColumnRef, decodeExecRef, defaultFn, encodeColumnRef,
-  encodeExecRef, faderKey, isHoldCell, isHoldFn, parseFaderKey, resolveExecPage, stepPage, swipeStep, type ColumnPageLike
+  cellFn, columnFaderCommand, decodeColumnRef, decodeExecRef, defaultFn, encodeColumnRef,
+  encodeExecRef, faderKey, isHoldCell, isHoldFn, parseFaderKey, resolveExecPage, stepPage, swipeStep
 } from './executor-surface'
 import {
-  activeGroupOf, buildSurfaceData, goTargetOf, indexSurface, isStageSurfaceMessage, pageIsActive, resolveCell, surfaceCuelists,
+  activeGroupOf, buildSurfaceData, goTargetOf, indexSurface, isStageSurfaceMessage, pageIsActive, resolveCell, surfaceColumnFader, surfaceCuelists,
   surfaceFromSnapshot, STAGE_SURFACE_KEY, type SurfaceSources
 } from './pages/surface-data'
 import { cellAt, clampRect, findFreeSpot, fitWidgetsToGrid, inBounds, overlaps, rectFits, starterWidgets } from './pages/page-layout'
@@ -37,7 +37,7 @@ function sources(over: Partial<SurfaceSources> = {}): SurfaceSources {
   return {
     pages: [page()], currentPage: 0, selectedExecutor: null, selectedCuelistId: null, cuelists: [], chases: [], effects: [],
     macros: [], presets: [], groups: [], selectedFixtureIds: [], groupMasters: {}, speedMasters: [], stagePages: [],
-    grandMaster: 255, blackout: false, blinder: false, strobe: false, ...over
+    grandMaster: 255, blackout: false, blinder: false, strobe: false, columnFaders: {}, ...over
   }
 }
 
@@ -112,34 +112,17 @@ describe('executor widget references', () => {
 // ---------------------------------------------------------------- column faders
 
 describe('column faders', () => {
-  const p: ColumnPageLike = {
-    cells: [
-      [null, { kind: 'cuelist', id: 'a', mode: 'toggle' }, { kind: 'chase', id: 'c', mode: 'toggle' }, null],
-      [{ kind: 'macro', id: 'm', mode: 'toggle' }, null, null, null],
-      [null, null, null, null]
-    ],
-    columns: [{}, {}, { fader: { kind: 'grandmaster' } }]
-  }
-  const lookup = { cuelist: (id: string) => (id === 'a' ? 100 : undefined), chase: () => 50, group: () => undefined, grandMaster: 200 }
-
-  it('shows the first driven cell, the grand master, or nothing', () => {
-    expect(columnFaderLevel(p, 0, lookup)).toBe(100)
-    expect(columnFaderLevel(p, 1, lookup)).toBeNull()
-    expect(columnFaderLevel(p, 2, lookup)).toBe(200)
-    expect(columnFaderActive(p, 0)).toBe(true)
-    expect(columnFaderActive(p, 1)).toBe(false)
-    expect(columnFaderActive(p, 2)).toBe(true)
+  it('read what the console computed ("page:col"), null when the fader drives nothing', () => {
+    const data = { columnFaders: { '0:0': 100, '1:2': 0 } }
+    expect(surfaceColumnFader(data, 0, 0)).toBe(100)
+    expect(surfaceColumnFader(data, 1, 2)).toBe(0)
+    expect(surfaceColumnFader(data, 0, 1)).toBeNull()
   })
 
-  it('maps to existing remote commands for the Stage window', () => {
-    expect(columnFaderCommands(p, 0, 127.6)).toEqual([
-      { type: 'set-cuelist-fader', payload: { id: 'a', level: 128 } },
-      { type: 'set-chase-fader', payload: { id: 'c', level: 128 } }
-    ])
-    expect(columnFaderCommands(p, 2, 300)).toEqual([{ type: 'set-grand-master', payload: 255 }])
-    expect(columnFaderCommands(p, 1, 10)).toEqual([])
-    const cellOnly: ColumnPageLike = { ...p, columns: [{ fader: { kind: 'cell', row: 2 } }] }
-    expect(columnFaderCommands(cellOnly, 0, 10)).toEqual([{ type: 'set-chase-fader', payload: { id: 'c', level: 10 } }])
+  it('go to the console as one column-fader command (Stage window)', () => {
+    expect(columnFaderCommand(2, 3, 127.6)).toEqual({ type: 'column-fader', payload: { page: 2, col: 3, level: 128 } })
+    expect(columnFaderCommand(0, 0, 300).payload.level).toBe(255)
+    expect(columnFaderCommand(0, 0, NaN).payload.level).toBe(0)
   })
 
   it('serialises fader functions for selects', () => {
@@ -294,29 +277,29 @@ describe('stage page layout', () => {
 // ---------------------------------------------------------------- Stage window actions
 
 describe('command actions (Stage window)', () => {
-  it('sends existing remote commands', () => {
+  it('sends remote commands', () => {
     const sent: [string, unknown][] = []
     const send = vi.fn((type: string, payload?: unknown) => { sent.push([type, payload]) })
     const throttled = vi.fn((_k: string, type: string, payload: unknown) => { sent.push([type, payload]) })
-    const p: ColumnPageLike = { cells: [[{ kind: 'cuelist', id: 'a', mode: 'toggle' }, null, null, null]], columns: [{}] }
-    const a = createCommandActions(send, throttled, (i) => (i === 0 ? p : undefined))
+    const a = createCommandActions(send, throttled)
     a.executor({ page: 2, col: 1, row: 3 }, 'down')
     a.columnFader(0, 0, 64)
-    a.columnFader(1, 0, 64) // unknown page: nothing
     a.macro('m1')
     a.preset('p', 'color', 2)
     a.setPage(3)
     a.go('a')
+    a.groupMaster?.('g1', 99)
+    a.speedTap?.('s1')
     expect(sent).toEqual([
       ['executor', { page: 2, col: 1, row: 3, phase: 'down' }],
-      ['set-cuelist-fader', { id: 'a', level: 64 }],
+      ['column-fader', { page: 0, col: 0, level: 64 }],
       ['run-macro', { id: 'm1' }],
       ['cli', { text: 'At Preset 4.2', origin: 'stage' }],
       ['set-executor-page', 3],
-      ['go-cuelist', 'a']
+      ['go-cuelist', 'a'],
+      ['set-group-master', { id: 'g1', level: 99 }],
+      ['tap-speed-master', { id: 's1' }]
     ])
-    expect(a.groupMaster).toBeUndefined()
-    expect(a.speedTap).toBeUndefined()
   })
 
   it('writes preset command lines with the family number', () => {
@@ -328,12 +311,12 @@ describe('command actions (Stage window)', () => {
 // ---------------------------------------------------------------- pickup ghosts
 
 describe('controller ghosts', () => {
-  it('reads the likely store shapes defensively', () => {
-    expect(readGhost({ 'fader:2': 100 }, 2)).toBe(100)
-    expect(readGhost({ 3: 300 }, 3)).toBe(255)
-    expect(readGhost(new Map([['fader:1', { value: 12.4 }]]), 1)).toBe(12)
-    expect(readGhost({ 'fader:1': 'x' }, 1)).toBeNull()
-    expect(readGhost({}, 0)).toBeNull()
-    expect(readGhost(undefined, 0)).toBeNull()
+  it('reads ghostKey(page, col) / gm values defensively', () => {
+    expect(readGhost({ '0:2': 100 }, '0:2')).toBe(100)
+    expect(readGhost({ '1:3': 300 }, '1:3')).toBe(255)
+    expect(readGhost({ gm: 12.4 }, 'gm')).toBe(12)
+    expect(readGhost({ '0:1': 'x' }, '0:1')).toBeNull()
+    expect(readGhost({}, '0:0')).toBeNull()
+    expect(readGhost(undefined, '0:0')).toBeNull()
   })
 })

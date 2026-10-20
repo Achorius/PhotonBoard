@@ -23,6 +23,7 @@ import { usePlaybackStore } from './playback-store'
 import { usePatchStore } from './patch-store'
 import { useEffectsStore } from './effects-store'
 import { useExecutorStore } from './executor-store'
+import { markLocalChange, sendRemoteCommandThrottled } from '@renderer/lib/runtime'
 
 export type NewPreset = Partial<Omit<Preset, 'id' | 'type'>> & { type: PresetType }
 
@@ -270,6 +271,9 @@ export const usePoolStore = create<PoolState>()(subscribeWithSelector((set, get)
   setSpeedMasterBpm: (id, bpm) => {
     if (!Number.isFinite(bpm)) return
     const value = Math.max(1, Math.min(999, bpm))
+    // Remote browser: the console runs the masters (no-ops on the console)
+    markLocalChange(`speedBpm:${id}`)
+    sendRemoteCommandThrottled(`speedBpm:${id}`, 'set-speed-master-bpm', { id, bpm: value })
     const { speedMasters } = get()
     if (speedMasters.find((m) => m.id === id)?.bpm === value) return
     set({ speedMasters: speedMasters.map((m) => (m.id === id ? { ...m, bpm: value } : m)) })
@@ -347,6 +351,9 @@ export const usePoolStore = create<PoolState>()(subscribeWithSelector((set, get)
   setGroupMaster: (groupId, level) => {
     if (!Number.isFinite(level)) return
     const v = Math.max(0, Math.min(255, Math.round(level)))
+    // Remote browser: the console applies group masters (no-ops on the console)
+    markLocalChange(`groupMaster:${groupId}`)
+    sendRemoteCommandThrottled(`groupMaster:${groupId}`, 'set-group-master', { id: groupId, level: v })
     if (get().groupMasters[groupId] === v) return
     set({ groupMasters: { ...get().groupMasters, [groupId]: v } })
   },

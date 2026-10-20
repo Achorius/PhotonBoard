@@ -124,6 +124,11 @@ export const layout: Translation['layout'] = {
     help: 'Sélectionnez un projecteur ou un pont sur le plan pour le modifier. Glissez dans le vide pour déplacer la vue, pincez ou utilisez la molette pour zoomer.'
   },
 
+  /** Default names (show data, written when created) */
+  defaults: {
+    barName: 'Pont {n}'
+  },
+
   bar: {
     deselect: 'Désélectionner le pont',
     section: 'Pont',

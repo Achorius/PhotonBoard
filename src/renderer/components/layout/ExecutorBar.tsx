@@ -43,8 +43,8 @@ import { setSceneMode, startSceneLearn } from '@renderer/components/playback/sce
 import { t, useT } from '@renderer/i18n'
 import { deleteWithUndo, useSelectionActions } from '@renderer/lib/selection-actions'
 import { useSurfaceData, pressExecutor, setExecutorPage, getStoreActions } from '@renderer/components/stage/pages/surface-store'
-import { indexSurface, pageIsActive, resolveCell, type ResolvedCell, type SurfaceIndex } from '@renderer/components/stage/pages/surface-data'
-import { columnFaderActive, columnFaderLevel, faderKey, isHoldFn, stepPage } from '@renderer/components/stage/executor-surface'
+import { indexSurface, pageIsActive, resolveCell, surfaceColumnFader, type ResolvedCell, type SurfaceIndex } from '@renderer/components/stage/pages/surface-data'
+import { faderKey, isHoldFn, stepPage } from '@renderer/components/stage/executor-surface'
 import { KIND_ICON, cellName, fnBadge, fnBadgeTone } from '@renderer/components/stage/cell-visuals'
 import { PageSelector, useSwipePaging } from '@renderer/components/stage/PageSelector'
 import { columnFaderOptions, pageMenuExtra, proCellEntries, setColumnFaderFn } from '@renderer/components/stage/executor-menus'
@@ -512,22 +512,11 @@ function ColumnHeader({ col, pageIndex, title, color, proMode, faderKeyValue }: 
 
 function ColumnFaderCell({ col, pageIndex, color, index }: { col: number; pageIndex: number; color: string; index: SurfaceIndex }) {
   const t = useT()
-  const page = index.data.executorPages[pageIndex]
-  const active = columnFaderActive(page, col)
-  const remote = columnFaderLevel(page, col, {
-    cuelist: (id) => index.cuelists.get(id)?.faderLevel,
-    chase: (id) => index.chases.get(id)?.faderLevel,
-    group: (id) => index.groups.get(id)?.master,
-    grandMaster: index.data.grandMaster
-  })
-  const [local, setLocal] = useState(255)
-  const value = remote ?? local
-  const ghost = useColumnGhost(col)
-  const onChange = (v: number) => {
-    setLocal(v)
-    getStoreActions().columnFader(pageIndex, col, v)
-  }
-  return <MiniFader value={value} color={color} ghost={ghost} disabled={!active} label={t('pro.stage.faders.columnAria', { n: col + 1 })} onChange={onChange} />
+  // What the fader drives, by its function (column level, cell master, GM, group / speed master, rate, X-fade)
+  const level = surfaceColumnFader(index.data, pageIndex, col)
+  const ghost = useColumnGhost(pageIndex, col)
+  const onChange = (v: number) => getStoreActions().columnFader(pageIndex, col, v)
+  return <MiniFader value={level ?? 0} color={color} ghost={ghost} disabled={level === null} label={t('pro.stage.faders.columnAria', { n: col + 1 })} onChange={onChange} />
 }
 
 const MiniFader = memo(function MiniFader({ value, color, ghost, disabled, label, onChange }: {

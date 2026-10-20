@@ -64,6 +64,7 @@ export const midi = {
       strobe: 'Strobe (hold)',
       tap: 'Tap tempo',
       grandMaster: 'Grand Master',
+      xfade: 'Crossfade of the selected scene',
       columnFader: 'Column {n} fader',
       group: 'Group {ref}',
       preset: 'Preset {ref}',
@@ -79,6 +80,7 @@ export const midi = {
       strobe: 'Strobe',
       tap: 'Tap',
       gm: 'GM',
+      xfade: 'X-fade',
       prev: 'Pg −',
       next: 'Pg +'
     }

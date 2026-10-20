@@ -504,6 +504,42 @@ class PhotonBoardInstance extends InstanceBase {
             phase: o.phase === 'up' ? 'up' : 'down'
           })
         }
+      },
+      column_fader: {
+        name: 'Set Column Fader',
+        description: 'Move an executor column fader (whatever it drives: column level, scene, Grand Master, group / speed master, rate, X-fade)',
+        options: [
+          { id: 'page', type: 'number', label: 'Page (0 = current)', default: 0, min: 0, max: 16 },
+          { id: 'col', type: 'number', label: 'Column', default: 1, min: 1, max: 8 },
+          { id: 'level', type: 'number', label: 'Level (%)', default: 100, min: 0, max: 100 }
+        ],
+        callback: (action) => {
+          const o = action.options
+          this.sendCommand('column-fader', {
+            page: o.page > 0 ? o.page - 1 : 'current',
+            col: o.col - 1,
+            level: Math.round((o.level / 100) * 255)
+          })
+        }
+      },
+      group_master: {
+        name: 'Set Group Master',
+        description: 'Group master level (group id as shown in the PhotonBoard show)',
+        options: [
+          { id: 'group', type: 'textinput', label: 'Group id', default: '' },
+          { id: 'level', type: 'number', label: 'Level (%)', default: 100, min: 0, max: 100 }
+        ],
+        callback: (action) => {
+          const o = action.options
+          if (o.group) this.sendCommand('set-group-master', { id: o.group, level: Math.round((o.level / 100) * 255) })
+        }
+      },
+      tap_speed_master: {
+        name: 'Tap Speed Master',
+        options: [{ id: 'master', type: 'textinput', label: 'Speed master id', default: '' }],
+        callback: (action) => {
+          if (action.options.master) this.sendCommand('tap-speed-master', { id: action.options.master })
+        }
       }
     })
   }

@@ -18,6 +18,9 @@ import { pressExecutor, getStoreActions } from './pages/surface-store'
 import { collectSurfaceData } from './pages/stage-surface-broadcast'
 import { assignToCell, setColumnFaderFn } from './executor-menus'
 import { applyRemoteState } from '@renderer/hooks/useRemoteSync'
+import { getColumnLevel, resetPlayback } from '@renderer/lib/playback-controller'
+import { columnFaderValue } from '@renderer/lib/pro/executor-actions'
+import { refreshColumnFaders } from '@renderer/lib/pro/column-fader-sync'
 
 function cuelist(id: string): Cuelist {
   return {
@@ -53,10 +56,30 @@ describe('executor presses from the surfaces (console)', () => {
     expect(usePlaybackStore.getState().cuelists[0].isPlaying).toBe(false)
   })
 
-  it('column faders go through executor-actions', () => {
+  it('column faders go through executor-actions (column level by default, the cell when set so)', () => {
+    resetPlayback()
     const loc = useExecutorStore.getState().findCell('cuelist', 'b')!
     getStoreActions().columnFader(loc.page, loc.col, 100)
-    expect(usePlaybackStore.getState().cuelists.find((c) => c.id === 'b')!.faderLevel).toBe(100)
+    expect(getColumnLevel(loc.page, loc.col)).toBe(100)
+    expect(columnFaderValue(loc.page, loc.col)).toBe(100)
+    expect(usePlaybackStore.getState().cuelists.find((c) => c.id === 'b')!.faderLevel).toBe(255)
+    // the published map follows (console)
+    refreshColumnFaders()
+    expect(useProStore.getState().columnFaders[`${loc.page}:${loc.col}`]).toBe(100)
+
+    useExecutorStore.getState().setColumnFader(loc.page, loc.col, { kind: 'cell', row: loc.row })
+    getStoreActions().columnFader(loc.page, loc.col, 40)
+    expect(usePlaybackStore.getState().cuelists.find((c) => c.id === 'b')!.faderLevel).toBe(40)
+    expect(columnFaderValue(loc.page, loc.col)).toBe(40)
+
+    useExecutorStore.getState().setColumnFader(loc.page, loc.col, { kind: 'grandmaster' })
+    getStoreActions().columnFader(loc.page, loc.col, 30)
+    expect(useDmxStore.getState().grandMaster).toBe(30)
+    expect(columnFaderValue(loc.page, loc.col)).toBe(30)
+    // a show load puts every column back at full
+    useExecutorStore.getState().setColumnFader(loc.page, loc.col, undefined)
+    resetPlayback()
+    expect(getColumnLevel(loc.page, loc.col)).toBe(255)
   })
 })
 
@@ -107,5 +130,23 @@ describe('remote mirror (useRemoteSync)', () => {
   it('keeps the console page for later when the pages content has not arrived yet', () => {
     applyRemoteState({ executorPage: 2 })
     expect(useExecutorStore.getState().currentPage).toBe(0)
+  })
+})
+
+describe('column faders and group masters reach remotes', () => {
+  it('the snapshot carries them; a remote mirrors them', () => {
+    resetPlayback()
+    refreshColumnFaders()
+    const loc = useExecutorStore.getState().findCell('cuelist', 'a')!
+    getStoreActions().columnFader(loc.page, loc.col, 90)
+    refreshColumnFaders()
+    expect(collectSurfaceData().columnFaders[`${loc.page}:${loc.col}`]).toBe(90)
+    // A remote browser receives the console's values
+    useProStore.setState({ columnFaders: {} })
+    usePoolStore.setState({ groupMasters: {} })
+    applyRemoteState({ columnFaders: { '0:0': 12, '1:3': 300 }, groupMasters: { g1: 40 } })
+    expect(useProStore.getState().columnFaders).toEqual({ '0:0': 12, '1:3': 255 })
+    expect(usePoolStore.getState().groupMasters).toEqual({ g1: 40 })
+    resetPlayback()
   })
 })

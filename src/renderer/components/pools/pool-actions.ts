@@ -1,8 +1,8 @@
 // ============================================================
 // Pools — actions (store changes, one undo step each).
-// The command line's ProApi offers the same operations; when the
-// integrator's lib/pro/api.ts exists these can delegate to it. For now
-// they call the pro modules / stores directly (same semantics):
+// The command line's ProApi (lib/pro/api.ts) offers the same
+// operations over the same pro modules; these keep their own calls for
+// the pool's UI feedback (toasts, family filtering of the programmer):
 //   presets  lib/pro/store-ops storePreset + pool-store CRUD,
 //            lib/pro/programmer-engine applyPreset
 //   groups   patch-store groups (+ numbers)
@@ -27,6 +27,7 @@ import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { ensureObjectNumbers, findPreset, usePoolStore } from '@renderer/stores/pool-store'
 import { useSelectionStore } from '@renderer/stores/selection-store'
+import { useProStore } from '@renderer/stores/pro-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { toast, SWATCH_COLORS } from '@renderer/components/ui'
 import { refreshPresetMeta } from '@renderer/components/fixtures/preset-meta'
@@ -67,7 +68,7 @@ export function applyPresetToSelection(id: string): boolean {
     toast.info(t('pro.pools.toast.selectFirst'), { description: t('pro.pools.toast.selectFirstHint') })
     return false
   }
-  const n = applyPreset(id, ids)
+  const n = applyPreset(id, ids, useProStore.getState().progTime ?? undefined)
   refreshProgrammerState()
   refreshPresetMeta()
   if (n === 0) {

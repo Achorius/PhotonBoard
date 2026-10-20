@@ -42,6 +42,10 @@ export interface StageState {
   blind?: boolean
   highlight?: boolean
   speedMasters?: { id: string; number: number; name: string; bpm: number }[]
+  /** Group master levels (0-255; missing = 255) */
+  groupMasters?: Record<string, number>
+  /** What each column fader shows, "page:col" → 0-255 */
+  columnFaders?: Record<string, number>
   /** Last command lines run on the console, oldest first */
   cliLog?: { id: number; time: number; text: string; ok: boolean; message: string; level: 'info' | 'warning' | 'error'; origin?: string }[]
 }

@@ -6,12 +6,7 @@
 // 'note': note-on 127 when active / 0 when not (a pad LED);
 // 'cc': the target's value on the mapping's scale (motor fader, LED
 // ring, or 127 / 0 for on/off targets).
-//
-// INTEGRATOR: `feedback` is not (yet) part of MidiMapping['options'] in
-// src/shared/types.ts and normalizeMidiMapping drops it on load — add
-// `feedback?: 'note' | 'cc'` to the type and keep it in the normaliser
-// (oneOf(options.feedback, ['note', 'cc'])), until then it lives for
-// the session only.
+// Saved with the show (shared/show-format normalizeMidiMapping).
 // ============================================================
 
 import type { MidiMapping } from '@shared/types'
@@ -19,7 +14,7 @@ import type { MidiMapping } from '@shared/types'
 export type MidiFeedbackMode = 'note' | 'cc'
 
 export function mappingFeedbackMode(m: MidiMapping): MidiFeedbackMode | undefined {
-  const f = (m.options as { feedback?: unknown }).feedback
+  const f: unknown = m.options.feedback
   return f === 'note' || f === 'cc' ? f : undefined
 }
 
