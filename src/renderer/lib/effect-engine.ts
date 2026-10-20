@@ -12,6 +12,10 @@
 //  - One-shot effects stop themselves after one cycle and notify
 //    listeners (the effects store clears its isRunning flag).
 //  - Driven by the mixer clock (registerFrameSource) — time injected.
+//  - Pro: the speed comes from a pluggable source (speed masters ×
+//    speedMultiplier, installed by lib/pro/speed-masters.ts) — read per
+//    frame, phase kept, so tapping a master never jumps; a paused effect
+//    holds its phase (still output).
 // ============================================================
 
 import type { Effect, EffectChannel, WaveformType, WaveformKeyframe, SpatialAxis, Position3D, PatchEntry, FixtureDefinition } from '@shared/types'
@@ -68,10 +72,21 @@ interface RunningEffect {
   /** Accumulated cycles (phase in turns, not wrapped) */
   cycles: number
   lastUpdate: number
+  /** Phase frozen (executor Pause) */
+  paused?: boolean
 }
 
 const activeEffects = new Map<string, RunningEffect>()
 const completeListeners = new Set<(id: string) => void>()
+
+/** Speed (Hz) of an effect this frame; default its own `speed` */
+export type EffectSpeedSource = (effect: Effect) => number
+let speedSource: EffectSpeedSource | null = null
+
+/** Install the speed source (speed masters); null = each effect's own speed. */
+export function setEffectSpeedSource(fn: EffectSpeedSource | null): void {
+  speedSource = fn
+}
 
 // ------------------------------------------------------------
 // Waveforms
@@ -400,6 +415,18 @@ export function isEffectRunning(id: string): boolean {
   return activeEffects.has(id)
 }
 
+/** Freeze (true) / continue (false) / toggle (undefined) a running effect's phase; returns the new state. */
+export function setEffectPaused(id: string, paused?: boolean): boolean {
+  const running = activeEffects.get(id)
+  if (!running) return false
+  running.paused = paused ?? !running.paused
+  return running.paused
+}
+
+export function isEffectPaused(id: string): boolean {
+  return !!activeEffects.get(id)?.paused
+}
+
 export function getActiveEffects(): Map<string, { effect: Effect; cycles: number }> {
   return new Map(Array.from(activeEffects, ([id, r]) => [id, { effect: r.effect, cycles: r.cycles }]))
 }
@@ -419,8 +446,8 @@ export function updateEffects(now: number): void {
   for (const [id, running] of activeEffects) {
     const dt = Math.max(0, now - running.lastUpdate) / 1000
     running.lastUpdate = now
-    const speed = Number(running.effect.speed)
-    running.cycles += dt * (Number.isFinite(speed) && speed > 0 ? speed : 0)
+    const speed = Number(speedSource ? speedSource(running.effect) : running.effect.speed)
+    if (!running.paused) running.cycles += dt * (Number.isFinite(speed) && speed > 0 ? speed : 0)
 
     if (running.effect.oneShot && running.cycles >= 1) {
       completed.push(id)

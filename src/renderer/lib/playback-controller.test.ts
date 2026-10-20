@@ -30,7 +30,7 @@ describe('auto-follow', () => {
       const idx = s.cuelists.find((c) => c.id === id)?.currentCueIndex ?? -1
       if (idx !== last) { last = idx; changes.push(t) }
     })
-    const t0 = clockNow() + 1000
+    const t0 = Math.round(clockNow()) + 1000 // integer: frame-time differences stay exact (no 49.999… ms)
     let t = t0
     usePlaybackStore.getState().goCuelist(id)
     // 1 s of frames at 40 Hz
