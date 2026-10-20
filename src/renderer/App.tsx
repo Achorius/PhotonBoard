@@ -12,7 +12,7 @@ import { ShortcutsDialog } from './components/layout/ShortcutsDialog'
 import { RemoteAccess } from './components/layout/RemoteAccess'
 import { BlackoutBanner } from './components/layout/MasterControls'
 import { requestNewShow, requestOpenShow, requestSave, requestSaveAs } from './components/layout/file-actions'
-import { DialogHost, Spinner, ToastHost } from './components/ui'
+import { DialogHost, Spinner, ToastHost, hasOpenOverlay } from './components/ui'
 import { PatchView } from './components/patch/PatchView'
 import { FixtureControlView } from './components/fixtures/FixtureControlView'
 import { PlaybackView } from './components/playback/PlaybackView'
@@ -37,6 +37,15 @@ import { handleCommand } from './lib/command-handler'
 import { startStateBroadcast } from './lib/state-snapshot'
 import { installDirtyTracking, loadLastShow } from './lib/show-io'
 import { installContentTracking, loadConsoleShow } from './lib/content-sync'
+import { installHistory, redo, undo } from './lib/history'
+import { getLocale, onLocaleChange, useT } from './i18n'
+
+/** Text field focused: the Edit menu's Undo / Redo act on the text, not on the show */
+function isEditingText(): boolean {
+  const el = document.activeElement as HTMLElement | null
+  if (!el) return false
+  return el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+}
 
 // Lazy-load the 3D visualizer (three.js): not loaded until the 3D tab opens,
 // never on weak GPUs (they get the 2D stage layout instead)
@@ -71,6 +80,9 @@ export default function App() {
 
   // Executor slots follow the scene list even when the executor bar is hidden
   useEffect(() => startExecutorAutoSync(), [])
+
+  // Undo / redo of show content (console and remote: each device undoes its own edits)
+  useEffect(() => installHistory(), [])
 
   // One-time init: fixture library, MIDI, gamepad, last show
   useEffect(() => {
@@ -111,6 +123,14 @@ export default function App() {
       listen(bridge.onMenuEvent('menu:save', () => { void requestSave() })),
       listen(bridge.onMenuEvent('menu:save-as', () => { void requestSaveAs() })),
       listen(bridge.onMenuEvent('menu:load', () => { void requestOpenShow() })),
+      // Edit menu (Mod+Z / redo accelerators): text undo inside a field, show undo elsewhere
+      listen(bridge.onMenuEvent('menu:undo', () => { if (isEditingText()) document.execCommand('undo'); else if (!hasOpenOverlay()) undo() })),
+      listen(bridge.onMenuEvent('menu:redo', () => { if (isEditingText()) document.execCommand('redo'); else if (!hasOpenOverlay()) redo() })),
+      // Native menus (main process) follow the UI language
+      (() => {
+        bridge.app.setLanguage?.(getLocale())
+        return onLocaleChange((locale) => bridge.app.setLanguage?.(locale))
+      })(),
       // Commands from the Stage window, remote browsers, Companion and main
       listen(bridge.stage.onCommand((command) => {
         try {
@@ -196,9 +216,10 @@ export default function App() {
 }
 
 function ViewLoading() {
+  const t = useT()
   return (
     <div className="flex h-full w-full items-center justify-center gap-2 text-sm text-fg-tertiary">
-      <Spinner size={16} /> Loading view…
+      <Spinner size={16} /> {t('shell.loadingView')}
     </div>
   )
 }

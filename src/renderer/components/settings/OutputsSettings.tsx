@@ -20,6 +20,7 @@ import {
 import { useOutputStatus } from '@renderer/hooks/useOutputStatus'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { Notice, SettingsCard, SettingsPage } from './settings-ui'
+import { t as translate, useT } from '@renderer/i18n'
 
 const ARTNET_PORT = 6454
 const BROADCAST = '255.255.255.255'
@@ -34,14 +35,16 @@ const USB_DRIVERS: { value: UsbDmxDriver; label: string }[] = [
   { value: 'velleman', label: 'Velleman VM116 / K8062' },
   { value: 'stairville', label: 'Stairville USB-DMX' },
   { value: 'udmx', label: 'uDMX / Anyma / clone' },
-  { value: 'generic-ftdi', label: 'Generic FTDI (Open DMX)' }
+  { value: 'generic-ftdi', label: 'Generic FTDI (Open DMX)' } // label translated at render (settings.outputs.genericFtdi)
 ]
 const PRO_DRIVERS = new Set<UsbDmxDriver>(['enttec-pro', 'eurolite-pro'])
 
-const UNIVERSE_OPTIONS = Array.from({ length: MAX_UNIVERSES }, (_, u) => ({ value: String(u), label: `Universe ${u + 1}` }))
+/** Options built at render: labels follow the UI language */
+const universeOptions = () => Array.from({ length: MAX_UNIVERSES }, (_, u) => ({ value: String(u), label: translate('common.universeN', { n: u + 1 }) }))
+const usbDriverOptions = () => USB_DRIVERS.map((d) => (d.value === 'generic-ftdi' ? { ...d, label: translate('settings.outputs.genericFtdi') } : d))
 
 const STATE_TONE: Record<DmxOutputStatus['state'], Tone> = { ok: 'go', connecting: 'warning', error: 'danger', invalid: 'danger', disabled: 'neutral' }
-const STATE_LABEL: Record<DmxOutputStatus['state'], string> = { ok: 'Sending', connecting: 'Connecting', error: 'Error', invalid: 'Invalid', disabled: 'Disabled' }
+const stateLabel = (state: DmxOutputStatus['state']) => translate(`settings.outputs.state.${state}`)
 
 // ---- Draft model (a local key per row; ids come from main) ----
 
@@ -95,13 +98,13 @@ const HOST_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i
 
 function hostError(host: string): string | null {
   const h = host.trim()
-  if (!h) return 'Enter an IP address or host name'
+  if (!h) return translate('settings.outputs.errors.hostRequired')
   if (/^[\d.]+$/.test(h)) {
     const m = IPV4_RE.exec(h)
-    if (!m || m.slice(1).some((o) => Number(o) > 255)) return 'Not a valid IPv4 address'
+    if (!m || m.slice(1).some((o) => Number(o) > 255)) return translate('settings.outputs.errors.badIp')
     return null
   }
-  return h.replace(/\.$/, '').split('.').every((l) => HOST_LABEL_RE.test(l)) ? null : 'Not a valid host name'
+  return h.replace(/\.$/, '').split('.').every((l) => HOST_LABEL_RE.test(l)) ? null : translate('settings.outputs.errors.badHost')
 }
 
 interface DraftErrors { [key: string]: { host?: string; port?: string } }
@@ -115,9 +118,9 @@ function validate(d: Draft): { errors: DraftErrors; count: number } {
   }
   const used = new Map<string, string>()
   for (const u of d.usb) {
-    if (!u.portPath) { errors[u.key] = { port: 'Choose a serial port' }; count++; continue }
+    if (!u.portPath) { errors[u.key] = { port: translate('settings.outputs.errors.choosePort') }; count++; continue }
     if (u.enabled === false) continue
-    if (used.has(u.portPath)) { errors[u.key] = { port: 'Another adapter already uses this port' }; count++ }
+    if (used.has(u.portPath)) { errors[u.key] = { port: translate('settings.outputs.errors.portInUse') }; count++ }
     used.set(u.portPath, u.key)
   }
   return { errors, count }
@@ -141,6 +144,7 @@ export function OutputsSettings() {
 }
 
 function OutputsEditor() {
+  const t = useT()
   const status = useOutputStatus()
   const [applied, setApplied] = useState<DmxOutputsConfig | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -158,7 +162,7 @@ function OutputsEditor() {
       setApplied(cfg)
       setDraft(toDraft(cfg))
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'The output configuration could not be read')
+      setLoadError(e instanceof Error ? e.message : translate('settings.outputs.readFailed'))
     }
   }, [])
 
@@ -167,7 +171,7 @@ function OutputsEditor() {
     try {
       setPorts(await getBridge()!.dmxOutputs.scanUsb())
     } catch (e) {
-      toast.error('Could not list serial ports', { description: e instanceof Error ? e.message : undefined })
+      toast.error(translate('settings.outputs.scanFailed'), { description: e instanceof Error ? e.message : undefined })
     } finally {
       setScanning(false)
       setScanned(true)
@@ -178,7 +182,8 @@ function OutputsEditor() {
 
   const statusById = useMemo(() => new Map((status?.outputs ?? []).map((o) => [o.id, o])), [status])
   const dirty = !!draft && canonical(fromDraft(draft)) !== canonical(applied)
-  const { errors, count: errorCount } = useMemo(() => (draft ? validate(draft) : { errors: {}, count: 0 }), [draft])
+  // `t` in the deps: messages follow the UI language
+  const { errors, count: errorCount } = useMemo(() => (draft ? validate(draft) : { errors: {}, count: 0 }), [draft, t])
 
   const update = useCallback((fn: (d: Draft) => Draft) => {
     setDraft((d) => (d ? fn(d) : d))
@@ -195,9 +200,9 @@ function OutputsEditor() {
   const removeRow = useCallback(async (kind: 'artnet' | 'usb', key: string, name: string, live: boolean) => {
     if (live) {
       const ok = await confirm({
-        title: `Remove “${name}”?`,
-        message: 'This output stops sending DMX as soon as you apply the changes.',
-        confirmLabel: 'Remove output',
+        title: translate('settings.outputs.removeTitle', { name }),
+        message: translate('settings.outputs.removeMessage'),
+        confirmLabel: translate('settings.outputs.removeAction'),
         tone: 'danger'
       })
       if (!ok) return
@@ -242,20 +247,20 @@ function OutputsEditor() {
     try {
       const result = await getBridge()!.dmxOutputs.configure(fromDraft(draft))
       if (!result.success) {
-        const error = result.error || 'The configuration was refused'
+        const error = result.error || translate('settings.outputs.refused')
         setApplyError(error)
-        toast.error('Outputs not applied', { description: error })
+        toast.error(translate('settings.outputs.notApplied'), { description: error })
         return
       }
       const cfg = result.config ?? fromDraft(draft)
       setApplied(cfg)
       setDraft(toDraft(cfg))
-      if (result.warning) toast.warning('Outputs applied with a warning', { description: result.warning })
-      else toast.success('DMX outputs applied')
+      if (result.warning) toast.warning(translate('settings.outputs.appliedWarning'), { description: result.warning })
+      else toast.success(translate('settings.outputs.applied'))
     } catch (e) {
-      const error = e instanceof Error ? e.message : 'Unknown error'
+      const error = e instanceof Error ? e.message : translate('errors.unknown')
       setApplyError(error)
-      toast.error('Outputs not applied', { description: error })
+      toast.error(translate('settings.outputs.notApplied'), { description: error })
     } finally {
       setApplying(false)
     }
@@ -266,36 +271,36 @@ function OutputsEditor() {
   return (
     <>
       <SettingsPage
-        title="DMX outputs"
-        description="Where the console sends DMX. Saved on this machine — not in the show — and kept when you open another show."
+        title={t('settings.outputs.title')}
+        description={t('settings.outputs.description')}
       >
         {loadError && (
           <Notice tone="danger" icon={LuCircleAlert}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="flex-1">{loadError}</span>
-              <Button size="sm" icon={LuRefreshCw} onClick={() => { void load() }}>Retry</Button>
+              <Button size="sm" icon={LuRefreshCw} onClick={() => { void load() }}>{t('common.retry')}</Button>
             </div>
           </Notice>
         )}
         {!draft && !loadError && (
-          <div className="flex items-center gap-2 py-8 text-sm text-fg-tertiary"><Spinner size={16} /> Reading output configuration…</div>
+          <div className="flex items-center gap-2 py-8 text-sm text-fg-tertiary"><Spinner size={16} /> {t('settings.outputs.reading')}</div>
         )}
         {draft && (
           <>
             <SettingsCard
               icon={LuNetwork}
-              title="Art-Net"
+              title={t('settings.outputs.artnet')}
               status={<Badge size="xs">{draft.artnet.length}</Badge>}
-              subtitle="Ethernet nodes and Art-Net fixtures. Broadcast reaches every node on the network; a node's IP sends to that node only."
-              actions={draft.artnet.length > 0 && <Button size="sm" icon={LuPlus} onClick={addArtnet}>Add node</Button>}
+              subtitle={t('settings.outputs.artnetSubtitle')}
+              actions={draft.artnet.length > 0 && <Button size="sm" icon={LuPlus} onClick={addArtnet}>{t('settings.outputs.addNode')}</Button>}
             >
               {draft.artnet.length === 0 ? (
                 <EmptyState
                   size="sm"
                   icon={LuNetwork}
-                  title="No Art-Net output"
-                  description="Add a node to send a universe over the network."
-                  action={<Button variant="primary" size="sm" icon={LuPlus} onClick={addArtnet}>Add Art-Net node</Button>}
+                  title={t('settings.outputs.noArtnet')}
+                  description={t('settings.outputs.noArtnetDescription')}
+                  action={<Button variant="primary" size="sm" icon={LuPlus} onClick={addArtnet}>{t('settings.outputs.addArtnetNode')}</Button>}
                 />
               ) : draft.artnet.map((a, i) => (
                 <ArtnetRow
@@ -313,24 +318,24 @@ function OutputsEditor() {
 
             <SettingsCard
               icon={LuUsb}
-              title="USB DMX adapters"
+              title={t('settings.outputs.usb')}
               status={<Badge size="xs">{draft.usb.length}</Badge>}
               subtitle={
                 ports.length > 0
-                  ? `${ports.length} serial port${ports.length === 1 ? '' : 's'} detected: ${ports.map((p) => p.path).join(', ')}`
-                  : scanned ? 'No serial port detected — plug the adapter in, then rescan.' : 'Looking for serial ports…'
+                  ? t('settings.outputs.portsDetected', { count: ports.length, ports: ports.map((p) => p.path).join(', ') })
+                  : scanned ? t('settings.outputs.noPort') : t('settings.outputs.lookingForPorts')
               }
               actions={
                 <>
-                  <Button size="sm" variant="ghost" icon={LuRefreshCw} loading={scanning} onClick={() => { void scan() }}>Rescan ports</Button>
-                  {draft.usb.length > 0 && <Button size="sm" icon={LuPlus} onClick={addUsb}>Add adapter</Button>}
+                  <Button size="sm" variant="ghost" icon={LuRefreshCw} loading={scanning} onClick={() => { void scan() }}>{t('settings.outputs.rescanPorts')}</Button>
+                  {draft.usb.length > 0 && <Button size="sm" icon={LuPlus} onClick={addUsb}>{t('settings.outputs.addAdapter')}</Button>}
                 </>
               }
             >
               {usbUnavailable && (
                 <div className="px-4 pt-3">
                   <Notice tone="warning" icon={LuTriangleAlert}>
-                    USB DMX support is not available in this build (the serial-port driver failed to load). Art-Net still works.
+                    {t('settings.outputs.usbUnavailable')}
                   </Notice>
                 </div>
               )}
@@ -338,9 +343,9 @@ function OutputsEditor() {
                 <EmptyState
                   size="sm"
                   icon={LuUsb}
-                  title="No USB DMX adapter"
-                  description="ENTTEC Open DMX / DMX USB Pro and compatible FTDI adapters drive a universe straight from a USB port."
-                  action={<Button variant="primary" size="sm" icon={LuPlus} onClick={addUsb} disabled={usbUnavailable}>Add USB adapter</Button>}
+                  title={t('settings.outputs.noUsb')}
+                  description={t('settings.outputs.noUsbDescription')}
+                  action={<Button variant="primary" size="sm" icon={LuPlus} onClick={addUsb} disabled={usbUnavailable}>{t('settings.outputs.addUsbAdapter')}</Button>}
                 />
               ) : draft.usb.map((u, i) => (
                 <UsbRow
@@ -370,14 +375,14 @@ function OutputsEditor() {
             <StatusDot tone={applyError || errorCount ? 'danger' : 'accent'} size="md" />
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="text-sm font-medium text-fg-primary">
-                {errorCount > 0 ? `Fix ${errorCount} problem${errorCount === 1 ? '' : 's'} before applying` : 'Output changes not applied yet'}
+                {errorCount > 0 ? t('settings.outputs.fixProblems', { count: errorCount }) : t('settings.outputs.notAppliedYet')}
               </span>
               {applyError
                 ? <span className="text-xs text-danger-fg">{applyError}</span>
-                : <span className="text-xs text-fg-tertiary">DMX keeps going to the current outputs until you apply.</span>}
+                : <span className="text-xs text-fg-tertiary">{t('settings.outputs.keepsGoing')}</span>}
             </div>
-            <Button variant="ghost" icon={LuRotateCcw} onClick={discard} disabled={applying}>Discard</Button>
-            <Button variant="primary" loading={applying} disabled={errorCount > 0} onClick={() => { void apply() }}>Apply outputs</Button>
+            <Button variant="ghost" icon={LuRotateCcw} onClick={discard} disabled={applying}>{t('common.discard')}</Button>
+            <Button variant="primary" loading={applying} disabled={errorCount > 0} onClick={() => { void apply() }}>{t('settings.outputs.applyOutputs')}</Button>
           </div>
         </div>
       )}
@@ -390,14 +395,15 @@ function OutputsEditor() {
 // ---------------------------------------------------------------
 
 function OutputState({ status, applied, enabled }: { status?: DmxOutputStatus; applied: boolean; enabled: boolean }) {
-  if (!applied) return <Badge size="xs" tone="accent">New — not applied</Badge>
-  if (!enabled) return <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><StatusDot tone="neutral" />Disabled</span>
-  if (!status) return <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><StatusDot tone="neutral" />No status</span>
+  const t = useT()
+  if (!applied) return <Badge size="xs" tone="accent">{t('settings.outputs.newNotApplied')}</Badge>
+  if (!enabled) return <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><StatusDot tone="neutral" />{t('settings.outputs.state.disabled')}</span>
+  if (!status) return <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><StatusDot tone="neutral" />{t('settings.outputs.noStatus')}</span>
   return (
     <span className="flex items-center gap-2 text-xs text-fg-secondary">
-      <StatusDot tone={STATE_TONE[status.state]} pulse={status.state === 'error'} label={STATE_LABEL[status.state]} />
-      {STATE_LABEL[status.state]}
-      {status.state === 'ok' && <span className="font-mono text-2xs tabular text-fg-tertiary">{Math.round(status.fps)} fps</span>}
+      <StatusDot tone={STATE_TONE[status.state]} pulse={status.state === 'error'} label={stateLabel(status.state)} />
+      {stateLabel(status.state)}
+      {status.state === 'ok' && <span className="font-mono text-2xs tabular text-fg-tertiary">{t('units.fpsValue', { value: Math.round(status.fps) })}</span>}
     </span>
   )
 }
@@ -413,12 +419,13 @@ function RowHeader({ icon: Icon, enabled, onEnabled, label, placeholder, onLabel
   onRemove: () => void
   removeLabel: string
 }) {
+  const t = useT()
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <Switch checked={enabled} onChange={onEnabled} aria-label={`${enabled ? 'Disable' : 'Enable'} ${label || placeholder}`} />
+      <Switch checked={enabled} onChange={onEnabled} aria-label={enabled ? t('settings.outputs.disableOutput', { name: label || placeholder }) : t('settings.outputs.enableOutput', { name: label || placeholder })} />
       <Icon size={16} aria-hidden className={cn('shrink-0', enabled ? 'text-fg-secondary' : 'text-fg-disabled')} />
       <TextInput
-        aria-label="Output name"
+        aria-label={t('settings.outputs.outputName')}
         value={label}
         placeholder={placeholder}
         maxLength={64}
@@ -442,6 +449,7 @@ const ArtnetRow = memo(function ArtnetRow({ entry: a, index, status, applied, er
   onPatch: (key: string, patch: Partial<ArtNetConfig>) => void
   onRemove: (kind: 'artnet', key: string, name: string, live: boolean) => void
 }) {
+  const t = useT()
   const enabled = a.enabled !== false
   const name = a.label || `Art-Net ${index + 1}`
   const artUni = a.artnetUniverse ?? a.universe % 16
@@ -458,10 +466,10 @@ const ArtnetRow = memo(function ArtnetRow({ entry: a, index, status, applied, er
         onLabel={(v) => onPatch(a.key, { label: v })}
         state={<OutputState status={status} applied={applied} enabled={enabled} />}
         onRemove={() => onRemove('artnet', a.key, name, applied)}
-        removeLabel={`Remove ${name}`}
+        removeLabel={t('settings.outputs.removeOutput', { name })}
       />
       <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_150px_minmax(0,1.4fr)]', !enabled && 'opacity-60')}>
-        <Field layout="stacked" label="Destination" error={error} hint={!error ? (isBroadcast ? 'Broadcast — every node on the network' : 'Unicast — this node only') : undefined}>
+        <Field layout="stacked" label={t('settings.outputs.destination')} error={error} hint={!error ? (isBroadcast ? t('settings.outputs.broadcastHint') : t('settings.outputs.unicastHint')) : undefined}>
           {(id) => (
             <TextInput
               id={id}
@@ -476,18 +484,18 @@ const ArtnetRow = memo(function ArtnetRow({ entry: a, index, status, applied, er
                   onClick={() => onPatch(a.key, { host: BROADCAST })}
                   className="-mr-1 shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-[0.04em] text-fg-tertiary hover:bg-surface-3 hover:text-fg-primary"
                 >
-                  Broadcast
+                  {t('settings.outputs.broadcast')}
                 </button>
               )}
             />
           )}
         </Field>
-        <Field layout="stacked" label="Source universe" hint="Console universe sent">
+        <Field layout="stacked" label={t('settings.outputs.sourceUniverse')} hint={t('settings.outputs.sourceUniverseHint')}>
           {(id) => (
             <Select
               id={id}
               value={String(a.universe)}
-              options={UNIVERSE_OPTIONS}
+              options={universeOptions()}
               onChange={(v) => {
                 const universe = Number(v)
                 // Keep the Art-Net universe in step while it mirrors the source
@@ -498,15 +506,15 @@ const ArtnetRow = memo(function ArtnetRow({ entry: a, index, status, applied, er
           )}
         </Field>
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-fg-secondary">Art-Net address</span>
+          <span className="text-xs font-medium text-fg-secondary">{t('settings.outputs.artnetAddress')}</span>
           <div className="grid grid-cols-3 gap-2">
-            <NumberField label="Net" aria-label="Art-Net net" value={a.net} min={0} max={127} onChange={(v) => onPatch(a.key, { net: Math.round(v) })} />
-            <NumberField label="Sub" aria-label="Art-Net subnet" value={a.subnet} min={0} max={15} onChange={(v) => onPatch(a.key, { subnet: Math.round(v) })} />
-            <NumberField label="Uni" aria-label="Art-Net universe" value={artUni} min={0} max={15} onChange={(v) => onPatch(a.key, { artnetUniverse: Math.round(v) })} />
+            <NumberField label={t('settings.outputs.net')} aria-label={t('settings.outputs.netAria')} value={a.net} min={0} max={127} onChange={(v) => onPatch(a.key, { net: Math.round(v) })} />
+            <NumberField label={t('settings.outputs.sub')} aria-label={t('settings.outputs.subAria')} value={a.subnet} min={0} max={15} onChange={(v) => onPatch(a.key, { subnet: Math.round(v) })} />
+            <NumberField label={t('settings.outputs.uni')} aria-label={t('settings.outputs.uniAria')} value={artUni} min={0} max={15} onChange={(v) => onPatch(a.key, { artnetUniverse: Math.round(v) })} />
           </div>
           <span className="text-xs text-fg-tertiary">
-            Port-Address <span className="font-mono tabular text-fg-secondary">{portAddress(a.net, a.subnet, artUni)}</span>
-            {a.port !== ARTNET_PORT && <> · UDP <span className="font-mono tabular">{a.port}</span></>}
+            {t.rich('settings.outputs.portAddress', { value: <span className="font-mono tabular text-fg-secondary">{portAddress(a.net, a.subnet, artUni)}</span> })}
+            {a.port !== ARTNET_PORT && <> · {t.rich('settings.outputs.udpPort', { port: <span className="font-mono tabular">{a.port}</span> })}</>}
           </span>
         </div>
       </div>
@@ -529,15 +537,16 @@ const UsbRow = memo(function UsbRow({ entry: u, index, ports, scanning, status, 
   onRemove: (kind: 'usb', key: string, name: string, live: boolean) => void
   onRescan: () => void
 }) {
+  const t = useT()
   const enabled = u.enabled !== false
   const name = u.label || `USB DMX ${index + 1}`
   const portMissing = !!u.portPath && !ports.some((p) => p.path === u.portPath)
   const portOptions = [
-    { value: '', label: ports.length ? 'Choose a port…' : 'No port detected', disabled: true },
-    ...(portMissing ? [{ value: u.portPath, label: `${u.portPath} (not connected)` }] : []),
+    { value: '', label: ports.length ? t('settings.outputs.choosePort') : t('settings.outputs.noPortDetected'), disabled: true },
+    ...(portMissing ? [{ value: u.portPath, label: t('settings.outputs.portNotConnected', { port: u.portPath }) }] : []),
     ...ports.map((p) => ({
       value: p.path,
-      label: [p.path, p.manufacturer || p.friendlyName, p.serialNumber ? `S/N ${p.serialNumber}` : ''].filter(Boolean).join(' · ')
+      label: [p.path, p.manufacturer || p.friendlyName, p.serialNumber ? t('settings.outputs.serialNumber', { value: p.serialNumber }) : ''].filter(Boolean).join(' · ')
     }))
   ]
   const showError = applied && enabled && status?.lastError && status.state !== 'ok'
@@ -552,14 +561,14 @@ const UsbRow = memo(function UsbRow({ entry: u, index, ports, scanning, status, 
         onLabel={(v) => onPatch(u.key, { label: v })}
         state={<OutputState status={status} applied={applied} enabled={enabled} />}
         onRemove={() => onRemove('usb', u.key, name, applied)}
-        removeLabel={`Remove ${name}`}
+        removeLabel={t('settings.outputs.removeOutput', { name })}
       />
       <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_150px]', !enabled && 'opacity-60')}>
         <Field
           layout="stacked"
-          label="Serial port"
+          label={t('settings.outputs.serialPort')}
           error={error}
-          hint={!error ? (portMissing ? 'Adapter not plugged in — it reconnects automatically when it comes back' : 'Each adapter needs its own port') : undefined}
+          hint={!error ? (portMissing ? t('settings.outputs.portUnplugged') : t('settings.outputs.portOwn')) : undefined}
         >
           {(id) => (
             <div className="flex gap-2">
@@ -573,18 +582,18 @@ const UsbRow = memo(function UsbRow({ entry: u, index, ports, scanning, status, 
                   onPatch(u.key, { portPath: path, serialNumber: port?.serialNumber })
                 }}
               />
-              <IconButton icon={LuRefreshCw} label="Rescan serial ports" variant="secondary" loading={scanning} onClick={onRescan} />
+              <IconButton icon={LuRefreshCw} label={t('settings.outputs.rescanSerial')} variant="secondary" loading={scanning} onClick={onRescan} />
             </div>
           )}
         </Field>
-        <Field layout="stacked" label="Adapter type" hint={PRO_DRIVERS.has(u.driver) ? 'Pro protocol (own DMX processor)' : 'Open DMX — timing generated by the console'}>
+        <Field layout="stacked" label={t('settings.outputs.adapterType')} hint={PRO_DRIVERS.has(u.driver) ? t('settings.outputs.proProtocol') : t('settings.outputs.openProtocol')}>
           {(id) => (
-            <Select id={id} value={u.driver} options={USB_DRIVERS} onChange={(driver) => onPatch(u.key, { driver })} />
+            <Select id={id} value={u.driver} options={usbDriverOptions()} onChange={(driver) => onPatch(u.key, { driver })} />
           )}
         </Field>
-        <Field layout="stacked" label="Source universe">
+        <Field layout="stacked" label={t('settings.outputs.sourceUniverse')}>
           {(id) => (
-            <Select id={id} value={String(u.universe)} options={UNIVERSE_OPTIONS} onChange={(v) => onPatch(u.key, { universe: Number(v) })} />
+            <Select id={id} value={String(u.universe)} options={universeOptions()} onChange={(v) => onPatch(u.key, { universe: Number(v) })} />
           )}
         </Field>
       </div>
@@ -598,15 +607,16 @@ const UsbRow = memo(function UsbRow({ entry: u, index, ports, scanning, status, 
 // ---------------------------------------------------------------
 
 function RemoteOutputsOverview() {
+  const t = useT()
   const status = useOutputStatus()
   const outputs = status?.outputs ?? []
   return (
-    <SettingsPage title="DMX outputs" description="Live state of the console's outputs. Outputs are configured on the console itself.">
-      <SettingsCard icon={LuNetwork} title="Outputs" status={<Badge size="xs">{outputs.length}</Badge>}>
+    <SettingsPage title={t('settings.outputs.title')} description={t('settings.outputs.remoteDescription')}>
+      <SettingsCard icon={LuNetwork} title={t('settings.outputs.remoteTitle')} status={<Badge size="xs">{outputs.length}</Badge>}>
         {!status ? (
-          <div className="flex items-center gap-2 px-4 py-6 text-sm text-fg-tertiary"><Spinner size={16} /> Reading output status…</div>
+          <div className="flex items-center gap-2 px-4 py-6 text-sm text-fg-tertiary"><Spinner size={16} /> {t('settings.outputs.readingStatus')}</div>
         ) : outputs.length === 0 ? (
-          <EmptyState size="sm" icon={LuNetwork} title="No DMX output configured" description="Open Settings → Outputs on the console to add an Art-Net node or a USB adapter." />
+          <EmptyState size="sm" icon={LuNetwork} title={t('settings.outputs.noneConfigured')} description={t('settings.outputs.noneConfiguredDescription')} />
         ) : outputs.map((o) => (
           <div key={o.id} className="flex min-h-row items-center gap-3 border-b border-line-subtle px-4 py-2 last:border-b-0">
             {o.type === 'artnet' ? <LuRadioTower size={16} aria-hidden className="text-fg-tertiary" /> : <LuUsb size={16} aria-hidden className="text-fg-tertiary" />}
@@ -615,7 +625,7 @@ function RemoteOutputsOverview() {
               <span className="truncate font-mono text-2xs text-fg-tertiary">{o.target}</span>
               {o.lastError && o.state !== 'ok' && <span className="text-xs text-danger-fg">{o.lastError}</span>}
             </div>
-            <Badge size="xs" mono>U{o.sourceUniverse + 1}</Badge>
+            <Badge size="xs" mono>{t('units.universeShort', { n: o.sourceUniverse + 1 })}</Badge>
             <OutputState status={o} applied enabled={o.enabled} />
           </div>
         ))}

@@ -12,10 +12,12 @@ import { useMidiStore } from '@renderer/stores/midi-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { formatTimecode, getTimecodePosition, isTimecodeEnabled, isTimecodeReceiving } from '@renderer/lib/timecode-engine'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
+import { useT } from '@renderer/i18n'
 import { CommandLine } from './CommandLine'
 import { OutputHealthIndicator } from './OutputHealth'
 
 export function StatusBar() {
+  const t = useT()
   const executorBarOpen = useUiStore((s) => s.executorBarOpen)
   return (
     <footer className="flex h-statusbar shrink-0 items-center gap-1 border-t border-line bg-surface-1 px-1.5 text-xs text-fg-tertiary">
@@ -30,7 +32,7 @@ export function StatusBar() {
       <ShowFile />
       <IconButton
         icon={executorBarOpen ? LuPanelBottomClose : LuPanelBottomOpen}
-        label={executorBarOpen ? 'Hide executors' : 'Show executors'}
+        label={executorBarOpen ? t('shell.status.hideExecutors') : t('shell.status.showExecutors')}
         size="xs"
         onClick={() => useUiStore.getState().toggleExecutorBar()}
       />
@@ -43,27 +45,30 @@ function Sep() {
 }
 
 function PatchSummary() {
+  const t = useT()
   const count = usePatchStore((s) => s.patch.length)
   const universes = usePatchStore((s) => new Set(s.patch.map((p) => p.universe)).size)
+  const num = (n: number) => <span className="tabular text-fg-secondary">{n}</span>
   return (
     <span className="shrink-0 whitespace-nowrap px-1.5">
-      <span className="tabular text-fg-secondary">{count}</span> fixture{count === 1 ? '' : 's'}
-      {universes > 1 && <> · <span className="tabular text-fg-secondary">{universes}</span> universes</>}
+      {t.rich('common.fixtureCount', { count: num(count) }, count)}
+      {universes > 1 && <> · {t.rich('common.universeCount', { count: num(universes) }, universes)}</>}
     </span>
   )
 }
 
 function MidiStatus() {
+  const t = useT()
   const inputs = useMidiStore((s) => s.devices.filter((d) => d.type === 'input' && d.connected).map((d) => d.name).join(', '))
   return (
-    <Tooltip content={inputs ? `MIDI inputs: ${inputs}` : 'No MIDI input connected'}>
+    <Tooltip content={inputs ? t('shell.status.midiInputs', { names: inputs }) : t('shell.status.noMidiInput')}>
       <button
         type="button"
         onClick={() => useUiStore.getState().setActiveTab('midi')}
         className="flex h-full min-w-0 max-w-[220px] shrink items-center gap-1.5 rounded-sm px-1.5 hover:bg-surface-3 hover:text-fg-primary"
       >
         <LuPiano size={13} aria-hidden className="shrink-0" />
-        <span className="truncate">{inputs || 'No MIDI'}</span>
+        <span className="truncate">{inputs || t('shell.status.noMidi')}</span>
         {inputs && <MidiActivity />}
       </button>
     </Tooltip>
@@ -85,6 +90,7 @@ function MidiActivity() {
 
 /** Incoming MIDI timecode (shown only when timecode sync is enabled) */
 function TimecodeStatus() {
+  const t = useT()
   const [tc, setTc] = useState<{ text: string; receiving: boolean } | null>(null)
   useEffect(() => {
     const read = () => {
@@ -101,7 +107,7 @@ function TimecodeStatus() {
   return (
     <>
       <Sep />
-      <span className="flex shrink-0 items-center gap-1.5 px-1.5" title={tc.receiving ? 'Receiving MIDI timecode' : 'Timecode enabled — no signal'}>
+      <span className="flex shrink-0 items-center gap-1.5 px-1.5" title={tc.receiving ? t('shell.status.timecodeReceiving') : t('shell.status.timecodeNoSignal')}>
         <LuTimer size={13} aria-hidden />
         <StatusDot tone={tc.receiving ? 'go' : 'warning'} />
         <span className={cn('font-mono tabular', tc.receiving ? 'text-fg-primary' : 'text-fg-tertiary')}>{tc.text}</span>
@@ -112,6 +118,7 @@ function TimecodeStatus() {
 
 /** Current show file (Electron: click to reveal in the file manager) */
 function ShowFile() {
+  const t = useT()
   const showName = useUiStore((s) => s.showName)
   const isDirty = useUiStore((s) => s.isDirty)
   const [path, setPath] = useState<string | null>(null)
@@ -126,10 +133,10 @@ function ShowFile() {
 
   if (isRemoteMode()) return null
   if (!path) {
-    return <span className="shrink-0 whitespace-nowrap px-1.5 text-fg-disabled">Not saved yet</span>
+    return <span className="shrink-0 whitespace-nowrap px-1.5 text-fg-disabled">{t('shell.status.notSavedYet')}</span>
   }
   return (
-    <Tooltip content={`${path} — click to reveal`}>
+    <Tooltip content={t('shell.status.revealPath', { path })}>
       <button
         type="button"
         onClick={() => { void getBridge()?.show.reveal() }}

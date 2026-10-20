@@ -19,6 +19,7 @@ import { useUiStore } from '@renderer/stores/ui-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { useRemoteConnection } from '@renderer/hooks/useRemoteConnection'
 import { sendRemoteCommand } from '@renderer/lib/runtime'
+import { useT } from '@renderer/i18n'
 import { SceneGrid, STAGE_COLUMNS, type Cell, type SceneMode, type StageGridMode, type StageScene } from './SceneGrid'
 import { GrandMasterBar, GrandMasterFader, GroupStrip, MasterButtons, PlaybackButtons, StageClock, type StageGroup } from './StageControls'
 
@@ -102,6 +103,7 @@ function useGroupSelection() {
 // ---- Pieces ----
 
 function ConnectionDot() {
+  const t = useT()
   const state = useRemoteConnection()
   const ok = state === 'open'
   return (
@@ -109,7 +111,7 @@ function ConnectionDot() {
       tone={ok ? 'go' : state === 'auth-required' ? 'danger' : 'warning'}
       pulse={!ok}
       size="md"
-      label={ok ? 'Connected to the console' : state === 'auth-required' ? 'PIN required' : 'Reconnecting to the console'}
+      label={ok ? t('shell.connection.connected') : state === 'auth-required' ? t('shell.connection.pinRequired') : t('shell.connection.reconnecting')}
     />
   )
 }
@@ -120,27 +122,32 @@ function ShowTitle({ className }: { className?: string }) {
 }
 
 function BlackoutStrip() {
+  const t = useT()
   const blackout = useDmxStore((s) => s.blackout)
   if (!blackout) return null
   return (
     <div role="alert" className="flex h-8 shrink-0 items-center justify-center gap-2 bg-danger text-xs font-bold uppercase tracking-[0.14em] text-on-danger">
       <span aria-hidden className="h-2 w-2 rounded-full bg-white animate-blink" />
-      Blackout
+      {t('common.blackout')}
     </div>
   )
 }
 
 function GridModeSwitch({ value, onChange, compact }: { value: StageGridMode; onChange: (m: StageGridMode) => void; compact?: boolean }) {
+  const t = useT()
+  const play = t('stage.gridModes.play')
+  const levels = t('stage.gridModes.levels')
+  const arrange = t('stage.gridModes.arrange')
   return (
     <SegmentedControl<StageGridMode>
-      aria-label="Scene grid mode"
+      aria-label={t('stage.gridModeAria')}
       size={compact ? 'sm' : 'md'}
       value={value}
       onChange={onChange}
       items={[
-        { value: 'play', label: compact ? undefined : 'Play', icon: LuHand, title: 'Play' },
-        { value: 'levels', label: compact ? undefined : 'Levels', icon: LuSlidersVertical, title: 'Levels' },
-        { value: 'arrange', label: compact ? undefined : 'Arrange', icon: LuMove, title: 'Arrange' }
+        { value: 'play', label: compact ? undefined : play, icon: LuHand, title: play },
+        { value: 'levels', label: compact ? undefined : levels, icon: LuSlidersVertical, title: levels },
+        { value: 'arrange', label: compact ? undefined : arrange, icon: LuMove, title: arrange }
       ]}
     />
   )
@@ -181,6 +188,7 @@ function ReleaseClear() {
 }
 
 function Grid({ mode, size, visibleColumns, className }: { mode: StageGridMode; size: 'sm' | 'md'; visibleColumns?: number[]; className?: string }) {
+  const t = useT()
   const grid = useExecutorStore((s) => s.grid)
   const columns = useExecutorStore((s) => s.columns)
   const modes = useExecutorStore((s) => s.modes)
@@ -190,8 +198,8 @@ function Grid({ mode, size, visibleColumns, className }: { mode: StageGridMode; 
       <div className={cn('flex min-h-0 flex-1 rounded-lg border border-dashed border-line', className)}>
         <EmptyState
           icon={LuClapperboard}
-          title="No scenes in this show"
-          description="Scenes recorded on the console appear here automatically."
+          title={t('stage.noScenes')}
+          description={t('stage.noScenesRemote')}
         />
       </div>
     )
@@ -214,10 +222,11 @@ function Grid({ mode, size, visibleColumns, className }: { mode: StageGridMode; 
 }
 
 function ModeHint({ mode }: { mode: StageGridMode }) {
+  const t = useT()
   if (mode === 'play') return null
   return (
     <p className={cn('shrink-0 text-center text-xs', mode === 'arrange' ? 'text-info-fg' : 'text-fg-tertiary')}>
-      {mode === 'arrange' ? 'Arrange — drag a scene onto another cell. Nothing fires.' : 'Levels — scene master faders. Double-tap = full.'}
+      {mode === 'arrange' ? t('stage.arrangeHintShort') : t('stage.levelsHintShort')}
     </p>
   )
 }
@@ -225,9 +234,10 @@ function ModeHint({ mode }: { mode: StageGridMode }) {
 // ---- Phone ----
 
 function PageTabs({ page, onChange }: { page: number; onChange: (p: number) => void }) {
+  const t = useT()
   const columns = useExecutorStore((s) => s.columns)
   return (
-    <div role="tablist" aria-label="Executor columns" className="grid grid-cols-4 gap-1 rounded-lg bg-surface-0 p-1 ring-1 ring-inset ring-line">
+    <div role="tablist" aria-label={t('stage.pagesAria')} className="grid grid-cols-4 gap-1 rounded-lg bg-surface-0 p-1 ring-1 ring-inset ring-line">
       {Array.from({ length: PAGE_COUNT }, (_, p) => {
         const cols = [p * COLUMNS_PER_PAGE, p * COLUMNS_PER_PAGE + 1]
         const active = p === page
@@ -237,7 +247,7 @@ function PageTabs({ page, onChange }: { page: number; onChange: (p: number) => v
             type="button"
             role="tab"
             aria-selected={active}
-            aria-label={`Columns ${cols[0] + 1} and ${cols[1] + 1}`}
+            aria-label={t('stage.pageAria', { a: cols[0] + 1, b: cols[1] + 1 })}
             onClick={() => onChange(p)}
             className={cn(
               'flex h-control flex-col items-center justify-center gap-1 rounded-md transition-colors duration-fast',
@@ -295,11 +305,12 @@ function PhoneStage() {
 // ---- Tablet / desktop browser ----
 
 function TabletStage() {
+  const t = useT()
   const [mode, setMode] = useState<StageGridMode>('play')
   const groups = useGroupSelection()
   return (
     <div className="flex h-full w-full overflow-hidden bg-surface-0">
-      <aside aria-label="Masters" className="flex w-[200px] shrink-0 flex-col gap-3 border-r border-line bg-surface-1 p-3 lg:w-[232px]">
+      <aside aria-label={t('stage.mastersAria')} className="flex w-[200px] shrink-0 flex-col gap-3 border-r border-line bg-surface-1 p-3 lg:w-[232px]">
         <GrandMaster variant="fader" />
         <Masters layout="column" />
         <ReleaseClear />
@@ -315,9 +326,9 @@ function TabletStage() {
             icon={LuLayoutDashboard}
             onClick={() => useUiStore.getState().setStageMode(false)}
             labelClassName="hidden lg:inline"
-            aria-label="Full console"
+            aria-label={t('stage.fullConsole')}
           >
-            Full console
+            {t('stage.fullConsole')}
           </Button>
         </header>
         <BlackoutStrip />

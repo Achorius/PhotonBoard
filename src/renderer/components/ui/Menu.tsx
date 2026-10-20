@@ -16,6 +16,7 @@ import { Popover } from './Popover'
 import { Spinner } from './Spinner'
 import { formatShortcut } from './Kbd'
 import { pointRect, type Placement, type Rect } from './positioning'
+import { t } from '@renderer/i18n'
 
 export type MenuEntry =
   | {
@@ -123,9 +124,9 @@ export function Menu({ items, onClose, className }: MenuProps) {
         </>
       )}
       {entries === null ? (
-        <div className="flex h-control items-center gap-2 px-3 text-xs text-fg-tertiary"><Spinner size={14} /> Loading…</div>
+        <div className="flex h-control items-center gap-2 px-3 text-xs text-fg-tertiary"><Spinner size={14} /> {t('common.loading')}</div>
       ) : entries.length === 0 ? (
-        <div className="flex h-control items-center px-3 text-xs text-fg-tertiary">Nothing here</div>
+        <div className="flex h-control items-center px-3 text-xs text-fg-tertiary">{t('common.nothingHere')}</div>
       ) : entries.map((entry, i) => {
         if (entry.type === 'separator') return <div key={i} role="separator" className="my-1 h-px bg-line-subtle" />
         if (entry.type === 'label') return <div key={i} className="px-3 pb-1 pt-2 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{entry.label}</div>

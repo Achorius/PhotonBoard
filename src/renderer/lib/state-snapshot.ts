@@ -24,6 +24,7 @@ import { getContentState, onContentStateChange } from './content-sync'
 import { computeProgrammerSummary, type ProgrammerSummary } from './console-programmer'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
 import type { ContentState } from '@shared/remote-commands'
+import { getLocale, onLocaleChange, type Locale } from '@renderer/i18n'
 
 export interface SnapshotCue {
   id: string
@@ -72,6 +73,8 @@ export interface StateSnapshot {
   timelineTime?: number
   showName: string
   isDirty: boolean
+  /** Console UI language: the Stage window follows it (remote browsers keep their own) */
+  language?: Locale
   cuelists: SnapshotCuelist[]
   chases: SnapshotChase[]
   groups: { id: string; name: string; color: string; fixtureCount: number }[]
@@ -110,6 +113,7 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
     timelinePlaying: getTimelineState().isPlaying,
     showName,
     isDirty,
+    language: getLocale(),
     cuelists: cuelists.map(cl => ({
       id: cl.id,
       name: cl.name,
@@ -320,7 +324,8 @@ export function startStateBroadcast(): () => void {
       if (running(s.effects) !== running(p.effects)) onControlChange()
     }),
     onContentStateChange(onControlChange),
-    onTimelinePlayStateChange(onControlChange)
+    onTimelinePlayStateChange(onControlChange),
+    onLocaleChange(onControlChange)
   ]
 
   // The playhead rides with the DMX part (same ~10 Hz rate)

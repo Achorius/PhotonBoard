@@ -7,6 +7,7 @@ import { Button, Modal, Spinner, TextInput } from '@renderer/components/ui'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { loadLastShow } from '@renderer/lib/show-io'
 import { useRemoteConnection } from '@renderer/hooks/useRemoteConnection'
+import { t as translate, useT } from '@renderer/i18n'
 
 /** Grace period before showing "reconnecting" (normal start-up, brief network blips) */
 const BANNER_DELAY_MS = 1500
@@ -22,6 +23,7 @@ export function RemoteAccess() {
 }
 
 function PinDialog() {
+  const t = useT()
   const state = useRemoteConnection()
   const [requested, setRequested] = useState(state === 'auth-required')
   const [pin, setPin] = useState('')
@@ -49,11 +51,11 @@ function PinDialog() {
     setError(null)
     try {
       const ok = await getBridge()?.remote.authenticate(pin.trim())
-      if (!ok) setError('Wrong PIN — check the PIN shown in the console Settings.')
+      if (!ok) setError(translate('remote.wrongPin'))
       // The start-up show load was refused without the PIN: fetch it now
       else void loadLastShow()
     } catch {
-      setError('Could not reach the console.')
+      setError(translate('remote.unreachable'))
     } finally {
       setBusy(false)
     }
@@ -65,9 +67,9 @@ function PinDialog() {
       onClose={() => {}}
       dismissible={false}
       size="sm"
-      title="Enter the console PIN"
-      description="This PhotonBoard console is protected. The PIN is in Settings → Remote access on the console."
-      footer={<Button variant="primary" loading={busy} onClick={() => { void submit() }}>Connect</Button>}
+      title={t('remote.pinTitle')}
+      description={t('remote.pinDescription')}
+      footer={<Button variant="primary" loading={busy} onClick={() => { void submit() }}>{t('remote.connect')}</Button>}
     >
       <form onSubmit={(e) => { e.preventDefault(); void submit() }} className="flex flex-col gap-2">
         <TextInput
@@ -77,8 +79,8 @@ function PinDialog() {
           autoComplete="one-time-code"
           icon={LuKeyRound}
           size="lg"
-          aria-label="PIN"
-          placeholder="PIN"
+          aria-label={t('remote.pin')}
+          placeholder={t('remote.pin')}
           value={pin}
           invalid={!!error}
           onChange={(e) => setPin(e.target.value)}
@@ -91,6 +93,7 @@ function PinDialog() {
 }
 
 function ConnectionBanner() {
+  const t = useT()
   const state = useRemoteConnection()
   const [visible, setVisible] = useState(false)
   useEffect(() => {
@@ -102,7 +105,7 @@ function ConnectionBanner() {
   return (
     <div role="alert" className="flex h-control-sm shrink-0 items-center justify-center gap-2 bg-warning px-3 text-xs font-semibold text-on-warning">
       <LuWifiOff size={14} aria-hidden />
-      Connection to the console lost — reconnecting
+      {t('remote.connectionLost')}
       <Spinner size={12} />
     </div>
   )

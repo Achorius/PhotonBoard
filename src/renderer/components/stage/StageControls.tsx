@@ -9,9 +9,11 @@
 
 import { memo, useEffect, useRef, useState } from 'react'
 import { LuEraser, LuPlay, LuPower, LuSquare, LuSun, LuUsers, LuX, LuZap } from 'react-icons/lu'
-import { Button, Fader, cn, tint, usePointerDrag, withAlpha } from '@renderer/components/ui'
+import { Button, Fader, cn, formatPercent, tint, usePointerDrag, withAlpha } from '@renderer/components/ui'
+import { getLocale, useT } from '@renderer/i18n'
 
 const pctOf = (v: number) => Math.round((v / 255) * 100)
+const pctUnit = () => (getLocale() === 'fr' ? '\u202F%' : '%')
 
 // ---------------------------------------------------------------
 // Grand Master
@@ -23,12 +25,13 @@ export const GrandMasterFader = memo(function GrandMasterFader({ value, onChange
   onChange: (v: number) => void
   size?: 'md' | 'lg'
 }) {
+  const t = useT()
   const pct = pctOf(value)
   const reduced = pct < 100
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center gap-2">
       <div className="flex w-full items-baseline justify-between gap-2 px-1">
-        <span className="text-2xs font-bold uppercase tracking-[0.08em] text-fg-tertiary">Grand master</span>
+        <span className="text-2xs font-bold uppercase tracking-[0.08em] text-fg-tertiary">{t('stage.grandMaster')}</span>
       </div>
       <span
         className={cn(
@@ -37,7 +40,7 @@ export const GrandMasterFader = memo(function GrandMasterFader({ value, onChange
           pct === 0 ? 'text-danger-fg' : reduced ? 'text-warning-fg' : 'text-fg-primary'
         )}
       >
-        {pct}<span className="text-base text-fg-tertiary">%</span>
+        {pct}<span className="text-base text-fg-tertiary">{pctUnit()}</span>
       </span>
       <div className="flex min-h-0 w-full flex-1 justify-center">
         <Fader
@@ -46,7 +49,7 @@ export const GrandMasterFader = memo(function GrandMasterFader({ value, onChange
           defaultValue={255}
           readout={false}
           color={reduced ? 'rgb(var(--pb-warning))' : 'rgb(var(--pb-fg-secondary))'}
-          aria-label="Grand Master"
+          aria-label={t('common.grandMaster')}
           className={size === 'lg' ? 'w-24' : 'w-16'}
         />
       </div>
@@ -59,6 +62,7 @@ export const GrandMasterFader = memo(function GrandMasterFader({ value, onChange
  * never jumps the level), double-tap = full.
  */
 export function GrandMasterBar({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const start = useRef(0)
   const lastTap = useRef(0)
@@ -87,11 +91,11 @@ export function GrandMasterBar({ value, onChange }: { value: number; onChange: (
         ref={ref}
         role="slider"
         tabIndex={0}
-        aria-label="Grand Master"
+        aria-label={t('common.grandMaster')}
         aria-valuemin={0}
         aria-valuemax={255}
         aria-valuenow={value}
-        aria-valuetext={`${pct}%`}
+        aria-valuetext={formatPercent(value)}
         onKeyDown={(e) => {
           const step = e.shiftKey ? 25 : 5
           if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); onChange(Math.min(255, value + step)) }
@@ -110,7 +114,7 @@ export function GrandMasterBar({ value, onChange }: { value: number; onChange: (
         <div className="absolute inset-y-1.5 w-1 -translate-x-1/2 rounded-full bg-fg-primary shadow-raised" style={{ left: `max(6px, min(calc(100% - 6px), ${pct}%))` }} />
       </div>
       <span className={cn('w-14 shrink-0 text-right font-mono text-xl font-semibold tabular', pct === 0 ? 'text-danger-fg' : reduced ? 'text-warning-fg' : 'text-fg-primary')}>
-        {pct}%
+        {formatPercent(value)}
       </span>
     </div>
   )
@@ -133,6 +137,7 @@ export interface MasterButtonsProps {
 
 /** Strobe & Blinder (hold) and Blackout (latching) */
 export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder, onStrobe, layout, size = 'md' }: MasterButtonsProps) {
+  const t = useT()
   const tall = size === 'lg' ? 'h-16 text-base' : 'h-14'
   return (
     <div className={cn('grid gap-2', layout === 'column' ? 'grid-cols-2' : 'grid-cols-3')}>
@@ -142,10 +147,10 @@ export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder
         active={strobe}
         onPress={() => onStrobe(true)}
         onRelease={() => onStrobe(false)}
-        aria-label="Strobe (hold)"
+        aria-label={t('stage.strobeHold')}
         className={cn(tall, 'flex-col gap-0.5 font-semibold')}
       >
-        Strobe
+        {t('common.strobe')}
       </Button>
       <Button
         icon={LuSun}
@@ -153,10 +158,10 @@ export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder
         active={blinder}
         onPress={() => onBlinder(true)}
         onRelease={() => onBlinder(false)}
-        aria-label="Blinder (hold)"
+        aria-label={t('stage.blinderHold')}
         className={cn(tall, 'flex-col gap-0.5 font-semibold')}
       >
-        Blinder
+        {t('common.blinder')}
       </Button>
       <Button
         icon={LuPower}
@@ -164,7 +169,7 @@ export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder
         tone="danger"
         active={blackout}
         onClick={onBlackout}
-        aria-label="Blackout"
+        aria-label={t('common.blackout')}
         className={cn(
           tall,
           'font-bold uppercase tracking-[0.08em]',
@@ -173,7 +178,7 @@ export function MasterButtons({ blackout, blinder, strobe, onBlackout, onBlinder
         )}
       >
         <span className="inline-flex items-center gap-1.5">
-          Blackout
+          {t('common.blackout')}
           {blackout && <span aria-hidden className="h-2 w-2 rounded-full bg-white animate-blink" />}
         </span>
       </Button>
@@ -189,6 +194,7 @@ export function PlaybackButtons({ timelinePlaying, onTimeline, onClear, onReleas
   onReleaseAll: () => void
   anyPlaying: boolean
 }) {
+  const t = useT()
   return (
     <div className="grid grid-cols-2 gap-2">
       {onTimeline && (
@@ -198,20 +204,20 @@ export function PlaybackButtons({ timelinePlaying, onTimeline, onClear, onReleas
           active={!!timelinePlaying}
           onClick={onTimeline}
           className="col-span-2 font-semibold"
-          aria-label={timelinePlaying ? 'Stop the timeline' : 'Play the timeline'}
+          aria-label={timelinePlaying ? t('stage.stopTimeline') : t('stage.playTimeline')}
         >
-          {timelinePlaying ? 'Timeline live' : 'Timeline'}
+          {timelinePlaying ? t('stage.timelineLive') : t('common.timeline')}
         </Button>
       )}
-      <Button icon={LuEraser} onClick={onClear} aria-label="Clear the programmer">Clear</Button>
+      <Button icon={LuEraser} onClick={onClear} aria-label={t('stage.clearProgrammer')}>{t('shell.clear.label')}</Button>
       <Button
         icon={LuSquare}
         variant={anyPlaying ? 'danger-outline' : 'secondary'}
         disabled={!anyPlaying}
         onClick={onReleaseAll}
-        aria-label="Release all scenes"
+        aria-label={t('stage.releaseAll')}
       >
-        Release
+        {t('stage.release')}
       </Button>
     </div>
   )
@@ -238,6 +244,7 @@ export function GroupStrip({ groups, activeGroupId, selectionCount, onSelectGrou
   onClear: () => void
   size?: 'md' | 'lg'
 }) {
+  const t = useT()
   const visible = groups.filter((g) => g.fixtureCount > 0)
   const h = size === 'lg' ? 'h-control-lg text-base' : 'h-control text-sm'
   return (
@@ -245,7 +252,7 @@ export function GroupStrip({ groups, activeGroupId, selectionCount, onSelectGrou
       <LuUsers size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none]">
         {visible.length === 0 ? (
-          <span className="whitespace-nowrap text-sm text-fg-tertiary">No groups in this show — create them in Patch.</span>
+          <span className="whitespace-nowrap text-sm text-fg-tertiary">{t('stage.noGroups')}</span>
         ) : visible.map((g) => {
           const active = g.id === activeGroupId
           return (
@@ -274,11 +281,11 @@ export function GroupStrip({ groups, activeGroupId, selectionCount, onSelectGrou
       <div className="flex shrink-0 items-center gap-2">
         {selectionCount > 0 && (
           <span className="whitespace-nowrap text-xs text-fg-tertiary">
-            <span className="font-mono tabular text-info-fg">{selectionCount}</span> selected
+            {t.rich('stage.selectedCount', { count: <span className="font-mono tabular text-info-fg">{selectionCount}</span> }, selectionCount)}
           </span>
         )}
-        <Button size={size === 'lg' ? 'lg' : 'md'} variant="secondary" onClick={onSelectAll}>All</Button>
-        <Button size={size === 'lg' ? 'lg' : 'md'} variant="ghost" icon={LuX} disabled={selectionCount === 0 && !activeGroupId} onClick={onClear}>None</Button>
+        <Button size={size === 'lg' ? 'lg' : 'md'} variant="secondary" onClick={onSelectAll}>{t('stage.selectAll')}</Button>
+        <Button size={size === 'lg' ? 'lg' : 'md'} variant="ghost" icon={LuX} disabled={selectionCount === 0 && !activeGroupId} onClick={onClear}>{t('stage.selectNone')}</Button>
       </div>
     </div>
   )

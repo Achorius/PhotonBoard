@@ -4,6 +4,8 @@
 // the slim state snapshot (lib/state-snapshot.ts, ~30 Hz, deduped
 // here); every action is a command (shared/remote-commands.ts)
 // executed by the console renderer.
+// Language: the snapshot's `language` (the console's UI language);
+// before the first snapshot, the choice shared through localStorage.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -12,6 +14,7 @@ import type { StateSnapshot } from '@renderer/lib/state-snapshot'
 import { EmptyState, IconButton, SegmentedControl, Spinner, cn } from '@renderer/components/ui'
 import { SceneGrid, type SceneMode, type StageGridMode, type StageScene } from '@renderer/components/stage/SceneGrid'
 import { GrandMasterFader, GroupStrip, MasterButtons, PlaybackButtons, StageClock } from '@renderer/components/stage/StageControls'
+import { setLocale, useT } from '@renderer/i18n'
 
 type StageState = Omit<StateSnapshot, 'dmx'>
 
@@ -57,6 +60,7 @@ function useThrottledSend() {
 }
 
 export function StageApp() {
+  const t = useT()
   const [state, setState] = useState<StageState | null>(null)
   const [gridMode, setGridMode] = useState<StageGridMode>('play')
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
@@ -71,6 +75,7 @@ export function StageApp() {
       const json = JSON.stringify(next)
       if (json === last) return
       last = json
+      if (next.language === 'fr' || next.language === 'en') setLocale(next.language)
       setState(next)
     })
     return () => { if (typeof off === 'function') off() }
@@ -153,8 +158,8 @@ export function StageApp() {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-surface-0 text-fg-secondary">
         <Spinner size={24} />
-        <span className="text-base">Waiting for the console…</span>
-        <span className="text-sm text-fg-tertiary">Press Esc to close the stage window</span>
+        <span className="text-base">{t('stage.waiting')}</span>
+        <span className="text-sm text-fg-tertiary">{t('stage.escToClose')}</span>
       </div>
     )
   }
@@ -166,38 +171,38 @@ export function StageApp() {
     <div className="flex h-screen w-screen select-none flex-col overflow-hidden bg-surface-0 text-fg-primary">
       <header className="flex h-[72px] shrink-0 items-center gap-4 border-b border-line bg-surface-1 px-5">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="rounded-sm bg-accent/15 px-2 py-1 text-2xs font-bold uppercase tracking-[0.12em] text-accent-fg">Stage</span>
+          <span className="rounded-sm bg-accent/15 px-2 py-1 text-2xs font-bold uppercase tracking-[0.12em] text-accent-fg">{t('stage.badge')}</span>
           <h1 className="truncate text-xl font-semibold">{state.showName}</h1>
-          {state.isDirty && <span className="h-2 w-2 shrink-0 rounded-full bg-warning" title="Unsaved changes on the console" aria-label="Unsaved changes" />}
+          {state.isDirty && <span className="h-2 w-2 shrink-0 rounded-full bg-warning" title={t('stage.unsavedOnConsole')} aria-label={t('stage.unsaved')} />}
           <span className="hidden whitespace-nowrap text-sm text-fg-tertiary xl:inline">
-            <span className="tabular">{state.fixtureCount}</span> fixtures · <span className="tabular">{state.cuelists.length}</span> scenes
+            {t('stage.summary', { fixtures: t('common.fixtureCount', { count: state.fixtureCount }), scenes: t('common.sceneCount', { count: state.cuelists.length }) })}
           </span>
         </div>
         <SegmentedControl<StageGridMode>
-          aria-label="Scene grid mode"
+          aria-label={t('stage.gridModeAria')}
           size="md"
           value={gridMode}
           onChange={setGridMode}
           items={[
-            { value: 'play', label: 'Play', icon: LuHand },
-            { value: 'levels', label: 'Levels', icon: LuSlidersVertical },
-            { value: 'arrange', label: 'Arrange', icon: LuMove }
+            { value: 'play', label: t('stage.gridModes.play'), icon: LuHand },
+            { value: 'levels', label: t('stage.gridModes.levels'), icon: LuSlidersVertical },
+            { value: 'arrange', label: t('stage.gridModes.arrange'), icon: LuMove }
           ]}
         />
         <span aria-hidden className="h-8 w-px bg-line" />
         <StageClock size="lg" />
-        <IconButton icon={LuX} label="Close the stage window (Esc)" size="lg" variant="ghost" onClick={() => window.stageApi?.close()} />
+        <IconButton icon={LuX} label={t('stage.close')} size="lg" variant="ghost" onClick={() => window.stageApi?.close()} />
       </header>
 
       {state.blackout && (
         <div role="alert" className="flex h-9 shrink-0 items-center justify-center gap-2 bg-danger text-sm font-bold uppercase tracking-[0.14em] text-on-danger">
           <span aria-hidden className="h-2 w-2 rounded-full bg-white animate-blink" />
-          Blackout — output is dark
+          {t('stage.blackoutDark')}
         </div>
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside aria-label="Masters" className="flex w-[260px] shrink-0 flex-col gap-4 border-r border-line bg-surface-1 p-4">
+        <aside aria-label={t('stage.mastersAria')} className="flex w-[260px] shrink-0 flex-col gap-4 border-r border-line bg-surface-1 p-4">
           <GrandMasterFader
             size="lg"
             value={grandMaster}
@@ -236,8 +241,8 @@ export function StageApp() {
             <div className="flex min-h-0 flex-1 rounded-lg border border-dashed border-line">
               <EmptyState
                 icon={LuClapperboard}
-                title="No scenes in this show"
-                description="Record scenes on the console (Scenes view). They appear here in the same 8 × 4 layout as the executor bar."
+                title={t('stage.noScenes')}
+                description={t('stage.noScenesConsole')}
               />
             </div>
           ) : (
@@ -256,8 +261,8 @@ export function StageApp() {
           {gridMode !== 'play' && (
             <p className={cn('shrink-0 text-center text-sm', gridMode === 'arrange' ? 'text-info-fg' : 'text-fg-tertiary')}>
               {gridMode === 'arrange'
-                ? 'Arrange — drag a scene onto another cell to swap them. Nothing fires.'
-                : 'Levels — each fader sets a scene master level. Double-tap a fader for full.'}
+                ? t('stage.arrangeHint')
+                : t('stage.levelsHint')}
             </p>
           )}
         </main>

@@ -1,4 +1,5 @@
 import { cn } from './cn'
+import { t } from '@renderer/i18n'
 
 export interface SpinnerProps {
   size?: number
@@ -8,7 +9,7 @@ export interface SpinnerProps {
 }
 
 /** Indeterminate activity indicator (inherits the text colour) */
-export function Spinner({ size = 16, className, label = 'Loading' }: SpinnerProps) {
+export function Spinner({ size = 16, className, label = t('ui.loading') }: SpinnerProps) {
   return (
     <svg
       role="status"

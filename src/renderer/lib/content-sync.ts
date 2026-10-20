@@ -44,6 +44,7 @@ import {
 } from './timeline-engine'
 import { startEffect, stopEffect } from './effect-engine'
 import { applyShowData, collectShowData, onShowApplied, withoutDirtyTracking, type ShowIoResult } from './show-io'
+import { t } from '@renderer/i18n'
 import { getBridge, isRemoteMode, sendRemoteCommand, setRemoteCommandPreflight } from './runtime'
 
 type Obj = Record<string, unknown>
@@ -204,6 +205,35 @@ function mergeFull(section: ContentSection, data: unknown): unknown {
     return replaceList(section as ListSection, current as ContentItems[ListSection][], normalizeSectionItems(section, data) as ContentItems[ListSection][])
   }
   return replaceValue(current, normalizeSectionValue(section as 'executor' | 'timeline' | 'roomConfig', data, cuelistIdSet()))
+}
+
+/**
+ * Apply section diffs to the LOCAL stores as a local edit (undo / redo,
+ * lib/history.ts). Same merge as a remote edit: items that stay keep their
+ * runtime state (a playing scene keeps playing), removed ones are released,
+ * re-added ones come back stopped. On the console the content tracking
+ * versions it like any local edit; on a remote it is sent to the console
+ * like any local edit.
+ */
+export function applySectionChanges(changes: Partial<Record<ContentSection, SectionChange>>): void {
+  const sections = CONTENT_SECTIONS.filter(s => changes[s])
+  for (const s of sections) {
+    try {
+      commitSection(s, mergeChange(s, changes[s]!) as never)
+    } catch (e) {
+      console.error(`[Content] could not apply "${s}":`, e)
+    }
+  }
+  if (sections.includes('patch') || sections.includes('groups')) reconcileGroups()
+}
+
+/**
+ * True while content that is NOT a local edit is written into the stores:
+ * a remote's edit merged on the console, the console's copy applied on a
+ * remote. Undo history ignores those changes (each device undoes its own).
+ */
+export function isApplyingExternalContent(): boolean {
+  return mergingRemote > 0 || applyingConsole > 0
 }
 
 // ---------------------------------------------------------------
@@ -565,7 +595,7 @@ let lastBootAttempt = 0
 
 export async function loadConsoleShow(): Promise<ShowIoResult> {
   const bridge = getBridge()
-  if (!bridge) return { status: 'error', error: 'Not connected' }
+  if (!bridge) return { status: 'error', error: t('file.errors.notConnected') }
   if (booting) return { status: 'busy' }
   booting = true
   bootAttempted = true
@@ -573,7 +603,7 @@ export async function loadConsoleShow(): Promise<ShowIoResult> {
   try {
     const result = await bridge.show.getCurrent({ origin })
     if (!result?.success || !result.show || !result.content) {
-      return { status: 'error', error: result?.error || 'The console did not send its show' }
+      return { status: 'error', error: result?.error || t('file.errors.consoleNoShow') }
     }
     if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
     applyingConsole++

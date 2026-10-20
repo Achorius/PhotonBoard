@@ -1,5 +1,5 @@
 // ============================================================
-// Top bar: brand, File menu, show title | programmer & MIDI state,
+// Top bar: brand, File & Edit menus, undo / redo, show title | programmer & MIDI state,
 // Stage, output health | masters (GM, Strobe, Blinder, Blackout).
 // Every subscription is field-level: nothing here re-renders at the
 // mixer rate.
@@ -7,10 +7,16 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
-  LuChevronDown, LuEraser, LuFilePlus, LuFolderOpen, LuHistory, LuLogOut, LuMonitorPlay, LuPiano, LuPlay,
-  LuSave, LuSaveAll, LuSquare, LuUpload, LuFolderSearch, LuCrosshair
+  LuChevronDown, LuCopy, LuEraser, LuFilePlus, LuFolderOpen, LuHistory, LuLogOut, LuMonitorPlay, LuPencil, LuPiano, LuPlay,
+  LuRedo2, LuSave, LuSaveAll, LuSquare, LuTrash2, LuUndo2, LuUpload, LuFolderSearch, LuCrosshair
 } from 'react-icons/lu'
-import { Badge, Button, Divider, DropdownMenu, StatusDot, Tooltip, type MenuEntry } from '@renderer/components/ui'
+import { Badge, Button, Divider, DropdownMenu, IconButton, StatusDot, Tooltip, type MenuEntry } from '@renderer/components/ui'
+import { t as translate, useT } from '@renderer/i18n'
+import { redo, undo, useHistoryStore } from '@renderer/lib/history'
+import {
+  canDeleteSelection, canDuplicateSelection, canRenameSelection, deleteSelection, duplicateSelection, getActiveSelection,
+  renameSelection
+} from '@renderer/lib/selection-actions'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useFollowStore } from '@renderer/stores/follow-store'
@@ -36,6 +42,8 @@ export function Toolbar() {
       <div className="titlebar-no-drag flex min-w-0 items-center gap-1">
         <BrandMark />
         <FileMenu />
+        <EditMenu />
+        <UndoRedoButtons />
         <ShowTitle />
       </div>
       <div className="min-w-4 flex-1 self-stretch" />
@@ -77,16 +85,17 @@ function BrandMark() {
 // ---------------------------------------------------------------
 
 function FileMenu() {
+  const t = useT()
   const fileInput = useRef<HTMLInputElement>(null)
   const remote = isRemoteMode()
 
   const items = (): MenuEntry[] => [
     ...(!remote ? [
-      { label: 'New show', icon: LuFilePlus, shortcut: 'Mod+N', onSelect: () => { void requestNewShow() } },
-      { label: 'Open…', icon: LuFolderOpen, shortcut: 'Mod+O', onSelect: () => { void requestOpenShow() } }
+      { label: t('shell.fileMenu.newShow'), icon: LuFilePlus, shortcut: 'Mod+N', onSelect: () => { void requestNewShow() } },
+      { label: t('shell.fileMenu.open'), icon: LuFolderOpen, shortcut: 'Mod+O', onSelect: () => { void requestOpenShow() } }
     ] : []),
     {
-      label: remote ? 'Open show on console' : 'Open recent',
+      label: remote ? t('shell.fileMenu.openOnConsole') : t('shell.fileMenu.openRecent'),
       icon: LuHistory,
       submenu: async () => {
         const names = await listShows()
@@ -94,16 +103,16 @@ function FileMenu() {
       }
     },
     { type: 'separator' },
-    { label: 'Save', icon: LuSave, shortcut: 'Mod+S', onSelect: () => { void requestSave() } },
-    { label: 'Save as…', icon: LuSaveAll, shortcut: 'Mod+Shift+S', onSelect: () => { void requestSaveAs() } },
+    { label: t('shell.fileMenu.save'), icon: LuSave, shortcut: 'Mod+S', onSelect: () => { void requestSave() } },
+    { label: t('shell.fileMenu.saveAs'), icon: LuSaveAll, shortcut: 'Mod+Shift+S', onSelect: () => { void requestSaveAs() } },
     ...(remote ? [
       { type: 'separator' } as const,
-      { label: 'Upload show file…', icon: LuUpload, description: 'Send a .pbshow from this device to the console', onSelect: () => fileInput.current?.click() }
+      { label: t('shell.fileMenu.upload'), icon: LuUpload, description: t('shell.fileMenu.uploadDescription'), onSelect: () => fileInput.current?.click() }
     ] : [
       { type: 'separator' } as const,
-      { label: 'Reveal show file', icon: LuFolderSearch, onSelect: () => { void getBridge()?.show.reveal() } },
+      { label: t('shell.fileMenu.reveal'), icon: LuFolderSearch, onSelect: () => { void getBridge()?.show.reveal() } },
       { type: 'separator' } as const,
-      { label: 'Quit PhotonBoard', icon: LuLogOut, shortcut: IS_MAC_ELECTRON ? 'Mod+Q' : undefined, onSelect: () => { void requestQuit() } }
+      { label: t('shell.fileMenu.quit'), icon: LuLogOut, shortcut: IS_MAC_ELECTRON ? 'Mod+Q' : undefined, onSelect: () => { void requestQuit() } }
     ])
   ]
 
@@ -113,7 +122,7 @@ function FileMenu() {
         items={items}
         trigger={({ active, ...props }) => (
           <Button {...props} variant="ghost" active={active} tone="neutral" iconRight={LuChevronDown} className="px-2.5">
-            File
+            {t('shell.fileMenu.trigger')}
           </Button>
         )}
       />
@@ -134,18 +143,117 @@ function FileMenu() {
   )
 }
 
+// ---------------------------------------------------------------
+// Edit menu + undo / redo (touch-friendly buttons next to the menus)
+// ---------------------------------------------------------------
+
+const REDO_SHORTCUT = /mac|iphone|ipad/i.test(typeof navigator !== 'undefined' ? navigator.platform : '') ? 'Mod+Shift+Z' : 'Ctrl+Y'
+
+function EditMenu() {
+  const t = useT()
+  // Built when the menu opens: the active view's selection at that moment
+  const items = (): MenuEntry[] => {
+    const h = useHistoryStore.getState()
+    const sel = getActiveSelection()
+    const label = sel ? safeLabel(sel.label) : null
+    return [
+      {
+        label: h.undoLabel ? t('shell.editMenu.undoWhat', { what: h.undoLabel }) : t('shell.editMenu.undo'),
+        icon: LuUndo2,
+        shortcut: 'Mod+Z',
+        disabled: !h.canUndo,
+        description: isRemoteMode() ? t('shell.editMenu.remoteHint') : undefined,
+        onSelect: () => { undo() }
+      },
+      {
+        label: h.redoLabel ? t('shell.editMenu.redoWhat', { what: h.redoLabel }) : t('shell.editMenu.redo'),
+        icon: LuRedo2,
+        shortcut: REDO_SHORTCUT,
+        disabled: !h.canRedo,
+        onSelect: () => { redo() }
+      },
+      { type: 'separator' },
+      {
+        label: canDuplicateSelection() && label ? t('shell.editMenu.duplicateWhat', { what: label }) : t('shell.editMenu.duplicateSelection'),
+        icon: LuCopy,
+        shortcut: 'Mod+D',
+        disabled: !canDuplicateSelection(),
+        onSelect: () => { duplicateSelection() }
+      },
+      {
+        label: t('shell.editMenu.renameSelection'),
+        icon: LuPencil,
+        shortcut: 'F2',
+        disabled: !canRenameSelection(),
+        onSelect: () => { renameSelection() }
+      },
+      {
+        label: canDeleteSelection() && label ? t('shell.editMenu.deleteWhat', { what: label }) : t('shell.editMenu.deleteSelection'),
+        icon: LuTrash2,
+        shortcut: 'Backspace',
+        danger: canDeleteSelection(),
+        disabled: !canDeleteSelection(),
+        description: sel ? undefined : t('shell.editMenu.noSelection'),
+        onSelect: () => { void deleteSelection() }
+      }
+    ]
+  }
+  return (
+    <DropdownMenu
+      items={items}
+      trigger={({ active, ...props }) => (
+        <Button {...props} variant="ghost" active={active} tone="neutral" iconRight={LuChevronDown} className="px-2.5">
+          {t('shell.editMenu.trigger')}
+        </Button>
+      )}
+    />
+  )
+}
+
+function safeLabel(label: () => string): string | null {
+  try { return label() } catch { return null }
+}
+
+function UndoRedoButtons() {
+  const t = useT()
+  const canUndo = useHistoryStore((s) => s.canUndo)
+  const canRedo = useHistoryStore((s) => s.canRedo)
+  const undoLabel = useHistoryStore((s) => s.undoLabel)
+  const redoLabel = useHistoryStore((s) => s.redoLabel)
+  // ≥ 1536 px (Pi touchscreen, desktops): one-tap undo / redo. Narrower: in the Edit menu (and Mod+Z)
+  return (
+    <div className="hidden items-center 2xl:flex">
+      <IconButton
+        icon={LuUndo2}
+        label={undoLabel ? t('shell.editMenu.undoWhat', { what: undoLabel }) : canUndo ? t('shell.editMenu.undo') : t('shell.editMenu.nothingToUndo')}
+        shortcut="Mod+Z"
+        disabled={!canUndo}
+        onClick={() => { undo() }}
+      />
+      <IconButton
+        icon={LuRedo2}
+        label={redoLabel ? t('shell.editMenu.redoWhat', { what: redoLabel }) : canRedo ? t('shell.editMenu.redo') : t('shell.editMenu.nothingToRedo')}
+        shortcut={REDO_SHORTCUT}
+        disabled={!canRedo}
+        onClick={() => { redo() }}
+      />
+    </div>
+  )
+}
+
 function ShowTitle() {
+  const t = useT()
   const showName = useUiStore((s) => s.showName)
   const isDirty = useUiStore((s) => s.isDirty)
   return (
     <div className="ml-1 flex min-w-0 items-center gap-2">
       <span className="truncate text-sm font-semibold text-fg-primary" title={showName}>{showName}</span>
       {isDirty && (
-        <Tooltip content="Unsaved changes" shortcut={isRemoteMode() ? undefined : 'Mod+S'}>
-          <span role="img" aria-label="Unsaved changes" className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+        <Tooltip content={t('shell.unsavedChanges')} shortcut={isRemoteMode() ? undefined : 'Mod+S'}>
+          <span role="img" aria-label={t('shell.unsavedChanges')} className="h-2 w-2 shrink-0 rounded-full bg-accent" />
         </Tooltip>
       )}
-      {isRemoteMode() && <Badge tone="info" size="xs">REMOTE</Badge>}
+      {isRemoteMode() && <Badge tone="info" size="xs">{t('shell.remoteBadge')}</Badge>}
     </div>
   )
 }
@@ -155,19 +263,21 @@ function ShowTitle() {
 // ---------------------------------------------------------------
 
 function FollowIndicator() {
+  const t = useT()
   const active = useFollowStore((s) => s.active)
   if (!active) return null
   return (
-    <Button size="sm" variant="ghost" icon={LuCrosshair} onClick={() => useUiStore.getState().setActiveTab('follow')} tooltip="Follow spot is tracking — open Follow" className="text-go-fg">
-      <span className="inline-flex items-center gap-1.5">Follow <StatusDot tone="go" pulse /></span>
+    <Button size="sm" variant="ghost" icon={LuCrosshair} onClick={() => useUiStore.getState().setActiveTab('follow')} tooltip={t('shell.follow.tooltip')} className="text-go-fg">
+      <span className="inline-flex items-center gap-1.5">{t('shell.follow.label')} <StatusDot tone="go" pulse /></span>
     </Button>
   )
 }
 
 function TimelineButton() {
+  const t = useT()
   const [playing, setPlaying] = useState(() => getTimelineState().isPlaying)
   useEffect(() => onTimelinePlayStateChange(setPlaying), [])
-  const midi = useMidiLearnTarget('timeline_play', 'Live / Timeline')
+  const midi = useMidiLearnTarget('timeline_play', t('shell.timelineButton.midiLabel'))
   return (
     <Button
       icon={playing ? LuSquare : LuPlay}
@@ -175,17 +285,18 @@ function TimelineButton() {
       active={playing}
       onClick={transportToggle}
       onContextMenu={midi.onContextMenu}
-      tooltip={`${playing ? 'Stop' : 'Play'} the timeline · right-click: MIDI learn`}
-      aria-label={playing ? 'Stop timeline' : 'Play timeline'}
+      tooltip={playing ? t('shell.timelineButton.stop') : t('shell.timelineButton.play')}
+      aria-label={playing ? t('shell.timelineButton.stopAria') : t('shell.timelineButton.playAria')}
       labelClassName="hidden xl:inline"
       className={midi.ring}
     >
-      Live
+      {t('shell.timelineButton.label')}
     </Button>
   )
 }
 
 function MidiLearnButton() {
+  const t = useT()
   const isLearning = useMidiStore((s) => s.isLearning)
   const learnLabel = useMidiStore((s) => s.learnTarget?.label)
   return (
@@ -196,21 +307,20 @@ function MidiLearnButton() {
       onClick={() => {
         const midi = useMidiStore.getState()
         if (midi.isLearning) midi.cancelLearn()
-        else midi.startLearn({ type: 'master', label: 'Grand Master' })
+        else midi.startLearn({ type: 'master', label: translate('common.grandMaster') })
       }}
-      tooltip={isLearning
-        ? 'Move a MIDI control to map it — click to cancel'
-        : 'MIDI learn: right-click (or long-press) any control, then move a MIDI fader or key. Click here to learn the Grand Master.'}
-      aria-label={isLearning ? `MIDI learning ${learnLabel ?? ''} — cancel` : 'MIDI learn'}
+      tooltip={isLearning ? t('shell.learn.tooltipLearning') : t('shell.learn.tooltipIdle')}
+      aria-label={isLearning ? t('shell.learn.ariaLearning', { target: learnLabel ?? '' }) : t('shell.learn.ariaIdle')}
       labelClassName="hidden xl:inline max-w-[160px]"
     >
-      {isLearning ? `Learning ${learnLabel ?? '…'}` : 'Learn'}
+      {isLearning ? (learnLabel ? t('shell.learn.learning', { target: learnLabel }) : t('shell.learn.learningEllipsis')) : t('shell.learn.label')}
     </Button>
   )
 }
 
 /** Lights up while the programmer holds manual values */
 function ClearButton() {
+  const t = useT()
   const [active, setActive] = useState(false)
   useEffect(() => {
     const id = setInterval(() => setActive(isProgrammerActive()), 250)
@@ -222,17 +332,18 @@ function ClearButton() {
       tone="accent"
       active={active}
       onClick={() => { clearProgrammer(); setActive(false) }}
-      tooltip={active ? 'Clear the programmer (release manual values)' : 'Programmer is empty'}
-      shortcut="Backspace"
-      aria-label="Clear programmer"
+      tooltip={active ? t('shell.clear.tooltipActive') : t('shell.clear.tooltipEmpty')}
+      shortcut="Mod+Backspace"
+      aria-label={t('shell.clear.aria')}
       labelClassName="hidden xl:inline"
     >
-      Clear
+      {t('shell.clear.label')}
     </Button>
   )
 }
 
 function StageButton() {
+  const t = useT()
   const remote = isRemoteMode()
   return (
     <Button
@@ -242,24 +353,25 @@ function StageButton() {
         if (remote) useUiStore.getState().setStageMode(true)
         else getBridge()?.stage.open()
       }}
-      tooltip={remote ? 'Switch to the Stage view' : 'Open the Stage window (second screen)'}
+      tooltip={remote ? t('shell.stage.tooltipRemote') : t('shell.stage.tooltipConsole')}
       shortcut={remote ? undefined : 'Mod+Shift+W'}
-      aria-label="Stage"
+      aria-label={t('shell.stage.label')}
       labelClassName="hidden xl:inline"
     >
-      Stage
+      {t('shell.stage.label')}
     </Button>
   )
 }
 
 function RemoteIndicator() {
+  const t = useT()
   const state = useRemoteConnection()
-  const label = state === 'open' ? 'Connected to the console' : state === 'auth-required' ? 'PIN required' : 'Reconnecting to the console…'
+  const label = state === 'open' ? t('shell.connection.connected') : state === 'auth-required' ? t('shell.connection.pinRequired') : t('shell.connection.reconnecting')
   return (
     <Tooltip content={label}>
       <span role="status" aria-label={label} className="flex h-control items-center gap-1.5 px-1.5 text-xs text-fg-secondary">
         <StatusDot tone={state === 'open' ? 'go' : state === 'auth-required' ? 'danger' : 'warning'} pulse={state !== 'open'} />
-        <span className="hidden xl:inline">{state === 'open' ? 'Online' : 'Offline'}</span>
+        <span className="hidden xl:inline">{state === 'open' ? t('shell.connection.online') : t('shell.connection.offline')}</span>
       </span>
     </Tooltip>
   )

@@ -4,6 +4,7 @@
 import { memo, useMemo } from 'react'
 import { cn, palette } from '@renderer/components/ui'
 import { encodeQr, qrToSvgPath, type QrEcc } from './qr'
+import { t } from '@renderer/i18n'
 
 export const QrCode = memo(function QrCode({ value, size = 176, ecc = 'M', className, label }: {
   value: string
@@ -22,7 +23,7 @@ export const QrCode = memo(function QrCode({ value, size = 176, ecc = 'M', class
   return (
     <svg
       role="img"
-      aria-label={label ?? `QR code: ${value}`}
+      aria-label={label ?? t('settings.remoteAccess.qrAria', { value })}
       viewBox={`0 0 ${dim} ${dim}`}
       width={size}
       height={size}

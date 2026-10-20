@@ -7,10 +7,14 @@ import { usePatchStore } from '../../stores/patch-store'
 import { useDmxStore } from '../../stores/dmx-store'
 import { usePlaybackStore } from '../../stores/playback-store'
 import { setProgrammerChannel, clearProgrammer } from '../../lib/dmx-mixer'
+import { t, useT } from '@renderer/i18n'
+import { formatPercent } from '@renderer/components/ui'
 
 // ============================================================
 // CommandLine — GrandMA3-style command input
 // Supports: Fixture, Thru, At, Full, Zero, Clear, Go, Stop, Group
+// The syntax stays in English in every language (console convention,
+// like grandMA); feedback messages are translated.
 // ============================================================
 
 interface CommandResult {
@@ -28,13 +32,13 @@ function executeCommand(input: string): CommandResult {
   // ---- Clear ----
   if (tokens[0] === 'clear') {
     clearProgrammer()
-    return { ok: true, message: 'Programmer cleared' }
+    return { ok: true, message: t('shell.commandLine.programmerCleared') }
   }
 
   // ---- Blackout ----
   if (tokens[0] === 'blackout' || tokens[0] === 'bo') {
     useDmxStore.getState().toggleBlackout()
-    return { ok: true, message: 'Blackout toggled' }
+    return { ok: true, message: t('shell.commandLine.blackoutToggled') }
   }
 
   // ---- Go [cuelist] ----
@@ -44,15 +48,15 @@ function executeCommand(input: string): CommandResult {
       const idx = parseInt(tokens[1]) - 1
       if (idx >= 0 && idx < cuelists.length) {
         usePlaybackStore.getState().goCuelist(cuelists[idx].id)
-        return { ok: true, message: `GO Scene ${idx + 1}` }
+        return { ok: true, message: t('shell.commandLine.goScene', { n: idx + 1 }) }
       }
-      return { ok: false, message: `Scene ${tokens[1]} not found` }
+      return { ok: false, message: t('shell.commandLine.sceneNotFound', { n: tokens[1] }) }
     }
     if (cuelists.length > 0) {
       usePlaybackStore.getState().goCuelist(cuelists[0].id)
-      return { ok: true, message: 'GO Scene 1' }
+      return { ok: true, message: t('shell.commandLine.goScene', { n: 1 }) }
     }
-    return { ok: false, message: 'No scenes' }
+    return { ok: false, message: t('shell.commandLine.noScenes') }
   }
 
   // ---- Stop [cuelist] ----
@@ -62,21 +66,21 @@ function executeCommand(input: string): CommandResult {
       const idx = parseInt(tokens[1]) - 1
       if (idx >= 0 && idx < cuelists.length) {
         usePlaybackStore.getState().stopCuelist(cuelists[idx].id)
-        return { ok: true, message: `STOP Scene ${idx + 1}` }
+        return { ok: true, message: t('shell.commandLine.stopScene', { n: idx + 1 }) }
       }
     }
     // Stop all
     for (const cl of cuelists) {
       if (cl.isPlaying) usePlaybackStore.getState().stopCuelist(cl.id)
     }
-    return { ok: true, message: 'All scenes stopped' }
+    return { ok: true, message: t('shell.commandLine.allStopped') }
   }
 
   // ---- Group <n> [At <value>] ----
   if (tokens[0] === 'group') {
     const groupIdx = parseInt(tokens[1]) - 1
     if (isNaN(groupIdx) || groupIdx < 0 || groupIdx >= groups.length) {
-      return { ok: false, message: `Group ${tokens[1] || '?'} not found` }
+      return { ok: false, message: t('shell.commandLine.groupNotFound', { n: tokens[1] || '?' }) }
     }
     const group = groups[groupIdx]
     const fixtureIds = group.fixtureIds.filter(id => patch.some(p => p.id === id))
@@ -89,18 +93,18 @@ function executeCommand(input: string): CommandResult {
     const atIdx = tokens.indexOf('at')
     if (atIdx > -1) {
       const value = parseValue(tokens[atIdx + 1])
-      if (value === null) return { ok: false, message: 'Invalid value' }
+      if (value === null) return { ok: false, message: t('shell.commandLine.invalidValue') }
       applyToFixtures(fixtureIds, value, patch, getFixtureChannels)
-      return { ok: true, message: `Group ${groupIdx + 1} "${group.name}" at ${Math.round(value / 255 * 100)}%` }
+      return { ok: true, message: t('shell.commandLine.groupAt', { n: groupIdx + 1, name: group.name, percent: formatPercent(value) }) }
     }
 
-    return { ok: true, message: `Selected group "${group.name}" (${fixtureIds.length} fixtures)` }
+    return { ok: true, message: t('shell.commandLine.groupSelected', { name: group.name, count: fixtureIds.length }) }
   }
 
   // ---- Fixture <range> [At <value>] ----
   if (tokens[0] === 'fixture' || tokens[0] === 'fix' || tokens[0] === 'f') {
     const { ids, endIdx } = parseFixtureRange(tokens, 1, patch)
-    if (ids.length === 0) return { ok: false, message: 'No matching fixtures' }
+    if (ids.length === 0) return { ok: false, message: t('shell.commandLine.noMatchingFixtures') }
 
     // Select fixtures
     clearSelection()
@@ -111,38 +115,38 @@ function executeCommand(input: string): CommandResult {
     const atIdx = remaining.indexOf('at')
     if (atIdx > -1) {
       const value = parseValue(remaining[atIdx + 1])
-      if (value === null) return { ok: false, message: 'Invalid value after At' }
+      if (value === null) return { ok: false, message: t('shell.commandLine.invalidValueAfterAt') }
       applyToFixtures(ids, value, patch, getFixtureChannels)
-      return { ok: true, message: `${ids.length} fixture(s) at ${Math.round(value / 255 * 100)}%` }
+      return { ok: true, message: t('shell.commandLine.fixturesAt', { count: ids.length, percent: formatPercent(value) }) }
     }
 
-    return { ok: true, message: `Selected ${ids.length} fixture(s)` }
+    return { ok: true, message: t('shell.commandLine.fixturesSelected', { count: ids.length }) }
   }
 
   // ---- At <value> (apply to current selection) ----
   if (tokens[0] === 'at' || tokens[0] === '@') {
     const selectedIds = usePatchStore.getState().selectedFixtureIds
-    if (selectedIds.length === 0) return { ok: false, message: 'No fixtures selected' }
+    if (selectedIds.length === 0) return { ok: false, message: t('shell.commandLine.noSelection') }
     const value = parseValue(tokens[1])
-    if (value === null) return { ok: false, message: 'Invalid value' }
+    if (value === null) return { ok: false, message: t('shell.commandLine.invalidValue') }
     applyToFixtures(selectedIds, value, patch, getFixtureChannels)
-    return { ok: true, message: `${selectedIds.length} fixture(s) at ${Math.round(value / 255 * 100)}%` }
+    return { ok: true, message: t('shell.commandLine.fixturesAt', { count: selectedIds.length, percent: formatPercent(value) }) }
   }
 
   // ---- Full (shortcut: selected fixtures at 100%) ----
   if (tokens[0] === 'full') {
     const selectedIds = usePatchStore.getState().selectedFixtureIds
-    if (selectedIds.length === 0) return { ok: false, message: 'No fixtures selected' }
+    if (selectedIds.length === 0) return { ok: false, message: t('shell.commandLine.noSelection') }
     applyToFixtures(selectedIds, 255, patch, getFixtureChannels)
-    return { ok: true, message: `${selectedIds.length} fixture(s) at Full` }
+    return { ok: true, message: t('shell.commandLine.fixturesFull', { count: selectedIds.length }) }
   }
 
   // ---- Zero (shortcut: selected fixtures at 0%) ----
   if (tokens[0] === 'zero' || tokens[0] === 'off') {
     const selectedIds = usePatchStore.getState().selectedFixtureIds
-    if (selectedIds.length === 0) return { ok: false, message: 'No fixtures selected' }
+    if (selectedIds.length === 0) return { ok: false, message: t('shell.commandLine.noSelection') }
     applyToFixtures(selectedIds, 0, patch, getFixtureChannels)
-    return { ok: true, message: `${selectedIds.length} fixture(s) at Zero` }
+    return { ok: true, message: t('shell.commandLine.fixturesZero', { count: selectedIds.length }) }
   }
 
   // ---- Channel <name> <value> — set any channel by name (e.g. Gobo 30, Color 50) ----
@@ -153,13 +157,13 @@ function executeCommand(input: string): CommandResult {
     // If no selection, apply to all patched fixtures
     const targetIds = selectedIds.length > 0 ? selectedIds : patch.map(p => p.id)
     const rawVal = parseInt(tokens[1])
-    if (isNaN(rawVal)) return { ok: false, message: `${channelName} <0-255>` }
+    if (isNaN(rawVal)) return { ok: false, message: t('shell.commandLine.channelUsage', { channel: channelName }) }
     const dmxVal = Math.min(255, Math.max(0, rawVal))
     const count = applyChannelByName(targetIds, channelName, dmxVal, patch, getFixtureChannels)
-    return { ok: true, message: `${count} fixture(s) ${channelName} = ${dmxVal}` }
+    return { ok: true, message: t('shell.commandLine.channelSet', { count, channel: channelName, value: dmxVal }) }
   }
 
-  return { ok: false, message: `Unknown command: ${tokens[0]}` }
+  return { ok: false, message: t('shell.commandLine.unknown', { command: tokens[0] }) }
 }
 
 // ---- Helpers ----
@@ -268,6 +272,7 @@ const HISTORY_MAX = 50
 const history: string[] = []
 
 export function CommandLine() {
+  const tr = useT()
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<CommandResult | null>(null)
   const historyIdx = useRef(-1)
@@ -326,10 +331,10 @@ export function CommandLine() {
           value={input}
           onChange={(e) => { setInput(e.target.value); historyIdx.current = -1 }}
           onKeyDown={onKeyDown}
-          placeholder="Fixture 1 thru 4 at 80   (press /)"
+          placeholder={tr('shell.commandLine.placeholder')}
           spellCheck={false}
           autoComplete="off"
-          aria-label="Command line"
+          aria-label={tr('shell.commandLine.aria')}
         />
       </label>
       {feedback && (

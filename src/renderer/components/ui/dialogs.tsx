@@ -10,6 +10,7 @@ import { create } from 'zustand'
 import { Modal } from './Modal'
 import { Button, type ButtonVariant } from './Button'
 import { TextInput } from './TextInput'
+import { t } from '@renderer/i18n'
 
 export interface DialogAction<T extends string = string> {
   id: T
@@ -71,8 +72,8 @@ export async function confirm(opts: ConfirmOptions): Promise<boolean> {
     title: opts.title,
     message: opts.message,
     actions: [
-      { id: 'cancel', label: opts.cancelLabel ?? 'Cancel', variant: 'secondary' },
-      { id: 'ok', label: opts.confirmLabel ?? 'OK', variant: opts.tone === 'danger' ? 'danger' : 'primary' }
+      { id: 'cancel', label: opts.cancelLabel ?? t('ui.cancel'), variant: 'secondary' },
+      { id: 'ok', label: opts.confirmLabel ?? t('ui.ok'), variant: opts.tone === 'danger' ? 'danger' : 'primary' }
     ]
   })
   return result === 'ok'
@@ -136,7 +137,7 @@ function PromptDialog({ pending }: { pending: Extract<Pending, { kind: 'prompt' 
 
   const submit = () => {
     const v = value.trim()
-    if (!v) { setError('Required'); return }
+    if (!v) { setError(t('ui.required')); return }
     const err = opts.validate?.(v) ?? null
     if (err) { setError(err); return }
     done(v)
@@ -150,8 +151,8 @@ function PromptDialog({ pending }: { pending: Extract<Pending, { kind: 'prompt' 
       onClose={() => done(null)}
       footer={(
         <>
-          <Button variant="secondary" onClick={() => done(null)}>Cancel</Button>
-          <Button variant="primary" onClick={submit}>{opts.confirmLabel ?? 'OK'}</Button>
+          <Button variant="secondary" onClick={() => done(null)}>{t('ui.cancel')}</Button>
+          <Button variant="primary" onClick={submit}>{opts.confirmLabel ?? t('ui.ok')}</Button>
         </>
       )}
     >

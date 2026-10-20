@@ -8,12 +8,16 @@
 //   Right-click (mouse) or long-press (touch, TOG cells) → options;
 //   mouse-drag a TOG cell, or long-press then drag on touch, to move it.
 // Arrange: nothing fires; drag any cell to move it, tap for options.
+// Keyboard (lib/selection-actions.ts) on the focused cell: Delete /
+// Backspace deletes the SCENE (confirm + Undo) — every scene always has
+// a cell (auto-placement), so there is no "empty the cell" action;
+// F2 renames it, Mod+D duplicates it.
 // ============================================================
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import {
-  LuArrowLeftRight, LuCheck, LuGripVertical, LuPencil, LuPiano, LuPlay, LuSkipBack, LuSquare, LuSquarePen, LuX
+  LuArrowLeftRight, LuCheck, LuGripVertical, LuPencil, LuPiano, LuPlay, LuSkipBack, LuSquare, LuSquarePen, LuTrash2, LuX
 } from 'react-icons/lu'
 import type { Cuelist } from '@shared/types'
 import {
@@ -25,9 +29,34 @@ import { useMidiStore } from '@renderer/stores/midi-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { COLUMN_COUNT, ROWS_PER_COLUMN, useExecutorStore, type SceneMode } from '@renderer/stores/executor-store'
 import { setSceneMode, startSceneLearn } from '@renderer/components/playback/scene-meta'
+import { t, useT } from '@renderer/i18n'
+import { deleteWithUndo, useSelectionActions } from '@renderer/lib/selection-actions'
 
-const MODE_LABEL: Record<SceneMode, string> = { toggle: 'TOG', trigger: 'TRIG', flash: 'FLASH' }
-const MODE_NAME: Record<SceneMode, string> = { toggle: 'Toggle — tap GO / STOP', trigger: 'Trigger — plays while held', flash: 'Flash — full while held' }
+const modeLabel = (mode: SceneMode) => t(`shell.executors.modeShort.${mode}`)
+
+/** Noun phrase for the confirm dialog / Undo toast ("scene “Intro”" / "la scène « Intro »") */
+function sceneLabel(cl: Cuelist): string {
+  return t('shell.executors.sceneLabel', { name: cl.name })
+}
+
+/** Delete a scene (confirm + one undo step + Undo toast) */
+export function deleteSceneWithUndo(cl: Cuelist): Promise<boolean> {
+  return deleteWithUndo({ label: sceneLabel(cl), run: () => usePlaybackStore.getState().removeCuelist(cl.id) })
+}
+
+async function renameScene(cl: Cuelist): Promise<void> {
+  const name = await prompt({ title: t('shell.executors.renameTitle'), label: t('shell.executors.renameLabel'), defaultValue: cl.name, confirmLabel: t('common.rename') })
+  if (name) usePlaybackStore.getState().renameCuelist(cl.id, name)
+}
+
+/** Scene of the executor cell that has keyboard focus */
+function focusedCellScene(): Cuelist | null {
+  const el = typeof document !== 'undefined' ? document.activeElement?.closest<HTMLElement>('[data-exec-cell]') : null
+  const cell = el ? parseCell(el.dataset.execCell!) : null
+  if (!cell) return null
+  const id = useExecutorStore.getState().grid[cell.col]?.[cell.row]
+  return id ? usePlaybackStore.getState().cuelists.find((c) => c.id === id) ?? null : null
+}
 
 const LONG_PRESS_MS = 450
 const DRAG_THRESHOLD = 6
@@ -52,6 +81,8 @@ interface CellCallbacks {
 }
 
 export function ExecutorBar() {
+  const tr = useT()
+  const sectionRef = useRef<HTMLElement>(null)
   const cuelists = usePlaybackStore((s) => s.cuelists)
   const grid = useExecutorStore((s) => s.grid)
   const columns = useExecutorStore((s) => s.columns)
@@ -61,6 +92,17 @@ export function ExecutorBar() {
   const [arranging, setArranging] = useState(false)
   const [drag, setDrag] = useState<DragState | null>(null)
   const ctx = useContextMenu()
+
+  // Delete / F2 / Mod+D on the focused cell (only while a cell has the focus)
+  useSelectionActions({
+    label: () => { const cl = focusedCellScene(); return cl ? sceneLabel(cl) : '' },
+    canDelete: () => !!focusedCellScene(),
+    delete: () => { const cl = focusedCellScene(); if (cl) usePlaybackStore.getState().removeCuelist(cl.id) },
+    canRename: () => !!focusedCellScene(),
+    rename: () => { const cl = focusedCellScene(); if (cl) void renameScene(cl) },
+    canDuplicate: () => !!focusedCellScene(),
+    duplicate: () => { const cl = focusedCellScene(); if (cl) usePlaybackStore.getState().duplicateCuelist(cl.id) }
+  }, { scope: sectionRef, requireFocus: true })
 
   // Slot assignment for new / deleted scenes: startExecutorAutoSync (executor-store), started by App
 
@@ -110,12 +152,12 @@ export function ExecutorBar() {
   }), [ctx.open])
 
   return (
-    <section aria-label="Executors" className="relative flex shrink-0 border-t border-line bg-surface-1">
+    <section ref={sectionRef} aria-label={tr('shell.executors.aria')} className="relative flex shrink-0 border-t border-line bg-surface-1">
       <div className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-line-subtle py-1.5 [[data-density=touch]_&]:w-14">
         <IconButton
           icon={arranging ? LuCheck : LuArrowLeftRight}
-          label={arranging ? 'Done arranging' : 'Arrange executors'}
-          tooltip={arranging ? 'Done — back to playback' : 'Arrange: move cells, rename, colours, modes (nothing fires)'}
+          label={arranging ? tr('shell.executors.doneArranging') : tr('shell.executors.arrange')}
+          tooltip={arranging ? tr('shell.executors.doneTooltip') : tr('shell.executors.arrangeTooltip')}
           size="sm"
           active={arranging}
           tone="info"
@@ -123,8 +165,8 @@ export function ExecutorBar() {
         />
         <IconButton
           icon={LuSquare}
-          label="Release all scenes"
-          tooltip="Stop every scene and chase"
+          label={tr('shell.executors.releaseAll')}
+          tooltip={tr('shell.executors.releaseAllTooltip')}
           size="sm"
           disabled={!anyPlaying}
           onClick={() => usePlaybackStore.getState().releaseAll()}
@@ -178,29 +220,24 @@ function cellMenu(cl: Cuelist, cell: Cell, mode: SceneMode): MenuEntry[] {
   const learning = midi.isLearning && midi.learnTarget?.type === 'cuelist_go' && midi.learnTarget.id === cl.id
   return [
     { type: 'label', label: cl.name },
-    { label: 'GO', icon: LuPlay, onSelect: () => pb().goCuelist(cl.id), disabled: cl.cues.length === 0 },
-    { label: 'Back', icon: LuSkipBack, onSelect: () => pb().goBackCuelist(cl.id), disabled: !cl.isPlaying },
-    { label: 'Stop', icon: LuSquare, onSelect: () => pb().stopCuelist(cl.id), disabled: !cl.isPlaying },
+    { label: t('common.go'), icon: LuPlay, onSelect: () => pb().goCuelist(cl.id), disabled: cl.cues.length === 0 },
+    { label: t('shell.executors.back'), icon: LuSkipBack, onSelect: () => pb().goBackCuelist(cl.id), disabled: !cl.isPlaying },
+    { label: t('common.stop'), icon: LuSquare, onSelect: () => pb().stopCuelist(cl.id), disabled: !cl.isPlaying },
     { type: 'separator' },
-    { type: 'label', label: 'Button mode' },
+    { type: 'label', label: t('shell.executors.buttonMode') },
     ...(['toggle', 'trigger', 'flash'] as SceneMode[]).map((m): MenuEntry => ({
-      label: MODE_NAME[m],
+      label: t(`shell.executors.modeName.${m}`),
       checked: mode === m,
       onSelect: () => setSceneMode(cl.id, cell, m)
     })),
     { type: 'separator' },
     learning
-      ? { label: 'Cancel MIDI learn', icon: LuX, onSelect: () => useMidiStore.getState().cancelLearn() }
-      : { label: 'MIDI learn…', icon: LuPiano, description: 'Then press a MIDI key or pad', onSelect: () => startSceneLearn(cl, mode) },
-    {
-      label: 'Rename…',
-      icon: LuPencil,
-      onSelect: async () => {
-        const name = await prompt({ title: 'Rename scene', label: 'Scene name', defaultValue: cl.name, confirmLabel: 'Rename' })
-        if (name) usePlaybackStore.getState().renameCuelist(cl.id, name)
-      }
-    },
-    { label: 'Edit in Scenes', icon: LuSquarePen, onSelect: () => useUiStore.getState().navigateToCuelist(cl.id) }
+      ? { label: t('shell.executors.cancelLearn'), icon: LuX, onSelect: () => useMidiStore.getState().cancelLearn() }
+      : { label: t('shell.executors.learn'), icon: LuPiano, description: t('shell.executors.learnDescription'), onSelect: () => startSceneLearn(cl, mode) },
+    { label: t('shell.executors.rename'), icon: LuPencil, shortcut: 'F2', onSelect: () => { void renameScene(cl) } },
+    { label: t('shell.executors.editInScenes'), icon: LuSquarePen, onSelect: () => useUiStore.getState().navigateToCuelist(cl.id) },
+    { type: 'separator' },
+    { label: t('shell.executors.deleteScene'), icon: LuTrash2, danger: true, shortcut: 'Backspace', onSelect: () => { void deleteSceneWithUndo(cl) } }
   ]
 }
 
@@ -249,6 +286,7 @@ const ColumnCells = memo(function ColumnCells({ col, title, color, ids, modes, b
 })
 
 function ColumnHeader({ col, title, color }: { col: number; title: string; color: string }) {
+  const t = useT()
   const anchor = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
   return (
@@ -260,21 +298,21 @@ function ColumnHeader({ col, title, color }: { col: number; title: string; color
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="group flex h-6 min-w-0 items-center gap-1.5 rounded-sm px-1.5 text-left hover:bg-surface-2 [[data-density=touch]_&]:h-8"
-        title="Column title & colour"
+        title={t('shell.executors.columnHeaderTooltip')}
       >
         <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span className={cn('min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-[0.06em]', title ? 'text-fg-secondary' : 'text-fg-disabled')}>
-          {title || `Column ${col + 1}`}
+          {title || t('shell.executors.columnN', { n: col + 1 })}
         </span>
         <LuPencil size={11} aria-hidden className="shrink-0 text-fg-disabled opacity-0 group-hover:opacity-100" />
       </button>
-      <Popover open={open} onClose={() => setOpen(false)} anchor={anchor} placement="top-start" className="w-[248px] p-3" aria-label={`Column ${col + 1}`}>
+      <Popover open={open} onClose={() => setOpen(false)} anchor={anchor} placement="top-start" className="w-[248px] p-3" aria-label={t('shell.executors.columnN', { n: col + 1 })}>
         <div className="flex flex-col gap-3">
           <TextInput
             size="sm"
             data-autofocus=""
-            aria-label="Column title"
-            placeholder={`Column ${col + 1}`}
+            aria-label={t('shell.executors.columnTitle')}
+            placeholder={t('shell.executors.columnN', { n: col + 1 })}
             value={title}
             onChange={(e) => useExecutorStore.getState().setColumnTitle(col, e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') setOpen(false) }}
@@ -309,6 +347,7 @@ const ExecutorCell = memo(function ExecutorCell({ col, row, cuelist: cl, color, 
   dropTarget: boolean
   callbacks: CellCallbacks
 }) {
+  const t = useT()
   const gesture = useRef<Gesture | null>(null)
   const lastPointerType = useRef('mouse')
   const latest = useRef({ cl, mode })
@@ -413,7 +452,9 @@ const ExecutorCell = memo(function ExecutorCell({ col, row, cuelist: cl, color, 
       role="button"
       tabIndex={0}
       aria-pressed={active}
-      aria-label={`${cl.name}, ${MODE_LABEL[mode]}, ${active ? `playing cue ${cl.currentCueIndex + 1} of ${cl.cues.length}` : 'stopped'}`}
+      aria-label={active
+        ? t('shell.executors.cellPlaying', { name: cl.name, mode: modeLabel(mode), cue: cl.currentCueIndex + 1, count: cl.cues.length })
+        : t('shell.executors.cellStopped', { name: cl.name, mode: modeLabel(mode) })}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => end(e, false)}
@@ -472,8 +513,8 @@ const ExecutorCell = memo(function ExecutorCell({ col, row, cuelist: cl, color, 
           {formatCuePosition(active ? cl.currentCueIndex : -1, cl.cues.length)}
         </span>
         <span className="flex-1" />
-        {midiMapped && <span title="MIDI mapped" className="h-1.5 w-1.5 shrink-0 rounded-full bg-midi-fg" />}
-        {mode !== 'toggle' && <Badge size="xs" tone={mode === 'flash' ? 'warning' : 'info'} variant={active ? 'solid' : 'subtle'}>{MODE_LABEL[mode]}</Badge>}
+        {midiMapped && <span title={t('shell.executors.midiMapped')} className="h-1.5 w-1.5 shrink-0 rounded-full bg-midi-fg" />}
+        {mode !== 'toggle' && <Badge size="xs" tone={mode === 'flash' ? 'warning' : 'info'} variant={active ? 'solid' : 'subtle'}>{modeLabel(mode)}</Badge>}
       </div>
       {active && fadeSeconds > 0 && (
         <span

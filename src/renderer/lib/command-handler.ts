@@ -28,6 +28,7 @@ import { handleTapTempo } from './midi-manager'
 import { saveShow, adoptRemoteShow } from './show-io'
 import { applyContentFromRemote, collectCurrentContent, withContentBump } from './content-sync'
 import { ClientHolds } from './client-holds'
+import { t } from '@renderer/i18n'
 import { getBridge } from './runtime'
 import { performRecord } from '@renderer/components/playback/record'
 
@@ -82,12 +83,12 @@ async function saveForRemote(requestId: string | undefined): Promise<void> {
     if (!requestId) return
     if (result.status === 'error') {
       // When the save never reached main, main is still waiting: answer it (ignored otherwise)
-      getBridge()?.remote.replyToMain(requestId, { error: result.error || 'The console could not save the show.' })
+      getBridge()?.remote.replyToMain(requestId, { error: result.error || t('errors.consoleSaveFailed') })
       return
     }
     if (result.status !== 'busy') return
     if (Date.now() >= deadline) {
-      getBridge()?.remote.replyToMain(requestId, { error: 'The console is busy with another show operation (open / save dialog?) — try again.' })
+      getBridge()?.remote.replyToMain(requestId, { error: t('errors.consoleBusy') })
       return
     }
     await new Promise((resolve) => setTimeout(resolve, SAVE_RETRY_MS))
@@ -349,7 +350,7 @@ export function handleCommand(cmd: Command): void {
       try {
         answer = collectCurrentContent(origin, sections)
       } catch (e) {
-        answer = { success: false, error: e instanceof Error ? e.message : 'The console could not collect its show' }
+        answer = { success: false, error: e instanceof Error ? e.message : t('errors.consoleCollectFailed') }
       }
       getBridge()?.remote.replyToMain(p.requestId, answer)
       break

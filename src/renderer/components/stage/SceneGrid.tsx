@@ -18,7 +18,8 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { LuGripVertical, LuMoveDiagonal } from 'react-icons/lu'
 import type { ExecutorSceneMode } from '@shared/types'
-import { Badge, Fader, SWATCH_COLORS, usePointerDrag, cn, formatCuePosition, palette, tint, withAlpha } from '@renderer/components/ui'
+import { Badge, Fader, SWATCH_COLORS, usePointerDrag, cn, formatCuePosition, formatPercent, palette, tint, withAlpha } from '@renderer/components/ui'
+import { t, useT } from '@renderer/i18n'
 
 export type SceneMode = ExecutorSceneMode
 export type StageGridMode = 'play' | 'levels' | 'arrange'
@@ -44,7 +45,7 @@ export interface ColumnInfo {
 export const STAGE_COLUMNS = 8
 export const STAGE_ROWS = 4
 
-const MODE_LABEL: Record<SceneMode, string> = { toggle: 'TOG', trigger: 'TRIG', flash: 'FLASH' }
+const modeLabel = (mode: SceneMode) => t(`shell.executors.modeShort.${mode}`)
 const LONG_PRESS_MS = 450
 const DRAG_THRESHOLD = 8
 const FALLBACK_COLOR: string = SWATCH_COLORS[11]
@@ -176,6 +177,7 @@ const ColumnCells = memo(function ColumnCells({ col, title, color, ids, modes, s
   drag: DragState | null
   callbacks: Callbacks
 }) {
+  const t = useT()
   return (
     <>
       <div className={cn('flex min-w-0 items-center gap-1.5 px-1', size === 'lg' ? 'h-7' : 'h-6')}>
@@ -187,7 +189,7 @@ const ColumnCells = memo(function ColumnCells({ col, title, color, ids, modes, s
             title ? 'text-fg-secondary' : 'text-fg-tertiary'
           )}
         >
-          {title || `Column ${col + 1}`}
+          {title || t('stage.columnN', { n: col + 1 })}
         </span>
       </div>
       {Array.from({ length: STAGE_ROWS }, (_, row) => {
@@ -267,6 +269,7 @@ interface TileProps {
 
 const SceneTile = memo(function SceneTile(props: TileProps) {
   const { col, row, id, name, isPlaying, faderLevel, currentCueIndex, cueCount, cueName, flash, color, sceneMode, gridMode, size, dragSource, dropTarget, callbacks } = props
+  useT() // labels follow the UI language
   const gesture = useRef<Gesture | null>(null)
   const [lifted, setLifted] = useState(false)
   const latest = useRef(props)
@@ -309,7 +312,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
           {name}
         </span>
         {size === 'sm' ? (
-          <LevelBar value={faderLevel} color={color} label={`${name} level`} onChange={(v) => callbacks.level(id, v)} />
+          <LevelBar value={faderLevel} color={color} label={t('stage.sceneLevel', { name })} onChange={(v) => callbacks.level(id, v)} />
         ) : (
         <div className="flex min-h-0 w-full flex-1 justify-center">
           <Fader
@@ -318,7 +321,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
             defaultValue={255}
             color={color}
             ticks
-            aria-label={`${name} level`}
+            aria-label={t('stage.sceneLevel', { name })}
             className="w-full max-w-[96px]"
           />
         </div>
@@ -389,7 +392,9 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
       role="button"
       tabIndex={0}
       aria-pressed={active}
-      aria-label={`${name}, ${MODE_LABEL[sceneMode]}, ${active ? `playing cue ${currentCueIndex + 1} of ${cueCount}` : 'stopped'}`}
+      aria-label={active
+        ? t('stage.cellPlaying', { name, mode: modeLabel(sceneMode), cue: currentCueIndex + 1, count: cueCount })
+        : t('stage.cellStopped', { name, mode: modeLabel(sceneMode) })}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => end(e, false)}
@@ -457,7 +462,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
         </span>
         <span className="flex-1" />
         {sceneMode !== 'toggle' && (
-          <Badge size="xs" tone={sceneMode === 'flash' ? 'warning' : 'info'} variant={active ? 'solid' : 'subtle'}>{MODE_LABEL[sceneMode]}</Badge>
+          <Badge size="xs" tone={sceneMode === 'flash' ? 'warning' : 'info'} variant={active ? 'solid' : 'subtle'}>{modeLabel(sceneMode)}</Badge>
         )}
       </div>
       {/* Scene master level (only when not at full) */}
@@ -475,6 +480,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
  * relative drag across the whole tile width, double-tap = full.
  */
 function LevelBar({ value, color, label, onChange }: { value: number; color: string; label: string; onChange: (v: number) => void }) {
+  useT()
   const ref = useRef<HTMLDivElement>(null)
   const start = useRef(0)
   const lastTap = useRef(0)
@@ -494,7 +500,7 @@ function LevelBar({ value, color, label, onChange }: { value: number; color: str
   const pct = Math.round((value / 255) * 100)
   return (
     <div className="flex w-full min-h-0 flex-1 flex-col justify-end gap-1">
-      <span className="text-center font-mono text-xs tabular text-fg-secondary">{pct}%</span>
+      <span className="text-center font-mono text-xs tabular text-fg-secondary">{formatPercent(value)}</span>
       <div
         ref={ref}
         role="slider"
@@ -503,7 +509,7 @@ function LevelBar({ value, color, label, onChange }: { value: number; color: str
         aria-valuemin={0}
         aria-valuemax={255}
         aria-valuenow={value}
-        aria-valuetext={`${pct}%`}
+        aria-valuetext={formatPercent(value)}
         onKeyDown={(e) => {
           const step = e.shiftKey ? 25 : 5
           if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); onChange(Math.min(255, value + step)) }

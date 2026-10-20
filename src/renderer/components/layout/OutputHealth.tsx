@@ -7,19 +7,23 @@ import { Badge, Button, Popover, StatusDot, usePopover, cn, type Tone } from '@r
 import { outputHealth, useOutputStatus, type OutputHealth } from '@renderer/hooks/useOutputStatus'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
+import { t as translate, useT } from '@renderer/i18n'
 
 const HEALTH_TONE: Record<OutputHealth, Tone> = { ok: 'go', degraded: 'warning', error: 'danger', none: 'neutral', unknown: 'neutral' }
 
 const STATE_TONE: Record<DmxOutputStatus['state'], Tone> = { ok: 'go', connecting: 'warning', error: 'danger', invalid: 'danger', disabled: 'neutral' }
-const STATE_LABEL: Record<DmxOutputStatus['state'], string> = { ok: 'Sending', connecting: 'Connecting', error: 'Error', invalid: 'Invalid config', disabled: 'Disabled' }
+/** Translated label of an output state */
+export function outputStateLabel(state: DmxOutputStatus['state']): string {
+  return translate(`shell.outputs.state.${state}`)
+}
 
 export function healthSummary(health: OutputHealth, count: number): string {
   switch (health) {
-    case 'ok': return count === 1 ? '1 output OK' : `${count} outputs OK`
-    case 'degraded': return 'Output connecting'
-    case 'error': return 'Output error'
-    case 'none': return 'No DMX output'
-    default: return 'Output status…'
+    case 'ok': return translate('shell.outputs.summaryOk', { count })
+    case 'degraded': return translate('shell.outputs.connecting')
+    case 'error': return translate('shell.outputs.error')
+    case 'none': return translate('shell.outputs.none')
+    default: return translate('shell.outputs.checking')
   }
 }
 
@@ -27,6 +31,7 @@ export function healthSummary(health: OutputHealth, count: number): string {
  * Output health indicator. `variant="statusbar"` renders the compact text form.
  */
 export function OutputHealthIndicator({ variant = 'toolbar' }: { variant?: 'toolbar' | 'statusbar' }) {
+  const t = useT()
   const status = useOutputStatus()
   const { health, active } = outputHealth(status)
   const pop = usePopover()
@@ -61,15 +66,15 @@ export function OutputHealthIndicator({ variant = 'toolbar' }: { variant?: 'tool
           {summary}
         </button>
       )}
-      <Popover {...pop.props} placement={variant === 'toolbar' ? 'bottom-end' : 'top-start'} className="w-[380px]" aria-label="DMX outputs">
+      <Popover {...pop.props} placement={variant === 'toolbar' ? 'bottom-end' : 'top-start'} className="w-[380px]" aria-label={t('shell.outputs.popoverLabel')}>
         <div className="flex items-center gap-2 border-b border-line-subtle px-3 py-2.5">
           <StatusDot tone={tone} size="md" />
           <span className="flex-1 text-sm font-semibold text-fg-primary">{summary}</span>
-          {patchedUniverses > 0 && <span className="text-xs text-fg-tertiary">{patchedUniverses} universe{patchedUniverses > 1 ? 's' : ''} patched</span>}
+          {patchedUniverses > 0 && <span className="text-xs text-fg-tertiary">{t('shell.outputs.patchedUniverses', { count: patchedUniverses })}</span>}
         </div>
         <div className="max-h-[320px] overflow-y-auto py-1">
           {!status || status.outputs.length === 0 ? (
-            <p className="px-3 py-4 text-center text-sm text-fg-tertiary">No Art-Net or USB DMX output is configured. The show runs, but nothing reaches the fixtures.</p>
+            <p className="px-3 py-4 text-center text-sm text-fg-tertiary">{t('shell.outputs.emptyHelp')}</p>
           ) : status.outputs.map((o) => <OutputRow key={o.id} output={o} />)}
         </div>
         <div className="flex justify-end border-t border-line-subtle px-2 py-2">
@@ -79,7 +84,7 @@ export function OutputHealthIndicator({ variant = 'toolbar' }: { variant?: 'tool
             icon={LuSettings2}
             onClick={() => { pop.close(); useUiStore.getState().setActiveTab('settings') }}
           >
-            Configure outputs
+            {t('shell.outputs.configure')}
           </Button>
         </div>
       </Popover>
@@ -88,6 +93,7 @@ export function OutputHealthIndicator({ variant = 'toolbar' }: { variant?: 'tool
 }
 
 function OutputRow({ output: o }: { output: DmxOutputStatus }) {
+  const t = useT()
   const Icon = o.type === 'artnet' ? LuNetwork : LuUsb
   return (
     <div className={cn('flex gap-2.5 px-3 py-2', !o.enabled && 'opacity-60')}>
@@ -95,7 +101,7 @@ function OutputRow({ output: o }: { output: DmxOutputStatus }) {
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm text-fg-primary">{o.label || (o.type === 'artnet' ? 'Art-Net' : 'USB DMX')}</span>
-          <Badge size="xs" mono>U{o.sourceUniverse + 1}</Badge>
+          <Badge size="xs" mono>{t('units.universeShort', { n: o.sourceUniverse + 1 })}</Badge>
         </div>
         <span className="truncate font-mono text-2xs text-fg-tertiary">{o.target}</span>
         {o.lastError && o.state !== 'ok' && <span className="text-xs text-danger-fg">{o.lastError}</span>}
@@ -103,9 +109,9 @@ function OutputRow({ output: o }: { output: DmxOutputStatus }) {
       <div className="flex shrink-0 flex-col items-end gap-0.5">
         <span className="flex items-center gap-1.5 text-xs text-fg-secondary">
           <StatusDot tone={STATE_TONE[o.state]} />
-          {STATE_LABEL[o.state]}
+          {outputStateLabel(o.state)}
         </span>
-        {o.state === 'ok' && <span className="font-mono text-2xs tabular text-fg-tertiary">{Math.round(o.fps)} fps</span>}
+        {o.state === 'ok' && <span className="font-mono text-2xs tabular text-fg-tertiary">{t('units.fpsValue', { value: Math.round(o.fps) })}</span>}
       </div>
     </div>
   )

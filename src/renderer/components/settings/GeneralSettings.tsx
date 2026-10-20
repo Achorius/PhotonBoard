@@ -4,11 +4,12 @@
 
 import { useEffect, useState } from 'react'
 import {
-  LuFile, LuFilePlus2, LuFolderOpen, LuFolderSearch, LuHand, LuKeyboard, LuLayoutPanelLeft, LuMonitor, LuMousePointer2,
+  LuFile, LuFilePlus2, LuFolderOpen, LuFolderSearch, LuHand, LuKeyboard, LuLanguages, LuLayoutPanelLeft, LuMonitor, LuMousePointer2,
   LuPanelBottom, LuPiano, LuSave, LuSaveAll, LuSparkles, LuTimer, LuWandSparkles
 } from 'react-icons/lu'
-import { Badge, Button, SegmentedControl, Switch, cn, type DensityPreference } from '@renderer/components/ui'
-import { detectAutoDensity, useShowTitle, useUiStore } from '@renderer/stores/ui-store'
+import { Badge, Button, Kbd, SegmentedControl, Switch, cn, type DensityPreference } from '@renderer/components/ui'
+import { detectAutoDensity, useShowTitle, useUiStore, type LanguagePreference } from '@renderer/stores/ui-store'
+import { LOCALE_NAMES, detectSystemLocale, t as translate, useT } from '@renderer/i18n'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { isTimecodeChase, isTimecodeEnabled, getTimecodeFramerate } from '@renderer/lib/timecode-engine'
@@ -19,7 +20,39 @@ import { InfoRow, SettingRow, SettingsCard, SettingsPage } from './settings-ui'
 // Display
 // ---------------------------------------------------------------
 
+/** Language of this device's UI — names in their own language, no flags */
+function LanguageCard() {
+  const t = useT()
+  const pref = useUiStore((s) => s.languagePreference)
+  return (
+    <SettingsCard icon={LuLanguages} title={t('settings.display.language.title')}>
+      <SettingRow
+        label={t('settings.display.language.label')}
+        description={
+          <>
+            {pref === 'auto' && <>{t('settings.display.language.descriptionAuto', { language: LOCALE_NAMES[detectSystemLocale()] })} </>}
+            {t('settings.display.language.description')}
+          </>
+        }
+      >
+        <SegmentedControl<LanguagePreference>
+          aria-label={t('settings.display.language.aria')}
+          size="md"
+          value={pref}
+          onChange={(v) => useUiStore.getState().setLanguagePreference(v)}
+          items={[
+            { value: 'auto', label: t('settings.display.language.auto'), icon: LuWandSparkles },
+            { value: 'fr', label: LOCALE_NAMES.fr },
+            { value: 'en', label: LOCALE_NAMES.en }
+          ]}
+        />
+      </SettingRow>
+    </SettingsCard>
+  )
+}
+
 export function DisplaySettings() {
+  const t = useT()
   const pref = useUiStore((s) => s.densityPreference)
   const density = useUiStore((s) => s.density)
   const executorBarOpen = useUiStore((s) => s.executorBarOpen)
@@ -28,60 +61,63 @@ export function DisplaySettings() {
   const profile = getDeviceProfile()
 
   return (
-    <SettingsPage title="Display" description="How the console looks on this screen. Saved per device: the Pi, a laptop and each tablet keep their own choice.">
-      <SettingsCard icon={LuMonitor} title="Control size">
+    <SettingsPage title={t('settings.display.title')} description={t('settings.display.description')}>
+      <LanguageCard />
+
+      <SettingsCard icon={LuMonitor} title={t('settings.display.controlSize')}>
         <SettingRow
-          label="Density"
+          label={t('settings.display.density')}
           description={
             pref === 'auto'
-              ? `Auto picks ${auto === 'touch' ? 'Touch on this touchscreen' : 'Compact for mouse and trackpad'}.`
+              ? t('settings.display.densityAuto', { choice: auto === 'touch' ? t('settings.display.densityAutoTouch') : t('settings.display.densityAutoCompact') })
               : density === 'touch'
-                ? 'Touch: large targets (44 px) for fingers — Pi touchscreen, tablets.'
-                : 'Compact: dense layout for mouse and trackpad.'
+                ? t('settings.display.densityTouch')
+                : t('settings.display.densityCompact')
           }
         >
           <SegmentedControl<DensityPreference>
-            aria-label="Density"
+            aria-label={t('settings.display.density')}
             size="md"
             value={pref}
             onChange={(v) => useUiStore.getState().setDensityPreference(v)}
             items={[
-              { value: 'auto', label: 'Auto', icon: LuWandSparkles },
-              { value: 'compact', label: 'Compact', icon: LuMousePointer2 },
-              { value: 'touch', label: 'Touch', icon: LuHand }
+              { value: 'auto', label: t('settings.display.densityOptions.auto'), icon: LuWandSparkles },
+              { value: 'compact', label: t('settings.display.densityOptions.compact'), icon: LuMousePointer2 },
+              { value: 'touch', label: t('settings.display.densityOptions.touch'), icon: LuHand }
             ]}
           />
         </SettingRow>
         <DensityPreview density={density} />
       </SettingsCard>
 
-      <SettingsCard icon={LuLayoutPanelLeft} title="Layout">
-        <SettingRow label="Executor bar" description="The 8 × 4 scene buttons at the bottom of every view.">
-          <Switch checked={executorBarOpen} onChange={(on) => useUiStore.getState().toggleExecutorBar(on)} aria-label="Show the executor bar" />
+      <SettingsCard icon={LuLayoutPanelLeft} title={t('settings.display.layout')}>
+        <SettingRow label={t('settings.display.executorBar')} description={t('settings.display.executorBarDescription')}>
+          <Switch checked={executorBarOpen} onChange={(on) => useUiStore.getState().toggleExecutorBar(on)} aria-label={t('settings.display.executorBarAria')} />
         </SettingRow>
-        <SettingRow label="Fixture sidebar" description="Patched fixtures and groups on the left, for quick selection.">
-          <Switch checked={sidebarOpen} onChange={(on) => useUiStore.getState().toggleSidebar(on)} aria-label="Show the fixture sidebar" />
+        <SettingRow label={t('settings.display.sidebar')} description={t('settings.display.sidebarDescription')}>
+          <Switch checked={sidebarOpen} onChange={(on) => useUiStore.getState().toggleSidebar(on)} aria-label={t('settings.display.sidebarAria')} />
         </SettingRow>
       </SettingsCard>
 
-      <SettingsCard icon={LuSparkles} title="3D visualiser" subtitle="Quality adapts automatically to this device's graphics.">
-        <InfoRow label="Device class">
-          {profile.isLowEnd ? 'Low-end graphics — 2D stage layout' : profile.isMidRange ? 'Mid-range graphics (Raspberry Pi) — 3D at reduced quality' : 'Desktop graphics — full 3D'}
+      <SettingsCard icon={LuSparkles} title={t('settings.display.visualizer')} subtitle={t('settings.display.visualizerSubtitle')}>
+        <InfoRow label={t('settings.display.deviceClass')}>
+          {profile.isLowEnd ? t('settings.display.deviceLowEnd') : profile.isMidRange ? t('settings.display.deviceMidRange') : t('settings.display.deviceDesktop')}
         </InfoRow>
-        <InfoRow label="Frame rate"><span className="font-mono tabular">{profile.visualizerFps} fps</span></InfoRow>
-        <InfoRow label="Pixel ratio"><span className="font-mono tabular">{profile.maxPixelRatio}×</span> maximum</InfoRow>
+        <InfoRow label={t('settings.display.frameRate')}><span className="font-mono tabular">{t('units.fpsValue', { value: profile.visualizerFps })}</span></InfoRow>
+        <InfoRow label={t('settings.display.pixelRatio')}>{t('settings.display.pixelRatioMax', { value: profile.maxPixelRatio })}</InfoRow>
       </SettingsCard>
     </SettingsPage>
   )
 }
 
 function DensityPreview({ density }: { density: 'compact' | 'touch' }) {
+  const t = useT()
   return (
     <div className="flex flex-wrap items-center gap-3 border-t border-line-subtle bg-surface-0/40 px-4 py-3">
-      <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Preview</span>
-      <Button size="sm" icon={LuSave}>Button</Button>
-      <Button size="sm" variant="primary">Primary</Button>
-      <Badge>{density === 'touch' ? 'Touch · 44 px targets' : 'Compact · 30 px controls'}</Badge>
+      <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('settings.display.preview')}</span>
+      <Button size="sm" icon={LuSave}>{t('settings.display.previewButton')}</Button>
+      <Button size="sm" variant="primary">{t('settings.display.previewPrimary')}</Button>
+      <Badge>{density === 'touch' ? t('settings.display.previewTouch') : t('settings.display.previewCompact')}</Badge>
     </div>
   )
 }
@@ -91,6 +127,7 @@ function DensityPreview({ density }: { density: 'compact' | 'touch' }) {
 // ---------------------------------------------------------------
 
 export function ShowSettings() {
+  const t = useT()
   const { showName, isDirty } = useShowTitle()
   const remote = isRemoteMode()
   const [path, setPath] = useState<string | null | undefined>(undefined)
@@ -103,55 +140,55 @@ export function ShowSettings() {
 
   const reveal = async () => {
     const ok = await getBridge()?.show.reveal().catch(() => false)
-    if (!ok) useUiStore.getState().showStatus('Could not open the shows folder', 'error')
+    if (!ok) useUiStore.getState().showStatus(translate('settings.show.revealFailed'), 'error')
   }
 
   const go = (tab: 'midi' | 'live') => useUiStore.getState().setActiveTab(tab)
 
   return (
-    <SettingsPage title="Show" description="The show file holds the patch, groups, scenes, chases, effects, timeline and MIDI mappings.">
+    <SettingsPage title={t('settings.show.title')} description={t('settings.show.description')}>
       <SettingsCard
         icon={LuFile}
         title={showName}
-        status={isDirty ? <Badge size="xs" tone="warning">Unsaved changes</Badge> : <Badge size="xs" tone="go">Saved</Badge>}
+        status={isDirty ? <Badge size="xs" tone="warning">{t('settings.show.unsaved')}</Badge> : <Badge size="xs" tone="go">{t('settings.show.saved')}</Badge>}
         actions={
           <>
-            <Button size="sm" variant={isDirty ? 'primary' : 'secondary'} icon={LuSave} onClick={() => { void requestSave() }}>Save</Button>
-            <Button size="sm" variant="ghost" icon={LuSaveAll} onClick={() => { void requestSaveAs() }}>Save as…</Button>
+            <Button size="sm" variant={isDirty ? 'primary' : 'secondary'} icon={LuSave} onClick={() => { void requestSave() }}>{t('common.save')}</Button>
+            <Button size="sm" variant="ghost" icon={LuSaveAll} onClick={() => { void requestSaveAs() }}>{t('common.saveAs')}</Button>
           </>
         }
       >
-        <InfoRow label="File" mono>
-          {path === undefined ? '…' : path ?? <span className="font-sans text-sm text-fg-tertiary">Not saved yet — Save picks a location</span>}
+        <InfoRow label={t('settings.show.file')} mono>
+          {path === undefined ? '…' : path ?? <span className="font-sans text-sm text-fg-tertiary">{t('settings.show.notSavedYet')}</span>}
         </InfoRow>
-        <InfoRow label="Backups">
-          Every save is atomic and keeps the previous version as <span className="font-mono text-xs">.pbshow.bak</span>; a damaged file is restored from it automatically.
+        <InfoRow label={t('settings.show.backups')}>
+          {t.rich('settings.show.backupsText', { file: <span className="font-mono text-xs">.pbshow.bak</span> })}
         </InfoRow>
-        <InfoRow label="Autosave">
-          Off — save with <span className="font-mono text-xs">Ctrl/Cmd + S</span>. The last show reopens automatically at start-up.
+        <InfoRow label={t('settings.show.autosave')}>
+          {t.rich('settings.show.autosaveText', { keys: <Kbd keys="Mod+S" className="align-middle" /> })}
         </InfoRow>
         {!remote && (
           <div className="flex flex-wrap gap-2 border-t border-line-subtle px-4 py-3">
-            <Button size="sm" icon={LuFolderOpen} onClick={() => { void requestOpenShow() }}>Open show…</Button>
-            <Button size="sm" icon={LuFilePlus2} onClick={() => { void requestNewShow() }}>New show</Button>
-            <Button size="sm" variant="ghost" icon={LuFolderSearch} onClick={() => { void reveal() }}>Show in folder</Button>
+            <Button size="sm" icon={LuFolderOpen} onClick={() => { void requestOpenShow() }}>{t('settings.show.openShow')}</Button>
+            <Button size="sm" icon={LuFilePlus2} onClick={() => { void requestNewShow() }}>{t('settings.show.newShow')}</Button>
+            <Button size="sm" variant="ghost" icon={LuFolderSearch} onClick={() => { void reveal() }}>{t('settings.show.showInFolder')}</Button>
           </div>
         )}
       </SettingsCard>
 
-      <SettingsCard icon={LuTimer} title="Control inputs" subtitle="Configured in their own views.">
-        <SettingRow label="MIDI devices & mappings" description="Controllers, learn mode, scene and fader mappings (saved with the show).">
-          <Button size="sm" variant="secondary" icon={LuPiano} onClick={() => go('midi')}>Open MIDI</Button>
+      <SettingsCard icon={LuTimer} title={t('settings.show.inputs')} subtitle={t('settings.show.inputsSubtitle')}>
+        <SettingRow label={t('settings.show.midi')} description={t('settings.show.midiDescription')}>
+          <Button size="sm" variant="secondary" icon={LuPiano} onClick={() => go('midi')}>{t('settings.show.openMidi')}</Button>
         </SettingRow>
         <SettingRow
-          label="MIDI timecode (MTC)"
+          label={t('settings.show.mtc')}
           description={
             isTimecodeEnabled()
-              ? `Enabled · ${getTimecodeFramerate()} fps${isTimecodeChase() ? ' · timeline chases timecode' : ''}`
-              : 'Chase an external MTC source with the timeline.'
+              ? `${t('settings.show.mtcEnabled', { fps: getTimecodeFramerate() })}${isTimecodeChase() ? t('settings.show.mtcChase') : ''}`
+              : t('settings.show.mtcDisabled')
           }
         >
-          <Button size="sm" variant="secondary" icon={LuTimer} onClick={() => go('live')}>Open Timeline</Button>
+          <Button size="sm" variant="secondary" icon={LuTimer} onClick={() => go('live')}>{t('settings.show.openTimeline')}</Button>
         </SettingRow>
       </SettingsCard>
     </SettingsPage>
@@ -163,6 +200,7 @@ export function ShowSettings() {
 // ---------------------------------------------------------------
 
 function platformInfo() {
+  const t = translate
   const ua = navigator.userAgent
   const electron = /Electron\/([\d.]+)/.exec(ua)?.[1]
   const chrome = /Chrom(?:e|ium)\/([\d.]+)/.exec(ua)?.[1]
@@ -170,12 +208,13 @@ function platformInfo() {
     : /Windows/.test(ua) ? 'Windows'
       : /Android/.test(ua) ? 'Android'
         : /iPhone|iPad|iPod/.test(ua) ? 'iOS / iPadOS'
-          : /Linux/.test(ua) ? 'Linux' : 'Unknown OS'
-  const arch = /aarch64|arm64/i.test(ua) || /arm/i.test(navigator.platform) ? 'ARM 64-bit' : /x86_64|Win64|x64|Intel/i.test(ua) ? 'x86-64' : ''
+          : /Linux/.test(ua) ? 'Linux' : t('settings.about.unknownOs')
+  const arch = /aarch64|arm64/i.test(ua) || /arm/i.test(navigator.platform) ? t('settings.about.arm64') : /x86_64|Win64|x64|Intel/i.test(ua) ? 'x86-64' : ''
   return { electron, chrome, os, arch }
 }
 
 export function AboutSettings() {
+  const t = useT()
   const [version, setVersion] = useState<string | null>(null)
   const remote = isRemoteMode()
   const info = platformInfo()
@@ -187,28 +226,28 @@ export function AboutSettings() {
   }, [])
 
   return (
-    <SettingsPage title="About PhotonBoard" description="DMX lighting console for laptops, the Raspberry Pi touchscreen and browsers.">
+    <SettingsPage title={t('settings.about.title')} description={t('settings.about.description')}>
       <SettingsCard icon={LuSparkles} title="PhotonBoard" status={version && !devBuild && <Badge size="xs" mono>v{version}</Badge>}>
-        <InfoRow label="Version">{devBuild ? 'Development build' : <span className="font-mono tabular">{version ?? '…'}</span>}</InfoRow>
-        <InfoRow label="Running as">{remote ? 'Web remote (browser) — connected to a console' : 'Console (desktop app)'}</InfoRow>
-        <InfoRow label="Platform">{[info.os, info.arch].filter(Boolean).join(' · ')}</InfoRow>
+        <InfoRow label={t('settings.about.version')}>{devBuild ? t('settings.about.devBuild') : <span className="font-mono tabular">{version ?? '…'}</span>}</InfoRow>
+        <InfoRow label={t('settings.about.runningAs')}>{remote ? t('settings.about.runningRemote') : t('settings.about.runningConsole')}</InfoRow>
+        <InfoRow label={t('settings.about.platform')}>{[info.os, info.arch].filter(Boolean).join(' · ')}</InfoRow>
         {info.electron && <InfoRow label="Electron"><span className="font-mono tabular">{info.electron}</span></InfoRow>}
         {info.chrome && <InfoRow label="Chromium"><span className="font-mono tabular">{info.chrome}</span></InfoRow>}
-        <InfoRow label="Screen"><span className="font-mono tabular">{window.screen.width} × {window.screen.height}</span> · {window.devicePixelRatio}× pixel ratio</InfoRow>
+        <InfoRow label={t('settings.about.screen')}><span className="font-mono tabular">{window.screen.width} × {window.screen.height}</span> · {t('settings.about.pixelRatio', { value: window.devicePixelRatio })}</InfoRow>
       </SettingsCard>
 
-      <SettingsCard icon={LuKeyboard} title="Help">
-        <SettingRow label="Keyboard shortcuts" description="Every shortcut, grouped by area.">
-          <Button size="sm" icon={LuKeyboard} onClick={() => useUiStore.getState().setShortcutsOpen(true)}>Show shortcuts</Button>
+      <SettingsCard icon={LuKeyboard} title={t('settings.about.help')}>
+        <SettingRow label={t('settings.about.shortcuts')} description={t('settings.about.shortcutsDescription')}>
+          <Button size="sm" icon={LuKeyboard} onClick={() => useUiStore.getState().setShortcutsOpen(true)}>{t('settings.about.showShortcuts')}</Button>
         </SettingRow>
       </SettingsCard>
 
-      <SettingsCard icon={LuPanelBottom} title="Credits">
+      <SettingsCard icon={LuPanelBottom} title={t('settings.about.credits')}>
         <ul className={cn('flex flex-col gap-1.5 px-4 py-3 text-sm text-fg-secondary')}>
-          <li>Fixture definitions from the <span className="text-fg-primary">Open Fixture Library</span> (open-fixture-library.org) and QLC+ / GDTF imports.</li>
-          <li>Built with Electron, React, Zustand, Three.js and Tailwind CSS.</li>
-          <li>Inter and JetBrains Mono typefaces (SIL Open Font License) · Lucide icons (ISC).</li>
-          <li>Art-Net™ designed by and copyright Artistic Licence Holdings Ltd.</li>
+          <li>{t.rich('settings.about.creditOfl', { ofl: <span className="text-fg-primary">{t('settings.about.creditOflName')}</span> })}</li>
+          <li>{t('settings.about.creditBuilt')}</li>
+          <li>{t('settings.about.creditFonts')}</li>
+          <li>{t('settings.about.creditArtnet')}</li>
         </ul>
       </SettingsCard>
     </SettingsPage>

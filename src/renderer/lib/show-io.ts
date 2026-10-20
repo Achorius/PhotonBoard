@@ -38,6 +38,7 @@ import {
 } from './timecode-engine'
 import { stopAllEffects } from './effect-engine'
 import { getBridge, isRemoteMode, runRemotePreflight } from './runtime'
+import { t } from '@renderer/i18n'
 
 export type ShowIoStatus = 'ok' | 'canceled' | 'error' | 'busy'
 
@@ -222,16 +223,20 @@ export function showNameFromPath(path: string | null | undefined): string | unde
 
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message
-  return typeof e === 'string' ? e : 'Unknown error'
+  return typeof e === 'string' ? e : t('file.errors.unknown')
 }
+
+/** Operation names shown in status messages ("Save failed: …") */
+type ShowOp = 'save' | 'saveAs' | 'open' | 'newShow' | 'autoLoad' | 'upload'
+const opLabel = (op: ShowOp) => t(`file.ops.${op}`)
 
 function status(message: string, type: 'info' | 'success' | 'error', duration = 3000): void {
   useUiStore.getState().showStatus(message, type, duration)
 }
 
-async function exclusive(label: string, fn: () => Promise<ShowIoResult>): Promise<ShowIoResult> {
+async function exclusive(op: ShowOp, fn: () => Promise<ShowIoResult>): Promise<ShowIoResult> {
   if (busy) {
-    status('Busy — another show operation is in progress', 'info', 2000)
+    status(t('file.busy'), 'info', 2000)
     return { status: 'busy' }
   }
   busy = true
@@ -239,8 +244,8 @@ async function exclusive(label: string, fn: () => Promise<ShowIoResult>): Promis
     return await fn()
   } catch (e) {
     const error = errorMessage(e)
-    console.error(`[Show] ${label} failed:`, e)
-    status(`${label} failed: ${error}`, 'error', 5000)
+    console.error(`[Show] ${op} failed:`, e)
+    status(t('file.failed', { op: opLabel(op), error }), 'error', 5000)
     return { status: 'error', error }
   } finally {
     busy = false
@@ -249,19 +254,19 @@ async function exclusive(label: string, fn: () => Promise<ShowIoResult>): Promis
 
 function requireBridge() {
   const bridge = getBridge()
-  if (!bridge) throw new Error('Not connected')
+  if (!bridge) throw new Error(t('file.errors.notConnected'))
   return bridge
 }
 
 /** Apply a load result coming from main; reports errors / cancel / warnings. */
-async function adoptLoadResult(result: ShowLoadResult | null | undefined, label: string): Promise<ShowIoResult> {
+async function adoptLoadResult(result: ShowLoadResult | null | undefined, op: ShowOp): Promise<ShowIoResult> {
   if (!result || result.canceled) {
-    status(`${label} cancelled`, 'info', 2000)
+    status(t('file.canceled', { op: opLabel(op) }), 'info', 2000)
     return { status: 'canceled' }
   }
   if (!result.success || !result.show) {
-    const error = result.error || 'The file could not be read'
-    status(`${label} failed: ${error}`, 'error', 5000)
+    const error = result.error || t('file.errors.unreadable')
+    status(t('file.failed', { op: opLabel(op), error }), 'error', 5000)
     return { status: 'error', error }
   }
   let applied: { show: ShowFile; warnings: string[] }
@@ -269,16 +274,19 @@ async function adoptLoadResult(result: ShowLoadResult | null | undefined, label:
     applied = applyShowData(result.show, { name: showNameFromPath(result.path) })
   } catch (e) {
     const error = errorMessage(e)
-    status(`${label} failed: ${error}`, 'error', 5000)
+    status(t('file.failed', { op: opLabel(op), error }), 'error', 5000)
     return { status: 'error', error }
   }
   await refreshFixtureLibrary()
 
   const warnings = [...(result.warning ? [result.warning] : []), ...applied.warnings]
-  if (warnings.length > 0) {
-    status(`Loaded ${applied.show.name} — ${warnings[0]}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}`, 'info', 6000)
+  const name = applied.show.name
+  if (warnings.length > 1) {
+    status(t('file.loadedWithWarnings', { name, warning: warnings[0], count: warnings.length - 1 }), 'info', 6000)
+  } else if (warnings.length === 1) {
+    status(t('file.loadedWithWarning', { name, warning: warnings[0] }), 'info', 6000)
   } else {
-    status(`Loaded ${applied.show.name}`, 'success', 2500)
+    status(t('file.loaded', { name }), 'success', 2500)
   }
   return { status: 'ok', name: applied.show.name, path: result.path, warnings }
 }
@@ -312,12 +320,12 @@ export interface SaveShowOptions {
 
 /** Save the current show (Save, or Save As with `saveAs`). */
 export function saveShow(opts: SaveShowOptions = {}): Promise<ShowIoResult> {
-  const label = opts.saveAs ? 'Save As' : 'Save'
-  return exclusive(label, async () => {
+  const op: ShowOp = opts.saveAs ? 'saveAs' : 'save'
+  return exclusive(op, async () => {
     const bridge = requireBridge()
     // Remote: the console saves ITS show — send our pending edits first (same socket, in order)
     runRemotePreflight()
-    status(opts.saveAs ? 'Save As…' : 'Saving…', 'info', 0)
+    status(opts.saveAs ? t('file.savingAs') : t('file.saving'), 'info', 0)
     const show = collectShowData()
     let result: ShowSaveResult | null
     if (opts.saveAs) {
@@ -326,35 +334,35 @@ export function saveShow(opts: SaveShowOptions = {}): Promise<ShowIoResult> {
       result = await bridge.show.save(show, opts.requestId ? { requestId: opts.requestId } : undefined)
     }
     if (!result || result.canceled) {
-      status(`${label} cancelled`, 'info', 2000)
+      status(t('file.canceled', { op: opLabel(op) }), 'info', 2000)
       return { status: 'canceled' }
     }
     if (!result.success) {
       const error = result.exists
-        ? 'A show with this name already exists'
-        : result.error || 'The show could not be written'
-      status(`${label} failed: ${error}`, 'error', 5000)
+        ? t('file.errors.exists')
+        : result.error || t('file.errors.notWritten')
+      status(t('file.failed', { op: opLabel(op), error }), 'error', 5000)
       return { status: 'error', error }
     }
     const name = showNameFromPath(result.path) ?? show.name
     const ui = useUiStore.getState()
     ui.setShowName(name)
     ui.setDirty(false)
-    status(`Saved ${name}`, 'success', 2500)
+    status(t('file.saved', { name }), 'success', 2500)
     return { status: 'ok', name, path: result.path }
   })
 }
 
 /** Open a show with the file dialog (Electron only). */
 export function openShow(): Promise<ShowIoResult> {
-  return exclusive('Open', async () => {
+  return exclusive('open', async () => {
     if (isRemoteMode()) {
-      const error = 'Pick a show from the list or upload a file on the remote'
+      const error = t('file.errors.remoteOpen')
       status(error, 'info', 3000)
       return { status: 'error', error }
     }
-    status('Opening…', 'info', 0)
-    return adoptLoadResult(await requireBridge().show.load(), 'Open')
+    status(t('file.opening'), 'info', 0)
+    return adoptLoadResult(await requireBridge().show.load(), 'open')
   })
 }
 
@@ -374,45 +382,45 @@ export async function listShows(): Promise<string[]> {
  * the console (Pi) load it.
  */
 export function openShowByName(name: string): Promise<ShowIoResult> {
-  return exclusive('Open', async () => {
-    status(`Opening ${name}…`, 'info', 0)
+  return exclusive('open', async () => {
+    status(t('file.openingName', { name }), 'info', 0)
     const result = await requireBridge().show.loadByName(name, { apply: isRemoteMode() })
-    return adoptLoadResult(result, 'Open')
+    return adoptLoadResult(result, 'open')
   })
 }
 
 /** Start a new empty show (patch, scenes, timeline… everything cleared). */
 export function newShow(): Promise<ShowIoResult> {
-  return exclusive('New show', async () => {
+  return exclusive('newShow', async () => {
     if (isRemoteMode()) {
-      const error = 'New Show is only available on the console'
+      const error = t('file.errors.remoteNew')
       status(error, 'info', 3000)
       return { status: 'error', error }
     }
     const fresh = await requireBridge().show.new()
-    const { show } = applyShowData(fresh ?? createEmptyShow(), { name: fresh?.name || 'New Show' })
-    status('New show', 'success', 2000)
+    const { show } = applyShowData(fresh ?? createEmptyShow(t('file.defaultShowName')), { name: fresh?.name || t('file.defaultShowName') })
+    status(t('file.newShowDone'), 'success', 2000)
     return { status: 'ok', name: show.name }
   })
 }
 
 /** Startup: reload the last show if there is one (silent when there is none). */
 export function loadLastShow(): Promise<ShowIoResult> {
-  return exclusive('Auto-load', async () => {
+  return exclusive('autoLoad', async () => {
     const result = await requireBridge().show.loadLast()
     if (!result || (!result.success && !result.error)) return { status: 'canceled' }
-    return adoptLoadResult(result, 'Auto-load')
+    return adoptLoadResult(result, 'autoLoad')
   })
 }
 
 /** Remote: upload a .pbshow from the browser; the console adopts it. */
 export function uploadShowFile(file: File, opts: { overwrite?: boolean } = {}): Promise<ShowIoResult> {
-  return exclusive('Upload', async () => {
-    status('Uploading show…', 'info', 0)
+  return exclusive('upload', async () => {
+    status(t('file.uploading'), 'info', 0)
     const text = await file.text()
     normalizeShow(text) // refuse obvious garbage before sending it
     const result = await requireBridge().show.upload(text, file.name, opts)
-    return adoptLoadResult(result, 'Upload')
+    return adoptLoadResult(result, 'upload')
   })
 }
 
@@ -424,11 +432,11 @@ export async function adoptRemoteShow(raw: unknown): Promise<ShowIoResult> {
   try {
     const { show, warnings } = applyShowData(raw)
     await refreshFixtureLibrary()
-    status(`Show loaded: ${show.name}`, 'success', 3000)
+    status(t('file.remoteShowLoaded', { name: show.name }), 'success', 3000)
     return { status: 'ok', name: show.name, warnings }
   } catch (e) {
     const error = errorMessage(e)
-    status(`Show from remote refused: ${error}`, 'error', 5000)
+    status(t('file.remoteShowRefused', { error }), 'error', 5000)
     return { status: 'error', error }
   }
 }
@@ -500,6 +508,11 @@ export function installDirtyTracking(): () => void {
     onTimecodeSettingsChange(markDirty)
   ]
   return () => { for (const u of unsubs) u() }
+}
+
+/** True while a show is applied or state mirrored from the console is written: not a user edit. */
+export function isApplyingShow(): boolean {
+  return applying > 0
 }
 
 /** Run `fn` without marking the show dirty (e.g. state mirrored from the Pi). */

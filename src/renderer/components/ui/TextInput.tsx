@@ -2,6 +2,7 @@ import type React from 'react'
 import type { IconType } from 'react-icons'
 import { LuX } from 'react-icons/lu'
 import { cn } from './cn'
+import { t } from '@renderer/i18n'
 
 export type InputSize = 'sm' | 'md' | 'lg'
 
@@ -56,7 +57,7 @@ export function TextInput({ size = 'md', icon: Icon, trailing, invalid, onClear,
         {...rest}
       />
       {showClear && (
-        <button type="button" aria-label="Clear" onClick={onClear} className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-fg-tertiary hover:bg-surface-3 hover:text-fg-primary">
+        <button type="button" aria-label={t('ui.clear')} onClick={onClear} className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-fg-tertiary hover:bg-surface-3 hover:text-fg-primary">
           <LuX size={12} aria-hidden />
         </button>
       )}

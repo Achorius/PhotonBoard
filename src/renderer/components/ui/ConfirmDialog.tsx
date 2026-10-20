@@ -1,6 +1,7 @@
 import type React from 'react'
 import { Modal } from './Modal'
 import { Button } from './Button'
+import { t } from '@renderer/i18n'
 
 export interface ConfirmDialogProps {
   open: boolean
@@ -19,7 +20,7 @@ export interface ConfirmDialogProps {
  * Declarative yes / no dialog. For one-off questions inside handlers prefer
  * `if (await confirm({...}))` from './dialogs'.
  */
-export function ConfirmDialog({ open, title, message, confirmLabel = 'OK', cancelLabel = 'Cancel', tone = 'default', busy, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, message, confirmLabel = t('ui.ok'), cancelLabel = t('ui.cancel'), tone = 'default', busy, onConfirm, onCancel }: ConfirmDialogProps) {
   return (
     <Modal
       open={open}

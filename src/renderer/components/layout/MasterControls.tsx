@@ -5,9 +5,10 @@ import { useCallback } from 'react'
 import type React from 'react'
 import { LuPower, LuSun, LuZap } from 'react-icons/lu'
 import type { MidiTargetType } from '@shared/types'
-import { Button, Slider, Tooltip, cn } from '@renderer/components/ui'
+import { Button, Slider, Tooltip, cn, formatPercent } from '@renderer/components/ui'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
+import { useT } from '@renderer/i18n'
 
 /** Right-click / long-press a control to MIDI-learn it; violet outline = mapped, pulsing = learning */
 export function useMidiLearnTarget(type: MidiTargetType, label: string) {
@@ -27,38 +28,40 @@ export function useMidiLearnTarget(type: MidiTargetType, label: string) {
 }
 
 function GrandMaster() {
+  const t = useT()
   const grandMaster = useDmxStore((s) => s.grandMaster)
   const setGrandMaster = useDmxStore((s) => s.setGrandMaster)
-  const midi = useMidiLearnTarget('master', 'Grand Master')
+  const midi = useMidiLearnTarget('master', t('common.grandMaster'))
   const pct = Math.round((grandMaster / 255) * 100)
   return (
-    <Tooltip content="Grand Master — double-click: full · right-click: MIDI learn">
+    <Tooltip content={t('shell.masters.gmTooltip')}>
       <div
         onContextMenu={midi.onContextMenu}
         className={cn('flex h-control items-center gap-2 rounded bg-surface-0 pl-2.5 pr-2 ring-1 ring-inset ring-line', midi.ring)}
       >
-        <span className="text-2xs font-bold tracking-[0.08em] text-fg-tertiary">GM</span>
+        <span className="text-2xs font-bold tracking-[0.08em] text-fg-tertiary">{t('shell.masters.gm')}</span>
         <Slider
-          aria-label="Grand Master"
+          aria-label={t('common.grandMaster')}
           value={grandMaster}
           onChange={setGrandMaster}
           defaultValue={255}
           color={pct < 100 ? 'rgb(var(--pb-warning))' : 'rgb(var(--pb-fg-secondary))'}
           className="w-20 xl:w-28 xl:[[data-density=touch]_&]:w-36"
         />
-        <span className={cn('w-9 text-right font-mono text-xs tabular', pct < 100 ? 'text-warning-fg' : 'text-fg-secondary')}>{pct}%</span>
+        <span className={cn('w-10 text-right font-mono text-xs tabular', pct < 100 ? 'text-warning-fg' : 'text-fg-secondary')}>{formatPercent(grandMaster)}</span>
       </div>
     </Tooltip>
   )
 }
 
 export function MasterControls() {
+  const t = useT()
   const blackout = useDmxStore((s) => s.blackout)
   const strobe = useDmxStore((s) => s.strobe)
   const blinder = useDmxStore((s) => s.blinder)
-  const strobeMidi = useMidiLearnTarget('strobe', 'Strobe')
-  const blinderMidi = useMidiLearnTarget('blinder', 'Blinder')
-  const blackoutMidi = useMidiLearnTarget('blackout', 'Blackout')
+  const strobeMidi = useMidiLearnTarget('strobe', t('common.strobe'))
+  const blinderMidi = useMidiLearnTarget('blinder', t('common.blinder'))
+  const blackoutMidi = useMidiLearnTarget('blackout', t('common.blackout'))
   const dmx = useDmxStore.getState
 
   return (
@@ -71,12 +74,12 @@ export function MasterControls() {
         onPress={() => dmx().toggleStrobe(true)}
         onRelease={() => dmx().toggleStrobe(false)}
         onContextMenu={strobeMidi.onContextMenu}
-        tooltip="Strobe — hold · right-click: MIDI learn"
-        aria-label="Strobe (hold)"
+        tooltip={t('shell.masters.strobeTooltip')}
+        aria-label={t('shell.masters.strobeAria')}
         labelClassName="hidden xl:inline"
         className={strobeMidi.ring}
       >
-        Strobe
+        {t('common.strobe')}
       </Button>
       <Button
         icon={LuSun}
@@ -85,12 +88,12 @@ export function MasterControls() {
         onPress={() => dmx().toggleBlinder(true)}
         onRelease={() => dmx().toggleBlinder(false)}
         onContextMenu={blinderMidi.onContextMenu}
-        tooltip="Blinder — hold for full white · right-click: MIDI learn"
-        aria-label="Blinder (hold)"
+        tooltip={t('shell.masters.blinderTooltip')}
+        aria-label={t('shell.masters.blinderAria')}
         labelClassName="hidden xl:inline"
         className={blinderMidi.ring}
       >
-        Blinder
+        {t('common.blinder')}
       </Button>
       <Button
         icon={LuPower}
@@ -99,7 +102,7 @@ export function MasterControls() {
         active={blackout}
         onClick={() => dmx().toggleBlackout()}
         onContextMenu={blackoutMidi.onContextMenu}
-        tooltip="Blackout · right-click: MIDI learn"
+        tooltip={t('shell.masters.blackoutTooltip')}
         shortcut="Esc"
         className={cn(
           'w-[128px] font-bold uppercase tracking-[0.06em]',
@@ -108,7 +111,7 @@ export function MasterControls() {
         )}
       >
         <span className="inline-flex items-center gap-1.5">
-          Blackout
+          {t('common.blackout')}
           {blackout && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-white animate-blink" />}
         </span>
       </Button>
@@ -118,14 +121,15 @@ export function MasterControls() {
 
 /** Full-width strip while Blackout is on: the stage is dark, make it impossible to miss */
 export function BlackoutBanner() {
+  const t = useT()
   const blackout = useDmxStore((s) => s.blackout)
   if (!blackout) return null
   return (
     <div role="alert" className="flex h-6 shrink-0 items-center justify-center gap-2 bg-danger text-2xs font-bold uppercase tracking-[0.1em] text-on-danger">
       <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-white animate-blink" />
-      Blackout — all intensity output is at zero
+      {t('shell.masters.blackoutBanner')}
       <button type="button" onClick={() => useDmxStore.getState().setBlackout(false)} className="ml-2 rounded-sm px-1.5 underline-offset-2 hover:underline">
-        Release (Esc)
+        {t('shell.masters.release')}
       </button>
     </div>
   )

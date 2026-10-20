@@ -3,6 +3,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 import { isElectronRuntime } from '@renderer/lib/runtime'
 import { dismissToast, showToast } from './toast-store'
+import {
+  readLanguagePreference, resolveLanguage, setLocale, t, writeLanguagePreference, type LanguagePreference
+} from '@renderer/i18n'
+
+export type { LanguagePreference } from '@renderer/i18n'
 
 // ---- Device type detection ----
 
@@ -99,6 +104,8 @@ interface UiState {
   densityPreference: DensityPreference
   /** Density in effect (also set as data-density on <html>) */
   density: Density
+  /** UI language chosen in Settings › Display, per machine ('auto' = system / Pi kiosk default) */
+  languagePreference: LanguagePreference
   /** Left fixture sidebar visible */
   sidebarOpen: boolean
   /** Bottom executor bar visible */
@@ -119,6 +126,8 @@ interface UiState {
   setSelectedUniverse: (u: number) => void
   setStageMode: (on: boolean) => void
   setDensityPreference: (pref: DensityPreference) => void
+  /** Store the language choice on this device and switch the UI (no reload) */
+  setLanguagePreference: (pref: LanguagePreference) => void
   /** Re-evaluate 'auto' density (pointer type changed) */
   refreshDensity: () => void
   toggleSidebar: (open?: boolean) => void
@@ -138,11 +147,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   activeTab: getDefaultTab(),
   // Phone/tablet: start in stage mode. Desktop browser: start in app mode.
   stageMode: !_isElectron && (isPhone() || isTablet()),
-  showName: 'New Show',
+  showName: t('file.defaultShowName'),
   isDirty: false,
   selectedUniverse: 0,
   densityPreference: initialDensityPreference,
   density: resolveDensity(initialDensityPreference),
+  languagePreference: readLanguagePreference(),
   // Narrow screens (tablets) start with the fixture list hidden
   sidebarOpen: readPref('sidebarOpen', window.innerWidth >= 1280),
   executorBarOpen: readPref('executorBarOpen', true),
@@ -160,6 +170,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   setDensityPreference: (pref) => {
     writePref('density', pref)
     set({ densityPreference: pref, density: resolveDensity(pref) })
+  },
+  setLanguagePreference: (pref) => {
+    writeLanguagePreference(pref)
+    set({ languagePreference: pref })
+    setLocale(resolveLanguage(pref))
   },
   refreshDensity: () => {
     const density = resolveDensity(get().densityPreference)

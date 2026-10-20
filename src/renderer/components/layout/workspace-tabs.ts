@@ -1,5 +1,6 @@
 // Workspace views shown in the navigation rail, in rail order.
-// Digit shortcuts follow the rail (1…9, 0).
+// Digit shortcuts follow the rail (1…9, 0). Names come from the
+// dictionary: t(`shell.tabs.${id}.label`) (rail) / `.title` (tooltips, cheat sheet).
 
 import type { IconType } from 'react-icons'
 import {
@@ -9,26 +10,25 @@ import type { ViewTab } from '@renderer/stores/ui-store'
 
 export type WorkspaceGroup = 'Setup' | 'Program' | 'Playback' | 'Visualise' | 'System'
 
+/** Views that have a rail entry (and a name in shell.tabs) */
+export type WorkspaceTabId = 'patch' | 'fixtures' | 'effects' | 'playback' | 'live' | 'visualizer' | 'stage-layout' | 'midi' | 'follow' | 'settings'
+
 export interface WorkspaceTab {
-  id: ViewTab
-  /** Short rail label */
-  label: string
-  /** Full name (tooltips, cheat sheet) */
-  title: string
+  id: WorkspaceTabId & ViewTab
   icon: IconType
   shortcut: string
   group: WorkspaceGroup
 }
 
 export const WORKSPACE_TABS: WorkspaceTab[] = [
-  { id: 'patch', label: 'Patch', title: 'Patch', icon: LuCable, shortcut: '1', group: 'Setup' },
-  { id: 'fixtures', label: 'Fixtures', title: 'Fixtures & programmer', icon: LuSlidersVertical, shortcut: '2', group: 'Program' },
-  { id: 'effects', label: 'Effects', title: 'Effects', icon: LuSparkles, shortcut: '3', group: 'Program' },
-  { id: 'playback', label: 'Scenes', title: 'Scenes & chases', icon: LuClapperboard, shortcut: '4', group: 'Playback' },
-  { id: 'live', label: 'Timeline', title: 'Timeline', icon: LuTimer, shortcut: '5', group: 'Playback' },
-  { id: 'visualizer', label: '3D', title: '3D visualiser', icon: LuBox, shortcut: '6', group: 'Visualise' },
-  { id: 'stage-layout', label: 'Layout', title: 'Stage layout', icon: LuGrid2X2, shortcut: '7', group: 'Visualise' },
-  { id: 'midi', label: 'MIDI', title: 'MIDI devices & mappings', icon: LuPiano, shortcut: '8', group: 'System' },
-  { id: 'follow', label: 'Follow', title: 'Follow spot', icon: LuCrosshair, shortcut: '9', group: 'System' },
-  { id: 'settings', label: 'Settings', title: 'Settings', icon: LuSettings, shortcut: '0', group: 'System' }
+  { id: 'patch', icon: LuCable, shortcut: '1', group: 'Setup' },
+  { id: 'fixtures', icon: LuSlidersVertical, shortcut: '2', group: 'Program' },
+  { id: 'effects', icon: LuSparkles, shortcut: '3', group: 'Program' },
+  { id: 'playback', icon: LuClapperboard, shortcut: '4', group: 'Playback' },
+  { id: 'live', icon: LuTimer, shortcut: '5', group: 'Playback' },
+  { id: 'visualizer', icon: LuBox, shortcut: '6', group: 'Visualise' },
+  { id: 'stage-layout', icon: LuGrid2X2, shortcut: '7', group: 'Visualise' },
+  { id: 'midi', icon: LuPiano, shortcut: '8', group: 'System' },
+  { id: 'follow', icon: LuCrosshair, shortcut: '9', group: 'System' },
+  { id: 'settings', icon: LuSettings, shortcut: '0', group: 'System' }
 ]

@@ -6,10 +6,13 @@
 //  - a second finger on the element sets `fine` (precision mode)
 // Spread the returned handlers on the drag surface and give it
 // `touch-none` (or .touch-none-surface) so the browser does not pan.
+// Every drag holds the undo history open: all the edits of one
+// gesture are ONE undo step (lib/history-gate.ts).
 // ============================================================
 
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type React from 'react'
+import { holdHistory } from '@renderer/lib/history-gate'
 
 export interface DragState {
   /** Pointer position (client coordinates) */
@@ -56,7 +59,11 @@ export function usePointerDrag(opts: PointerDragOptions): PointerDragHandlers {
     lastY: number
     extra: Set<number>
     target: HTMLElement
+    release: () => void
   } | null>(null)
+
+  // Unmounted mid-gesture: never leave the undo history held
+  useEffect(() => () => { g.current?.release(); g.current = null }, [])
 
   const state = (e: React.PointerEvent<HTMLElement>, target: HTMLElement): DragState => {
     const cur = g.current!
@@ -82,6 +89,7 @@ export function usePointerDrag(opts: PointerDragOptions): PointerDragHandlers {
     }
     const s = state(e, cur.target)
     g.current = null
+    cur.release()
     try {
       if (cur.target.hasPointerCapture(e.pointerId)) cur.target.releasePointerCapture(e.pointerId)
     } catch { /* already released */ }
@@ -98,11 +106,12 @@ export function usePointerDrag(opts: PointerDragOptions): PointerDragHandlers {
       }
       if (e.pointerType === 'mouse' && e.button !== 0) return
       const target = e.currentTarget
-      g.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, extra: new Set(), target }
+      g.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, extra: new Set(), target, release: () => {} }
       if (optsRef.current.onStart?.(state(e, target)) === false) {
         g.current = null
         return
       }
+      if (g.current) g.current.release = holdHistory()
       try { target.setPointerCapture(e.pointerId) } catch { /* pointer already gone */ }
     },
     onPointerMove: (e) => {
