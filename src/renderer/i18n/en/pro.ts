@@ -7,8 +7,12 @@
 
 import { core } from './pro/core'
 import { cli } from './pro/cli'
+import { cliUi } from './pro/cli-ui'
+import { scenes } from './pro/scenes'
 
 export const pro = {
   ...core,
-  cli
+  cli,
+  cliUi,
+  scenes
 }

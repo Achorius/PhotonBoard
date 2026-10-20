@@ -1,6 +1,8 @@
 // ============================================================
 // Scene settings: name, colour (executor column), priority, loop,
-// level, executor button mode, MIDI, cue-wide actions.
+// level, executor button mode, MIDI, cue-wide actions; in the Pro
+// view an "Advanced" section (tracking, MIB, rate, priority mode,
+// speed master).
 // ============================================================
 
 import { LuCopy, LuHand, LuListOrdered, LuPiano, LuTimer, LuTrash2, LuX } from 'react-icons/lu'
@@ -15,6 +17,8 @@ import { useMidiStore } from '@renderer/stores/midi-store'
 import { deleteWithUndo } from '@renderer/lib/selection-actions'
 import { MODE_LABEL, describeMidiSource, formatMidiSource, formatSlot, modeHint, setSceneMode, startSceneLearn, type ExecutorSlot } from './scene-meta'
 import { deleteScene, duplicateScene } from './actions'
+import { SceneAdvanced } from './SceneAdvanced'
+import { useUiStore } from '@renderer/stores/ui-store'
 
 export function SceneSettings({ cuelist: cl, slot, learning }: {
   cuelist: Cuelist
@@ -23,6 +27,7 @@ export function SceneSettings({ cuelist: cl, slot, learning }: {
 }) {
   const t = useT()
   const pb = usePlaybackStore.getState
+  const proMode = useUiStore((s) => s.proMode)
   const mapping = useMidiStore((s) => s.mappings.find((m) => m.target.type === 'cuelist_go' && m.target.id === cl.id))
   const allFollow = cl.cues.length > 0 && cl.cues.every((c) => c.followTime !== null)
   const noneFollow = cl.cues.every((c) => c.followTime === null)
@@ -91,6 +96,7 @@ export function SceneSettings({ cuelist: cl, slot, learning }: {
             </Button>
           </div>
         </Section>
+        {proMode && <SceneAdvanced cuelist={cl} />}
       </div>
       <div className="flex flex-col">
         <Section title={t('scenes.settings.executor')}>
