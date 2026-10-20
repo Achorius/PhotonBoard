@@ -51,7 +51,7 @@ function getDefaultTab(): ViewTab {
   return 'visualizer'
 }
 
-export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
+export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live' | 'pools'
 
 /** Control sizing: 'compact' for mouse/trackpad, 'touch' for fingers (>= 44px targets) */
 export type Density = 'compact' | 'touch'

@@ -3,7 +3,7 @@
 
 import type { Translation } from '../../types'
 
-export const programmer: Translation['pro']['programmer'] = {
+export const programmer: Pick<Translation['pro']['programmer'], 'undo' | 'defaults'> = {
   undo: {
     storeCue: 'Mémoriser la cue {cue}',
     updateCues: 'Mettre à jour les cues',

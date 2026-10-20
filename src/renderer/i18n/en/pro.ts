@@ -8,13 +8,17 @@
 import { core } from './pro/core'
 import { cli } from './pro/cli'
 import { programmer } from './pro/programmer'
+import { programmerUi } from './pro/programmer-ui'
 import { cliUi } from './pro/cli-ui'
 import { scenes } from './pro/scenes'
+import { pools } from './pro/pools'
 
 export const pro = {
   ...core,
   cli,
-  programmer,
+  // pro.programmer.* = engine undo/default names (programmer.ts) + Pro UI strings (programmer-ui.ts)
+  programmer: { ...programmer, ...programmerUi },
   cliUi,
-  scenes
+  scenes,
+  pools
 }

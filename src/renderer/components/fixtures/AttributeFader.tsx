@@ -12,6 +12,8 @@ import type { Attribute } from './programmer-model'
 import { formatRange, useProgrammerView } from './programmer-view-store'
 import { useChannelMenu } from './channel-menu'
 import { attrLabel } from './labels'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { PresetChip } from './PresetRow'
 
 export interface AttributeFaderProps {
   attr: Attribute
@@ -30,6 +32,7 @@ export const AttributeFader = memo(function AttributeFader({ attr, selectionCoun
   const sum = useAttrSummary(attr)
   const touched = useAttrTouched(attr.targets)
   const openMenu = useChannelMenu()
+  const proMode = useUiStore((s) => s.proMode)
   const onChange = useCallback((v: number) => setAttr(attr, v), [attr])
   const release = useCallback(() => releaseAttrs([attr]), [attr])
   const mixed = sum.min !== sum.max
@@ -65,6 +68,7 @@ export const AttributeFader = memo(function AttributeFader({ attr, selectionCoun
       >
         {formatRange(sum.min, sum.max, attr.max, unit)}
       </span>
+      {proMode && touched !== 'none' && <PresetChip targets={attr.targets} className="max-w-full" />}
       <div className="flex min-h-0 w-full flex-1 justify-center">
         <Fader
           value={sum.first}

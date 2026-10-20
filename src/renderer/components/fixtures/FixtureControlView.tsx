@@ -12,6 +12,9 @@
 // this view (a null selection registration keeps them from reaching
 // another view's selection); Mod+Backspace clears the programmer (global).
 // Subscriptions: patch / selection here; live values only in leaves.
+// Pro view: selection tools strip under the header (Next / Prev, MAtricks,
+// Align, Highlight, Blind, time, Park); attributes then act on the ACTIVE
+// fixtures (MAtricks + step); preset rows and "P4.2" chips in the panels.
 // ============================================================
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -35,6 +38,10 @@ import { FixtureStrips } from './FixtureStrips'
 import { FixtureSheet } from './FixtureSheet'
 import { DmxGrid } from './DmxGrid'
 import { ChannelMenuProvider } from './channel-menu'
+import { SelectionToolsStrip } from './SelectionToolsStrip'
+import { usePresetMetaWatch } from './preset-meta'
+import { useSelectionStore } from '@renderer/stores/selection-store'
+import { applyMatricks } from '@renderer/lib/pro/selection-tools'
 
 const MODES: { value: ProgrammerMode; icon: typeof LuTable }[] = [
   { value: 'attributes', icon: LuSlidersHorizontal },
@@ -56,12 +63,22 @@ export function FixtureControlView() {
   const mode = useProgrammerView((s) => s.mode)
   const unit = useProgrammerView((s) => s.unit)
   const universe = useUiStore((s) => s.selectedUniverse)
+  const proMode = useUiStore((s) => s.proMode)
+  const matricks = useSelectionStore((s) => s.matricks)
+  const step = useSelectionStore((s) => s.step)
+  usePresetMetaWatch(proMode)
 
   const defs = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures])
   const byId = useMemo(() => new Map(patch.map((p) => [p.id, p])), [patch])
   const numbers = useMemo(() => new Map(patch.map((p, i) => [p.id, i + 1])), [patch])
   const selectedEntries = useMemo(() => selectedIds.map((id) => byId.get(id)).filter((e) => e !== undefined), [selectedIds, byId])
-  const model = useMemo(() => buildProgrammerModel(selectedEntries, fixtures), [selectedEntries, fixtures])
+  // Pro view: the attributes act on the active fixtures (MAtricks, Next / Prev step)
+  const activeEntries = useMemo(() => {
+    if (!proMode) return selectedEntries
+    const active = applyMatricks(selectedIds, matricks, step).active
+    return active.map((id) => byId.get(id)).filter((e) => e !== undefined)
+  }, [proMode, selectedEntries, selectedIds, matricks, step, byId])
+  const model = useMemo(() => buildProgrammerModel(activeEntries, fixtures), [activeEntries, fixtures])
 
   const universes = useMemo(() => {
     const n = Math.max(...patch.map((p) => p.universe + 1), 1)
@@ -141,6 +158,7 @@ export function FixtureControlView() {
             <ReleaseSelectionButton ids={selectedIds} />
           </div>
         </header>
+        {proMode && <SelectionToolsStrip selection={selectedIds} />}
 
         {!hasPatch && mode !== 'dmx' ? (
           <EmptyState
