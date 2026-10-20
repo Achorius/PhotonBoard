@@ -24,6 +24,15 @@
 #   4. Configures tty1 auto-login + X11 kiosk (+ touchscreen mapping helper)
 #   5. Configures network (hostname, mDNS, timezone, firewall ports)
 #   6. Creates the show directory
+#
+# Image-build mode (--image-build, used by build-pi-image.sh): runs inside a
+# chroot of a NOT-yet-booted Raspberry Pi OS image to produce a ready-to-flash
+# PhotonBoard SD image. Nothing is started/stopped (no systemctl start,
+# hostnamectl, timedatectl...); files are written directly instead. It also
+# creates the kiosk user (default "photonboard", uid 1000, password
+# "photonboard"), disables the Raspberry Pi OS first-boot user wizard, keeps
+# SSH disabled and installs the boot-time services that keep the kiosk
+# working after a Pi Imager customisation (renamed user, Wi-Fi...).
 # ============================================================
 
 set -euo pipefail
@@ -59,7 +68,8 @@ Usage:
   sudo ./$PROG [options]
 
 Options (each also settable as an environment variable after "sudo"):
-  --version X.Y.Z     PhotonBoard version to install (PB_VERSION, default: latest)
+  --version X.Y.Z     PhotonBoard version to install (PB_VERSION, default: latest,
+                      pre-releases included when no stable release exists)
   --deb FILE          Install this local .deb instead of downloading (PB_DEB)
   --hostname NAME     Hostname (PB_HOSTNAME). Default: keep the current one,
                       except a stock name (raspberrypi, companionpi...) which
@@ -68,6 +78,12 @@ Options (each also settable as an environment variable after "sudo"):
   --user NAME         Kiosk user (PB_USER, default: the user who ran sudo)
   --update-module     Re-install the Companion module even if present
                       (PB_UPDATE_MODULE=1)
+  --image-build       Image-build mode, inside a chroot of an unbooted Raspberry
+                      Pi OS image (PB_IMAGE_BUILD=1). Requires --deb. Defaults:
+                      --user photonboard, --hostname photonboard
+  --password PASS     Image-build mode: kiosk user password (PB_PASSWORD,
+                      default: photonboard)
+  --keyboard LAYOUT   Image-build mode: keyboard layout (PB_KEYBOARD, default: fr)
   -h, --help          Show this help
 EOF
 }
@@ -122,6 +138,34 @@ script_dir() {
   fi
 }
 
+# GitHub release lookup. Prints "VERSION URL" for the arm64 .deb of:
+#   - release TAG (with or without a leading "v") when given,
+#   - else the latest release; when there is none (/releases/latest ignores
+#     pre-releases), the newest published release (pre-releases included)
+#     that has an *_arm64.deb asset.
+# The anonymous API never lists drafts. Release lists are newest first, so
+# the first arm64 .deb URL belongs to the newest release that has one; the
+# tag is read from that URL (.../releases/download/<tag>/<file>).
+release_info() { # release_info [VERSION]
+  local api="https://api.github.com/repos/$PB_REPO" json url tag t
+  local -a queries=()
+  if [[ -n ${1:-} ]]; then
+    queries=("$api/releases/tags/v${1#v}" "$api/releases/tags/${1#v}")
+  else
+    queries=("$api/releases/latest" "$api/releases?per_page=10")
+  fi
+  for t in "${queries[@]}"; do
+    json=$(curl -fsSL --retry 2 "$t" 2>/dev/null) || continue
+    url=$(printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*_arm64\.deb"' \
+          | sed 's/.*"\(https[^"]*\)"$/\1/' | head -n1)
+    [[ -n $url ]] || continue
+    tag=${url%/*}; tag=${tag##*/}
+    printf '%s %s\n' "${tag#v}" "$url"
+    return 0
+  done
+  return 1
+}
+
 # ============================================================
 # Steps
 # ============================================================
@@ -140,6 +184,11 @@ step_dependencies() {
     alsa-utils                   # amidi / aplay -l for MIDI troubleshooting
     zenity                       # native file dialogs for Electron on Linux
     "libgtk-3-0t64|libgtk-3-0"   # GTK runtime used by zenity/Electron dialogs
+    # Electron/Chromium runtime libraries not pulled in by GTK (missing on
+    # Raspberry Pi OS Lite): NSS, CUPS, accessibility bridge, X extensions.
+    libnss3 libnspr4 "libcups2t64|libcups2"
+    "libatk-bridge2.0-0t64|libatk-bridge2.0-0" "libatspi2.0-0t64|libatspi2.0-0"
+    libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libxss1 libxtst6
     avahi-daemon avahi-utils     # mDNS: <hostname>.local
     curl ca-certificates git
   )
@@ -157,14 +206,19 @@ step_dependencies() {
   info "System dependencies installed."
 }
 
-download_deb() { # download_deb URL -> prints local path
-  local url=$1 dir
+download_deb() { # download_deb URL... -> prints local path (first URL that works)
+  local dir url
   dir=$(mktemp -d /var/tmp/pb-deb.XXXXXX)
   chmod 755 "$dir"     # readable by apt's _apt sandbox user
-  curl -fSL --retry 3 -o "$dir/photonboard_arm64.deb" "$url" >&2 \
-    || die "Download failed: $url"
-  chmod 644 "$dir/photonboard_arm64.deb"
-  printf '%s\n' "$dir/photonboard_arm64.deb"
+  for url in "$@"; do
+    if curl -fSL --retry 3 -o "$dir/photonboard_arm64.deb" "$url" >&2; then
+      chmod 644 "$dir/photonboard_arm64.deb"
+      printf '%s\n' "$dir/photonboard_arm64.deb"
+      return 0
+    fi
+  done
+  rm -rf "$dir"
+  die "Download failed: $*"
 }
 
 find_local_deb() { # first photonboard_*_arm64.deb in CWD or next to the script
@@ -180,7 +234,7 @@ find_local_deb() { # first photonboard_*_arm64.deb in CWD or next to the script
 
 step_photonboard() {
   info "Step 2/6: Installing PhotonBoard..."
-  local installed want="" deb="" json url=""
+  local installed want="" deb="" url="" rel=""
   installed=$(installed_version)
   [[ -n $installed ]] && info "PhotonBoard $installed is installed."
 
@@ -188,10 +242,9 @@ step_photonboard() {
     [[ -f $PB_DEB ]] || die "--deb $PB_DEB: file not found"
     deb=$(cd "$(dirname "$PB_DEB")" && pwd -P)/$(basename "$PB_DEB")
   elif [[ $PB_VERSION == latest ]]; then
-    if json=$(curl -fsSL --retry 2 "https://api.github.com/repos/$PB_REPO/releases/latest" 2>/dev/null); then
-      want=$(printf '%s\n' "$json" | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n1)
-      url=$(printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*_arm64\.deb"' \
-            | sed 's/.*"\(https[^"]*\)"$/\1/' | head -n1)
+    if rel=$(release_info); then
+      want=${rel%% *}
+      url=${rel#* }
     fi
     if [[ -n $url ]]; then
       if [[ -n $installed && $installed == "$want" ]]; then
@@ -213,7 +266,14 @@ step_photonboard() {
       info "PhotonBoard $PB_VERSION already installed."
     else
       info "Downloading PhotonBoard $PB_VERSION..."
-      deb=$(download_deb "https://github.com/$PB_REPO/releases/download/v$PB_VERSION/photonboard_${PB_VERSION}_arm64.deb")
+      if rel=$(release_info "$PB_VERSION"); then
+        deb=$(download_deb "${rel#* }")
+      else
+        # API unreachable (rate limit...): try the usual asset URLs, tag with and without "v".
+        local base="https://github.com/$PB_REPO/releases/download"
+        deb=$(download_deb "$base/v$PB_VERSION/photonboard_${PB_VERSION}_arm64.deb" \
+                           "$base/$PB_VERSION/photonboard_${PB_VERSION}_arm64.deb")
+      fi
     fi
   fi
 
@@ -286,6 +346,8 @@ install_touch_helper() {
   local dst=/usr/local/bin/photonboard-map-touch tmp
   if [[ -n $SCRIPT_DIR && -f $SCRIPT_DIR/photonboard-map-touch.sh ]]; then
     install -m 0755 "$SCRIPT_DIR/photonboard-map-touch.sh" "$dst"
+  elif (( IMAGE_BUILD )); then
+    die "photonboard-map-touch.sh not found next to $PROG (image-build mode needs a full copy of scripts/)."
   else
     # Piped install (curl | sudo bash): fetch the helper from the same place.
     tmp=$(mktemp)
@@ -303,45 +365,8 @@ install_touch_helper() {
   info "Installed $dst"
 }
 
-step_kiosk() {
-  info "Step 4/6: Configuring auto-login and kiosk mode..."
-
-  if systemctl is-enabled --quiet display-manager.service 2>/dev/null; then
-    warn "A desktop display manager is enabled: it will conflict with the tty1 kiosk."
-    warn "Disable it with: sudo systemctl disable display-manager.service (or raspi-config > Boot > Console Autologin)."
-  fi
-
-  mkdir -p /etc/systemd/system/getty@tty1.service.d
-  cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
-EOF
-  systemctl daemon-reload
-
-  # Touchscreen mapping helper (maps the wch.cn touchscreens to their HDMI
-  # output by stable USB port path).
-  install_touch_helper
-  mkdir -p /etc/photonboard
-  if [[ ! -f /etc/photonboard/touch-map.conf ]]; then
-    cat > /etc/photonboard/touch-map.conf <<'TOUCHCONF'
-# PhotonBoard touchscreen mapping (see photonboard-map-touch --help)
-# Set SWAP=1 if the left/right touchscreens are inverted.
-SWAP=0
-# Optional overrides:
-#TOUCH_NAME='wch.cn TouchScreen'
-#OUTPUTS="HDMI-1 HDMI-2"
-#PORT_MAP="1-1=HDMI-1 1-2=HDMI-2"
-TOUCHCONF
-  fi
-
-  # .xinitrc — fully managed by this script (previous custom file backed up once).
-  local xinitrc="$REAL_HOME/.xinitrc"
-  if [[ -f $xinitrc ]] && ! grep -q 'PhotonBoard kiosk' "$xinitrc"; then
-    cp -p "$xinitrc" "$xinitrc.pb-backup"
-    warn "Existing $xinitrc saved as $xinitrc.pb-backup"
-  fi
-  cat > "$xinitrc" <<'XINITRC'
+write_xinitrc() { # write_xinitrc FILE
+  cat > "$1" <<'XINITRC'
 #!/bin/bash
 # PhotonBoard kiosk mode (managed by pi-setup.sh — re-running it overwrites this file)
 
@@ -365,7 +390,64 @@ fi
 # Launch PhotonBoard
 exec photonboard --no-sandbox --ignore-gpu-blocklist --use-gl=egl --start-fullscreen
 XINITRC
-  chmod 0755 "$xinitrc"
+  chmod 0755 "$1"
+}
+
+write_profile_block() { # write_profile_block FILE
+  replace_block "$1" <<'BASHPROFILE'
+# Auto-start X and PhotonBoard on console login (tty1 only)
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  # Only start X if a display is connected (exact "connected" status)
+  if grep -qsx connected /sys/class/drm/card*-*/status; then
+    startx -- -keeptty 2>/tmp/startx.log
+  else
+    echo "No display connected — skipping PhotonBoard GUI."
+    echo "PhotonBoard web server will still be available on port 9091."
+    echo "Plug a screen and run: startx"
+  fi
+fi
+BASHPROFILE
+}
+
+step_kiosk() {
+  info "Step 4/6: Configuring auto-login and kiosk mode..."
+
+  if systemctl is-enabled --quiet display-manager.service 2>/dev/null; then
+    warn "A desktop display manager is enabled: it will conflict with the tty1 kiosk."
+    warn "Disable it with: sudo systemctl disable display-manager.service (or raspi-config > Boot > Console Autologin)."
+  fi
+
+  mkdir -p /etc/systemd/system/getty@tty1.service.d
+  cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
+EOF
+  (( IMAGE_BUILD )) || systemctl daemon-reload
+
+  # Touchscreen mapping helper (maps the wch.cn touchscreens to their HDMI
+  # output by stable USB port path).
+  install_touch_helper
+  mkdir -p /etc/photonboard
+  if [[ ! -f /etc/photonboard/touch-map.conf ]]; then
+    cat > /etc/photonboard/touch-map.conf <<'TOUCHCONF'
+# PhotonBoard touchscreen mapping (see photonboard-map-touch --help)
+# Set SWAP=1 if the left/right touchscreens are inverted.
+SWAP=0
+# Optional overrides:
+#TOUCH_NAME='wch.cn TouchScreen'
+#OUTPUTS="HDMI-1 HDMI-2"
+#PORT_MAP="1-1=HDMI-1 1-2=HDMI-2"
+TOUCHCONF
+  fi
+
+  # .xinitrc — fully managed by this script (previous custom file backed up once).
+  local xinitrc="$REAL_HOME/.xinitrc"
+  if [[ -f $xinitrc ]] && ! grep -q 'PhotonBoard kiosk' "$xinitrc"; then
+    cp -p "$xinitrc" "$xinitrc.pb-backup"
+    warn "Existing $xinitrc saved as $xinitrc.pb-backup"
+  fi
+  write_xinitrc "$xinitrc"
   chown "$REAL_USER:" "$xinitrc"
 
   # .bash_profile — only our marked block is managed; the rest is preserved.
@@ -379,19 +461,7 @@ XINITRC
     # bash skips ~/.profile when ~/.bash_profile exists: keep loading it.
     printf '%s\n' '# ~/.bash_profile' '[ -f ~/.profile ] && . ~/.profile' > "$profile"
   fi
-  replace_block "$profile" <<'BASHPROFILE'
-# Auto-start X and PhotonBoard on console login (tty1 only)
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-  # Only start X if a display is connected (exact "connected" status)
-  if grep -qsx connected /sys/class/drm/card*-*/status; then
-    startx -- -keeptty 2>/tmp/startx.log
-  else
-    echo "No display connected — skipping PhotonBoard GUI."
-    echo "PhotonBoard web server will still be available on port 9091."
-    echo "Plug a screen and run: startx"
-  fi
-fi
-BASHPROFILE
+  write_profile_block "$profile"
   chown "$REAL_USER:" "$profile"
   rm -f "$profile.pb-old"
 
@@ -401,7 +471,11 @@ BASHPROFILE
 step_network() {
   info "Step 5/6: Configuring network..."
   local current new
-  current=$(hostname)
+  if (( IMAGE_BUILD )); then
+    current=$(cat /etc/hostname 2>/dev/null || true)
+  else
+    current=$(hostname)
+  fi
   if [[ -n $PB_HOSTNAME ]]; then
     new=$PB_HOSTNAME
   else
@@ -413,7 +487,10 @@ step_network() {
   [[ $new =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] \
     || die "Invalid hostname '$new' (letters, digits and '-' only, max 63)."
 
-  if [[ $current != "$new" ]]; then
+  if (( IMAGE_BUILD )); then
+    printf '%s\n' "$new" > /etc/hostname
+    info "Hostname set to $new (/etc/hostname)"
+  elif [[ $current != "$new" ]]; then
     hostnamectl set-hostname "$new"
     info "Hostname set to $new (was: $current)"
   else
@@ -428,7 +505,11 @@ step_network() {
   NEW_HOSTNAME=$new
 
   if [[ -f /usr/share/zoneinfo/$PB_TIMEZONE ]]; then
-    if timedatectl set-timezone "$PB_TIMEZONE"; then
+    if (( IMAGE_BUILD )); then
+      ln -sfn "/usr/share/zoneinfo/$PB_TIMEZONE" /etc/localtime
+      printf '%s\n' "$PB_TIMEZONE" > /etc/timezone
+      info "Timezone set to $PB_TIMEZONE"
+    elif timedatectl set-timezone "$PB_TIMEZONE"; then
       info "Timezone set to $PB_TIMEZONE"
     else
       warn "Could not set timezone $PB_TIMEZONE"
@@ -437,7 +518,11 @@ step_network() {
     warn "Timezone $PB_TIMEZONE not found — leaving system default"
   fi
 
-  systemctl enable --now avahi-daemon >/dev/null 2>&1 || warn "Could not enable avahi-daemon (mDNS)."
+  if (( IMAGE_BUILD )); then
+    systemctl enable avahi-daemon >/dev/null 2>&1 || warn "Could not enable avahi-daemon (mDNS)."
+  else
+    systemctl enable --now avahi-daemon >/dev/null 2>&1 || warn "Could not enable avahi-daemon (mDNS)."
+  fi
 
   # No firewall by default on Raspberry Pi OS, but just in case
   if command -v ufw >/dev/null 2>&1; then
@@ -458,8 +543,339 @@ step_directories() {
   info "Show directory: $SHOWS_DIR"
 }
 
+# ============================================================
+# Image-build mode only
+# ============================================================
+
+# Groups of the stock Raspberry Pi OS first user (pi-gen / cloud-init).
+IMAGE_USER_GROUPS=(adm dialout cdrom sudo audio video plugdev games users input render netdev gpio i2c spi)
+
+# Creates the kiosk user (uid 1000) in the unbooted image. The stock image
+# ships a placeholder first user ("pi", uid 1000, no password) meant to be
+# renamed by the first-boot wizard: it is renamed exactly like userconf-pi
+# does, so everything that refers to uid 1000 keeps working.
+image_create_user() {
+  local u=$REAL_USER first firstgroup g
+  if id "$u" >/dev/null 2>&1; then
+    info "User $u already exists."
+  elif first=$(getent passwd 1000 | cut -d: -f1) && [[ -n $first ]]; then
+    firstgroup=$(getent group 1000 | cut -d: -f1 || true)
+    info "Renaming the stock first user '$first' (uid 1000) to '$u'..."
+    usermod -l "$u" "$first"
+    usermod -m -d "/home/$u" "$u"
+    [[ -n $firstgroup && $firstgroup == "$first" ]] && groupmod -n "$u" "$firstgroup"
+    local f
+    for f in /etc/subuid /etc/subgid; do
+      [[ -f $f ]] && sed -i "s/^$first:/$u:/" "$f"
+    done
+    if [[ -f /etc/sudoers.d/010_pi-nopasswd ]]; then
+      sed -i "s/^$first /$u /" /etc/sudoers.d/010_pi-nopasswd
+    fi
+  else
+    info "Creating user $u (uid 1000)..."
+    if getent group 1000 >/dev/null; then
+      useradd -m -u 1000 -g "$(getent group 1000 | cut -d: -f1)" -s /bin/bash "$u"
+    else
+      useradd -m -u 1000 -U -s /bin/bash "$u"
+    fi
+  fi
+  usermod -s /bin/bash -c "PhotonBoard" "$u"
+  printf '%s:%s\n' "$u" "$PB_PASSWORD" | chpasswd
+  for g in gpio i2c spi input render; do
+    getent group "$g" >/dev/null || groupadd -f -r "$g"
+  done
+  local -a groups=()
+  for g in "${IMAGE_USER_GROUPS[@]}"; do
+    getent group "$g" >/dev/null && groups+=("$g")
+  done
+  usermod -a -G "$(IFS=,; echo "${groups[*]}")" "$u"
+  info "User $u: password set, groups ${groups[*]}"
+}
+
+# Disables the Raspberry Pi OS first-boot "create a user" wizard
+# (userconf-pi's userconfig.service, armed in the stock image by
+# "rename-user -f -s") the way cancel-rename does, offline.
+image_disable_user_wizard() {
+  if [[ -f /usr/lib/systemd/system/userconfig.service || -f /lib/systemd/system/userconfig.service ]]; then
+    systemctl disable userconfig.service >/dev/null 2>&1 || true
+    # Even if something re-enables it later (cloud-init's rename-user, a
+    # preset...), only run it for a headless userconf(.txt) file on the boot
+    # partition — never the interactive wizard that would block the kiosk.
+    mkdir -p /etc/systemd/system/userconfig.service.d
+    cat > /etc/systemd/system/userconfig.service.d/photonboard.conf <<'EOF'
+# PhotonBoard image: no interactive first-boot user wizard. Runs only when a
+# userconf/userconf.txt file was put on the boot partition.
+[Unit]
+ConditionPathExists=|/boot/firmware/userconf
+ConditionPathExists=|/boot/firmware/userconf.txt
+ConditionPathExists=|/boot/userconf
+ConditionPathExists=|/boot/userconf.txt
+EOF
+    info "First-boot user wizard (userconfig.service) disabled."
+  else
+    info "No userconfig.service in this image (nothing to disable)."
+  fi
+  rm -f /etc/ssh/sshd_config.d/rename_user.conf /etc/xdg/autostart/piwiz.desktop
+  # Tells userconf-pi's cancel-rename (run when Pi Imager 1.x renames the
+  # user) to keep console AUTOLOGIN for the renamed user (raspi-config B2).
+  mkdir -p /var/lib/userconf-pi
+  : > /var/lib/userconf-pi/autologin
+  systemctl enable getty@tty1.service >/dev/null 2>&1 \
+    || ln -sfn /usr/lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
+  systemctl set-default multi-user.target >/dev/null 2>&1 || true
+}
+
+image_disable_ssh() {
+  # Off by default; enabled again by an empty "ssh" file on the boot
+  # partition (Raspberry Pi OS sshswitch.service) or by Pi Imager.
+  systemctl disable ssh.service >/dev/null 2>&1 || true
+  systemctl enable sshswitch.service >/dev/null 2>&1 || true
+  rm -f /boot/firmware/ssh /boot/firmware/ssh.txt
+  info "SSH disabled (create an empty 'ssh' file on the boot partition to enable it)."
+}
+
+image_keyboard() {
+  [[ -n $PB_KEYBOARD && -f /etc/default/keyboard ]] || return 0
+  if grep -q '^XKBLAYOUT=' /etc/default/keyboard; then
+    sed -i "s/^XKBLAYOUT=.*/XKBLAYOUT=\"$PB_KEYBOARD\"/" /etc/default/keyboard
+  else
+    printf 'XKBLAYOUT="%s"\n' "$PB_KEYBOARD" >> /etc/default/keyboard
+  fi
+  sed -i 's/^XKBVARIANT=.*/XKBVARIANT=""/' /etc/default/keyboard
+  command -v setupcon >/dev/null 2>&1 && setupcon --force --save-only >/dev/null 2>&1 || true
+  info "Keyboard layout: $PB_KEYBOARD"
+}
+
+# Boot-time services shipped in the image.
+image_services() {
+  # Kiosk files for users created later (Pi Imager, cloud-init, adduser).
+  write_xinitrc /etc/skel/.xinitrc
+  if [[ ! -f /etc/skel/.bash_profile ]] || ! grep -qF "$KIOSK_BEGIN" /etc/skel/.bash_profile; then
+    [[ -f /etc/skel/.bash_profile ]] \
+      || printf '%s\n' '# ~/.bash_profile' '[ -f ~/.profile ] && . ~/.profile' > /etc/skel/.bash_profile
+    write_profile_block /etc/skel/.bash_profile
+  fi
+  printf '%s\n' "$REAL_USER" > /etc/photonboard/kiosk-user
+
+  # Raspberry Pi 5: make sure Xorg drives the display controller (vc4), not
+  # the render-only GPU, with the modesetting driver.
+  mkdir -p /etc/X11/xorg.conf.d
+  if [[ ! -f /etc/X11/xorg.conf.d/99-vc4.conf ]]; then
+    cat > /etc/X11/xorg.conf.d/99-vc4.conf <<'EOF'
+# PhotonBoard image: Raspberry Pi KMS display controller as the primary GPU.
+Section "OutputClass"
+  Identifier "vc4"
+  MatchDriver "vc4"
+  Driver "modesetting"
+  Option "PrimaryGPU" "true"
+EndSection
+EOF
+  fi
+
+  # --- 1. Kiosk guard: every boot, before the tty1 login. ---
+  cat > /usr/local/sbin/photonboard-kiosk-guard <<'GUARD'
+#!/bin/bash
+# PhotonBoard — keep the tty1 kiosk autologin working (runs at every boot,
+# before getty@tty1). If Pi Imager / cloud-init renamed or replaced the
+# kiosk user, or disabled the tty1 console, point the autologin at an
+# existing user again and give that user the kiosk files.
+# Opt out: sudo touch /etc/photonboard/no-kiosk
+set -u
+[ -e /etc/photonboard/no-kiosk ] && exit 0
+CONF=/etc/systemd/system/getty@tty1.service.d/autologin.conf
+KIOSK_BEGIN='# >>> PhotonBoard kiosk (managed by pi-setup.sh) >>>'
+reload=0
+
+valid_user() { [ -n "$1" ] && id "$1" >/dev/null 2>&1 && [ "$(id -u "$1")" -ge 1000 ]; }
+
+AUTO_USER=""
+[ -f "$CONF" ] && AUTO_USER=$(sed -n 's/.*--autologin \([^ ]*\).*/\1/p' "$CONF" | head -n1)
+if ! valid_user "$AUTO_USER"; then
+  NEW_USER=""
+  for U in "$(cat /etc/photonboard/kiosk-user 2>/dev/null)" "$(getent passwd 1000 | cut -d: -f1)"; do
+    valid_user "$U" && { NEW_USER=$U; break; }
+  done
+  [ -n "$NEW_USER" ] || NEW_USER=$(getent passwd | awk -F: '$3>=1000 && $3<60000 && $7 ~ /sh$/ {print $1; exit}')
+  if [ -n "$NEW_USER" ]; then
+    echo "Autologin user '${AUTO_USER:-none}' invalid — switching to $NEW_USER"
+    mkdir -p "${CONF%/*}"
+    printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin %s --noclear %%I $TERM\n' "$NEW_USER" > "$CONF"
+    AUTO_USER=$NEW_USER
+    reload=1
+  else
+    echo "No regular user found — kiosk autologin left unchanged."
+    exit 0
+  fi
+fi
+echo "$AUTO_USER" > /etc/photonboard/kiosk-user
+
+# Kiosk files, folders and device groups for the autologin user.
+H=$(getent passwd "$AUTO_USER" | cut -d: -f6)
+if [ -n "$H" ] && [ -d "$H" ]; then
+  if [ ! -f "$H/.xinitrc" ] || ! grep -q 'PhotonBoard kiosk' "$H/.xinitrc"; then
+    [ -f "$H/.xinitrc" ] && mv -f "$H/.xinitrc" "$H/.xinitrc.pb-backup"
+    install -m 0755 -o "$AUTO_USER" -g "$(id -gn "$AUTO_USER")" /etc/skel/.xinitrc "$H/.xinitrc"
+  fi
+  if [ ! -f "$H/.bash_profile" ]; then
+    install -m 0644 -o "$AUTO_USER" -g "$(id -gn "$AUTO_USER")" /etc/skel/.bash_profile "$H/.bash_profile"
+  elif ! grep -qF "$KIOSK_BEGIN" "$H/.bash_profile"; then
+    sed -n "/^$KIOSK_BEGIN\$/,\$p" /etc/skel/.bash_profile >> "$H/.bash_profile"
+  fi
+  mkdir -p "$H/Documents/PhotonBoard" "$H/.config/PhotonBoard/config"
+  chown "$AUTO_USER:" "$H/Documents" "$H/Documents/PhotonBoard" "$H/.config" \
+    "$H/.config/PhotonBoard" "$H/.config/PhotonBoard/config" 2>/dev/null || true
+  GROUPS_OK=""
+  for G in audio video input render plugdev dialout; do
+    getent group "$G" >/dev/null && GROUPS_OK="$GROUPS_OK${GROUPS_OK:+,}$G"
+  done
+  [ -n "$GROUPS_OK" ] && usermod -a -G "$GROUPS_OK" "$AUTO_USER"
+fi
+
+# rename-user (cloud-init) disables the tty1 console: the kiosk needs it.
+if ! systemctl -q is-enabled getty@tty1.service 2>/dev/null; then
+  echo "getty@tty1 was disabled — enabling it again"
+  systemctl -q enable getty@tty1.service
+  reload=1
+  START_GETTY=1
+fi
+[ "$reload" = 1 ] && systemctl daemon-reload
+[ "${START_GETTY:-0}" = 1 ] && systemctl --no-block start getty@tty1.service
+exit 0
+GUARD
+  chmod 0755 /usr/local/sbin/photonboard-kiosk-guard
+  cat > /etc/systemd/system/photonboard-kiosk-guard.service <<'UNIT'
+[Unit]
+Description=PhotonBoard kiosk guard (tty1 autologin user, kiosk files)
+After=systemd-user-sessions.service cloud-init.service cloud-init-network.service
+Before=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/photonboard-kiosk-guard
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl enable photonboard-kiosk-guard.service >/dev/null
+
+  # --- 2. First boot: per-unit identity. ---
+  cat > /usr/local/sbin/photonboard-first-boot <<'FIRSTBOOT'
+#!/bin/bash
+# PhotonBoard — first boot of a freshly flashed image (runs once).
+# Raspberry Pi OS regenerates the SSH host keys itself on first boot
+# (regenerate_ssh_host_keys.service); this is a safety net.
+set -u
+echo "$(date) — PhotonBoard first boot"
+if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1 && command -v ssh-keygen >/dev/null; then
+  echo "Generating SSH host keys..."
+  ssh-keygen -A
+fi
+mkdir -p /var/lib/photonboard
+touch /var/lib/photonboard/first-boot.done
+echo "$(date) — first boot done"
+FIRSTBOOT
+  chmod 0755 /usr/local/sbin/photonboard-first-boot
+  cat > /etc/systemd/system/photonboard-first-boot.service <<'UNIT'
+[Unit]
+Description=PhotonBoard first boot (per-unit SSH host keys)
+After=local-fs.target regenerate_ssh_host_keys.service
+Before=ssh.service sshswitch.service
+ConditionPathExists=!/var/lib/photonboard/first-boot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/photonboard-first-boot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl enable photonboard-first-boot.service >/dev/null
+  rm -f /var/lib/photonboard/first-boot.done
+
+  # --- 3. Wi-Fi from a text file on the boot partition. ---
+  # Pi Imager 2 offers no customisation for "Use custom" images: this lets a
+  # user set the Wi-Fi by editing photonboard-wifi.txt on the card (bootfs).
+  cat > /usr/local/sbin/photonboard-wifi <<'WIFI'
+#!/bin/bash
+# PhotonBoard — apply /boot/firmware/photonboard-wifi.txt (every boot, if set).
+set -u
+F=/boot/firmware/photonboard-wifi.txt
+[ -f "$F" ] || exit 0
+get() { # value of KEY="..." / KEY=... (Windows line endings and BOM tolerated)
+  sed -e 's/\r$//' -e '1s/^\xEF\xBB\xBF//' "$F" \
+    | sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" | tail -n1 \
+    | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+SSID=$(get WIFI_SSID); PSK=$(get WIFI_PASSWORD); COUNTRY=$(get WIFI_COUNTRY)
+[ -n "$SSID" ] || exit 0
+COUNTRY=$(printf '%s' "${COUNTRY:-FR}" | tr '[:lower:]' '[:upper:]')
+echo "Configuring Wi-Fi network '$SSID' (country $COUNTRY)"
+raspi-config nonint do_wifi_country "$COUNTRY" 2>/dev/null || rfkill unblock wifi 2>/dev/null || true
+nmcli radio wifi on 2>/dev/null || true
+nmcli connection delete photonboard-wifi >/dev/null 2>&1 || true
+if [ -n "$PSK" ]; then
+  nmcli connection add type wifi con-name photonboard-wifi ifname wlan0 ssid "$SSID" \
+    wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK" connection.autoconnect yes
+else
+  nmcli connection add type wifi con-name photonboard-wifi ifname wlan0 ssid "$SSID" connection.autoconnect yes
+fi
+RC=$?
+# Do not keep the password in clear text on the card: blank the file.
+cat > "$F" <<EOF
+# PhotonBoard — Wi-Fi
+# Applied on $(date '+%Y-%m-%d %H:%M') for network "$SSID" (result: $RC).
+# To change it, fill in the lines below again and restart the Pi.
+WIFI_SSID=""
+WIFI_PASSWORD=""
+WIFI_COUNTRY="$COUNTRY"
+EOF
+sync
+exit 0
+WIFI
+  chmod 0755 /usr/local/sbin/photonboard-wifi
+  cat > /etc/systemd/system/photonboard-wifi.service <<'UNIT'
+[Unit]
+Description=PhotonBoard Wi-Fi from photonboard-wifi.txt (boot partition)
+After=NetworkManager.service boot-firmware.mount
+Wants=NetworkManager.service
+ConditionPathExists=/boot/firmware/photonboard-wifi.txt
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/photonboard-wifi
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl enable photonboard-wifi.service >/dev/null
+  if [[ -d /boot/firmware ]]; then
+    # CRLF line endings: readable in Windows Notepad.
+    sed 's/$/\r/' > /boot/firmware/photonboard-wifi.txt <<'EOF'
+# PhotonBoard - Wi-Fi (optionnel / optional)
+#
+# FR : pour connecter la console en Wi-Fi, ecrivez le nom du reseau et le mot
+#      de passe entre les guillemets, enregistrez, puis demarrez le Pi.
+#      Le mot de passe est efface de ce fichier une fois applique.
+#      Le cable Ethernet fonctionne sans rien configurer.
+# EN : to use Wi-Fi, fill in the network name and password between the
+#      quotes, save, then boot the Pi. The password is wiped once applied.
+#
+WIFI_SSID=""
+WIFI_PASSWORD=""
+WIFI_COUNTRY="FR"
+EOF
+  fi
+  info "Boot services installed (kiosk guard, first boot, Wi-Fi file)."
+}
+
 print_summary() {
   local companion
+  if (( IMAGE_BUILD )); then
+    echo ""
+    info "Image configured: user $REAL_USER, hostname ${NEW_HOSTNAME}, PhotonBoard $(installed_version)"
+    return 0
+  fi
   companion=$(systemctl is-active companion 2>/dev/null || true)
   echo ""
   echo "============================================================"
@@ -499,6 +915,9 @@ main() {
   PB_TIMEZONE="${PB_TIMEZONE:-Europe/Paris}"
   PB_USER="${PB_USER:-}"
   PB_UPDATE_MODULE="${PB_UPDATE_MODULE:-0}"
+  PB_IMAGE_BUILD="${PB_IMAGE_BUILD:-0}"
+  PB_PASSWORD="${PB_PASSWORD:-photonboard}"
+  PB_KEYBOARD="${PB_KEYBOARD:-fr}"
 
   while [[ $# -gt 0 ]]; do
     case $1 in
@@ -507,11 +926,16 @@ main() {
       --hostname)      [[ $# -ge 2 ]] || die "--hostname needs a value"; PB_HOSTNAME=$2; shift 2 ;;
       --timezone)      [[ $# -ge 2 ]] || die "--timezone needs a value"; PB_TIMEZONE=$2; shift 2 ;;
       --user)          [[ $# -ge 2 ]] || die "--user needs a value"; PB_USER=$2; shift 2 ;;
+      --password)      [[ $# -ge 2 ]] || die "--password needs a value"; PB_PASSWORD=$2; shift 2 ;;
+      --keyboard)      [[ $# -ge 2 ]] || die "--keyboard needs a value"; PB_KEYBOARD=$2; shift 2 ;;
       --update-module) PB_UPDATE_MODULE=1; shift ;;
+      --image-build)   PB_IMAGE_BUILD=1; shift ;;
       -h|--help)       usage; exit 0 ;;
       *)               error "Unknown option: $1"; usage >&2; exit 1 ;;
     esac
   done
+  IMAGE_BUILD=0
+  [[ $PB_IMAGE_BUILD == 1 ]] && IMAGE_BUILD=1
 
   if [[ $EUID -ne 0 ]]; then
     die "This script must be run as root:
@@ -525,10 +949,20 @@ main() {
 
   SCRIPT_DIR=$(script_dir)
 
-  # The kiosk user: --user, else whoever ran sudo, else the first regular user.
-  REAL_USER=${PB_USER:-${SUDO_USER:-}}
-  if [[ -z $REAL_USER || $REAL_USER == root ]]; then
-    REAL_USER=$(getent passwd 1000 | cut -d: -f1 || true)
+  if (( IMAGE_BUILD )); then
+    [[ -n $PB_DEB ]] || die "--image-build needs --deb FILE (no download inside the image build)."
+    PB_USER=${PB_USER:-photonboard}
+    PB_HOSTNAME=${PB_HOSTNAME:-photonboard}
+    [[ $PB_USER =~ ^[a-z][-a-z0-9_]*$ ]] || die "Invalid user name: $PB_USER"
+    info "Image-build mode (chroot): user $PB_USER, hostname $PB_HOSTNAME"
+    REAL_USER=$PB_USER
+    image_create_user
+  else
+    # The kiosk user: --user, else whoever ran sudo, else the first regular user.
+    REAL_USER=${PB_USER:-${SUDO_USER:-}}
+    if [[ -z $REAL_USER || $REAL_USER == root ]]; then
+      REAL_USER=$(getent passwd 1000 | cut -d: -f1 || true)
+    fi
   fi
   if [[ -z $REAL_USER ]] || ! id "$REAL_USER" >/dev/null 2>&1; then
     die "Cannot determine the kiosk user: run with sudo from that user, or pass --user NAME."
@@ -547,7 +981,11 @@ main() {
   usermod -a -G "$(IFS=,; echo "${groups[*]}")" "$REAL_USER"
   info "Added $REAL_USER to groups: ${groups[*]}"
 
-  NEW_HOSTNAME=$(hostname)
+  if (( IMAGE_BUILD )); then
+    NEW_HOSTNAME=$(cat /etc/hostname 2>/dev/null || echo "$PB_HOSTNAME")
+  else
+    NEW_HOSTNAME=$(hostname)
+  fi
   MODULE_DIR="$COMPANION_MODULE_DEV/$MODULE_NAME"
   SHOWS_DIR="$REAL_HOME/Documents/PhotonBoard"
 
@@ -557,6 +995,12 @@ main() {
   step_kiosk
   step_network
   step_directories
+  if (( IMAGE_BUILD )); then
+    image_disable_user_wizard
+    image_disable_ssh
+    image_keyboard
+    image_services
+  fi
   print_summary
 }
 

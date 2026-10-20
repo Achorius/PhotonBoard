@@ -1,0 +1,160 @@
+# Builds the ready-to-flash Raspberry Pi 5 SD image (PhotonBoard-<version>-pi5.img.xz)
+# from the release's arm64 .deb and attaches it to the same release.
+#
+# Runs on a native arm64 runner (no qemu): the Raspberry Pi OS image is
+# chrooted into directly. Takes ~15-30 min.
+name: Raspberry Pi image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (empty = newest release with an arm64 .deb, pre-releases included)"
+        required: false
+        default: ""
+      base_url:
+        description: "Base image URL (empty = latest Raspberry Pi OS Lite arm64)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pi-image-${{ github.event.release.tag_name || inputs.tag || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release
+        id: rel
+        env:
+          WANT_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag=$WANT_TAG
+          if [ -z "$tag" ]; then
+            tag=$(gh api "repos/$GH_REPO/releases?per_page=20" \
+              --jq '[.[] | select(.draft | not) | select(any(.assets[]; .name | endswith("_arm64.deb")))][0].tag_name // empty')
+          fi
+          [ -n "$tag" ] || { echo "::error::No release with an *_arm64.deb asset"; exit 1; }
+          version=${tag#v}
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=PhotonBoard-$version-pi5.img.xz" >> "$GITHUB_OUTPUT"
+          echo "Release: $tag (version $version)"
+
+      - name: Download the arm64 .deb
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p deb
+          # On "release published" the .deb may still be uploading: wait up to 15 min.
+          for i in $(seq 1 30); do
+            if gh release download "$TAG" --pattern '*_arm64.deb' --dir deb --clobber 2>/dev/null \
+               && ls deb/*_arm64.deb >/dev/null 2>&1; then
+              break
+            fi
+            echo "No *_arm64.deb on release $TAG yet ($i/30) — waiting 30 s"
+            sleep 30
+          done
+          ls -l deb/
+          ls deb/*_arm64.deb >/dev/null
+
+      - name: Install image tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q parted fdisk e2fsprogs dosfstools xz-utils util-linux curl
+          df -h / "$RUNNER_TEMP"
+
+      - name: Build the image
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          NAME: ${{ steps.rel.outputs.name }}
+        run: |
+          set -euo pipefail
+          args=(--deb "$(ls deb/*_arm64.deb | head -n1)" --output "$PWD/out/$NAME" --work "$RUNNER_TEMP/pi-image-work" --keep-img)
+          [ -n "$BASE_URL" ] && args+=(--base-url "$BASE_URL")
+          sudo scripts/build-pi-image.sh "${args[@]}"
+          ls -l out/
+
+      - name: Smoke check the image
+        env:
+          NAME: ${{ steps.rel.outputs.name }}
+        run: |
+          set -euo pipefail
+          IMG="out/${NAME%.xz}"
+          R=/mnt/pbroot
+          sudo mkdir -p "$R"
+          L=$(sudo losetup --show -f -P -r "$IMG")
+          sleep 1
+          sudo mount -o ro,noload "${L}p2" "$R"
+          sudo mount -o ro "${L}p1" "$R/boot/firmware"
+          fail=0
+          check() { # check DESCRIPTION COMMAND...
+            local d=$1; shift
+            if sudo "$@" >/dev/null 2>&1; then echo "OK    $d"; else echo "FAIL  $d"; fail=1; fi
+          }
+          check "PhotonBoard binary"            test -x "$R/opt/PhotonBoard/photonboard"
+          check "photonboard command"           test -e "$R/usr/bin/photonboard"
+          check "user photonboard (uid 1000)"   grep -q '^photonboard:x:1000:' "$R/etc/passwd"
+          check "home /home/photonboard"        test -d "$R/home/photonboard"
+          check "password photonboard"          python3 -c 'import crypt,sys; h=[l.split(":")[1] for l in open(sys.argv[1]) if l.startswith("photonboard:")][0]; sys.exit(crypt.crypt("photonboard", h) != h)' "$R/etc/shadow"
+          check "groups (video audio input)"    sh -c "grep -E '^(video|audio|input|dialout|sudo):' '$R/etc/group' | grep -c photonboard | grep -qx 5"
+          check "tty1 autologin photonboard"    grep -q -- '--autologin photonboard ' "$R/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+          check "getty@tty1 enabled"            test -L "$R/etc/systemd/system/getty.target.wants/getty@tty1.service"
+          check "userconfig wizard disabled"    test ! -e "$R/etc/systemd/system/multi-user.target.wants/userconfig.service"
+          check "kiosk .xinitrc"                grep -q 'exec photonboard' "$R/home/photonboard/.xinitrc"
+          check "kiosk .bash_profile"           grep -q 'startx' "$R/home/photonboard/.bash_profile"
+          check "first-boot service enabled"    test -L "$R/etc/systemd/system/multi-user.target.wants/photonboard-first-boot.service"
+          check "kiosk guard enabled"           test -L "$R/etc/systemd/system/multi-user.target.wants/photonboard-kiosk-guard.service"
+          check "Wi-Fi service enabled"         test -L "$R/etc/systemd/system/multi-user.target.wants/photonboard-wifi.service"
+          check "hostname photonboard"          grep -qx photonboard "$R/etc/hostname"
+          check "hosts 127.0.1.1 photonboard"   grep -qP '^127\.0\.1\.1\tphotonboard$' "$R/etc/hosts"
+          check "timezone Europe/Paris"         sh -c "readlink '$R/etc/localtime' | grep -q Europe/Paris"
+          check "avahi enabled"                 test -L "$R/etc/systemd/system/multi-user.target.wants/avahi-daemon.service"
+          check "SSH disabled"                  sh -c "! ls '$R'/etc/systemd/system/*.wants/ssh.service '$R'/etc/systemd/system/*.wants/sshd.service 2>/dev/null"
+          check "no SSH host keys"              sh -c "! ls '$R'/etc/ssh/ssh_host_* 2>/dev/null"
+          check "machine-id not set"            sh -c "grep -qvE '^[0-9a-f]{32}$' '$R/etc/machine-id' || [ ! -s '$R/etc/machine-id' ]"
+          check "no shows"                      sh -c "! ls '$R'/home/*/Documents/PhotonBoard/*.pbshow 2>/dev/null"
+          check "first-boot resize in cmdline"  grep -qw resize "$R/boot/firmware/cmdline.txt"
+          check "Wi-Fi file on boot partition"  test -f "$R/boot/firmware/photonboard-wifi.txt"
+          check "Companion module"              test -f "$R/opt/companion-module-dev/companion-module-photonboard/package.json"
+          check "touch mapping helper"          test -x "$R/usr/local/bin/photonboard-map-touch"
+          echo "--- image summary"
+          sudo cat "$R/etc/rpi-issue" 2>/dev/null | head -n1 || true
+          grep PRETTY_NAME "$R/etc/os-release" || true
+          sudo cat "$R/boot/firmware/cmdline.txt"
+          sudo df -h "$R" "$R/boot/firmware"
+          sudo umount "$R/boot/firmware" "$R"
+          sudo losetup -d "$L"
+          xz -t "out/$NAME"
+          (cd out && sha256sum -c "$NAME.sha256")
+          [ "$fail" = 0 ] || { echo "::error::Image smoke check failed"; exit 1; }
+
+      - name: Attach the image to the release
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+          NAME: ${{ steps.rel.outputs.name }}
+        run: |
+          set -euo pipefail
+          rm -f "out/${NAME%.xz}"
+          gh release upload "$TAG" "out/$NAME" "out/$NAME.sha256" --clobber
+          {
+            echo "### Raspberry Pi 5 image"
+            echo ""
+            echo "- Release: \`$TAG\`"
+            echo "- Asset: \`$NAME\` ($(du -h "out/$NAME" | cut -f1))"
+            echo "- SHA-256: \`$(cut -d' ' -f1 "out/$NAME.sha256")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
