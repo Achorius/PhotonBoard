@@ -1,4 +1,6 @@
 // Properties of the selected clip / marker / section / track.
+// The header has the delete button (same as the Delete key: see
+// timelineSelectionActions); the name field is what F2 / Enter focus.
 
 import { useEffect, useState } from 'react'
 import type React from 'react'
@@ -8,19 +10,23 @@ import {
 import {
   Button, Field, IconButton, NumberField, SWATCH_COLORS, Section, Select, SwatchPicker, TextInput, cn, formatSeconds
 } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import type { MidiTargetType } from '@shared/types'
-import { MIN_CLIP_DURATION, addTrack, clipEnd, duplicateClip, fitFades, reorderZones, splitClip, swapTracks, trackName } from './timeline-model'
-import { deleteClip, deleteMarker, deleteTrack, deleteZone, learnTimelineTarget, seek } from './timeline-actions'
+import { MIN_CLIP_DURATION, addTrack, clipEnd, fitFades, reorderZones, splitClip, swapTracks, trackName } from './timeline-model'
+import {
+  deleteClip, deleteMarker, deleteTrack, deleteZone, duplicateClipAndSelect, learnTimelineTarget, seek
+} from './timeline-actions'
 import { getClockTime, useTimelineView } from './timeline-view-store'
 
 export function Inspector() {
+  const t = useT()
   const selection = useTimelineView((s) => s.selection)
   if (!selection) return null
   return (
-    <aside aria-label="Properties" className="flex h-full min-h-0 flex-col bg-surface-1">
+    <aside data-timeline-inspector aria-label={t('timeline.inspector.aria')} className="flex h-full min-h-0 flex-col bg-surface-1">
       {selection.kind === 'clip' && <ClipInspector id={selection.id} />}
       {selection.kind === 'marker' && <MarkerInspector id={selection.id} />}
       {selection.kind === 'zone' && <ZoneInspector id={selection.id} />}
@@ -29,26 +35,54 @@ export function Inspector() {
   )
 }
 
-function Header({ icon: Icon, title, subtitle, color }: { icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>; title: string; subtitle: string; color?: string }) {
+function Header({ icon: Icon, title, subtitle, color, deleteLabel, onDelete, deleteDisabled }: {
+  icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>
+  title: string
+  subtitle: string
+  color?: string
+  /** Tooltip of the header's delete button */
+  deleteLabel: string
+  onDelete: () => void
+  deleteDisabled?: boolean
+}) {
+  const t = useT()
   return (
     <header className="flex min-h-control-lg shrink-0 items-center gap-2.5 border-b border-line-subtle py-1.5 pl-3 pr-1.5">
       {color ? <span aria-hidden className="h-4 w-4 shrink-0 rounded-sm ring-1 ring-inset ring-white/10" style={{ backgroundColor: color }} /> : <Icon size={16} aria-hidden className="shrink-0 text-fg-tertiary" />}
       <div className="flex min-w-0 flex-1 flex-col">
-        <h2 className="truncate text-sm font-semibold">{title}</h2>
-        <p className="truncate text-xs text-fg-tertiary">{subtitle}</p>
+        <h2 className="truncate text-sm font-semibold" title={title}>{title}</h2>
+        <p className="truncate text-xs text-fg-tertiary" title={subtitle}>{subtitle}</p>
       </div>
-      <IconButton icon={LuX} label="Close properties (Esc)" size="sm" onClick={() => useTimelineView.getState().select(null)} />
+      <IconButton
+        data-inspector-delete
+        icon={LuTrash2}
+        label={deleteLabel}
+        shortcut="Delete"
+        size="sm"
+        className="hover:text-danger-fg"
+        disabled={deleteDisabled}
+        onClick={onDelete}
+      />
+      <IconButton icon={LuX} label={t('timeline.inspector.close')} size="sm" onClick={() => useTimelineView.getState().select(null)} />
     </header>
   )
 }
 
 /** Text field that commits on Enter / blur (store writes once per edit) */
-function CommitText({ value, onCommit, placeholder, label }: { value: string; onCommit: (v: string) => void; placeholder?: string; label: string }) {
+function CommitText({ value, onCommit, placeholder, label, nameField }: {
+  value: string
+  onCommit: (v: string) => void
+  placeholder?: string
+  label: string
+  /** The item's name: focused by F2 / Enter (rename the selection) */
+  nameField?: boolean
+}) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return (
     <TextInput
       aria-label={label}
+      data-inspector-name={nameField ? '' : undefined}
       value={draft}
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
@@ -63,6 +97,7 @@ function CommitText({ value, onCommit, placeholder, label }: { value: string; on
 }
 
 function MidiLearnButton({ type, id, label }: { type: MidiTargetType; id: string; label: string }) {
+  const t = useT()
   const mapped = useMidiStore((s) => s.mappings.some((m) => m.target.type === type && m.target.id === id))
   const learning = useMidiStore((s) => s.isLearning && s.learnTarget?.type === type && s.learnTarget?.id === id)
   return (
@@ -75,7 +110,7 @@ function MidiLearnButton({ type, id, label }: { type: MidiTargetType; id: string
       onClick={() => learnTimelineTarget({ type, id, label })}
       className={cn(learning && 'animate-pulse')}
     >
-      {learning ? 'Learning… (tap to cancel)' : mapped ? 'MIDI mapped — re-learn' : 'MIDI learn'}
+      {learning ? t('timeline.midi.learning') : mapped ? t('timeline.midi.relearn') : t('common.midiLearn')}
     </Button>
   )
 }
@@ -85,6 +120,7 @@ const Actions = ({ children }: { children: React.ReactNode }) => <div className=
 // ---------------------------------------------------------------- Clip
 
 function ClipInspector({ id }: { id: string }) {
+  const t = useT()
   const clip = usePlaybackStore((s) => s.timelineClips.find((c) => c.id === id))
   const cuelists = usePlaybackStore((s) => s.cuelists)
   const trackCount = usePlaybackStore((s) => s.timelineTrackCount)
@@ -94,27 +130,34 @@ function ClipInspector({ id }: { id: string }) {
   const update = (u: Parameters<ReturnType<typeof usePlaybackStore.getState>['updateTimelineClip']>[1]) => usePlaybackStore.getState().updateTimelineClip(id, u)
   const fadeIn = clip.fadeIn ?? 0
   const fadeOut = clip.fadeOut ?? 0
-  const canSplit = (() => { const t = getClockTime(); return t > clip.startTime + MIN_CLIP_DURATION && t < clipEnd(clip) - MIN_CLIP_DURATION })()
+  const canSplit = (() => { const now = getClockTime(); return now > clip.startTime + MIN_CLIP_DURATION && now < clipEnd(clip) - MIN_CLIP_DURATION })()
 
   return (
     <>
-      <Header icon={LuClapperboard} color={clip.color} title={clip.name || scene?.name || 'Missing scene'} subtitle={`Scene clip · ${trackName(trackNames, clip.trackIndex)}`} />
+      <Header
+        icon={LuClapperboard}
+        color={clip.color}
+        title={clip.name || scene?.name || t('timeline.clip.missingScene')}
+        subtitle={t('timeline.inspector.clipSubtitle', { track: trackName(trackNames, clip.trackIndex) })}
+        deleteLabel={t('timeline.clip.remove')}
+        onDelete={() => { void deleteClip(id) }}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Clip">
-          <Field label="Scene">
+        <Section title={t('timeline.inspector.clipSection')}>
+          <Field label={t('common.scene')}>
             {(fid) => (
               <Select
                 id={fid}
                 value={clip.cuelistId}
                 onChange={(v) => update({ cuelistId: v })}
-                options={[...(scene ? [] : [{ value: clip.cuelistId, label: 'Missing scene' }]), ...cuelists.map((c) => ({ value: c.id, label: c.name }))]}
+                options={[...(scene ? [] : [{ value: clip.cuelistId, label: t('timeline.clip.missingScene') }]), ...cuelists.map((c) => ({ value: c.id, label: c.name }))]}
               />
             )}
           </Field>
-          <Field label="Label">
-            <CommitText label="Clip label" value={clip.name ?? ''} placeholder={scene?.name ?? 'Scene name'} onCommit={(v) => update({ name: v.trim() || undefined })} />
+          <Field label={t('timeline.inspector.label')}>
+            <CommitText nameField label={t('timeline.inspector.clipLabelAria')} value={clip.name ?? ''} placeholder={scene?.name ?? t('timeline.inspector.sceneNamePlaceholder')} onCommit={(v) => update({ name: v.trim() || undefined })} />
           </Field>
-          <Field label="Track">
+          <Field label={t('timeline.inspector.track')}>
             {(fid) => (
               <Select
                 id={fid}
@@ -124,35 +167,35 @@ function ClipInspector({ id }: { id: string }) {
               />
             )}
           </Field>
-          <Field label="Colour">
+          <Field label={t('common.color')}>
             <SwatchPicker colors={SWATCH_COLORS} value={clip.color} onChange={(c) => update({ color: c })} columns={6} size="sm" />
           </Field>
         </Section>
 
-        <Section title="Timing">
-          <Field label="Start">
-            <NumberField aria-label="Start" value={clip.startTime} min={0} step={0.05} precision={2} unit="s" onChange={(v) => update({ startTime: v })} />
+        <Section title={t('timeline.inspector.timing')}>
+          <Field label={t('timeline.inspector.start')}>
+            <NumberField aria-label={t('timeline.inspector.start')} value={clip.startTime} min={0} step={0.05} precision={2} unit="s" onChange={(v) => update({ startTime: v })} />
           </Field>
-          <Field label="Length" hint={`Ends at ${formatSeconds(clipEnd(clip))}`}>
-            <NumberField aria-label="Length" value={clip.duration} min={MIN_CLIP_DURATION} step={0.05} precision={2} unit="s"
+          <Field label={t('timeline.inspector.length')} hint={t('timeline.inspector.endsAt', { time: formatSeconds(clipEnd(clip)) })}>
+            <NumberField aria-label={t('timeline.inspector.length')} value={clip.duration} min={MIN_CLIP_DURATION} step={0.05} precision={2} unit="s"
               onChange={(v) => update({ duration: v, ...fitFades({ duration: v, fadeIn, fadeOut }) })} />
           </Field>
-          <Field label="Fade in">
-            <NumberField aria-label="Fade in" value={fadeIn} min={0} max={Math.max(0, clip.duration - fadeOut)} step={0.05} precision={2} unit="s" onChange={(v) => update({ fadeIn: v })} />
+          <Field label={t('timeline.inspector.fadeIn')}>
+            <NumberField aria-label={t('timeline.inspector.fadeIn')} value={fadeIn} min={0} max={Math.max(0, clip.duration - fadeOut)} step={0.05} precision={2} unit="s" onChange={(v) => update({ fadeIn: v })} />
           </Field>
-          <Field label="Fade out" hint="Fades scale the scene's level; drag the dots on the clip too">
-            <NumberField aria-label="Fade out" value={fadeOut} min={0} max={Math.max(0, clip.duration - fadeIn)} step={0.05} precision={2} unit="s" onChange={(v) => update({ fadeOut: v })} />
+          <Field label={t('timeline.inspector.fadeOut')} hint={t('timeline.inspector.fadeHint')}>
+            <NumberField aria-label={t('timeline.inspector.fadeOut')} value={fadeOut} min={0} max={Math.max(0, clip.duration - fadeIn)} step={0.05} precision={2} unit="s" onChange={(v) => update({ fadeOut: v })} />
           </Field>
         </Section>
 
-        <Section title="Actions">
+        <Section title={t('timeline.inspector.actions')}>
           <Actions>
-            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => seek(clip.startTime, true)}>Go to start</Button>
-            <Button size="sm" variant="secondary" icon={LuClapperboard} disabled={!scene} onClick={() => useUiStore.getState().navigateToCuelist(clip.cuelistId)}>Edit scene</Button>
-            <Button size="sm" variant="secondary" icon={LuCopy} onClick={() => { const nid = duplicateClip(id); if (nid) useTimelineView.getState().select({ kind: 'clip', id: nid }) }}>Duplicate</Button>
-            <Button size="sm" variant="secondary" icon={LuScissors} disabled={!canSplit} tooltip={canSplit ? undefined : 'Move the playhead inside the clip'} onClick={() => splitClip(id, getClockTime())}>Split at playhead</Button>
+            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => seek(clip.startTime, true)}>{t('timeline.clip.goToStartShort')}</Button>
+            <Button size="sm" variant="secondary" icon={LuClapperboard} disabled={!scene} onClick={() => useUiStore.getState().navigateToCuelist(clip.cuelistId)}>{t('timeline.clip.editScene')}</Button>
+            <Button size="sm" variant="secondary" icon={LuCopy} tooltip={t('common.duplicate')} shortcut="Mod+D" onClick={() => duplicateClipAndSelect(id)}>{t('common.duplicate')}</Button>
+            <Button size="sm" variant="secondary" icon={LuScissors} disabled={!canSplit} tooltip={canSplit ? undefined : t('timeline.clip.splitHint')} onClick={() => splitClip(id, getClockTime())}>{t('timeline.clip.splitAtPlayhead')}</Button>
           </Actions>
-          <Button size="sm" variant="danger-outline" icon={LuTrash2} onClick={() => { void deleteClip(id) }} className="self-start">Remove clip</Button>
+          <Button size="sm" variant="danger-outline" icon={LuTrash2} onClick={() => { void deleteClip(id) }} className="self-start">{t('timeline.clip.remove')}</Button>
         </Section>
       </div>
     </>
@@ -162,25 +205,33 @@ function ClipInspector({ id }: { id: string }) {
 // ---------------------------------------------------------------- Marker
 
 function MarkerInspector({ id }: { id: string }) {
+  const t = useT()
   const marker = usePlaybackStore((s) => s.timelineMarkers.find((m) => m.id === id))
   if (!marker) return <Gone />
   const update = (u: { name?: string; time?: number; color?: string }) => usePlaybackStore.getState().updateTimelineMarker(id, u)
   return (
     <>
-      <Header icon={LuFlag} color={marker.color} title={marker.name} subtitle={`Marker · ${formatSeconds(marker.time)}`} />
+      <Header
+        icon={LuFlag}
+        color={marker.color}
+        title={marker.name}
+        subtitle={t('timeline.inspector.markerSubtitle', { time: formatSeconds(marker.time) })}
+        deleteLabel={t('timeline.marker.delete')}
+        onDelete={() => { void deleteMarker(id) }}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Marker">
-          <Field label="Name"><CommitText label="Marker name" value={marker.name} onCommit={(v) => update({ name: v.trim() || marker.name })} /></Field>
-          <Field label="Time"><NumberField aria-label="Marker time" value={marker.time} min={0} step={0.05} precision={2} unit="s" onChange={(v) => update({ time: v })} /></Field>
-          <Field label="Colour"><SwatchPicker colors={SWATCH_COLORS} value={marker.color} onChange={(c) => update({ color: c })} columns={6} size="sm" /></Field>
+        <Section title={t('timeline.inspector.markerSection')}>
+          <Field label={t('common.name')}><CommitText nameField label={t('timeline.inspector.markerNameAria')} value={marker.name} onCommit={(v) => update({ name: v.trim() || marker.name })} /></Field>
+          <Field label={t('timeline.inspector.time')}><NumberField aria-label={t('timeline.inspector.markerTimeAria')} value={marker.time} min={0} step={0.05} precision={2} unit="s" onChange={(v) => update({ time: v })} /></Field>
+          <Field label={t('common.color')}><SwatchPicker colors={SWATCH_COLORS} value={marker.color} onChange={(c) => update({ color: c })} columns={6} size="sm" /></Field>
         </Section>
-        <Section title="Actions">
+        <Section title={t('timeline.inspector.actions')}>
           <Actions>
-            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => seek(marker.time, true)}>Go to marker</Button>
-            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => update({ time: getClockTime() })}>Move to playhead</Button>
-            <MidiLearnButton type="timeline_goto_marker" id={id} label={`Go to ${marker.name}`} />
+            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => seek(marker.time, true)}>{t('timeline.marker.goTo')}</Button>
+            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => update({ time: getClockTime() })}>{t('timeline.marker.moveToPlayhead')}</Button>
+            <MidiLearnButton type="timeline_goto_marker" id={id} label={t('timeline.midi.goTo', { name: marker.name })} />
           </Actions>
-          <Button size="sm" variant="danger-outline" icon={LuTrash2} onClick={() => { void deleteMarker(id) }} className="self-start">Delete marker</Button>
+          <Button size="sm" variant="danger-outline" icon={LuTrash2} onClick={() => { void deleteMarker(id) }} className="self-start">{t('timeline.marker.delete')}</Button>
         </Section>
       </div>
     </>
@@ -190,6 +241,7 @@ function MarkerInspector({ id }: { id: string }) {
 // ---------------------------------------------------------------- Section (zone)
 
 function ZoneInspector({ id }: { id: string }) {
+  const t = useT()
   const zones = usePlaybackStore((s) => s.timelineZones)
   const zone = zones.find((z) => z.id === id)
   if (!zone) return <Gone />
@@ -205,26 +257,33 @@ function ZoneInspector({ id }: { id: string }) {
   }
   return (
     <>
-      <Header icon={LuSquareDashed} color={zone.color} title={zone.name} subtitle={`Section ${index + 1} of ${sorted.length}`} />
+      <Header
+        icon={LuSquareDashed}
+        color={zone.color}
+        title={zone.name}
+        subtitle={t('timeline.inspector.sectionSubtitle', { n: index + 1, count: sorted.length })}
+        deleteLabel={t('timeline.section.delete')}
+        onDelete={() => { void deleteZone(id) }}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Section">
-          <Field label="Name"><CommitText label="Section name" value={zone.name} onCommit={(v) => update({ name: v.trim() || zone.name })} /></Field>
-          <Field label="Start"><NumberField aria-label="Section start" value={zone.startTime} min={0} max={zone.endTime - 0.5} step={0.05} precision={2} unit="s" onChange={(v) => update({ startTime: v })} /></Field>
-          <Field label="End"><NumberField aria-label="Section end" value={zone.endTime} min={zone.startTime + 0.5} step={0.05} precision={2} unit="s" onChange={(v) => update({ endTime: v })} /></Field>
-          <Field label="Colour"><SwatchPicker colors={SWATCH_COLORS} value={zone.color} onChange={(c) => update({ color: c })} columns={6} size="sm" /></Field>
+        <Section title={t('timeline.inspector.sectionSection')}>
+          <Field label={t('common.name')}><CommitText nameField label={t('timeline.inspector.sectionNameAria')} value={zone.name} onCommit={(v) => update({ name: v.trim() || zone.name })} /></Field>
+          <Field label={t('timeline.inspector.start')}><NumberField aria-label={t('timeline.inspector.sectionStartAria')} value={zone.startTime} min={0} max={zone.endTime - 0.5} step={0.05} precision={2} unit="s" onChange={(v) => update({ startTime: v })} /></Field>
+          <Field label={t('timeline.inspector.end')}><NumberField aria-label={t('timeline.inspector.sectionEndAria')} value={zone.endTime} min={zone.startTime + 0.5} step={0.05} precision={2} unit="s" onChange={(v) => update({ endTime: v })} /></Field>
+          <Field label={t('common.color')}><SwatchPicker colors={SWATCH_COLORS} value={zone.color} onChange={(c) => update({ color: c })} columns={6} size="sm" /></Field>
         </Section>
-        <Section title="Arrange" actions={<span className="text-xs text-fg-tertiary">clips & markers move along</span>}>
+        <Section title={t('timeline.inspector.arrange')} actions={<span className="text-xs text-fg-tertiary">{t('timeline.inspector.arrangeHint')}</span>}>
           <Actions>
-            <Button size="sm" variant="secondary" icon={LuArrowUp} disabled={index <= 0} onClick={() => move(-1)}>Move earlier</Button>
-            <Button size="sm" variant="secondary" icon={LuArrowDown} disabled={index >= sorted.length - 1} onClick={() => move(1)}>Move later</Button>
+            <Button size="sm" variant="secondary" icon={LuArrowUp} disabled={index <= 0} onClick={() => move(-1)}>{t('timeline.section.moveEarlier')}</Button>
+            <Button size="sm" variant="secondary" icon={LuArrowDown} disabled={index >= sorted.length - 1} onClick={() => move(1)}>{t('timeline.section.moveLater')}</Button>
           </Actions>
         </Section>
-        <Section title="Actions">
+        <Section title={t('timeline.inspector.actions')}>
           <Actions>
-            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => seek(zone.startTime, true)}>Go to section</Button>
-            <MidiLearnButton type="timeline_goto_zone" id={id} label={`Go to ${zone.name}`} />
+            <Button size="sm" variant="secondary" icon={LuFlag} onClick={() => seek(zone.startTime, true)}>{t('timeline.section.goTo')}</Button>
+            <MidiLearnButton type="timeline_goto_zone" id={id} label={t('timeline.midi.goTo', { name: zone.name })} />
           </Actions>
-          <Button size="sm" variant="danger-outline" icon={LuTrash2} onClick={() => { void deleteZone(id) }} className="self-start">Delete section</Button>
+          <Button size="sm" variant="danger-outline" icon={LuTrash2} onClick={() => { void deleteZone(id) }} className="self-start">{t('timeline.section.delete')}</Button>
         </Section>
       </div>
     </>
@@ -234,27 +293,36 @@ function ZoneInspector({ id }: { id: string }) {
 // ---------------------------------------------------------------- Track
 
 function TrackInspector({ index }: { index: number }) {
+  const t = useT()
   const trackNames = usePlaybackStore((s) => s.timelineTrackNames)
   const trackCount = usePlaybackStore((s) => s.timelineTrackCount)
   const clipCount = usePlaybackStore((s) => s.timelineClips.filter((c) => c.trackIndex === index).length)
   if (index >= trackCount) return <Gone />
   const name = trackName(trackNames, index)
+  const lastTrack = trackCount <= 1
   return (
     <>
-      <Header icon={LuRows3} title={name} subtitle={`Track ${index + 1} · ${clipCount} clip${clipCount === 1 ? '' : 's'}`} />
+      <Header
+        icon={LuRows3}
+        title={name}
+        subtitle={t('timeline.inspector.trackSubtitle', { n: index + 1, clips: t('timeline.clipCount', { count: clipCount }) })}
+        deleteLabel={lastTrack ? t('timeline.track.lastTrack') : t('timeline.track.remove')}
+        deleteDisabled={lastTrack}
+        onDelete={() => { void deleteTrack(index) }}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Track">
-          <Field label="Name" hint="Saved with the show">
-            <CommitText label="Track name" value={trackNames[index] ?? ''} placeholder={`Track ${index + 1}`} onCommit={(v) => usePlaybackStore.getState().setTimelineTrackName(index, v)} />
+        <Section title={t('timeline.inspector.trackSection')}>
+          <Field label={t('common.name')} hint={t('timeline.inspector.trackNameHint')}>
+            <CommitText nameField label={t('timeline.inspector.trackNameAria')} value={trackNames[index] ?? ''} placeholder={t('timeline.defaults.trackName', { n: index + 1 })} onCommit={(v) => usePlaybackStore.getState().setTimelineTrackName(index, v)} />
           </Field>
         </Section>
-        <Section title="Actions">
+        <Section title={t('timeline.inspector.actions')}>
           <Actions>
-            <Button size="sm" variant="secondary" icon={LuPlus} onClick={() => addTrack(index)}>Insert track below</Button>
-            <Button size="sm" variant="secondary" icon={LuArrowUp} disabled={index === 0} onClick={() => { swapTracks(index, index - 1); useTimelineView.getState().select({ kind: 'track', index: index - 1 }) }}>Move up</Button>
-            <Button size="sm" variant="secondary" icon={LuArrowDown} disabled={index >= trackCount - 1} onClick={() => { swapTracks(index, index + 1); useTimelineView.getState().select({ kind: 'track', index: index + 1 }) }}>Move down</Button>
+            <Button size="sm" variant="secondary" icon={LuPlus} onClick={() => addTrack(index)}>{t('timeline.track.insertBelow')}</Button>
+            <Button size="sm" variant="secondary" icon={LuArrowUp} disabled={index === 0} onClick={() => { swapTracks(index, index - 1); useTimelineView.getState().select({ kind: 'track', index: index - 1 }) }}>{t('timeline.track.moveUp')}</Button>
+            <Button size="sm" variant="secondary" icon={LuArrowDown} disabled={index >= trackCount - 1} onClick={() => { swapTracks(index, index + 1); useTimelineView.getState().select({ kind: 'track', index: index + 1 }) }}>{t('timeline.track.moveDown')}</Button>
           </Actions>
-          <Button size="sm" variant="danger-outline" icon={LuTrash2} disabled={trackCount <= 1} onClick={() => { void deleteTrack(index) }} className="self-start">Remove track</Button>
+          <Button size="sm" variant="danger-outline" icon={LuTrash2} disabled={lastTrack} tooltip={lastTrack ? t('timeline.track.lastTrack') : undefined} onClick={() => { void deleteTrack(index) }} className="self-start">{t('timeline.track.remove')}</Button>
         </Section>
       </div>
     </>

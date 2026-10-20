@@ -4,6 +4,7 @@
 import { memo, useState } from 'react'
 import { LuArrowDown, LuArrowUp, LuEllipsisVertical, LuPencil, LuPlus, LuTrash2 } from 'react-icons/lu'
 import { DropdownMenu, IconButton, TextInput, cn, type MenuEntry } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { addTrack, swapTracks } from './timeline-model'
 import { deleteTrack } from './timeline-actions'
@@ -20,6 +21,7 @@ export interface TrackHeaderProps {
 }
 
 export const TrackHeader = memo(function TrackHeader({ index, name, customName, clipCount, trackCount, height, selected }: TrackHeaderProps) {
+  const t = useT()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
 
@@ -30,12 +32,12 @@ export const TrackHeader = memo(function TrackHeader({ index, name, customName, 
   }
 
   const menu = (): MenuEntry[] => [
-    { label: 'Rename track', icon: LuPencil, onSelect: startEdit },
-    { label: 'Insert track below', icon: LuPlus, onSelect: () => addTrack(index) },
-    { label: 'Move up', icon: LuArrowUp, disabled: index === 0, onSelect: () => swapTracks(index, index - 1) },
-    { label: 'Move down', icon: LuArrowDown, disabled: index >= trackCount - 1, onSelect: () => swapTracks(index, index + 1) },
+    { label: t('timeline.track.rename'), icon: LuPencil, onSelect: startEdit },
+    { label: t('timeline.track.insertBelow'), icon: LuPlus, onSelect: () => addTrack(index) },
+    { label: t('timeline.track.moveUp'), icon: LuArrowUp, disabled: index === 0, onSelect: () => swapTracks(index, index - 1) },
+    { label: t('timeline.track.moveDown'), icon: LuArrowDown, disabled: index >= trackCount - 1, onSelect: () => swapTracks(index, index + 1) },
     { type: 'separator' },
-    { label: 'Remove track…', icon: LuTrash2, danger: true, disabled: trackCount <= 1, onSelect: () => { void deleteTrack(index) } }
+    { label: t('timeline.track.removeEllipsis'), icon: LuTrash2, danger: true, disabled: trackCount <= 1, onSelect: () => { void deleteTrack(index) } }
   ]
 
   return (
@@ -55,8 +57,8 @@ export const TrackHeader = memo(function TrackHeader({ index, name, customName, 
         <TextInput
           size="sm"
           autoFocus
-          aria-label={`Track ${index + 1} name`}
-          placeholder={`Track ${index + 1}`}
+          aria-label={t('timeline.track.nameAria', { n: index + 1 })}
+          placeholder={t('timeline.defaults.trackName', { n: index + 1 })}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onFocus={(e) => e.currentTarget.select()}
@@ -73,14 +75,14 @@ export const TrackHeader = memo(function TrackHeader({ index, name, customName, 
       ) : (
         <div className="flex min-w-0 flex-1 flex-col">
           <span className={cn('truncate text-sm font-medium', customName ? 'text-fg-primary' : 'text-fg-secondary')}>{name}</span>
-          <span className="truncate text-2xs text-fg-tertiary">{clipCount === 0 ? 'Empty' : `${clipCount} clip${clipCount === 1 ? '' : 's'}`}</span>
+          <span className="truncate text-2xs text-fg-tertiary">{clipCount === 0 ? t('timeline.track.empty') : t('timeline.clipCount', { count: clipCount })}</span>
         </div>
       )}
       {!editing && (
         <div onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <DropdownMenu
             items={menu}
-            trigger={(p) => <IconButton {...p} icon={LuEllipsisVertical} label={`Track ${index + 1} options`} size="sm" />}
+            trigger={(p) => <IconButton {...p} icon={LuEllipsisVertical} label={t('timeline.track.optionsAria', { n: index + 1 })} size="sm" />}
           />
         </div>
       )}

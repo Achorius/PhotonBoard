@@ -5,6 +5,7 @@ import { useRef } from 'react'
 import type React from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { cn, palette, usePointerDrag, withAlpha } from '@renderer/components/ui'
+import { formatDecimal, useT } from '@renderer/i18n'
 import { useFollowStore } from '@renderer/stores/follow-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 
@@ -17,6 +18,7 @@ export interface PadFixture {
 }
 
 export function FollowPad({ fixtures }: { fixtures: PadFixture[] }) {
+  const t = useT()
   const room = useVisualizerStore(useShallow((s) => ({ width: s.roomConfig.width, depth: s.roomConfig.depth, height: s.roomConfig.height, edge: s.roomConfig.stageEdgeZ })))
   const { x, y, z, active } = useFollowStore(useShallow((s) => ({ x: s.targetX, y: s.targetY, z: s.targetZ, active: s.active })))
   const svgRef = useRef<SVGSVGElement>(null)
@@ -81,13 +83,13 @@ export function FollowPad({ fixtures }: { fixtures: PadFixture[] }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="pointer-events-none flex justify-center pb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-fg-tertiary">Upstage</div>
+      <div className="pointer-events-none flex justify-center pb-1 text-2xs font-semibold uppercase tracking-[0.08em] text-fg-tertiary">{t('follow.pad.upstage')}</div>
       <div
         {...drag}
         data-follow-pad
         tabIndex={0}
         role="application"
-        aria-label="Follow target — drag to aim, arrow keys to nudge"
+        aria-label={t('follow.pad.targetAria')}
         onKeyDown={onKeyDown}
         className={cn(
           'relative min-h-0 flex-1 cursor-crosshair touch-none select-none rounded-lg outline-none ring-1 ring-inset focus-visible:ring-2 focus-visible:ring-info-fg',
@@ -126,10 +128,10 @@ export function FollowPad({ fixtures }: { fixtures: PadFixture[] }) {
           </g>
         </svg>
         <div className="pointer-events-none absolute left-3 top-2 rounded bg-surface-0/70 px-2 py-1 font-mono text-xs tabular text-fg-secondary">
-          X {x.toFixed(2)} · Z {z.toFixed(2)} · H {y.toFixed(2)} m
+          {t('follow.pad.readout', { x: formatDecimal(x, 2), z: formatDecimal(z, 2), h: formatDecimal(y, 2) })}
         </div>
       </div>
-      <div className="pointer-events-none flex justify-center pt-1 text-2xs font-semibold uppercase tracking-[0.08em] text-fg-tertiary">Audience</div>
+      <div className="pointer-events-none flex justify-center pt-1 text-2xs font-semibold uppercase tracking-[0.08em] text-fg-tertiary">{t('follow.pad.audience')}</div>
     </div>
   )
 }
