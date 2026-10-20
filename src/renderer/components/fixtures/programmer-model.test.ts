@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FixtureDefinition, PatchEntry } from '@shared/types'
-import { buildProgrammerModel, colourWrites, nearestSlot, STANDARD_COLOUR_WHEEL, summarize, targetChannels, targetWrites } from './programmer-model'
+import { buildProgrammerModel, presetFamiliesFor, colourWrites, nearestSlot, STANDARD_COLOUR_WHEEL, summarize, targetChannels, targetWrites } from './programmer-model'
 import { hsvToRgb, rgbToHsv } from './colour-math'
 
 const spot: FixtureDefinition = {
@@ -119,5 +119,25 @@ describe('colour helpers', () => {
     expect(Math.round(hsv.h)).toBe(200)
     expect(hsv.s).toBeCloseTo(0.5, 1)
     expect(hsv.v).toBeCloseTo(0.8, 1)
+  })
+})
+
+describe('pro view helpers', () => {
+  const entry: PatchEntry = { id: 's1', fixtureDefId: 'test/spot', modeName: '8ch', universe: 0, address: 1, name: 'S1', groupIds: [] }
+
+  it('targets carry the coarse channel name (preset refs)', () => {
+    const m = buildProgrammerModel([entry], [spot])
+    expect(m.byKey.get('pan')!.targets[0].channel).toBe('Pan')
+    expect(m.byKey.get('color wheel')!.targets[0].channel).toBe('Color Wheel')
+  })
+
+  it('preset rows per tab: Dimmer first, beam split by family', () => {
+    const m = buildProgrammerModel([entry], [spot])
+    expect(presetFamiliesFor('position', m.byFeature)).toEqual(['intensity', 'position'])
+    expect(presetFamiliesFor('colour', m.byFeature)).toEqual(['intensity', 'color'])
+    expect(presetFamiliesFor('beam', m.byFeature)).toEqual(['intensity', 'beam', 'focus'])
+    expect(presetFamiliesFor('all', m.byFeature)).toEqual(['intensity', 'full'])
+    const none = { intensity: [], position: [], colour: [], beam: [], control: [] }
+    expect(presetFamiliesFor('beam', none)).toEqual(['beam'])
   })
 })

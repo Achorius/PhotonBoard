@@ -23,6 +23,10 @@ import { RemoteStageView } from './components/stage/RemoteStageView'
 import { getDeviceProfile } from './lib/device-detect'
 import { SettingsView } from './components/settings/SettingsView'
 import { LiveView } from './components/live/LiveView'
+import { PoolsView } from './components/pools/PoolsView'
+import { PoolDialogHost } from './components/pools/PoolDialogs'
+import { StagePagesView } from './components/stage/pages/StagePagesView'
+import { isProOnlyTab } from './components/layout/workspace-tabs'
 import { ExecutorBar } from './components/layout/ExecutorBar'
 import { startExecutorAutoSync } from './stores/executor-store'
 import { FollowPanel } from './components/follow/FollowPanel'
@@ -63,6 +67,9 @@ export default function App() {
   const stageMode = useUiStore(s => s.stageMode)
   const sidebarOpen = useUiStore(s => s.sidebarOpen)
   const executorBarOpen = useUiStore(s => s.executorBarOpen)
+  const proMode = useUiStore(s => s.proMode)
+  // Pro-only views fall back to the programmer when the Pro view is turned off
+  const view = !proMode && isProOnlyTab(activeTab) ? 'fixtures' : activeTab
 
   usePlaybackController()
   useRemoteSync()
@@ -145,7 +152,7 @@ export default function App() {
   }, [])
 
   const renderView = () => {
-    switch (activeTab) {
+    switch (view) {
       case 'patch':      return <PatchView />
       case 'fixtures':   return <FixtureControlView />
       case 'faders':     return <FixtureControlView /> // legacy: redirect to unified view
@@ -164,6 +171,8 @@ export default function App() {
       case 'stage-layout': return <StageLayoutView />
       case 'live':         return <LiveView />
       case 'follow':       return <FollowPanel />
+      case 'pools':        return <PoolsView />
+      case 'stage':        return <StagePagesView />
       case 'settings':   return <SettingsView />
       default:           return <StageLayoutView />
     }
@@ -172,6 +181,7 @@ export default function App() {
   const overlays = (
     <>
       <DialogHost />
+      <PoolDialogHost />
       <ShortcutsDialog />
     </>
   )
@@ -202,7 +212,7 @@ export default function App() {
       <div className="relative flex min-h-0 flex-1">
         <NavRail />
         {sidebarOpen && <PatchPanel />}
-        <main className="min-w-0 flex-1 overflow-hidden" data-view={activeTab}>
+        <main className="min-w-0 flex-1 overflow-hidden" data-view={view}>
           {renderView()}
         </main>
         {/* Over the view, above the executor + status bars */}

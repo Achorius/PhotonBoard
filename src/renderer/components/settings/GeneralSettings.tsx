@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react'
 import {
   LuFile, LuFilePlus2, LuFolderOpen, LuFolderSearch, LuHand, LuKeyboard, LuLanguages, LuLayoutPanelLeft, LuMonitor, LuMousePointer2,
-  LuPanelBottom, LuPiano, LuSave, LuSaveAll, LuSparkles, LuTimer, LuWandSparkles
+  LuPanelBottom, LuPiano, LuSave, LuSquareTerminal, LuSaveAll, LuSparkles, LuTimer, LuWandSparkles
 } from 'react-icons/lu'
 import { Badge, Button, Kbd, SegmentedControl, Switch, cn, type DensityPreference } from '@renderer/components/ui'
 import { detectAutoDensity, useShowTitle, useUiStore, type LanguagePreference } from '@renderer/stores/ui-store'
@@ -57,6 +57,7 @@ export function DisplaySettings() {
   const density = useUiStore((s) => s.density)
   const executorBarOpen = useUiStore((s) => s.executorBarOpen)
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
+  const proMode = useUiStore((s) => s.proMode)
   const auto = detectAutoDensity()
   const profile = getDeviceProfile()
 
@@ -96,6 +97,12 @@ export function DisplaySettings() {
         </SettingRow>
         <SettingRow label={t('settings.display.sidebar')} description={t('settings.display.sidebarDescription')}>
           <Switch checked={sidebarOpen} onChange={(on) => useUiStore.getState().toggleSidebar(on)} aria-label={t('settings.display.sidebarAria')} />
+        </SettingRow>
+      </SettingsCard>
+
+      <SettingsCard icon={LuSquareTerminal} title={t('settings.display.programming')} subtitle={t('settings.display.programmingSubtitle')}>
+        <SettingRow label={t('pro.proMode')} description={t('pro.proModeHint')}>
+          <Switch checked={proMode} onChange={(on) => useUiStore.getState().setProMode(on)} aria-label={t('settings.display.proModeAria')} />
         </SettingRow>
       </SettingsCard>
 

@@ -11,6 +11,8 @@ import { rangeValue, type Attribute } from './programmer-model'
 import { formatAttrValue, formatRange, useProgrammerView } from './programmer-view-store'
 import { useChannelMenu } from './channel-menu'
 import { attrLabel, rangeLabel } from './labels'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { PresetChip } from './PresetRow'
 
 export interface RangeCardProps {
   attr: Attribute
@@ -28,6 +30,7 @@ export const RangeCard = memo(function RangeCard({ attr, selectionCount, firstNa
   const sum = useAttrSummary(attr)
   const touched = useAttrTouched(attr.targets)
   const openMenu = useChannelMenu()
+  const proMode = useUiStore((s) => s.proMode)
   const release = useCallback(() => releaseAttrs([attr]), [attr])
   const dmx = attr.fine ? Math.floor(sum.first / 256) : sum.first
   const mixed = sum.min !== sum.max
@@ -59,6 +62,7 @@ export const RangeCard = memo(function RangeCard({ attr, selectionCount, firstNa
         <span aria-hidden className="h-3 w-1 shrink-0 rounded-full" style={{ backgroundColor: attr.color }} />
         <h3 className={cn('min-w-0 flex-1 truncate text-xs font-semibold', touched !== 'none' ? 'text-accent-fg' : 'text-fg-primary')} title={label}>{label}</h3>
         {coverage && <span className="font-mono text-2xs tabular text-fg-tertiary" title={t('fixtures.attr.coverage', { count: attr.fixtureIds.length, total: selectionCount })}>{coverage}</span>}
+        {proMode && touched !== 'none' && <PresetChip targets={attr.targets} />}
         <span className={cn('whitespace-nowrap font-mono text-xs tabular', mixed ? 'text-warning-fg' : 'text-fg-secondary')}>
           {formatRange(sum.min, sum.max, attr.max, unit, true)}
         </span>

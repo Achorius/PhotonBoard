@@ -2,20 +2,23 @@
 // the left, feature tabs (Position / Colour / Beam / Control / All) on
 // the right. Tabs only exist for features the selection has; a dot on a
 // tab = something of that feature is in the programmer.
+// Pro view: preset rows (Dimmer + the open tab's families) above the panel.
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { FixtureDefinition } from '@shared/types'
 import { LuAperture, LuLayoutGrid, LuMove, LuPalette, LuSettings2 } from 'react-icons/lu'
 import { Tabs, type TabItem } from '@renderer/components/ui'
 import { useT } from '@renderer/i18n'
 import { useAnyTouched } from './attr-actions'
-import type { Attribute, ProgrammerModel } from './programmer-model'
+import { presetFamiliesFor, type Attribute, type ProgrammerModel } from './programmer-model'
 import { useProgrammerView, type FeatureTab } from './programmer-view-store'
 import { IntensityPanel } from './IntensityPanel'
 import { PositionPanel } from './PositionPanel'
 import { ColourPanel } from './ColourPanel'
 import { AllAttributesPanel, FeaturePanel } from './FeaturePanel'
 import { featureLabel } from './labels'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { PresetRows } from './PresetRow'
 
 const TAB_ORDER: FeatureTab[] = ['position', 'colour', 'beam', 'control', 'all']
 
@@ -51,6 +54,8 @@ export const ProgrammerAttributes = memo(function ProgrammerAttributes({ model, 
   const tab: FeatureTab = enabled(requested) ? requested : TAB_ORDER.find(enabled) ?? 'all'
 
   const intensity = f.intensity[0]
+  const proMode = useUiStore((s) => s.proMode)
+  const families = useMemo(() => (proMode ? presetFamiliesFor(tab, f) : []), [proMode, tab, f])
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -67,6 +72,7 @@ export const ProgrammerAttributes = memo(function ProgrammerAttributes({ model, 
         <div className="shrink-0 px-3">
           <Tabs items={items} value={tab} onChange={(id) => useProgrammerView.getState().setTab(id)} aria-label={t('fixtures.features.aria')} />
         </div>
+        {proMode && <PresetRows families={families} className="border-b border-line-subtle px-3 py-2" />}
         <div role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
           {tab === 'position' && <PositionPanel model={model} defs={defs} firstName={firstName} />}
           {tab === 'colour' && <ColourPanel model={model} firstName={firstName} />}

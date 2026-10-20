@@ -7,8 +7,12 @@
 
 import { core } from './pro/core'
 import { cli } from './pro/cli'
+import { pools } from './pro/pools'
+import { programmerUi } from './pro/programmer-ui'
 
 export const pro = {
   ...core,
-  cli
+  cli,
+  pools,
+  programmer: programmerUi
 }

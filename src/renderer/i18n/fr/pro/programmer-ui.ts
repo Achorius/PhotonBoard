@@ -1,0 +1,77 @@
+// Ajouts Pro du programmer (pro.programmer.*) : outils de sélection
+// (Suivant / Précédent, MAtricks, alignement, Highlight, Blind, temps,
+// Park) et rangées de presets des panneaux d'attributs.
+
+import type { Translation } from '../../types'
+
+export const programmerUi: Translation['pro']['programmer'] = {
+  tools: {
+    aria: 'Outils de sélection',
+    prev: 'Préc.',
+    prevTitle: 'Projecteur précédent de la sélection',
+    next: 'Suiv.',
+    nextTitle: 'Projecteur suivant de la sélection',
+    all: 'Tous',
+    allTitle: 'Revenir à tous les projecteurs de la sélection',
+    set: 'Aller à',
+    setTitle: 'Aller à un projecteur de la sélection',
+    setPrompt: 'Aller au projecteur',
+    setPromptMessage: 'Position dans la sélection, de 1 à {count}.',
+    setInvalid: 'Saisissez un nombre entier de 1 à {count}',
+    stepAria: 'Projecteur {index} sur {count}',
+    allCount: 'Tous · {count}',
+    matricks: 'MAtricks',
+    matricksTitle: 'Entrelacement, blocs, groupes, ailes, inversion',
+    interleave: 'Entrelacement',
+    interleaveHint: 'Un projecteur sur N, à partir d’une position',
+    interleaveWidth: 'Un sur',
+    interleaveIndex: 'À partir de',
+    blocks: 'Blocs',
+    blocksHint: 'Projecteurs par bloc (même valeur dans un bloc)',
+    groups: 'Groupes',
+    groupsHint: 'Découper la sélection ; les dégradés repartent dans chaque groupe',
+    wings: 'Ailes',
+    wingsHint: 'Dégradés en miroir sur les ailes',
+    invert: 'Inverser',
+    invertHint: 'Inverser l’ordre de la sélection',
+    reset: 'Réinitialiser',
+    active: { one: '{count} projecteur actif', other: '{count} projecteurs actifs' },
+    align: 'Aligner',
+    alignAria: 'Alignement des dégradés',
+    alignOff: 'Non',
+    alignTitles: {
+      left: 'Du premier projecteur au dernier',
+      right: 'Du dernier projecteur au premier',
+      outside: 'Des bords vers le milieu',
+      inside: 'Du milieu vers les bords'
+    },
+    highlight: 'Highlight',
+    highlightTitle: 'Allumer les projecteurs sélectionnés (ouvert, blanc, plein feu) — jamais mémorisé',
+    blind: 'Blind',
+    blindTitle: 'Les réglages du programmer ne sortent pas sur scène (aperçu seulement)',
+    time: 'Temps',
+    timeTitle: 'Montée et délai des nouvelles valeurs du programmer',
+    timeSet: '{fade} · {delay}',
+    fade: 'Montée',
+    delay: 'Délai',
+    timeClear: 'Sans temps',
+    park: 'Park',
+    parkTitle: 'Figer la sortie de projecteurs',
+    parkSelection: 'Parker la sélection',
+    parkSelectionHint: 'Garder leur sortie actuelle, quoi qu’il se joue',
+    unparkSelection: 'Libérer la sélection',
+    unparkAll: 'Tout libérer',
+    parked: { one: '{count} canal parké', other: '{count} canaux parkés' },
+    parkedToast: { one: '{count} canal parké', other: '{count} canaux parkés' }
+  },
+  presets: {
+    aria: 'Presets {family}',
+    store: 'Mémoriser comme nouveau preset',
+    storeTitle: 'Mémoriser les valeurs {family} de la sélection dans le preset {ref}',
+    open: 'Tous les presets',
+    openTitle: 'Ouvrir la vue Pools',
+    fromPreset: 'Depuis le preset {ref}',
+    severalPresets: 'Depuis plusieurs presets',
+    chipSeveral: 'P…'
+  }
+}

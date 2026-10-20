@@ -1,12 +1,13 @@
 // Main navigation: vertical rail of workspace views, grouped
-// (Setup · Program · Playback · Visualise · System).
+// (Setup · Program · Playback · Visualise · System). The Pro view adds
+// Pools (Program) and Stage pages (Playback).
 
 import { Fragment } from 'react'
 import { LuKeyboard, LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
 import { IconButton, Tooltip, cn } from '@renderer/components/ui'
 import { useUiStore, type ViewTab } from '@renderer/stores/ui-store'
 import { useT } from '@renderer/i18n'
-import { WORKSPACE_TABS } from './workspace-tabs'
+import { railTabs } from './workspace-tabs'
 
 /** Legacy tab ids that open another view */
 const TAB_ALIASES: Partial<Record<ViewTab, ViewTab>> = { faders: 'fixtures' }
@@ -15,7 +16,9 @@ export function NavRail() {
   const t = useT()
   const activeTab = useUiStore((s) => s.activeTab)
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
+  const proMode = useUiStore((s) => s.proMode)
   const current = TAB_ALIASES[activeTab] ?? activeTab
+  const tabs = railTabs(proMode)
 
   return (
     <nav
@@ -23,14 +26,14 @@ export function NavRail() {
       className="flex w-[76px] shrink-0 flex-col items-stretch border-r border-line bg-surface-1 [[data-density=touch]_&]:w-[88px]"
     >
       <div className="scrollbar-none flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 py-2">
-        {WORKSPACE_TABS.map((tab, i) => {
-          const newGroup = i > 0 && WORKSPACE_TABS[i - 1].group !== tab.group
+        {tabs.map((tab, i) => {
+          const newGroup = i > 0 && tabs[i - 1].group !== tab.group
           const selected = current === tab.id
           const Icon = tab.icon
           return (
             <Fragment key={tab.id}>
               {newGroup && <div role="separator" className="mx-2 my-1.5 h-px bg-line-subtle" />}
-              <Tooltip content={t(`shell.tabs.${tab.id}.title`)} shortcut={tab.shortcut} placement="right">
+              <Tooltip content={t(tab.titleKey)} shortcut={tab.shortcut} placement="right">
                 <button
                   type="button"
                   data-tab={tab.id}
@@ -39,12 +42,14 @@ export function NavRail() {
                   className={cn(
                     'group relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-md px-0.5 py-1.5 transition-colors duration-fast',
                     '[[data-density=touch]_&]:min-h-[54px]',
+                    // Pro view: two more entries — tighter on mouse screens so the rail still fits
+                    proMode && 'min-h-[44px] gap-0.5 [[data-density=touch]_&]:min-h-[44px]',
                     selected ? 'bg-surface-3 text-fg-primary' : 'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary'
                   )}
                 >
                   {selected && <span aria-hidden className="absolute -left-1.5 top-2 bottom-2 w-[3px] rounded-r-full bg-accent" />}
                   <Icon size={20} aria-hidden className={cn('shrink-0', selected && 'text-accent-fg')} />
-                  <span className="max-w-full truncate text-[11px] font-medium leading-none tracking-[-0.01em]">{t(`shell.tabs.${tab.id}.label`)}</span>
+                  <span className="max-w-full truncate text-[11px] font-medium leading-none tracking-[-0.01em]">{t(tab.labelKey)}</span>
                 </button>
               </Tooltip>
             </Fragment>
