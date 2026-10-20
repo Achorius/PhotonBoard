@@ -6,8 +6,9 @@
 // ============================================================
 
 import { create } from 'zustand'
-import type { Matricks } from '@renderer/lib/pro/selection-tools'
+import { applyMatricks, matricksStepCount, type Matricks, type MatricksResult } from '@renderer/lib/pro/selection-tools'
 import type { AlignMode } from '@renderer/lib/pro/contracts'
+import { usePatchStore } from './patch-store'
 
 interface SelectionToolsState {
   matricks: Matricks
@@ -41,3 +42,28 @@ export const useSelectionStore = create<SelectionToolsState>((set, get) => ({
   setAlign: (align) => set({ align }),
   reset: () => set({ matricks: {}, step: null, align: null })
 }))
+
+// A new fixture selection starts on "all" again (grandMA: Next / Prev restart)
+usePatchStore.subscribe((s, p) => {
+  if (s.selectedFixtureIds !== p.selectedFixtureIds && useSelectionStore.getState().step !== null) {
+    useSelectionStore.getState().setStep(null)
+  }
+})
+
+/** MAtricks + step applied to the fixture selection (selection order): what "At" applies to, with fan phases */
+export function getMatricksResult(selection: string[] = usePatchStore.getState().selectedFixtureIds): MatricksResult {
+  const { matricks, step } = useSelectionStore.getState()
+  return applyMatricks(selection, matricks, step)
+}
+
+/** Fixture ids active after MAtricks / Next / Prev */
+export function getActiveSelection(): string[] {
+  return getMatricksResult().active
+}
+
+/** Next / Prev / All through the selection (blocks of the MAtricks) */
+export function stepSelection(direction: 'next' | 'prev' | 'all'): void {
+  const s = useSelectionStore.getState()
+  if (direction === 'all') { s.setStep(null); return }
+  s.stepBy(direction === 'next' ? 1 : -1, matricksStepCount(usePatchStore.getState().selectedFixtureIds, s.matricks))
+}

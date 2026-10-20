@@ -20,6 +20,9 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { recordFromProgrammer } from '@renderer/lib/programmer-utils'
+// The pro programmer engine (fades, preset refs) registers its overlay with
+// programmer-utils when it loads: recording sees target values and meta.
+import '@renderer/lib/pro/programmer-engine'
 import { clearProgrammer } from '@renderer/lib/dmx-mixer'
 import { cueKey } from '@renderer/lib/fixture-index'
 import { isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
@@ -85,7 +88,8 @@ export function capture(selectedOnly: boolean, fixtureIds?: string[]): Capture {
     const counts = summaryCounts(useConsoleProgrammer.getState(), limit)
     if (counts.channelCount > 0) return { values: [], source: 'programmer', ...counts, effects, ...meta }
   } else {
-    const programmer = recordFromProgrammer()
+    // withMeta: preset references and per-value programmer timing go into the cue
+    const programmer = recordFromProgrammer({ withMeta: true })
     if (programmer.length > 0) {
       const values = limit ? programmer.filter((v) => limit.has(v.fixtureId)) : programmer
       return { values, source: 'programmer', fixtureCount: countFixtures(values), channelCount: values.length, effects, ...meta }

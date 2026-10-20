@@ -14,6 +14,18 @@
 // are updated with the same `now` right before the mix, so fades,
 // chases and effects stay in lock-step (and keep running while the
 // window is hidden — the loop uses a timer, not rAF).
+//
+// Pro additions (all inactive unless used — the simple path is
+// unchanged):
+//   - layer flags: LAYER_SWAP (intensity claimed LTP-style against
+//     lower layers), LAYER_SUPER (merged AFTER the programmer),
+//   - HIGHLIGHT_LAYER_ID: merged after the programmer, never recorded,
+//   - Blind: the programmer (and highlight) leave the output; a
+//     preview mix that includes them is produced (getPreviewBuffer),
+//   - group masters: a flat per-channel scale on intensity, before GM,
+//   - park: a flat per-channel value applied last (after GM).
+// Merge order: layers → programmer → super layers → highlight →
+// masters (group masters, GM, blackout, strobe, blinder) → park.
 // ============================================================
 
 import { useDmxStore, setDmxStoreProgrammerReset } from '@renderer/stores/dmx-store'
@@ -40,7 +52,14 @@ export interface MixerLayer {
   /** Activation timestamp (ms). Used to break LTP ties at same priority (latest wins). */
   activatedAt: number
   channels: LayerChannels
+  /** LAYER_SWAP | LAYER_SUPER (pro priority modes); 0 / undefined = normal */
+  flags?: number
 }
+
+/** Layer flag: the layer's intensity (HTP) channels are claimed LTP-style against LOWER layers */
+export const LAYER_SWAP = 1
+/** Layer flag: the layer is merged after the programmer (wins over it) */
+export const LAYER_SUPER = 2
 
 /** Flat per-channel description of the patch (index = universe * 512 + channel). */
 export interface ChannelInfo {
@@ -71,6 +90,9 @@ const U = DMX_CHANNELS_PER_UNIVERSE
 
 /** Reserved layer id for the programmer (manual faders). Always wins. */
 export const PROGRAMMER_LAYER_ID = '__programmer__'
+
+/** Reserved layer id for Highlight: merged after the programmer, never recorded. */
+export const HIGHLIGHT_LAYER_ID = '__highlight__'
 
 // ============================================================
 // Pure core (unit-tested)
@@ -139,6 +161,87 @@ function finiteByte(v: number): number {
   return Math.round(v)
 }
 
+/** Options of mixLayers (pro features; omitted = the classic mix) */
+export interface MixOptions {
+  /** Blind: the programmer and the highlight do not reach `out` */
+  excludeProgrammer?: boolean
+  /** Also produce the mix WITH the programmer and highlight (Blind preview) here */
+  preview?: Uint8Array
+}
+
+// Scratch reused frame after frame (no per-frame allocation)
+let mixState = new Uint8Array(U)
+const sortedScratch: MixerLayer[] = []
+const superScratch: MixerLayer[] = []
+
+const byPriorityThenLatest = (a: MixerLayer, b: MixerLayer) => (b.priority - a.priority) || (b.activatedAt - a.activatedAt)
+
+// Merge context of the layer being merged: mergeChannel is a plain
+// function (Map.forEach callback) so the hot loop allocates nothing.
+const EMPTY = new Uint8Array(0)
+let mOut: Uint8Array = EMPTY
+let mState: Uint8Array = EMPTY
+let mHtp: Uint8Array = EMPTY
+let mRole: Uint8Array = EMPTY
+let mBase = 0
+let mScale = 1
+/** State an HTP write leaves: 1 = merged, 2 = claimed (swap layer) */
+let mHtpMark = 1
+
+function mergeChannel(raw: number, ch: number): void {
+  if (ch < 0 || ch >= U) return
+  const idx = mBase + ch
+  const value = finiteByte(isIntensityRole(mRole[idx] as ChannelRole) ? raw * mScale : raw)
+  const st = mState[idx]
+  if (mHtp[idx]) {
+    if (st === 2) return // claimed by a higher swap layer
+    if (st === 0 || value > mOut[idx]) mOut[idx] = value
+    mState[idx] = mHtpMark
+  } else if (st !== 2) {
+    mOut[idx] = value
+    mState[idx] = 2
+  }
+}
+
+/** Raw overlay (programmer / highlight): the layer's values replace the mix */
+function overlayRaw(layer: MixerLayer, info: ChannelInfo, out: Uint8Array): void {
+  for (const [u, uniMap] of layer.channels) {
+    if (u < 0 || u >= info.universeCount) continue
+    for (const [ch, raw] of uniMap) {
+      if (ch < 0 || ch >= U) continue
+      const idx = u * U + ch
+      if (idx < out.length) out[idx] = finiteByte(raw)
+    }
+  }
+}
+
+/**
+ * Super layers (sorted, highest first) over the mix: they win over
+ * everything merged before them; between super layers, HTP channels take
+ * the highest value and LTP channels the highest priority / latest layer.
+ * `mark` must differ between two calls in the same frame.
+ */
+function overlaySupers(supers: MixerLayer[], info: ChannelInfo, out: Uint8Array, state: Uint8Array, mark: number): void {
+  for (const layer of supers) {
+    const scale = Math.min(255, layer.master) / 255
+    for (const [u, uniMap] of layer.channels) {
+      if (u < 0 || u >= info.universeCount) continue
+      for (const [ch, raw] of uniMap) {
+        if (ch < 0 || ch >= U) continue
+        const idx = u * U + ch
+        if (idx >= out.length) continue
+        const value = finiteByte(isIntensityRole(info.role[idx] as ChannelRole) ? raw * scale : raw)
+        if (state[idx] !== mark) {
+          out[idx] = value
+          state[idx] = mark
+        } else if (info.htp[idx] && value > out[idx]) {
+          out[idx] = value
+        }
+      }
+    }
+  }
+}
+
 /**
  * Merge layers into `out` (pre-master mix, length universeCount*512).
  *
@@ -148,66 +251,91 @@ function finiteByte(v: number): number {
  *  - A layer's master scales intensity channels only (dimmers, and the
  *    colour emitters of dimmer-less fixtures) — never position/colour/gobo.
  *  - A layer whose master is 0 is inactive (claims no LTP channel).
- *  - The programmer always wins.
+ *  - LAYER_SWAP: the layer's HTP channels merge HTP with HIGHER layers but
+ *    are claimed (LTP-style) against lower ones.
+ *  - The programmer always wins over normal layers; LAYER_SUPER layers are
+ *    merged after it; the highlight layer comes last.
+ *  - `opts.excludeProgrammer` (Blind): programmer and highlight stay out of
+ *    `out`; `opts.preview` receives the mix with them.
  */
-export function mixLayers(layers: Iterable<MixerLayer>, info: ChannelInfo, out: Uint8Array): void {
+export function mixLayers(layers: Iterable<MixerLayer>, info: ChannelInfo, out: Uint8Array, opts?: MixOptions): void {
   out.set(info.defaults.subarray(0, out.length))
   const size = Math.min(out.length, info.universeCount * U)
 
   let programmer: MixerLayer | undefined
-  const sorted: MixerLayer[] = []
+  let highlight: MixerLayer | undefined
+  const sorted = sortedScratch
+  const supers = superScratch
+  sorted.length = 0
+  supers.length = 0
   for (const layer of layers) {
     if (layer.id === PROGRAMMER_LAYER_ID) { programmer = layer; continue }
+    if (layer.id === HIGHLIGHT_LAYER_ID) { highlight = layer; continue }
     if (layer.channels.size === 0 || !(layer.master > 0)) continue
-    sorted.push(layer)
+    if ((layer.flags ?? 0) & LAYER_SUPER) supers.push(layer)
+    else sorted.push(layer)
   }
-  sorted.sort((a, b) => (b.priority - a.priority) || (b.activatedAt - a.activatedAt))
+  sorted.sort(byPriorityThenLatest)
+  if (supers.length > 1) supers.sort(byPriorityThenLatest)
 
-  // 0 = untouched, 1 = HTP written, 2 = LTP claimed
-  const state = new Uint8Array(size)
+  // 0 = untouched, 1 = HTP written, 2 = claimed (LTP, or HTP by a swap layer)
+  if (mixState.length < size) mixState = new Uint8Array(size)
+  const state = mixState
+  state.fill(0, 0, size)
 
+  mOut = out
+  mState = state
+  mHtp = info.htp
+  mRole = info.role
   for (const layer of sorted) {
-    const scale = Math.min(255, layer.master) / 255
+    mScale = Math.min(255, layer.master) / 255
+    mHtpMark = ((layer.flags ?? 0) & LAYER_SWAP) !== 0 ? 2 : 1
     for (const [u, uniMap] of layer.channels) {
       if (u < 0 || u >= info.universeCount) continue
-      for (const [ch, raw] of uniMap) {
-        if (ch < 0 || ch >= U) continue
-        const idx = u * U + ch
-        const role = info.role[idx] as ChannelRole
-        const value = finiteByte(isIntensityRole(role) ? raw * scale : raw)
-        if (info.htp[idx]) {
-          if (state[idx] === 0 || value > out[idx]) out[idx] = value
-          state[idx] = 1
-        } else if (state[idx] !== 2) {
-          out[idx] = value
-          state[idx] = 2
-        }
-      }
+      mBase = u * U
+      uniMap.forEach(mergeChannel)
     }
+  }
+  mOut = mState = mHtp = mRole = EMPTY
+
+  const preview = opts?.preview
+  if (preview) {
+    preview.set(out.subarray(0, Math.min(out.length, preview.length)))
+    if (programmer) overlayRaw(programmer, info, preview)
+    if (supers.length > 0) overlaySupers(supers, info, preview, state, 3)
+    if (highlight) overlayRaw(highlight, info, preview)
   }
 
-  if (programmer) {
-    for (const [u, uniMap] of programmer.channels) {
-      if (u < 0 || u >= info.universeCount) continue
-      for (const [ch, raw] of uniMap) {
-        if (ch < 0 || ch >= U) continue
-        out[u * U + ch] = finiteByte(raw)
-      }
-    }
-  }
+  const blind = !!opts?.excludeProgrammer
+  if (programmer && !blind) overlayRaw(programmer, info, out)
+  if (supers.length > 0) overlaySupers(supers, info, out, state, 4)
+  if (highlight && !blind) overlayRaw(highlight, info, out)
+  sorted.length = 0
+  supers.length = 0
+}
+
+/** Pro output-stage inputs (flat, index = universe * 512 + channel) */
+export interface OutputExtras {
+  /** Group master scale 0..1 per channel (only intensity channels use it; before GM) */
+  groupScale?: Float32Array | null
+  /** Parked value per channel, -1 = not parked (applied last, after every master) */
+  parked?: Int16Array | null
 }
 
 /**
  * Output stage: apply the master section to the mix. Only intensity channels
- * are affected by GM / blackout / strobe; the blinder forces dimmers full,
- * shutters open and (dimmer-less fixtures) white/RGB full — nothing else.
- * Precedence: blinder < strobe < blackout (blackout always kills light).
+ * are affected by group masters / GM / blackout / strobe; the blinder forces
+ * dimmers full, shutters open and (dimmer-less fixtures) white/RGB full —
+ * nothing else. Precedence: blinder < strobe < blackout (blackout always
+ * kills light). Parked channels are written last, untouched by any master.
  */
-export function applyMasters(mix: Uint8Array, info: ChannelInfo, masters: MasterState, out: Uint8Array): void {
+export function applyMasters(mix: Uint8Array, info: ChannelInfo, masters: MasterState, out: Uint8Array, extras?: OutputExtras): void {
   const size = Math.min(mix.length, out.length, info.role.length)
   const gm = finiteByte(masters.grandMaster) / 255
   const kill = masters.blackout || (masters.strobe && !masters.strobeOn)
   const blinder = masters.blinder
+  const groupScale = extras?.groupScale ?? null
+  const scaleLen = groupScale ? groupScale.length : 0
 
   for (let idx = 0; idx < size; idx++) {
     const forced = blinder ? info.blinder[idx] : -1
@@ -218,17 +346,27 @@ export function applyMasters(mix: Uint8Array, info: ChannelInfo, masters: Master
     }
     if (info.isFine[idx]) continue // written together with its coarse channel
 
+    const scale = idx < scaleLen ? gm * groupScale![idx] : gm
     const fine = info.fineOf[idx]
     if (fine !== -1 && fine < size) {
       // 16-bit intensity: scale the combined value, then split it again
-      let v16 = forced >= 0 ? 65535 : Math.round((mix[idx] * 256 + mix[fine]) * gm)
+      let v16 = forced >= 0 ? 65535 : Math.round((mix[idx] * 256 + mix[fine]) * scale)
       if (kill) v16 = 0
       out[idx] = v16 >> 8
       out[fine] = v16 & 0xff
     } else {
-      let v = forced >= 0 ? forced : Math.round(mix[idx] * gm)
+      let v = forced >= 0 ? forced : Math.round(mix[idx] * scale)
       if (kill) v = 0
       out[idx] = v
+    }
+  }
+
+  const parked = extras?.parked
+  if (parked) {
+    const n = Math.min(size, parked.length)
+    for (let idx = 0; idx < n; idx++) {
+      const p = parked[idx]
+      if (p >= 0) out[idx] = p > 255 ? 255 : p
     }
   }
 }
@@ -263,6 +401,18 @@ let mixVersion = 0
 let publishedVersion = -1
 let lastPublish = -Infinity
 let strobeOn = true
+
+// ---- Pro output state (flat arrays applied in the frame loop) ----
+let blind = false
+let previewBuf = new Uint8Array(U)
+let prevPreviewBuf = new Uint8Array(U)
+let previewVersion = 0
+let publishedPreviewVersion = -1
+let publishedBlind = false
+let parkedIdx: Int16Array | null = null
+let groupScaleArr: Float32Array | null = null
+const outputExtras: OutputExtras = { groupScale: null, parked: null }
+const blindMixOptions: MixOptions = { excludeProgrammer: true, preview: previewBuf }
 
 const PUBLISH_INTERVAL_MS = 40 // ~25 Hz for UI meters
 
@@ -326,22 +476,32 @@ export function setLayer(
   id: string,
   channels: LayerChannels,
   priority?: LayerPriority,
-  master?: number
+  master?: number,
+  flags?: number
 ): void {
   const existing = layers.get(id)
   if (existing) {
     existing.channels = channels
     if (priority !== undefined) existing.priority = clampPriority(priority)
     if (master !== undefined) existing.master = toDmx(master)
+    if (flags !== undefined) existing.flags = flags | 0
   } else {
-    layers.set(id, {
+    const layer: MixerLayer = {
       id,
       priority: clampPriority(priority ?? 50),
       master: master === undefined ? 255 : toDmx(master),
       activatedAt: clockNow(),
       channels
-    })
+    }
+    if (flags) layer.flags = flags | 0
+    layers.set(id, layer)
   }
+}
+
+/** Set the pro flags of a layer (LAYER_SWAP | LAYER_SUPER; 0 = normal). */
+export function setLayerFlags(id: string, flags: number): void {
+  const layer = layers.get(id)
+  if (layer) layer.flags = Number.isFinite(flags) ? flags | 0 : 0
 }
 
 function clampPriority(p: number): number {
@@ -393,9 +553,33 @@ export function getLayerIds(): string[] {
 export function resetMixer(): void {
   layers.clear()
   invalidateChannelInfo()
+  notifyProgrammer('clear', -1, -1)
 }
 
 // --------------- Public API: programmer ---------------
+
+/**
+ * Programmer change notification (the pro programmer engine keeps its
+ * fades and preset references in step with what the programmer holds):
+ * 'set' / 'release' of one channel, or 'clear' of everything.
+ */
+export type ProgrammerListener = (kind: 'set' | 'release' | 'clear', universe: number, channel: number) => void
+
+let programmerListener: ProgrammerListener | null = null
+
+/** Install (or remove with null) THE programmer listener. */
+export function setProgrammerListener(fn: ProgrammerListener | null): void {
+  programmerListener = fn
+}
+
+function notifyProgrammer(kind: 'set' | 'release' | 'clear', universe: number, channel: number): void {
+  if (!programmerListener) return
+  try {
+    programmerListener(kind, universe, channel)
+  } catch (e) {
+    console.error('[Mixer] programmer listener failed:', e)
+  }
+}
 
 function programmerLayer(): MixerLayer {
   let layer = layers.get(PROGRAMMER_LAYER_ID)
@@ -443,6 +627,7 @@ export function setProgrammerChannel(universe: number, channel: number, value: n
     layer.channels.set(universe, uniMap)
   }
   uniMap.set(channel, v)
+  if (programmerListener) notifyProgrammer('set', universe, channel)
 
   if (isRemoteMode()) {
     let pending = pendingRemoteProgrammer.get(universe)
@@ -459,6 +644,7 @@ export function setProgrammerChannel(universe: number, channel: number, value: n
 export function clearProgrammerChannel(universe: number, channel: number): void {
   const uniMap = layers.get(PROGRAMMER_LAYER_ID)?.channels.get(universe)
   if (uniMap) uniMap.delete(channel)
+  notifyProgrammer('release', universe, channel)
   if (isRemoteMode()) {
     pendingRemoteProgrammer.get(universe)?.delete(channel)
     sendRemoteCommand('release-programmer-channels', { [universe]: [channel] })
@@ -468,9 +654,12 @@ export function clearProgrammerChannel(universe: number, channel: number): void 
 /** Release several programmer channels at once ({ universe: [channels] }). */
 export function releaseProgrammerChannels(channels: Record<number, number[]>): void {
   for (const [u, list] of Object.entries(channels)) {
+    if (!Array.isArray(list)) continue
     const uniMap = layers.get(PROGRAMMER_LAYER_ID)?.channels.get(Number(u))
-    if (!uniMap || !Array.isArray(list)) continue
-    for (const ch of list) uniMap.delete(ch)
+    for (const ch of list) {
+      uniMap?.delete(ch)
+      notifyProgrammer('release', Number(u), ch)
+    }
   }
   if (isRemoteMode()) {
     // A set still waiting in the batch would be re-sent after the release
@@ -486,6 +675,7 @@ export function releaseProgrammerChannels(channels: Record<number, number[]>): v
 /** Clear all programmer values. */
 export function clearProgrammer(): void {
   layers.get(PROGRAMMER_LAYER_ID)?.channels.clear()
+  notifyProgrammer('clear', -1, -1)
   if (isRemoteMode()) {
     pendingRemoteProgrammer.clear()
     remoteTouched.clear()
@@ -521,6 +711,64 @@ export function isProgrammerActive(): boolean {
     if (chMap.size > 0) return true
   }
   return false
+}
+
+// --------------- Public API: pro output (highlight, blind, park, group masters) ---------------
+
+/** Replace the highlight layer's values (null / empty = highlight off). Never recorded. */
+export function setHighlightChannels(channels: LayerChannels | null): void {
+  if (!channels || channels.size === 0) {
+    layers.delete(HIGHLIGHT_LAYER_ID)
+    return
+  }
+  const existing = layers.get(HIGHLIGHT_LAYER_ID)
+  if (existing) existing.channels = channels
+  else layers.set(HIGHLIGHT_LAYER_ID, { id: HIGHLIGHT_LAYER_ID, priority: 100, master: 255, activatedAt: 0, channels })
+}
+
+/**
+ * Blind: the programmer (and the highlight) stop reaching the output; a
+ * preview mix WITH them is produced every frame (getPreviewBuffer).
+ */
+export function setBlind(on: boolean): void {
+  blind = !!on
+}
+
+export function isBlindActive(): boolean {
+  return blind
+}
+
+/** Pre-master mix including the programmer: the Blind preview while Blind is on, else the mix. Do not mutate. */
+export function getPreviewBuffer(): Uint8Array {
+  return blind ? previewBuf : mixBuf
+}
+
+/** Bumped when the preview changes (mix version when not blind) */
+export function getPreviewVersion(): number {
+  return blind ? previewVersion : mixVersion
+}
+
+/**
+ * Parked channels: value per channel (index = universe * 512 + channel),
+ * -1 = not parked; applied last, after every master. null = none.
+ */
+export function setParked(idx: Int16Array | null): void {
+  parkedIdx = idx
+  outputExtras.parked = idx
+}
+
+/** Group master scale (0..1) per channel, applied to intensity before the GM. null = none. */
+export function setGroupMasterScale(scale: Float32Array | null): void {
+  groupScaleArr = scale
+  outputExtras.groupScale = scale
+}
+
+export function getParked(): Int16Array | null {
+  return parkedIdx
+}
+
+export function getGroupMasterScale(): Float32Array | null {
+  return groupScaleArr
 }
 
 // --------------- Public API: frame access ---------------
@@ -587,6 +835,8 @@ function ensureChannelInfo(): void {
     mixBuf = grow(mixBuf)
     prevMixBuf = grow(prevMixBuf)
     outputBuf = grow(outputBuf)
+    previewBuf = grow(previewBuf)
+    blindMixOptions.preview = previewBuf
     const sent = new Int16Array(size).fill(-1)
     sent.set(sentBuf.subarray(0, size))
     sentBuf = sent
@@ -614,7 +864,19 @@ export function runMixerFrame(now: number): void {
   ensureChannelInfo()
   const info = channelInfo
 
-  mixLayers(layers.values(), info, mixBuf)
+  if (blind) {
+    mixLayers(layers.values(), info, mixBuf, blindMixOptions)
+    if (prevPreviewBuf.length !== previewBuf.length) prevPreviewBuf = new Uint8Array(previewBuf.length).fill(0)
+    for (let i = 0; i < previewBuf.length; i++) {
+      if (previewBuf[i] !== prevPreviewBuf[i]) {
+        prevPreviewBuf.set(previewBuf)
+        previewVersion++
+        break
+      }
+    }
+  } else {
+    mixLayers(layers.values(), info, mixBuf)
+  }
 
   let mixChanged = false
   for (let i = 0; i < mixBuf.length; i++) {
@@ -634,13 +896,17 @@ export function runMixerFrame(now: number): void {
     blinder: dmx.blinder,
     strobe: dmx.strobe,
     strobeOn
-  }, outputBuf)
+  }, outputBuf, parkedIdx || groupScaleArr ? outputExtras : undefined)
 
   sendChangedChannels(info.universeCount)
 
-  // Throttled publish of the pre-master mix for the UI (faders, meters, 3D)
+  // Throttled publish of the pre-master mix for the UI (faders, meters, 3D).
+  // Blind: the UI shows the preview (the programmer being edited blind).
   const strobeChanged = prevStrobe !== strobeOn
-  if ((mixVersion !== publishedVersion || strobeChanged) && now - lastPublish >= PUBLISH_INTERVAL_MS) {
+  const changed = blind
+    ? previewVersion !== publishedPreviewVersion || !publishedBlind
+    : mixVersion !== publishedVersion || publishedBlind
+  if ((changed || strobeChanged) && now - lastPublish >= PUBLISH_INTERVAL_MS) {
     publishMix(info.universeCount)
     lastPublish = now
   }
@@ -674,10 +940,13 @@ function sendChangedChannels(universeCount: number): void {
 
 function publishMix(universeCount: number): void {
   const values: number[][] = []
+  const source = blind ? previewBuf : mixBuf
   for (let u = 0; u < universeCount; u++) {
-    values.push(Array.from(mixBuf.subarray(u * U, (u + 1) * U)))
+    values.push(Array.from(source.subarray(u * U, (u + 1) * U)))
   }
   publishedVersion = mixVersion
+  publishedPreviewVersion = previewVersion
+  publishedBlind = blind
   useDmxStore.setState({ values, _strobePhase: strobeOn })
 }
 
