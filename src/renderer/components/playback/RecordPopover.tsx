@@ -4,23 +4,33 @@
 //   Chases: new chase · add step to the selected chase · update a step
 // Shows what will be stored (programmer or live output, fixtures,
 // channels, running effects) and can clear the programmer after.
+// Pro view (console, scenes): store mode for an existing cue (Merge /
+// Overwrite / Remove / Cue only, via lib/pro/store-ops) and a feature
+// filter (only these attributes are stored).
 // ============================================================
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import type { IconType } from 'react-icons'
 import { LuCirclePlus, LuCircleDot, LuListPlus, LuRefreshCw, LuSparkles, LuTriangleAlert } from 'react-icons/lu'
 import {
   Button, Checkbox, Popover, SegmentedControl, Switch, TextInput, cn, toast
 } from '@renderer/components/ui'
+import type { CueFeature } from '@shared/types'
 import { formatList, useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { isRemoteMode } from '@renderer/lib/runtime'
+import type { StoreMode } from '@renderer/lib/pro/store-ops'
 import {
   capture, captureSummary, clearProgrammerAfterRecord, recordAddCue, recordAddStep, recordNewChase, recordNewScene, recordUpdateCue, recordUpdateStep,
   type Capture
 } from './record'
 import { formatCueNumber } from './actions'
+import { CUE_FEATURES, cleanFeatureFilter, toggleFeatureFilter } from './pro-cue'
+import { RECORD_STORE_MODES, applyFeatureFilter, storeIntoExistingCue } from './store-modes'
+import { featureLabel } from './feature-label'
 
 type Target = 'new' | 'add' | 'update'
 
@@ -31,15 +41,31 @@ interface RecordPrefs {
   clearAfter: boolean
   includeEffects: boolean
   updateMode: 'merge' | 'replace'
+  /** Pro: store mode into an existing cue */
+  storeMode: Exclude<StoreMode, 'block'>
+  /** Pro: only these features ([] = all) */
+  filter: CueFeature[]
 }
 
 function readPrefs(): RecordPrefs {
-  const fallback: RecordPrefs = { target: 'new', clearAfter: false, includeEffects: true, updateMode: 'merge' }
+  const fallback: RecordPrefs = { target: 'new', clearAfter: false, includeEffects: true, updateMode: 'merge', storeMode: 'merge', filter: [] }
   try {
     const raw = JSON.parse(window.localStorage.getItem(PREF_KEY) ?? 'null')
-    if (raw && typeof raw === 'object') return { ...fallback, ...raw }
+    if (raw && typeof raw === 'object') {
+      const prefs: RecordPrefs = { ...fallback, ...raw }
+      prefs.filter = cleanFeatureFilter(raw.filter)
+      if (!RECORD_STORE_MODES.includes(prefs.storeMode)) prefs.storeMode = 'merge'
+      return prefs
+    }
   } catch { /* ignore */ }
   return fallback
+}
+
+/** The capture limited to the feature filter (Pro) */
+function filterCapture(cap: Capture, filter: CueFeature[]): Capture {
+  if (filter.length === 0 || cap.values.length === 0) return cap
+  const values = applyFeatureFilter(cap.values, filter)
+  return { ...cap, values, channelCount: values.length, fixtureCount: new Set(values.map((v) => v.fixtureId)).size }
 }
 
 function writePrefs(p: RecordPrefs): void {
@@ -96,6 +122,11 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
     return () => clearInterval(timer)
   }, [selectedOnly, selectionCount])
 
+  // Pro (console only: a remote's record runs on the console without these options)
+  const pro = useUiStore((s) => s.proMode) && pane === 'scenes' && !isRemoteMode()
+  const filter = pro ? prefs.filter : []
+  const shown = useMemo(() => filterCapture(cap, filter), [cap, filter])
+
   const scene = usePlaybackStore((s) => (pane === 'scenes' ? s.cuelists.find((c) => c.id === s.selectedCuelistId) ?? null : null))
   const chase = usePlaybackStore((s) => (pane === 'chases' ? s.chases.find((c) => c.id === s.selectedChaseId) ?? null : null))
 
@@ -108,15 +139,28 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
   const canAdd = pane === 'scenes' ? !!scene : !!chase
   const canUpdate = pane === 'scenes' ? !!updateCue : !!updateStep
   const target: Target = prefs.target === 'add' && !canAdd ? 'new' : prefs.target === 'update' && !canUpdate ? (canAdd ? 'add' : 'new') : prefs.target
-  const empty = cap.channelCount === 0
+  const empty = shown.channelCount === 0
+  const filteredOut = empty && cap.channelCount > 0
   const nameInput = useRef<HTMLInputElement>(null)
 
   const doRecord = () => {
     if (empty) return
-    const fresh = capture(selectedOnly)
-    if (fresh.channelCount === 0) return
+    const raw = capture(selectedOnly)
+    const fresh = filterCapture(raw, filter)
+    if (fresh.channelCount === 0) {
+      if (raw.channelCount > 0) toast.warning(t('pro.scenes.record.filteredOut'))
+      return
+    }
     let message = ''
-    if (pane === 'scenes') {
+    if (pane === 'scenes' && pro && target === 'update' && scene && updateCue) {
+      // Store modes through lib/pro/store-ops (the filter is applied there too)
+      const number = formatCueNumber(updateCue.number)
+      const mode = prefs.storeMode
+      message = mode === 'remove'
+        ? t('pro.scenes.record.toastRemoved', { number, count: fresh.channelCount })
+        : t(mode === 'overwrite' ? 'scenes.toast.cueReplaced' : 'scenes.toast.cueUpdated', { number })
+      storeIntoExistingCue(scene.id, updateCue.id, raw.values, { mode, ...(filter.length > 0 ? { filter } : {}) }, message)
+    } else if (pane === 'scenes') {
       if (target === 'new') {
         const id = recordNewScene(fresh, { name, includeEffects: prefs.includeEffects })
         const cl = usePlaybackStore.getState().cuelists.find((c) => c.id === id)
@@ -143,6 +187,7 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
       }
     }
     const cleared = prefs.clearAfter && fresh.source === 'programmer'
+    // (a filtered store clears the whole programmer too, like the console's Store + Clear)
     if (cleared) clearProgrammerAfterRecord()
     toast.success(message || t('scenes.toast.recorded'), {
       description: cleared ? t('scenes.toast.summaryCleared', { summary: captureSummary(fresh) }) : captureSummary(fresh)
@@ -173,7 +218,7 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
           {empty ? <LuTriangleAlert size={16} aria-hidden className="shrink-0 text-warning-fg" /> : null}
           <div className="flex min-w-0 flex-1 flex-col">
             <span className={cn('text-sm font-medium', empty ? 'text-warning-fg' : 'text-fg-primary')}>
-              {empty ? t('scenes.record.nothing') : cap.source === 'programmer' ? t('scenes.record.sourceProgrammer') : t('scenes.record.sourceOutput')}
+              {filteredOut ? t('pro.scenes.record.filteredOut') : empty ? t('scenes.record.nothing') : cap.source === 'programmer' ? t('scenes.record.sourceProgrammer') : t('scenes.record.sourceOutput')}
             </span>
             <span className="text-xs text-fg-tertiary">
               {empty
@@ -183,8 +228,8 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
           </div>
           {!empty && (
             <div className="flex shrink-0 flex-col items-end font-mono text-xs tabular text-fg-secondary">
-              <span>{t('scenes.record.fixturesShort', { count: cap.fixtureCount })}</span>
-              <span>{t('units.channelsShortValue', { count: cap.channelCount })}</span>
+              <span>{t('scenes.record.fixturesShort', { count: shown.fixtureCount })}</span>
+              <span>{t('units.channelsShortValue', { count: shown.channelCount })}</span>
             </div>
           )}
         </div>
@@ -194,6 +239,20 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
             onChange={setSelectedOnly}
             label={t('scenes.record.selectedOnly', { count: selectionCount })}
           />
+        )}
+        {pro && (
+          <div role="group" aria-label={t('pro.scenes.record.filterAria')} data-record-filter="" className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-xs text-fg-secondary">{t('pro.scenes.record.filter')}</span>
+            <Checkbox checked={filter.length === 0} onChange={() => update({ filter: [] })} label={t('pro.scenes.record.filterAll')} />
+            {CUE_FEATURES.map((f) => (
+              <Checkbox
+                key={f}
+                checked={filter.length === 0 || filter.includes(f)}
+                onChange={() => update({ filter: toggleFeatureFilter(filter, f) })}
+                label={featureLabel(f)}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -235,7 +294,17 @@ function RecordForm({ onClose, pane, selectedCueId, selectedStepId, onRecordedCu
               : t('scenes.record.selectCueFirst')
             : updateStep ? t('scenes.record.channelsNow', { count: updateStep.values.length }) : t('scenes.record.selectStepFirst')}
         >
-          {target === 'update' && (
+          {target === 'update' && pro && (
+            <SegmentedControl
+              size="xs"
+              aria-label={t('pro.scenes.record.storeModeAria')}
+              value={prefs.storeMode}
+              onChange={(v) => update({ storeMode: v })}
+              data-record-store-mode=""
+              items={RECORD_STORE_MODES.map((m) => ({ value: m, label: t(`pro.scenes.record.${m}`), title: t(`pro.scenes.record.${m}Title`) }))}
+            />
+          )}
+          {target === 'update' && !pro && (
             <SegmentedControl
               size="xs"
               aria-label={t('scenes.record.updateModeAria')}

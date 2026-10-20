@@ -5,24 +5,29 @@
 // stored effects and settings. Header: visible Duplicate / Delete
 // buttons for the scene; the cue table registers the cue selection
 // actions (Delete / Mod+D / F2 on the selected cue).
+// Pro view: advanced cue columns (Columns menu, remembered) and the
+// cue timing editor beside the table (below it when narrow).
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import {
-  LuArrowDown, LuArrowUp, LuCircleDot, LuCopy, LuEllipsis, LuListOrdered, LuPencil, LuPiano, LuPlay, LuRefreshCw, LuSettings2,
-  LuSkipBack, LuSparkles, LuSquare, LuTrash2, LuX, LuZap
+  LuArrowDown, LuArrowUp, LuCircleDot, LuColumns3, LuCopy, LuEllipsis, LuListOrdered, LuPencil, LuPiano, LuPlay, LuRefreshCw, LuSettings2,
+  LuSkipBack, LuSparkles, LuSquare, LuTimer, LuTrash2, LuX, LuZap
 } from 'react-icons/lu'
 import type { Cuelist } from '@shared/types'
 import {
-  Badge, Button, DropdownMenu, EmptyState, IconButton, Slider, Tabs, formatCuePosition, formatPercent, formatSeconds, toast,
+  Badge, Button, DropdownMenu, EmptyState, IconButton, Slider, Tabs, ToggleButton, cn, formatCuePosition, formatPercent, formatSeconds, toast,
   type MenuEntry
 } from '@renderer/components/ui'
 import { t as translate, useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
+import { useUiStore } from '@renderer/stores/ui-store'
 import { useSelectionActions } from '@renderer/lib/selection-actions'
 import { CueTable } from './CueTable'
+import { CueTimingEditor } from './CueTimingEditor'
+import { PRO_COLUMNS_KEY, parseProColumns, type ProCueColumns } from './pro-cue'
 import {
   cueSelectionActions, deleteCue, deleteScene, duplicateCue, duplicateScene, focusNameField, formatCueNumber, sceneSelectionActions
 } from './actions'
@@ -33,6 +38,16 @@ import { capture, captureSummary, recordAddCue, recordUpdateCue } from './record
 import { MODE_LABEL, formatMidiSource, formatSlot, startSceneLearn, useLearningSceneId, useSceneMidi, type ExecutorSlot } from './scene-meta'
 
 type SceneTab = 'cues' | 'effects' | 'settings'
+
+const TIMING_EDITOR_KEY = 'photonboard.scenes.timingEditor'
+
+function readLocal(key: string): string | null {
+  try { return window.localStorage.getItem(key) } catch { return null }
+}
+
+function writeLocal(key: string, value: string): void {
+  try { window.localStorage.setItem(key, value) } catch { /* ignore */ }
+}
 
 export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelectCue }: {
   cuelist: Cuelist
@@ -48,7 +63,26 @@ export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelect
   const learning = useLearningSceneId() === cl.id
   const body = useRef<HTMLDivElement>(null)
   const width = useWidth(body)
+  const outer = useRef<HTMLDivElement>(null)
+  const outerWidth = useWidth(outer)
   const pb = usePlaybackStore.getState
+  // Pro view: advanced columns and the cue timing editor (remembered on this machine)
+  const proMode = useUiStore((s) => s.proMode)
+  const [proColumns, setProColumnsState] = useState<ProCueColumns>(() => parseProColumns(readLocal(PRO_COLUMNS_KEY)))
+  const setProColumn = (k: keyof ProCueColumns, on: boolean) => setProColumnsState((cur) => {
+    const next = { ...cur, [k]: on }
+    writeLocal(PRO_COLUMNS_KEY, JSON.stringify(next))
+    return next
+  })
+  const [timingOpen, setTimingOpenState] = useState(() => readLocal(TIMING_EDITOR_KEY) === '1')
+  const setTimingOpen = (open: boolean) => {
+    setTimingOpenState(open)
+    writeLocal(TIMING_EDITOR_KEY, open ? '1' : '0')
+  }
+  const showTiming = proMode && tab === 'cues' && timingOpen && cl.cues.length > 0
+  const timingSide = outerWidth === 0 || outerWidth >= 980
+  // Width the advanced columns take (Delay / Total give way to them first)
+  const proExtra = proMode ? (proColumns.featureTiming ? 120 : 0) + (proColumns.parts ? 84 : 0) + (proColumns.trigger ? 84 : 0) + (proColumns.presets ? 44 : 0) : 0
 
   const selectedIndex = cl.cues.findIndex((c) => c.id === selectedCueId)
   const selectedCue = selectedIndex >= 0 ? cl.cues[selectedIndex] : undefined
@@ -78,6 +112,15 @@ export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelect
     recordUpdateCue(cl.id, selectedCue.id, cap, 'merge')
     toast.success(t('scenes.toast.cueUpdated', { number: formatCueNumber(selectedCue.number) }), { description: t('scenes.toast.channelsMerged', { count: cap.channelCount }) })
   }
+
+  const columnsMenu = (): MenuEntry[] => [
+    { type: 'label', label: translate('pro.scenes.columns.menuTitle') },
+    ...(['featureTiming', 'parts', 'trigger', 'presets'] as const).map((k): MenuEntry => ({
+      label: translate(`pro.scenes.columns.${k}`),
+      checked: proColumns[k],
+      onSelect: () => setProColumn(k, !proColumns[k])
+    }))
+  ]
 
   const menu = (): MenuEntry[] => [
     { type: 'label', label: cl.name || translate('common.untitled') },
@@ -240,12 +283,40 @@ export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelect
                 </Button>
               </>
             )}
+            {proMode && (
+              <>
+                <DropdownMenu
+                  placement="bottom-end"
+                  items={columnsMenu}
+                  trigger={(p) => (
+                    <Button {...p} size="sm" variant="ghost" icon={LuColumns3} aria-label={t('pro.scenes.columns.menu')} tooltip={t('pro.scenes.columns.menuTitle')} labelClassName="hidden 2xl:inline" className="max-2xl:w-control-sm max-2xl:px-0" data-cue-columns-menu="">
+                      {t('pro.scenes.columns.menu')}
+                    </Button>
+                  )}
+                />
+                <ToggleButton
+                  size="sm"
+                  tone="neutral"
+                  icon={LuTimer}
+                  pressed={timingOpen}
+                  onPressedChange={setTimingOpen}
+                  aria-label={t('pro.scenes.timing.button')}
+                  tooltip={timingOpen ? t('pro.scenes.timing.hide') : t('pro.scenes.timing.show')}
+                  labelClassName="hidden xl:inline"
+                  className="max-xl:w-control-sm max-xl:px-0"
+                  data-cue-timing-toggle=""
+                >
+                  {t('pro.scenes.timing.button')}
+                </ToggleButton>
+              </>
+            )}
             <Button size="sm" variant="secondary" icon={LuCircleDot} className="text-accent-fg" tooltip={t('scenes.cues.addTooltip')} onClick={recordCue}>{t('scenes.cues.add')}</Button>
           </div>
         )}
       </div>
 
-      <div ref={body} data-reorder-scroll="" className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={outer} className={cn('flex min-h-0 flex-1', showTiming && timingSide ? 'flex-row' : 'flex-col')}>
+      <div ref={body} data-reorder-scroll="" className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {tab === 'cues' && (cl.cues.length === 0 ? (
           <EmptyState
             icon={LuListOrdered}
@@ -259,12 +330,16 @@ export function SceneDetail({ cuelist: cl, number, slot, selectedCueId, onSelect
               cuelist={cl}
               selectedCueId={selectedCueId}
               onSelectCue={onSelectCue}
-              columns={{ delay: width === 0 || width >= 720, tracked: width === 0 || width >= 840 }}
+              columns={{ delay: width === 0 || width >= 720 + proExtra, tracked: width === 0 || width >= 840 + proExtra, ...(proMode ? proColumns : {}) }}
+              proMode={proMode}
+              onEditTiming={() => setTimingOpen(true)}
             />
           </div>
         ))}
         {tab === 'effects' && <SceneEffects cuelist={cl} />}
         {tab === 'settings' && <SceneSettings cuelist={cl} slot={slot} learning={learning} />}
+      </div>
+      {showTiming && <CueTimingEditor cuelist={cl} cue={selectedCue} layout={timingSide ? 'side' : 'bottom'} onClose={() => setTimingOpen(false)} />}
       </div>
     </section>
   )

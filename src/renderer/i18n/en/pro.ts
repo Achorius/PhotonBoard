@@ -8,9 +8,13 @@
 import { core } from './pro/core'
 import { cli } from './pro/cli'
 import { programmer } from './pro/programmer'
+import { cliUi } from './pro/cli-ui'
+import { scenes } from './pro/scenes'
 
 export const pro = {
   ...core,
   cli,
-  programmer
+  programmer,
+  cliUi,
+  scenes
 }

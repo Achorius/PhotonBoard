@@ -1,8 +1,10 @@
 // Programmation pro — couche de données commune (lot 0).
 
 import type { Translation } from '../../types'
+import type { core as enCore } from '../../en/pro/core'
 
-type Core = Pick<Translation['pro'], 'sections' | 'executor' | 'defaults' | 'proMode' | 'proModeHint'>
+/** The keys of en/pro/core.ts only (each work package types its own file) */
+type Core = { [K in keyof typeof enCore]: Translation['pro'][K] }
 
 export const core: Core = {
   sections: {

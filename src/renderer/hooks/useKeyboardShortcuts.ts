@@ -7,6 +7,10 @@
 // Selection keys (lib/selection-actions.ts): Delete / Backspace delete
 // the selection of the active view, Mod+D duplicates it, F2 / Enter
 // rename it. Mod+Backspace clears the programmer.
+// Command line: "/" focuses it (also Shift+: on AZERTY keyboards, where
+// "/" needs Shift; Shift+/ is "?" on QWERTY = the cheat sheet, so it gets
+// no other binding). Keys typed in it never reach these shortcuts; its
+// keypad buttons never take the focus.
 // Undo / redo (lib/history.ts): Mod+Z, Mod+Shift+Z, Ctrl+Y. In
 // Electron the application menu owns Mod+Z and the platform redo
 // accelerator (menu:undo / menu:redo, see App.tsx).
@@ -91,6 +95,15 @@ export function getShortcutGroups(t: TFunction): ShortcutGroup[] {
 /** Id of the command line input (focused by "/") */
 export const COMMAND_LINE_ID = 'pb-command-line'
 
+/** "/" — focus the command line (status bar); false when it is not on screen */
+export function focusCommandLine(): boolean {
+  const input = document.getElementById(COMMAND_LINE_ID)
+  if (!(input instanceof HTMLInputElement)) return false
+  input.focus()
+  return true
+}
+
+/** Typing in a field (the command line included): global shortcuts stay quiet */
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable) return true
@@ -159,10 +172,14 @@ export function useKeyboardShortcuts(): void {
       }
 
       if (mod || e.altKey || hasOpenOverlay()) return
-      // Shift is allowed only for characters that need it ("?")
+      // Shift is allowed only for characters that need it ("?"; "/" is Shift+: on AZERTY)
       if (e.key === '?') {
         e.preventDefault()
         useUiStore.getState().setShortcutsOpen(true)
+        return
+      }
+      if (e.key === '/') {
+        if (focusCommandLine()) e.preventDefault()
         return
       }
       if (e.shiftKey) return
@@ -202,14 +219,6 @@ export function useKeyboardShortcuts(): void {
           } else {
             const cuelistId = selectGoTargetCuelistId(pb)
             if (cuelistId) pb.goCuelist(cuelistId)
-          }
-          break
-        }
-        case '/': {
-          const input = document.getElementById(COMMAND_LINE_ID)
-          if (input) {
-            e.preventDefault()
-            input.focus()
           }
           break
         }
