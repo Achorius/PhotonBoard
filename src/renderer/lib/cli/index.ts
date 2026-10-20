@@ -1,195 +1,78 @@
 // ============================================================
 // PhotonBoard — Command line (public entry point)
 //
-// WP0 contract: FINAL exported types and signatures, stub bodies.
-// WP1 implements the engine (tokenizer.ts, parser.ts, registry.ts,
-// objects.ts, commands/*, macro-runner.ts) and re-exports it from
-// here; callers only ever import '@renderer/lib/cli'.
+// Callers only ever import '@renderer/lib/cli'. Syntax: README.md.
 //
 //   parse(input)               never throws; `expected` drives autocomplete
 //   executeLine(line, ctx?)    never throws; ctx defaults to the one set
 //                              with setCliContext() (the integrator wires
 //                              the real ProApi there)
 //   runCommandLine(text, o?)   executeLine + command-line log (pro-store)
+//   previewLine(text, ctx?)    "→ 12 fixtures, Group “Wash”" while typing
 //   registerCommand(cmd)       keyword (+ aliases) → command
 //   runMacro / stopMacro       macros (sequential lines with waits)
+//   getCliHistory()            typed lines, 200, localStorage
+//
+// Modules: tokenizer.ts · parser.ts · ast.ts · objects.ts (numbers →
+// objects) · values.ts · commands/* · preview.ts · help.ts ·
+// macro-runner.ts · history.ts. Commands talk to the show ONLY through
+// the ProApi facade (lib/pro/contracts.ts).
 //
 // Keywords stay English (console convention); every message goes
 // through ctx.t() — namespace pro.cli.*.
 // ============================================================
 
-import { t, type TParams, type TranslationKey } from '@renderer/i18n'
+import { t } from '@renderer/i18n'
 import { usePoolStore } from '@renderer/stores/pool-store'
 import { useProStore, type CliLogEntry } from '@renderer/stores/pro-store'
-import type { ProApi } from '@renderer/lib/pro/contracts'
+import { getCliContext, getCommand, key, type CliContext, type CliResult, type TFn } from './registry'
+import { parse } from './parser'
+import { describeAst } from './preview'
+import { registerBuiltinCommands } from './commands'
+import { createMacroRunner, type MacroClock } from './macro-runner'
+import { createCliHistory, type CliHistory } from './history'
 
-/** Translation function given to commands (t, or a fixed-locale one in tests) */
-export type TFn = (key: TranslationKey, params?: TParams) => string
+export type {
+  CliObjectKind, CliId, CliIdRange, CliObjectRef, CliObjectExpr, CliValue, CliValueExpr, CliOption, CliAst, CliExpectation,
+  CliParseError, CliParseResult
+} from './ast'
+export type { TFn, CliContext, CliResult, CliCommand } from './registry'
+export { registerCommand, getCommand, listCommands, setCliContext, getCliContext } from './registry'
+export { parse, DEFAULT_OBJECT, CLI_OPTIONS, FILTER_FEATURES, BUTTON_FUNCTIONS } from './parser'
+export {
+  tokenize, resolveKeyword, displayKeyword, ACTION_KEYWORDS, OBJECT_KEYWORDS, OTHER_KEYWORDS, KEYWORD_ALIASES, LEGACY_CHANNEL_WORDS,
+  type Token, type KeywordMatch
+} from './tokenizer'
+export { CLI_CHEATSHEET, helpKeyOf, type CheatLine, type CheatSection } from './help'
+export { createCliHistory, CLI_HISTORY_KEY, CLI_HISTORY_LIMIT, type CliHistory, type HistoryStorage } from './history'
+export { createMacroRunner, realClock, MAX_MACRO_DEPTH, type MacroClock, type MacroRunner } from './macro-runner'
+export { describeAst } from './preview'
 
-// ---------------------------------------------------------------- AST
+registerBuiltinCommands()
 
-/** Object keywords (Fixture, Group, Preset, Cue, Sequence, Executor, Page, Macro, Chase, Effect, Speed, DMX) */
-export type CliObjectKind =
-  | 'fixture' | 'group' | 'preset' | 'cue' | 'sequence' | 'executor' | 'page' | 'macro' | 'chase' | 'effect' | 'speed' | 'dmx'
+// ---------------------------------------------------------------- execute
 
-/** `4` → { major: 4 } · `4.2` → { major: 4, minor: 2 } (preset family.slot, page.slot, universe.address) */
-export interface CliId {
-  major: number
-  minor?: number
-}
-
-/** `1`, `1 Thru 8`, `1 Thru` (to the end) */
-export interface CliIdRange {
-  from: CliId
-  /** undefined = single id; 'end' = open "Thru" */
-  to?: CliId | 'end'
-}
-
-/** `Fixture 1 Thru 4 + 7 - 3` */
-export interface CliObjectRef {
-  kind: CliObjectKind
-  /** Bare numbers default to 'fixture' */
-  implicit?: boolean
-  ids: { op: '+' | '-'; range: CliIdRange }[]
-}
-
-/** `Group 2 + Fixture 5 If Group 1` */
-export interface CliObjectExpr {
-  items: { op: '+' | '-'; object: CliObjectRef }[]
-  condition?: CliObjectRef
-}
-
-export type CliValue =
-  /** Percent 0-100 (Full = 100, Zero = 0); `to` = fan "At 0 Thru 100" */
-  | { kind: 'level'; from: number; to?: number }
-  /** `At Preset 4.2` */
-  | { kind: 'preset'; id: CliId }
-
-export interface CliValueExpr {
-  value: CliValue
-  fade?: number
-  delay?: number
-}
-
-/** `/merge`, `/filter=position,color` */
-export interface CliOption {
-  name: string
-  value?: string
-}
-
-export interface CliAst {
-  /** Lower-case action keyword ('store', 'go-', 'clearall'…); undefined = selection / bare value */
-  action?: string
-  objects?: CliObjectExpr
-  value?: CliValueExpr
-  /** `Label Group 3 "Wash"` */
-  text?: string
-  options: CliOption[]
-  /** The line as typed */
-  source: string
-}
-
-/** What may come next (autocomplete chips, keypad hints) */
-export interface CliExpectation {
-  kind: 'action' | 'object' | 'number' | 'value' | 'option' | 'text' | 'end'
-  /** Candidate keywords / options for this position */
-  values?: string[]
-  /** Help key of the candidate (pro.cli.help.*) */
-  helpKey?: string
-}
-
-export interface CliParseError {
-  /** Message key suffix under pro.cli.errors (WP1 adds the messages) */
-  code: string
-  /** Character offset in the input */
-  at: number
-  token?: string
-}
-
-export interface CliParseResult {
-  ast?: CliAst
-  error?: CliParseError
-  expected: CliExpectation[]
-}
-
-// ---------------------------------------------------------------- registry
-
-export interface CliContext {
-  api: ProApi
-  t: TFn
-  now(): number
-}
-
-export interface CliResult {
-  ok: boolean
-  /** Already translated */
-  message: string
-  level?: 'info' | 'warning' | 'error'
-  /** Undo step the command created (for "Oops") */
-  undoLabel?: string
-  /** The command needs an answer first (Store on an existing cue…): final result */
-  pending?: Promise<CliResult>
-}
-
-export interface CliCommand {
-  /** Lower-case action keyword */
-  keyword: string
-  aliases?: string[]
-  /** pro.cli.help.<helpKey> */
-  helpKey: string
-  run(ast: CliAst, ctx: CliContext): CliResult
-  /** One-line preview while typing ("→ 12 fixtures, Group 'Wash'") */
-  preview?(ast: CliAst, ctx: CliContext): string
-}
-
-const commands = new Map<string, CliCommand>()
-
-/** Register (or replace) a command by keyword and aliases (case-insensitive). */
-export function registerCommand(c: CliCommand): void {
-  for (const k of [c.keyword, ...(c.aliases ?? [])]) commands.set(k.toLowerCase(), c)
-}
-
-/** Command for an action keyword (case-insensitive) */
-export function getCommand(keyword: string): CliCommand | undefined {
-  return commands.get(keyword.toLowerCase())
-}
-
-/** Every registered command (one entry per command) */
-export function listCommands(): CliCommand[] {
-  return Array.from(new Set(commands.values()))
-}
-
-let defaultContext: CliContext | null = null
-
-/** Context used when executeLine() gets none (the integrator sets the real ProApi). */
-export function setCliContext(ctx: CliContext | null): void {
-  defaultContext = ctx
-}
-
-export function getCliContext(): CliContext | null {
-  return defaultContext
-}
-
-// ---------------------------------------------------------------- parse / execute (stubs)
-
-/** Parse a command line. Never throws. WP0 stub: no grammar yet. */
-export function parse(input: string): CliParseResult {
-  if (input.trim() === '') return { expected: [{ kind: 'action' }, { kind: 'object' }] }
-  return { error: { code: 'notImplemented', at: 0 }, expected: [] }
+/** Message of a parse error (pro.cli.errors.<code>) */
+export function parseErrorMessage(tr: TFn, code: string, token?: string): string {
+  return tr(key(`pro.cli.errors.${code}`), { token: token ?? '' })
 }
 
 /** Run one command line. Never throws. */
 export function executeLine(line: string, ctx?: CliContext): CliResult {
-  const context = ctx ?? defaultContext
+  const context = ctx ?? getCliContext()
   const tr: TFn = context?.t ?? t
   const text = line.trim()
   if (text === '') return { ok: true, message: '', level: 'info' }
   if (!context) return { ok: false, message: tr('pro.cli.notAvailable'), level: 'warning' }
   try {
     const parsed = parse(text)
-    if (!parsed.ast) return { ok: false, message: tr('pro.cli.notAvailable'), level: 'warning' }
-    const command = parsed.ast.action ? getCommand(parsed.ast.action) : getCommand('select')
-    if (!command) return { ok: false, message: tr('pro.cli.unknownCommand', { command: parsed.ast.action ?? text }), level: 'error' }
+    if (parsed.error || !parsed.ast) {
+      const e = parsed.error ?? { code: 'internal', at: 0 }
+      return { ok: false, message: parseErrorMessage(tr, e.code, e.token), level: 'error' }
+    }
+    const action = parsed.ast.action ?? 'select'
+    const command = getCommand(action)
+    if (!command) return { ok: false, message: tr('pro.cli.unknownCommand', { command: action }), level: 'error' }
     return command.run(parsed.ast, context)
   } catch (e) {
     console.error('[CLI] command failed:', e)
@@ -197,20 +80,50 @@ export function executeLine(line: string, ctx?: CliContext): CliResult {
   }
 }
 
-/** Run a line and add it to the command-line log (console UI, remote 'cli', macros). */
+/** One-line preview of what a line would do ('' when nothing to say or invalid). Never throws. */
+export function previewLine(line: string, ctx?: CliContext): string {
+  const context = ctx ?? getCliContext()
+  if (!context || line.trim() === '') return ''
+  try {
+    const parsed = parse(line)
+    if (!parsed.ast || parsed.error) return ''
+    const command = getCommand(parsed.ast.action ?? 'select')
+    return (command?.preview ?? describeAst)(parsed.ast, context)
+  } catch {
+    return ''
+  }
+}
+
+function logResult(text: string, result: CliResult, origin?: string): void {
+  const entry: Omit<CliLogEntry, 'id' | 'time'> = { text, ok: result.ok, message: result.message, level: result.level ?? (result.ok ? 'info' : 'error') }
+  if (origin) entry.origin = origin
+  useProStore.getState().appendCliLog(entry)
+}
+
+/**
+ * Run a line and add it to the command-line log (console UI, remote
+ * 'cli', macros). A command waiting for an answer logs its question,
+ * then its final result when answered.
+ */
 export function runCommandLine(text: string, origin?: string, ctx?: CliContext): CliResult {
   const result = executeLine(text, ctx)
-  if (text.trim() !== '') {
-    const entry: Omit<CliLogEntry, 'id' | 'time'> = { text: text.trim(), ok: result.ok, message: result.message, level: result.level ?? (result.ok ? 'info' : 'error') }
-    if (origin) entry.origin = origin
-    useProStore.getState().appendCliLog(entry)
+  const line = text.trim()
+  if (line !== '') {
+    logResult(line, result, origin)
+    result.pending?.then(final => logResult(line, final, origin), () => {})
   }
   return result
 }
 
-// ---------------------------------------------------------------- macros (basic runner)
+// ---------------------------------------------------------------- macros
 
-const running = new Map<string, { cancel: () => void }>()
+const macroRunner = createMacroRunner({
+  getMacros: () => {
+    const api = getCliContext()?.api
+    return typeof api?.getMacros === 'function' ? api.getMacros() : usePoolStore.getState().macros
+  },
+  runLine: () => undefined
+})
 
 /**
  * Run a macro (by id, or by number): its lines one after the other, waiting
@@ -218,32 +131,43 @@ const running = new Map<string, { cancel: () => void }>()
  * already running (a macro never starts itself twice).
  */
 export function runMacro(idOrNumber: string | number, opts: { ctx?: CliContext; origin?: string } = {}): boolean {
-  const { macros } = usePoolStore.getState()
-  const macro = typeof idOrNumber === 'number' ? macros.find(m => m.number === idOrNumber) : macros.find(m => m.id === idOrNumber)
-  if (!macro || running.has(macro.id)) return false
-  let cancelled = false
-  let timer: ReturnType<typeof setTimeout> | null = null
-  running.set(macro.id, { cancel: () => { cancelled = true; if (timer) clearTimeout(timer) } })
-  const lines = macro.lines.map(l => ({ ...l }))
-  const step = (i: number) => {
-    timer = null
-    if (cancelled || i >= lines.length) { running.delete(macro.id); return }
-    const res = runCommandLine(lines[i].command, opts.origin ?? 'macro', opts.ctx)
-    if (!res.ok && res.level === 'error') { running.delete(macro.id); return }
-    const wait = Math.max(0, lines[i].wait ?? 0) * 1000
-    if (wait > 0) timer = setTimeout(() => step(i + 1), wait)
-    else step(i + 1)
-  }
-  step(0)
-  return true
+  const api = opts.ctx?.api
+  const macros = typeof api?.getMacros === 'function' ? api.getMacros() : undefined
+  return macroRunner.run(idOrNumber, (command, macroId) => {
+    const base = opts.ctx ?? getCliContext()
+    runCommandLine(command, opts.origin ?? 'macro', base ? { ...base, macro: macroId } : undefined)
+  }, macros)
 }
 
 /** Stop a running macro ("Off Macro 3") */
 export function stopMacro(id: string): void {
-  running.get(id)?.cancel()
-  running.delete(id)
+  macroRunner.stop(id)
 }
 
 export function isMacroRunning(id: string): boolean {
-  return running.has(id)
+  return macroRunner.isRunning(id)
+}
+
+/** Ids of the running macros */
+export function runningMacros(): string[] {
+  return macroRunner.running()
+}
+
+export function stopAllMacros(): void {
+  macroRunner.stopAll()
+}
+
+/** Clock of macro waits (tests; default setTimeout) */
+export function setMacroClock(clock: MacroClock): void {
+  macroRunner.setClock(clock)
+}
+
+// ---------------------------------------------------------------- history
+
+let history: CliHistory | null = null
+
+/** Typed-line history of this machine (created on first use) */
+export function getCliHistory(): CliHistory {
+  history ??= createCliHistory()
+  return history
 }
