@@ -9,6 +9,7 @@
 
 import { memo, useRef } from 'react'
 import { cn, usePointerDrag } from '../ui'
+import { formatNumber, useT } from '@renderer/i18n'
 import { useSquareFit } from '@renderer/hooks/useSquareFit'
 
 export interface XYPadProps {
@@ -40,6 +41,7 @@ const FINE = 0.1
 export const XYPad = memo(function XYPad({
   x, y, onChange, size = 160, fill, label, max = 255, fine, markers, readout = true, onChangeStart, onChangeEnd, className
 }: XYPadProps) {
+  const t = useT()
   const padRef = useRef<HTMLDivElement>(null)
   const live = useRef({ x, y })
   const [fitRef, fitSize] = useSquareFit<HTMLDivElement>(!!fill)
@@ -74,8 +76,9 @@ export const XYPad = memo(function XYPad({
 
   const pct = (v: number) => `${(Math.max(0, Math.min(max, v)) / max) * 100}%`
   const pctY = (v: number) => `${(1 - Math.max(0, Math.min(max, v)) / max) * 100}%`
-  const toPct = (v: number) => `${Math.round((v / max) * 1000) / 10}`
-  const readoutText = typeof readout === 'string' ? readout : readout ? (max > 255 ? `Pan:${toPct(x)}% Tilt:${toPct(y)}%` : `Pan:${x} Tilt:${y}`) : null
+  const pctSign = t.locale === 'fr' ? ' %' : '%'
+  const toPct = (v: number) => `${formatNumber((v / max) * 100, { max: 1, grouping: false })}${pctSign}`
+  const readoutText = typeof readout === 'string' ? readout : readout ? (max > 255 ? `Pan:${toPct(x)} Tilt:${toPct(y)}` : `Pan:${x} Tilt:${y}`) : null
 
   return (
     <div className={cn('flex flex-col items-center gap-1.5', fill && 'h-full w-full min-h-0 min-w-0', className)}>
@@ -85,7 +88,7 @@ export const XYPad = memo(function XYPad({
           ref={padRef}
           role="group"
           tabIndex={0}
-          aria-label={`${label ?? 'XY pad'}: ${toPct(x)}%, ${toPct(y)}%`}
+          aria-label={`${label ?? t('fixtures.position.xyPadAria')}: ${toPct(x)}, ${toPct(y)}`}
           onKeyDown={(e) => {
             const step = (e.shiftKey ? 0.1 : 0.01) * max
             let nx = x

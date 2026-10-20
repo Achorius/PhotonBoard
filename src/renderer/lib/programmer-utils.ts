@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react'
 import { create } from 'zustand'
+import { t } from '@renderer/i18n'
 import {
   clearProgrammer, getProgrammerChannels, getProgrammerValue, releaseProgrammerChannels, setProgrammerChannel
 } from './dmx-mixer'
@@ -60,9 +61,12 @@ export function recordFromProgrammer(): CueChannelValue[] {
  */
 export function getProgrammerSummary(): string {
   const values = recordFromProgrammer()
-  if (values.length === 0) return 'Empty'
+  if (values.length === 0) return t('fixtures.summary.empty')
   const fixtureCount = new Set(values.map(v => v.fixtureId)).size
-  return `${fixtureCount} fixture${fixtureCount > 1 ? 's' : ''}, ${values.length} ch`
+  return t('fixtures.summary.contents', {
+    fixtures: t('common.fixtureCount', { count: fixtureCount }),
+    channels: t('fixtures.summary.channels', { count: values.length })
+  })
 }
 
 // ============================================================

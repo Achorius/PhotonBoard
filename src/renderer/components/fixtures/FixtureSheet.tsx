@@ -11,13 +11,16 @@ import type React from 'react'
 import { LuCable, LuTable } from 'react-icons/lu'
 import type { FixtureDefinition, PatchEntry } from '@shared/types'
 import { Button, EmptyState, cn, fixtureCategoryIcon, formatAddress, palette, tint, withAlpha } from '@renderer/components/ui'
+import { useLocale, useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { useAttrSummary, useAttrTouched } from './attr-actions'
 import { buildProgrammerModel, FEATURES, type Attribute } from './programmer-model'
 import { formatRange, useProgrammerView } from './programmer-view-store'
+import { attrLabel, featureLabel } from './labels'
 
 export function FixtureSheet() {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const fixtures = usePatchStore((s) => s.fixtures)
   const selectedIds = usePatchStore((s) => s.selectedFixtureIds)
@@ -34,14 +37,19 @@ export function FixtureSheet() {
     return (
       <EmptyState
         icon={LuCable}
-        title="No fixtures patched"
-        description="The sheet lists every patched fixture with its live values."
-        action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>Add fixtures</Button>}
+        title={t('fixtures.empty.noPatchTitle')}
+        description={t('fixtures.sheet.noPatchDescription')}
+        action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>{t('fixtures.empty.addFixtures')}</Button>}
       />
     )
   }
   if (columns.length === 0) {
-    return <EmptyState icon={LuTable} title="No channels" description="The patched fixture types have no known channels." />
+    return <EmptyState icon={LuTable} title={t('fixtures.sheet.noChannelsTitle')} description={t('fixtures.sheet.noChannelsDescription')} />
+  }
+  const columnTitle = (c: Attribute): string => {
+    const name = attrLabel(c, t)
+    const title = c.fine ? t('fixtures.attr.fine', { name }) : name
+    return c.cells ? t('fixtures.attr.cells', { name: title }) : title
   }
 
   return (
@@ -52,19 +60,19 @@ export function FixtureSheet() {
             <th colSpan={3} className="sticky left-0 z-10 bg-surface-1" />
             {groups.map((g) => (
               <th key={g.id} colSpan={g.span} scope="colgroup" className="border-l border-line px-2 text-left text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">
-                {g.label}
+                {featureLabel(g.id, t)}
               </th>
             ))}
           </tr>
           <tr className="h-control-sm">
             <Th sticky left={0} className="w-10 text-right">#</Th>
-            <Th sticky left={40} className="w-[132px] min-w-[132px] max-w-[132px] text-left">Fixture</Th>
-            <Th sticky left={172} className="w-[72px] text-left">Address</Th>
+            <Th sticky left={40} className="w-[132px] min-w-[132px] max-w-[132px] text-left">{t('common.fixture')}</Th>
+            <Th sticky left={172} className="w-[72px] text-left">{t('common.address')}</Th>
             {columns.map((c, i) => (
               <th
                 key={c.key}
                 scope="col"
-                title={`${c.label}${c.fine ? ' (16-bit)' : ''}${c.cells ? ' — cells' : ''}`}
+                title={columnTitle(c)}
                 className={cn(
                   'min-w-[52px] whitespace-nowrap border-b border-line px-1.5 text-center text-2xs font-semibold uppercase',
                   i === 0 || columns[i - 1].feature !== c.feature ? 'border-l border-l-line' : 'border-l border-l-line-subtle'
@@ -149,6 +157,7 @@ const SheetRow = memo(function SheetRow({ entry, def, number, selected, columns,
 })
 
 const SheetCell = memo(function SheetCell({ attr, fixtureId, edge }: { attr: Attribute; fixtureId: string; edge: string }) {
+  useLocale() // 16-bit values use the language's decimal separator
   const unit = useProgrammerView((s) => s.unit)
   const sum = useAttrSummary(attr, fixtureId)
   const targets = useMemo(() => attr.targets.filter((t) => t.fixtureId === fixtureId), [attr, fixtureId])
