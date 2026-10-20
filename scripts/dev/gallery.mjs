@@ -180,6 +180,7 @@ try {
     await step('patch map', async () => { await subtab('DMX map'); await s('04-patch-carte-dmx') })
     await step('patch library', async () => {
       await subtab('Library')
+      await win.locator('[data-source-tab="library"]').first().click({ timeout: 3000 }) // Library tab: catalog / library / online
       await win.getByRole('option').filter({ hasText: 'Moving Head Spot' }).first().click({ timeout: 3000 })
       await s('05-patch-bibliotheque')
     })
@@ -459,6 +460,7 @@ try {
     })
     await step('pi add dialog', async () => {
       await tab('patch'); await subtab('Library')
+      await win.locator('[data-source-tab="library"]').first().click({ timeout: 3000 }) // Library tab: catalog / library / online
       await win.getByRole('option').filter({ hasText: 'Moving Head Spot' }).first().click({ timeout: 3000 })
       await win.getByRole('button', { name: 'Patch…' }).first().click({ timeout: 3000 })
       await s('12-dialogue-ajout-fixtures', 500)

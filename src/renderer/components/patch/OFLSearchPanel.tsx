@@ -1,15 +1,17 @@
 // ============================================================
 // Open Fixture Library — online search + download into the user
-// library. States: idle, searching (the first search downloads
-// the OFL index and can take a while), results, no results,
-// error (from the main process), offline.
+// library ("update from the internet": the offline catalog is the
+// primary source). States: idle, searching (the first search
+// downloads the OFL index and can take a while), results, no
+// results, error (from the main process), offline.
 // ============================================================
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
-import { LuCheck, LuCloudDownload, LuGlobe, LuRefreshCw, LuSearch, LuSearchX, LuServerCrash, LuWifiOff } from 'react-icons/lu'
+import { LuCheck, LuCloudDownload, LuGlobe, LuPackageSearch, LuRefreshCw, LuSearch, LuSearchX, LuServerCrash, LuWifiOff } from 'react-icons/lu'
 import type { FixtureDefinition, OFLSearchResult } from '@shared/types'
 import { Badge, Button, EmptyState, Skeleton, Spinner, TextInput, cn, fixtureCategoryIcon, toast } from '@renderer/components/ui'
+import { t as tr, useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 
 const SLOW_MS = 2500
@@ -17,7 +19,7 @@ const SLOW_MS = 2500
 function errorMessage(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e ?? '')
   // Electron prefixes IPC errors: "Error invoking remote method 'x': Error: …"
-  return raw.replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '').trim() || 'Unknown error'
+  return raw.replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '').trim() || tr('patch.shared.unknownError')
 }
 
 function useOnline(): boolean {
@@ -34,11 +36,14 @@ function useOnline(): boolean {
 
 type Status = 'idle' | 'searching' | 'done' | 'error'
 
-export function OFLSearchPanel({ onFixtureDownloaded, className }: {
+export function OFLSearchPanel({ onFixtureDownloaded, onOpenCatalog, className }: {
   /** Called after a download (the library is already reloaded) — or when "Use" is pressed on a fixture already in the library */
   onFixtureDownloaded: (def: FixtureDefinition) => void
+  /** Switch to the offline catalog (offered when there is no internet) */
+  onOpenCatalog?: () => void
   className?: string
 }) {
+  const t = useT()
   const fixtures = usePatchStore((s) => s.fixtures)
   const online = useOnline()
   const [query, setQuery] = useState('')
@@ -87,16 +92,21 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
     try {
       const def = await window.photonboard.fixtures.oflDownload(r.manufacturerKey, r.fixtureKey)
       await usePatchStore.getState().loadFixtures()
-      toast.success(`${def?.name ?? r.name} added to the library`, { description: `${def?.modes.length ?? 0} modes · ${r.manufacturer}` })
+      toast.success(tr('patch.online.added', { name: def?.name ?? r.name }), {
+        description: tr('patch.online.addedDescription', { modes: tr('patch.shared.modeCount', { count: def?.modes.length ?? 0 }), maker: r.manufacturer })
+      })
       if (def) onFixtureDownloaded(def)
     } catch (e) {
-      toast.error(`Could not download ${r.name}`, { description: errorMessage(e) })
+      toast.error(tr('patch.online.downloadFailed', { name: r.name }), { description: errorMessage(e) })
     } finally {
       setDownloading((s) => { const n = new Set(s); n.delete(key); return n })
     }
   }, [onFixtureDownloaded])
 
   const local = new Map(fixtures.map((f) => [f.id, f]))
+  const catalogButton = onOpenCatalog
+    ? <Button size="sm" variant="primary" icon={LuPackageSearch} onClick={onOpenCatalog}>{t('patch.online.openCatalog')}</Button>
+    : null
 
   let body: React.ReactNode
   if (!online && status !== 'done') {
@@ -104,9 +114,14 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
       <EmptyState
         size="sm"
         icon={LuWifiOff}
-        title="You are offline"
-        description="The Open Fixture Library needs an internet connection. Fixtures already downloaded stay in your library."
-        action={query ? <Button size="sm" variant="secondary" icon={LuRefreshCw} onClick={() => { void search(query) }}>Try again</Button> : undefined}
+        title={t('patch.online.offlineTitle')}
+        description={t('patch.online.offlineDescription')}
+        action={(
+          <>
+            {catalogButton}
+            {query && <Button size="sm" variant="secondary" icon={LuRefreshCw} onClick={() => { void search(query) }}>{t('patch.online.tryAgain')}</Button>}
+          </>
+        )}
       />
     )
   } else if (status === 'idle') {
@@ -114,8 +129,9 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
       <EmptyState
         size="sm"
         icon={LuGlobe}
-        title="Open Fixture Library"
-        description="Search thousands of fixtures by maker or model. Downloads are added to your local library and work offline afterwards."
+        title={t('patch.online.idleTitle')}
+        description={t('patch.online.idleDescription')}
+        action={onOpenCatalog ? <Button size="sm" variant="ghost" icon={LuPackageSearch} onClick={onOpenCatalog}>{t('patch.online.openCatalog')}</Button> : undefined}
       />
     )
   } else if (status === 'searching') {
@@ -123,7 +139,7 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
       <div className="flex flex-col gap-3 p-3" aria-busy="true">
         <div className="flex items-center gap-2 text-sm text-fg-secondary">
           <Spinner size={14} />
-          {slow ? 'Downloading the library index — the first search can take up to a minute…' : 'Searching…'}
+          {slow ? t('patch.online.slow') : t('patch.online.searching')}
         </div>
         <Skeleton lines={4} />
       </div>
@@ -133,9 +149,14 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
       <EmptyState
         size="sm"
         icon={LuServerCrash}
-        title="The online library could not be reached"
+        title={t('patch.online.errorTitle')}
         description={error ?? undefined}
-        action={<Button size="sm" variant="secondary" icon={LuRefreshCw} onClick={() => { void search(query) }}>Try again</Button>}
+        action={(
+          <>
+            <Button size="sm" variant="secondary" icon={LuRefreshCw} onClick={() => { void search(query) }}>{t('patch.online.tryAgain')}</Button>
+            {catalogButton}
+          </>
+        )}
       />
     )
   } else if (results.length === 0) {
@@ -143,16 +164,16 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
       <EmptyState
         size="sm"
         icon={LuSearchX}
-        title="No fixtures found"
-        description={`Nothing matches “${query.trim()}”. Try the manufacturer name or fewer words. If the console has no internet access, the online index cannot load.`}
-        action={<Button size="sm" variant="ghost" icon={LuRefreshCw} onClick={() => { void search(query) }}>Search again</Button>}
+        title={t('patch.online.noResultsTitle')}
+        description={t('patch.online.noResultsDescription', { query: query.trim() })}
+        action={<Button size="sm" variant="ghost" icon={LuRefreshCw} onClick={() => { void search(query) }}>{t('patch.online.searchAgain')}</Button>}
       />
     )
   } else {
     body = (
       <>
         <div className="sticky top-0 z-[1] flex h-control-xs items-center border-b border-line-subtle bg-surface-1 px-3 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">
-          {results.length} result{results.length === 1 ? '' : 's'}{results.length >= 50 ? ' (best matches)' : ''}
+          {results.length >= 50 ? t('patch.online.resultsBest', { count: results.length }) : t('patch.online.results', { count: results.length })}
         </div>
         {results.map((r) => {
           const key = `${r.manufacturerKey}/${r.fixtureKey}`
@@ -177,7 +198,7 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
         <TextInput
           size="sm"
           icon={LuSearch}
-          placeholder="Search online: maker, model…"
+          placeholder={t('patch.online.searchPlaceholder')}
           value={query}
           onChange={(e) => onInput(e.target.value)}
           onClear={() => onInput('')}
@@ -186,11 +207,11 @@ export function OFLSearchPanel({ onFixtureDownloaded, className }: {
             else if (e.key === 'Escape' && query) { e.stopPropagation(); onInput('') }
           }}
           trailing={status === 'searching' ? <Spinner size={12} className="text-fg-tertiary" /> : undefined}
-          aria-label="Search the Open Fixture Library"
+          aria-label={t('patch.online.searchAria')}
           data-autofocus=""
         />
       </div>
-      <div role="list" aria-label="Online results" className="min-h-0 flex-1 overflow-y-auto">{body}</div>
+      <div role="list" aria-label={t('patch.online.listAria')} className="min-h-0 flex-1 overflow-y-auto">{body}</div>
     </div>
   )
 }
@@ -202,6 +223,7 @@ const OFLResultRow = memo(function OFLResultRow({ result: r, local, busy, onDown
   onDownload: (r: OFLSearchResult) => void
   onUse: (def: FixtureDefinition) => void
 }) {
+  const t = useT() // memo leaf: re-render on a language change
   const Icon = fixtureCategoryIcon(r.categories)
   return (
     <div role="listitem" className="flex min-h-row items-center gap-2.5 border-b border-line-subtle px-3 py-1.5 last:border-b-0">
@@ -212,12 +234,12 @@ const OFLResultRow = memo(function OFLResultRow({ result: r, local, busy, onDown
       </div>
       {local ? (
         <>
-          <Badge size="xs" tone="go" icon={LuCheck}>In library</Badge>
-          <Button size="sm" variant="ghost" onClick={() => onUse(local)}>Use</Button>
+          <Badge size="xs" tone="go" icon={LuCheck} title={t('patch.shared.inLibrary')}><span className="sr-only">{t('patch.shared.inLibrary')}</span></Badge>
+          <Button size="sm" variant="ghost" onClick={() => onUse(local)}>{t('patch.shared.use')}</Button>
         </>
       ) : (
         <Button size="sm" variant="secondary" icon={LuCloudDownload} loading={busy} onClick={() => onDownload(r)}>
-          {busy ? 'Adding' : 'Add'}
+          {busy ? t('patch.online.adding') : t('common.add')}
         </Button>
       )}
     </div>

@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { LuFileUp, LuGrid3X3, LuLibrary, LuPanelRight, LuPlus, LuTable2, LuTriangleAlert } from 'react-icons/lu'
 import { Badge, Button, ResizeHandle, Tabs, ToggleButton, useResizable } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { canImportFiles, importFixtureFiles, usePatchAnalysis } from './patch-hooks'
 import { PatchTable } from './PatchTable'
 import { UniverseMap } from './UniverseMap'
@@ -35,6 +36,7 @@ function writePref(key: string, value: string) {
 }
 
 export function PatchView() {
+  const t = useT()
   const { patch, conflicts, universes } = usePatchAnalysis()
   const [tab, setTabState] = useState<PatchTab>(() => readPref(TAB_KEY, ['fixtures', 'map', 'library'] as const, 'fixtures'))
   // Groups panel: shown by default on wide screens; the viewer's choice is remembered
@@ -42,31 +44,31 @@ export function PatchView() {
   const [adding, setAdding] = useState<AddFixturesRequest | null>(null)
   const groupsPane = useResizable({ initial: 296, min: 220, max: 420, storageKey: 'patch.groups', direction: -1 })
 
-  const setTab = (t: PatchTab) => { setTabState(t); writePref(TAB_KEY, t) }
+  const setTab = (next: PatchTab) => { setTabState(next); writePref(TAB_KEY, next) }
   const setShowGroups = (on: boolean) => { setShowGroupsState(on); writePref(GROUPS_KEY, on ? 'on' : 'off') }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-control-lg shrink-0 items-center gap-3 border-b border-line px-3">
-        <h1 className="text-sm font-semibold text-fg-primary">Patch</h1>
-        <span className="hidden text-xs tabular text-fg-tertiary lg:inline">
-          {patch.length} fixture{patch.length === 1 ? '' : 's'} · {universes.length} universe{universes.length === 1 ? '' : 's'}
+        <h1 className="text-sm font-semibold text-fg-primary">{t('patch.view.title')}</h1>
+        <span className="hidden text-xs tabular text-fg-tertiary xl:inline">
+          {t('patch.view.summary', { fixtures: t('common.fixtureCount', { count: patch.length }), universes: t('common.universeCount', { count: universes.length }) })}
         </span>
         <Tabs
           variant="pill"
           size="sm"
-          aria-label="Patch views"
+          aria-label={t('patch.view.tabsAria')}
           value={tab}
           onChange={setTab}
           items={[
-            { id: 'fixtures', label: 'Fixtures', icon: LuTable2 },
-            { id: 'map', label: 'DMX map', icon: LuGrid3X3 },
-            { id: 'library', label: 'Library', icon: LuLibrary }
+            { id: 'fixtures', label: t('patch.view.tabs.fixtures'), icon: LuTable2, 'data-patch-tab': 'fixtures' },
+            { id: 'map', label: t('patch.view.tabs.map'), icon: LuGrid3X3, 'data-patch-tab': 'map' },
+            { id: 'library', label: t('patch.view.tabs.library'), icon: LuLibrary, 'data-patch-tab': 'library' }
           ]}
         />
         {conflicts.size > 0 && tab !== 'library' && (
-          <Badge tone="danger" icon={LuTriangleAlert} title="Fixtures sharing DMX channels">
-            {conflicts.size} address conflict{conflicts.size === 1 ? '' : 's'}
+          <Badge tone="danger" icon={LuTriangleAlert} title={t('patch.view.conflictsTitle')}>
+            {t('patch.view.conflicts', { count: conflicts.size })}
           </Badge>
         )}
         <div className="flex-1" />
@@ -79,17 +81,17 @@ export function PatchView() {
             pressed={showGroups}
             onPressedChange={setShowGroups}
             labelClassName="hidden xl:inline"
-            aria-label="Groups panel"
+            aria-label={t('patch.view.groupsPanel')}
           >
-            Groups
+            {t('common.groups')}
           </ToggleButton>
         )}
         {canImportFiles() && tab !== 'library' && (
-          <Button size="sm" variant="ghost" icon={LuFileUp} labelClassName="hidden xl:inline" aria-label="Import fixture files" tooltip="Import GDTF, QLC+ (.qxf), OFL JSON…" onClick={() => { void importFixtureFiles() }}>
-            Import
+          <Button size="sm" variant="ghost" icon={LuFileUp} labelClassName="hidden xl:inline" aria-label={t('patch.view.importAria')} tooltip={t('patch.view.importTooltip')} onClick={() => { void importFixtureFiles() }}>
+            {t('common.import')}
           </Button>
         )}
-        <Button size="sm" variant="primary" icon={LuPlus} onClick={() => setAdding({})}>Add fixtures</Button>
+        <Button size="sm" variant="primary" icon={LuPlus} onClick={() => setAdding({})} data-action="add-fixtures">{t('patch.view.addFixtures')}</Button>
       </header>
 
       <div className="flex min-h-0 flex-1">

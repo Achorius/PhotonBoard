@@ -1,5 +1,6 @@
 import type { FixtureDefinition, FixtureChannel } from '@shared/types'
 import { detectPixelLayout } from '@shared/types'
+import { t } from '@renderer/i18n'
 
 /**
  * Parse an Open Fixture Library JSON file into our FixtureDefinition format
@@ -33,7 +34,7 @@ export function parseOFLFixture(json: any, manufacturer: string): FixtureDefinit
       const modeChannels = mode.channels?.filter((ch: any) => typeof ch === 'string') || []
       const pixelLayout = detectPixelLayout(modeChannels)
       return {
-        name: mode.name || mode.shortName || 'Default',
+        name: mode.name || mode.shortName || t('patch.parse.defaultMode'),
         shortName: mode.shortName,
         channels: modeChannels,
         channelCount: modeChannels.length,
@@ -43,7 +44,7 @@ export function parseOFLFixture(json: any, manufacturer: string): FixtureDefinit
 
     return {
       id,
-      name: json.name || 'Unknown',
+      name: json.name || t('patch.parse.unknownName'),
       manufacturer,
       categories: json.categories || ['Other'],
       channels,

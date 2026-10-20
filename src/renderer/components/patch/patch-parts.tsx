@@ -5,11 +5,13 @@ import type React from 'react'
 import { LuChevronDown, LuCircleAlert, LuInfo, LuTriangleAlert } from 'react-icons/lu'
 import type { Group } from '@shared/types'
 import { cn, withAlpha } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { UNIVERSE_SIZE } from './patch-utils'
 
 /** Compact group chips for table rows: up to `max` chips then "+N" */
 export const GroupChips = memo(function GroupChips({ groups, max = 2 }: { groups: readonly Group[] | undefined; max?: number }) {
-  if (!groups || groups.length === 0) return <span className="text-xs text-fg-disabled" aria-label="No group">–</span>
+  const t = useT()
+  if (!groups || groups.length === 0) return <span className="text-xs text-fg-disabled" aria-label={t('patch.parts.noGroup')}>–</span>
   const shown = groups.slice(0, max)
   return (
     <span className="flex min-w-0 items-center gap-1" title={groups.map((g) => g.name).join(', ')}>
@@ -98,13 +100,14 @@ export function InlineSelect({ value, onChange, options, 'aria-label': ariaLabel
 
 /** One universe as a thin 512-slot bar: existing ranges grey, new ones accent, conflicts red. */
 export function UniverseStrip({ segments, label, className }: { segments: StripSegment[]; label: React.ReactNode; className?: string }) {
+  const t = useT()
   return (
     <div className={cn('flex flex-col gap-1', className)}>
       <div className="flex items-center justify-between text-2xs text-fg-tertiary">
         <span className="font-semibold uppercase tracking-[0.06em]">{label}</span>
         <span className="font-mono tabular">1 – {UNIVERSE_SIZE}</span>
       </div>
-      <div className="relative h-4 overflow-hidden rounded-sm bg-surface-0 ring-1 ring-inset ring-line" role="img" aria-label={`Universe usage: ${segments.length} ranges`}>
+      <div className="relative h-4 overflow-hidden rounded-sm bg-surface-0 ring-1 ring-inset ring-line" role="img" aria-label={t('patch.parts.usage', { count: segments.length })}>
         {segments.map((s) => {
           const start = Math.max(1, s.address)
           const end = Math.min(UNIVERSE_SIZE, s.address + s.count - 1)
