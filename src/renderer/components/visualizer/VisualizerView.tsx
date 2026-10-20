@@ -10,14 +10,16 @@ import {
   LuPanelRight, LuPlus, LuRectangleHorizontal, LuRuler, LuSquareDashed, LuSunMoon, LuTriangleAlert, LuWarehouse
 } from 'react-icons/lu'
 import {
-  Button, Divider, EmptyState, IconButton, Popover, SegmentedControl, Slider, ToggleButton, ToolbarGroup, Tooltip, cn, usePopover
+  Button, Divider, EmptyState, IconButton, Popover, SegmentedControl, Slider, ToggleButton, ToolbarGroup, Tooltip, cn, formatPercent, usePopover
 } from '@renderer/components/ui'
 import { useVisualizerStore, type VisualizerQuality } from '@renderer/stores/visualizer-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { useT, type TranslationKey } from '@renderer/i18n'
 import { ThreeCanvas } from './ThreeCanvas'
 import { FixturePropertiesPanel } from './editor/FixturePropertiesPanel'
 import { RoomFields } from './editor/RigPanels'
+import { RigSelectionActions } from './editor/RigSelectionActions'
 import { SelectionControls } from './SelectionControls'
 import type { CameraPreset, VisualizerEngine } from './scene/VisualizerEngine'
 
@@ -29,35 +31,41 @@ class WebGLErrorBoundary extends React.Component<{ children: React.ReactNode }, 
   }
   render() {
     if (this.state.error !== null) {
-      return (
-        <EmptyState
-          icon={LuTriangleAlert}
-          title="3D view crashed"
-          description={this.state.error || 'The 3D renderer stopped unexpectedly.'}
-          action={
-            <>
-              <Button variant="primary" onClick={() => this.setState({ error: null })}>Try again</Button>
-              <Button onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>Open stage layout</Button>
-            </>
-          }
-        />
-      )
+      return <CrashState error={this.state.error} onRetry={() => this.setState({ error: null })} />
     }
     return this.props.children
   }
 }
 
-const CAMERAS: Array<{ id: CameraPreset; label: string; icon: typeof LuBox; hint: string }> = [
-  { id: 'perspective', label: 'Persp', icon: LuBox, hint: 'Perspective view' },
-  { id: 'front', label: 'Front', icon: LuRectangleHorizontal, hint: 'From the audience' },
-  { id: 'top', label: 'Top', icon: LuSquareDashed, hint: 'Plan view from above' },
-  { id: 'side', label: 'Side', icon: LuPanelLeft, hint: 'From stage left' }
+/** Error card of the boundary (a function component: re-renders on a language change) */
+function CrashState({ error, onRetry }: { error: string; onRetry: () => void }) {
+  const t = useT()
+  return (
+    <EmptyState
+      icon={LuTriangleAlert}
+      title={t('visualizer.crash.title')}
+      description={error || t('visualizer.crash.fallback')}
+      action={
+        <>
+          <Button variant="primary" onClick={onRetry}>{t('visualizer.crash.retry')}</Button>
+          <Button onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>{t('visualizer.crash.openLayout')}</Button>
+        </>
+      }
+    />
+  )
+}
+
+const CAMERAS: Array<{ id: CameraPreset; label: TranslationKey; icon: typeof LuBox; hint: TranslationKey }> = [
+  { id: 'perspective', label: 'visualizer.camera.perspective', icon: LuBox, hint: 'visualizer.camera.perspectiveHint' },
+  { id: 'front', label: 'visualizer.camera.front', icon: LuRectangleHorizontal, hint: 'visualizer.camera.frontHint' },
+  { id: 'top', label: 'visualizer.camera.top', icon: LuSquareDashed, hint: 'visualizer.camera.topHint' },
+  { id: 'side', label: 'visualizer.camera.side', icon: LuPanelLeft, hint: 'visualizer.camera.sideHint' }
 ]
 
-const QUALITY_ITEMS: Array<{ value: VisualizerQuality; label: string; title: string }> = [
-  { value: 'low', label: 'Low', title: 'Low — 20 fps, reduced resolution, no real lights' },
-  { value: 'medium', label: 'Med', title: 'Medium — 30 fps, 4 real lights' },
-  { value: 'high', label: 'High', title: 'High — up to 60 fps, full resolution, 10 real lights' }
+const QUALITY_ITEMS: Array<{ value: VisualizerQuality; label: TranslationKey; title: TranslationKey }> = [
+  { value: 'low', label: 'visualizer.quality.low', title: 'visualizer.quality.lowHint' },
+  { value: 'medium', label: 'visualizer.quality.medium', title: 'visualizer.quality.mediumHint' },
+  { value: 'high', label: 'visualizer.quality.high', title: 'visualizer.quality.highHint' }
 ]
 
 export function VisualizerView() {
@@ -68,6 +76,7 @@ export function VisualizerView() {
   const selectedFixtureId = useVisualizerStore((s) => s.selectedFixtureId)
   const patchCount = usePatchStore((s) => s.patch.length)
   const touch = useUiStore((s) => s.density === 'touch')
+  const t = useT()
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === rootRef.current)
@@ -82,24 +91,25 @@ export function VisualizerView() {
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-surface-0">
+      <RigSelectionActions scope={rootRef} bars={false} />
       <header className="flex h-control-lg shrink-0 items-center gap-2 overflow-x-auto border-b border-line bg-surface-1 px-3">
         <LuBox size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
-        <h1 className="shrink-0 text-sm font-semibold text-fg-primary">Visualiser</h1>
+        <h1 className="shrink-0 text-sm font-semibold text-fg-primary">{t('visualizer.title')}</h1>
         <Divider />
-        <ToolbarGroup aria-label="Camera">
+        <ToolbarGroup aria-label={t('visualizer.camera.group')}>
           {CAMERAS.map((c) => (
             <Button
               key={c.id}
               size="sm"
               variant="ghost"
               icon={c.icon}
-              tooltip={c.hint}
-              aria-label={c.hint}
-              labelClassName="hidden xl:inline"
+              tooltip={t(c.hint)}
+              aria-label={t(c.hint)}
+              labelClassName="hidden 2xl:inline"
               disabled={!engine}
               onClick={() => engine?.setCameraPreset(c.id)}
             >
-              {c.label}
+              {t(c.label)}
             </Button>
           ))}
         </ToolbarGroup>
@@ -115,17 +125,17 @@ export function VisualizerView() {
           icon={LuPanelRight}
           pressed={inspectorOpen}
           onPressedChange={setInspectorOpen}
-          tooltip="Fixture inspector"
-          aria-label="Fixture inspector"
-          labelClassName="hidden xl:inline"
+          tooltip={t('visualizer.toolbar.inspectorHint')}
+          aria-label={t('visualizer.toolbar.inspectorHint')}
+          labelClassName="hidden 2xl:inline"
         >
-          Inspector
+          {t('visualizer.toolbar.inspector')}
         </ToggleButton>
         <RoomButton />
         <IconButton
           size="sm"
           icon={fullscreen ? LuMinimize : LuMaximize}
-          label={fullscreen ? 'Exit full screen' : 'Full screen'}
+          label={t(fullscreen ? 'visualizer.toolbar.exitFullScreen' : 'visualizer.toolbar.fullScreen')}
           onClick={toggleFullscreen}
         />
       </header>
@@ -141,9 +151,9 @@ export function VisualizerView() {
               <EmptyState
                 size="sm"
                 icon={LuCable}
-                title="No fixtures patched"
-                description="Patched fixtures appear here with live beams."
-                action={<Button size="sm" variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>Add fixtures</Button>}
+                title={t('visualizer.empty.title')}
+                description={t('visualizer.empty.description')}
+                action={<Button size="sm" variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>{t('visualizer.empty.action')}</Button>}
               />
             </div>
           </div>
@@ -152,16 +162,14 @@ export function VisualizerView() {
         {/* Zoom buttons for fingers (pinch works too) */}
         {engine && (
           <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg border border-line bg-surface-1/90 shadow-raised backdrop-blur">
-            <IconButton icon={LuPlus} label="Zoom in" size="sm" onClick={() => engine.zoomBy(0.75)} className="rounded-none" />
+            <IconButton icon={LuPlus} label={t('visualizer.zoomIn')} size="sm" onClick={() => engine.zoomBy(0.75)} className="rounded-none" />
             <div className="h-px bg-line" />
-            <IconButton icon={LuMinus} label="Zoom out" size="sm" onClick={() => engine.zoomBy(1.33)} className="rounded-none" />
+            <IconButton icon={LuMinus} label={t('visualizer.zoomOut')} size="sm" onClick={() => engine.zoomBy(1.33)} className="rounded-none" />
           </div>
         )}
 
         <p className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-surface-1/80 px-2 py-1 text-2xs text-fg-tertiary backdrop-blur">
-          {touch
-            ? 'Drag to orbit · pinch to zoom · two fingers to pan · tap a fixture to select, double-tap to focus'
-            : 'Drag to orbit · scroll to zoom · right-drag to pan · click a fixture to select, double-click to focus'}
+          {t(touch ? 'visualizer.hintTouch' : 'visualizer.hintMouse')}
         </p>
 
         {selectedFixtureId && inspectorOpen && (
@@ -185,19 +193,20 @@ function ViewToggles() {
   const shadows = useVisualizerStore((s) => s.shadowsEnabled)
   const lowQuality = useVisualizerStore((s) => s.quality === 'low')
   const v = useVisualizerStore.getState()
+  const t = useT()
   const items = [
-    { label: 'Beams', icon: LuFlashlight, on: showBeams, set: v.setShowBeams, hint: 'Show beam cones' },
-    { label: 'Haze', icon: LuCloudFog, on: hazeEnabled, set: v.setHazeEnabled, hint: 'Hazed air: bright beams (off: clean air)' },
-    { label: 'Walls', icon: LuWarehouse, on: showRoom, set: v.setShowRoom, hint: 'Walls and ceiling' },
-    { label: 'Grid', icon: LuGrid3X3, on: showGrid, set: v.setShowGrid, hint: 'Floor grid (1 m)' },
-    { label: 'Labels', icon: LuHash, on: showLabels, set: v.setShowLabels, hint: 'Fixture numbers' },
-    { label: 'Shadows', icon: LuSunMoon, on: shadows, set: v.setShadowsEnabled, hint: lowQuality ? 'Shadows need Medium or High quality' : 'Real-time shadows (GPU heavy)', disabled: lowQuality }
+    { id: 'beams', label: t('visualizer.show.beams'), icon: LuFlashlight, on: showBeams, set: v.setShowBeams, hint: t('visualizer.show.beamsHint') },
+    { id: 'haze', label: t('visualizer.show.haze'), icon: LuCloudFog, on: hazeEnabled, set: v.setHazeEnabled, hint: t('visualizer.show.hazeHint') },
+    { id: 'walls', label: t('visualizer.show.walls'), icon: LuWarehouse, on: showRoom, set: v.setShowRoom, hint: t('visualizer.show.wallsHint') },
+    { id: 'grid', label: t('visualizer.show.grid'), icon: LuGrid3X3, on: showGrid, set: v.setShowGrid, hint: t('visualizer.show.gridHint') },
+    { id: 'labels', label: t('visualizer.show.labels'), icon: LuHash, on: showLabels, set: v.setShowLabels, hint: t('visualizer.show.labelsHint') },
+    { id: 'shadows', label: t('visualizer.show.shadows'), icon: LuSunMoon, on: shadows, set: v.setShadowsEnabled, hint: t(lowQuality ? 'visualizer.show.shadowsNeedQuality' : 'visualizer.show.shadowsHint'), disabled: lowQuality }
   ]
   return (
-    <ToolbarGroup aria-label="Show">
+    <ToolbarGroup aria-label={t('visualizer.show.group')}>
       {items.map((it) => (
         <ToggleButton
-          key={it.label}
+          key={it.id}
           size="sm"
           variant="ghost"
           tone="neutral"
@@ -220,23 +229,24 @@ function ViewToggles() {
 function QualityControl({ engine }: { engine: VisualizerEngine | null }) {
   const quality = useVisualizerStore((s) => s.quality)
   const [fps, setFps] = useState(0)
+  const t = useT()
   useEffect(() => {
     if (!engine) return
     const id = window.setInterval(() => setFps((prev) => (prev === engine.fps ? prev : engine.fps)), 500)
     return () => window.clearInterval(id)
   }, [engine])
   return (
-    <ToolbarGroup aria-label="Quality">
+    <ToolbarGroup aria-label={t('visualizer.quality.group')}>
       <SegmentedControl
         size="sm"
-        aria-label="Render quality"
+        aria-label={t('visualizer.quality.label')}
         value={quality}
         onChange={(q) => useVisualizerStore.getState().setQuality(q)}
-        items={QUALITY_ITEMS}
+        items={QUALITY_ITEMS.map((q) => ({ value: q.value, label: t(q.label), title: t(q.title) }))}
       />
-      <Tooltip content="Frames rendered per second — the view only redraws when something changes">
+      <Tooltip content={t('visualizer.quality.fpsHint')}>
         <span className={cn('flex w-14 items-center justify-end gap-1 font-mono text-2xs tabular', fps > 0 ? 'text-fg-secondary' : 'text-fg-tertiary')}>
-          {fps > 0 ? `${fps} fps` : 'idle'}
+          {fps > 0 ? t('units.fpsValue', { value: fps }) : t('visualizer.quality.idle')}
         </span>
       </Tooltip>
     </ToolbarGroup>
@@ -246,20 +256,21 @@ function QualityControl({ engine }: { engine: VisualizerEngine | null }) {
 function RoomButton() {
   const pop = usePopover()
   const ambient = useVisualizerStore((s) => s.ambientIntensity)
+  const t = useT()
   return (
     <>
-      <Button ref={pop.anchorRef} size="sm" variant="ghost" icon={LuRuler} active={pop.open} tone="neutral" onClick={pop.toggle} {...pop.triggerProps} labelClassName="hidden xl:inline">
-        Room
+      <Button ref={pop.anchorRef} size="sm" variant="ghost" icon={LuRuler} active={pop.open} tone="neutral" onClick={pop.toggle} {...pop.triggerProps} labelClassName="hidden 2xl:inline">
+        {t('visualizer.toolbar.room')}
       </Button>
-      <Popover {...pop.props} placement="bottom-end" className="flex w-[300px] flex-col gap-3 p-3" aria-label="Room">
-        <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Room (metres)</p>
+      <Popover {...pop.props} placement="bottom-end" className="flex w-[300px] flex-col gap-3 p-3" aria-label={t('visualizer.toolbar.room')}>
+        <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('visualizer.room.title')}</p>
         <RoomFields />
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2 text-xs text-fg-secondary">
             <LuEye size={14} aria-hidden className="text-fg-tertiary" />
-            House lights
+            {t('visualizer.room.houseLights')}
           </div>
-          <Slider value={Math.round(ambient * 100)} onChange={(v) => useVisualizerStore.getState().setAmbientIntensity(v / 100)} min={0} max={100} defaultValue={15} showValue={(v) => `${v}%`} aria-label="House lights" />
+          <Slider value={Math.round(ambient * 100)} onChange={(v) => useVisualizerStore.getState().setAmbientIntensity(v / 100)} min={0} max={100} defaultValue={15} showValue={(v) => formatPercent(v, 100, t.locale)} aria-label={t('visualizer.room.houseLights')} />
         </div>
       </Popover>
     </>

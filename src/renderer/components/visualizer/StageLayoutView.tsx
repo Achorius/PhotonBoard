@@ -9,27 +9,33 @@ import {
   LuPlus, LuRotateCcw, LuScan, LuX, LuZoomIn, LuZoomOut
 } from 'react-icons/lu'
 import {
-  Button, Divider, EmptyState, IconButton, Section, Select, ToggleButton, ToolbarGroup, toast
+  Button, Divider, EmptyState, IconButton, Section, Select, ToggleButton, ToolbarGroup, formatPercent, toast
 } from '@renderer/components/ui'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { exportStagePDF } from '@renderer/lib/pdf-export'
+import { formatNumber, useT, type TFunction } from '@renderer/i18n'
 import { LayoutEditor2D, type LayoutEditorHandle } from './editor/LayoutEditor2D'
 import { SideView } from './editor/SideView'
 import { FixturePropertiesPanel } from './editor/FixturePropertiesPanel'
 import { RoomPropertiesPanel, TrussPropertiesPanel } from './editor/RigPanels'
-import { MOUNT_OPTIONS, flipFixtures, hangOnBar, resetPlacement, setMount } from './editor/rig-actions'
+import { flipFixtures, formatMetres, hangOnBar, mountOptions, resetPlacement, setMount } from './editor/rig-actions'
+import { RigSelectionActions } from './editor/RigSelectionActions'
 import { SelectionControls } from './SelectionControls'
 
-const GRID_OPTIONS = [
-  { value: '0.1', label: '10 cm' },
-  { value: '0.25', label: '25 cm' },
-  { value: '0.5', label: '50 cm' },
-  { value: '1', label: '1 m' }
-]
+const GRID_SIZES = [0.1, 0.25, 0.5, 1]
+
+function gridOptions(t: TFunction) {
+  return GRID_SIZES.map((m) => ({
+    value: String(m),
+    label: m < 1 ? t('layout.centimetres', { value: formatNumber(m * 100, {}, t.locale) }) : formatMetres(m, 0, t)
+  }))
+}
 
 export function StageLayoutView() {
+  const t = useT()
+  const rootRef = useRef<HTMLDivElement>(null)
   const editor = useRef<LayoutEditorHandle>(null)
   // Zoom changes stream at pointer rate: only the readout re-renders
   const zoomListener = useRef<((scale: number, fit: number) => void) | null>(null)
@@ -51,30 +57,31 @@ export function StageLayoutView() {
     try {
       const { patch, fixtures, groups } = usePatchStore.getState()
       exportStagePDF(patch, fixtures, useVisualizerStore.getState().roomConfig, useUiStore.getState().showName, groups)
-      toast.success('Lighting plot exported')
+      toast.success(t('layout.toolbar.exported'))
     } catch (err) {
-      toast.error('PDF export failed', { description: err instanceof Error ? err.message : String(err) })
+      toast.error(t('layout.toolbar.exportFailed'), { description: err instanceof Error ? err.message : String(err) })
     }
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
+      <RigSelectionActions scope={rootRef} bars />
       <header className="flex h-control-lg shrink-0 items-center gap-2 overflow-x-auto border-b border-line bg-surface-1 px-3">
         <LuLayoutGrid size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
-        <h1 className="shrink-0 text-sm font-semibold text-fg-primary">Stage layout</h1>
+        <h1 className="shrink-0 text-sm font-semibold text-fg-primary">{t('layout.title')}</h1>
         <Divider />
-        <Button size="sm" variant="ghost" icon={LuPlus} onClick={() => vis.addTrussBar()}>Add bar</Button>
+        <Button size="sm" variant="ghost" icon={LuPlus} onClick={() => vis.addTrussBar()}>{t('layout.toolbar.addBar')}</Button>
         <Divider />
-        <ToolbarGroup aria-label="Grid">
-          <ToggleButton size="sm" variant="ghost" tone="neutral" icon={LuGrid3X3} pressed={showGrid} onPressedChange={vis.setShowGrid} tooltip="Show grid" labelClassName="hidden 2xl:inline">Grid</ToggleButton>
-          <ToggleButton size="sm" variant="ghost" tone="neutral" icon={LuMagnet} pressed={snapToGrid} onPressedChange={vis.setSnapToGrid} tooltip="Snap to grid">Snap</ToggleButton>
-          <Select size="sm" aria-label="Grid size" value={String(gridSize)} options={GRID_OPTIONS} onChange={(v) => vis.setGridSize(Number(v))} className="w-[88px] [[data-density=touch]_&]:w-[104px]" />
+        <ToolbarGroup aria-label={t('layout.toolbar.gridGroup')}>
+          <ToggleButton size="sm" variant="ghost" tone="neutral" icon={LuGrid3X3} pressed={showGrid} onPressedChange={vis.setShowGrid} tooltip={t('layout.toolbar.gridHint')} labelClassName="hidden 2xl:inline">{t('layout.toolbar.grid')}</ToggleButton>
+          <ToggleButton size="sm" variant="ghost" tone="neutral" icon={LuMagnet} pressed={snapToGrid} onPressedChange={vis.setSnapToGrid} tooltip={t('layout.toolbar.snapHint')}>{t('layout.toolbar.snap')}</ToggleButton>
+          <Select size="sm" aria-label={t('layout.toolbar.gridSize')} value={String(gridSize)} options={gridOptions(t)} onChange={(v) => vis.setGridSize(Number(v))} className="w-[88px] [[data-density=touch]_&]:w-[104px]" />
         </ToolbarGroup>
         <Divider />
         <ZoomControls editor={editor} listener={zoomListener} />
         <div className="flex-1" />
-        <ToggleButton size="sm" variant="ghost" tone="neutral" icon={LuPanelBottom} pressed={showSection} onPressedChange={setShowSection} tooltip="Section view (height)">Section</ToggleButton>
-        <Button size="sm" variant="ghost" icon={LuFileDown} onClick={exportPdf} tooltip="Lighting plot with patch list (A4)">Export PDF</Button>
+        <ToggleButton size="sm" variant="ghost" tone="neutral" icon={LuPanelBottom} pressed={showSection} onPressedChange={setShowSection} tooltip={t('layout.toolbar.sectionHint')}>{t('layout.toolbar.section')}</ToggleButton>
+        <Button size="sm" variant="ghost" icon={LuFileDown} onClick={exportPdf} tooltip={t('layout.toolbar.exportPdfHint')}>{t('layout.toolbar.exportPdf')}</Button>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -87,9 +94,9 @@ export function StageLayoutView() {
                   <EmptyState
                     size="sm"
                     icon={LuCable}
-                    title="No fixtures patched"
-                    description="Patch fixtures to place them on the plan. You can already set up the room and truss bars."
-                    action={<Button size="sm" variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>Add fixtures</Button>}
+                    title={t('layout.empty.title')}
+                    description={t('layout.empty.description')}
+                    action={<Button size="sm" variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>{t('layout.empty.action')}</Button>}
                   />
                 </div>
               </div>
@@ -97,7 +104,7 @@ export function StageLayoutView() {
           </div>
           {showSection && <SideView className="h-48 shrink-0 border-t border-line [[data-density=touch]_&]:h-56" />}
         </div>
-        <aside aria-label="Inspector" className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-line bg-surface-1 [[data-density=touch]_&]:w-80">
+        <aside aria-label={t('layout.inspector')} className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-line bg-surface-1 [[data-density=touch]_&]:w-80">
           {selectedCount > 1 ? (
             <MultiSelectionPanel />
           ) : selectedFixtureId ? (
@@ -119,16 +126,17 @@ function ZoomControls({ editor, listener }: {
   listener: React.MutableRefObject<((scale: number, fit: number) => void) | null>
 }) {
   const [pct, setPct] = useState(100)
+  const t = useT()
   useEffect(() => {
     listener.current = (scale, fit) => setPct(Math.round((scale / fit) * 100))
     return () => { listener.current = null }
   }, [listener])
   return (
-    <ToolbarGroup aria-label="Zoom">
-      <IconButton size="sm" icon={LuZoomOut} label="Zoom out" onClick={() => editor.current?.zoomBy(0.8)} />
-      <span className="w-12 text-center font-mono text-xs tabular text-fg-secondary">{pct}%</span>
-      <IconButton size="sm" icon={LuZoomIn} label="Zoom in" onClick={() => editor.current?.zoomBy(1.25)} />
-      <Button size="sm" variant="ghost" icon={LuScan} onClick={() => editor.current?.fit()} tooltip="Fit the room" shortcut="F">Fit</Button>
+    <ToolbarGroup aria-label={t('layout.toolbar.zoomGroup')}>
+      <IconButton size="sm" icon={LuZoomOut} label={t('layout.toolbar.zoomOut')} onClick={() => editor.current?.zoomBy(0.8)} />
+      <span className="w-12 text-center font-mono text-xs tabular text-fg-secondary">{formatPercent(pct, 100, t.locale)}</span>
+      <IconButton size="sm" icon={LuZoomIn} label={t('layout.toolbar.zoomIn')} onClick={() => editor.current?.zoomBy(1.25)} />
+      <Button size="sm" variant="ghost" icon={LuScan} onClick={() => editor.current?.fit()} tooltip={t('layout.toolbar.fitHint')} shortcut="F">{t('layout.toolbar.fit')}</Button>
     </ToolbarGroup>
   )
 }
@@ -138,15 +146,16 @@ function MultiSelectionPanel() {
   const ids = usePatchStore((s) => s.selectedFixtureIds)
   const bars = useVisualizerStore((s) => s.roomConfig.trussBars)
   const sortedBars = useMemo(() => [...bars].sort((a, b) => a.z - b.z), [bars])
+  const t = useT()
   return (
     <div className="flex min-h-0 flex-col">
       <header className="flex items-center gap-2 border-b border-line-subtle px-3 py-2.5">
-        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg-primary">{ids.length} fixtures selected</h3>
-        <IconButton icon={LuX} label="Clear selection" size="sm" onClick={() => usePatchStore.getState().clearSelection()} />
+        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg-primary">{t('layout.multi.title', { count: ids.length })}</h3>
+        <IconButton icon={LuX} label={t('layout.multi.clearSelection')} size="sm" onClick={() => usePatchStore.getState().clearSelection()} />
       </header>
-      <Section title="Hang on bar">
+      <Section title={t('layout.multi.hangOnBar')}>
         {sortedBars.length === 0 ? (
-          <p className="text-xs text-fg-tertiary">No truss bar yet.</p>
+          <p className="text-xs text-fg-tertiary">{t('layout.multi.noBars')}</p>
         ) : (
           <div className="flex flex-col gap-1">
             {sortedBars.map((b) => (
@@ -158,19 +167,19 @@ function MultiSelectionPanel() {
               >
                 <LuAlignHorizontalSpaceAround size={14} aria-hidden className="shrink-0 text-fg-tertiary" />
                 <span className="min-w-0 flex-1 truncate">{b.name}</span>
-                <span className="shrink-0 font-mono text-2xs tabular text-fg-tertiary">{b.y.toFixed(2)} m</span>
+                <span className="shrink-0 font-mono text-2xs tabular text-fg-tertiary">{formatMetres(b.y, 2, t)}</span>
               </button>
             ))}
-            <p className="text-2xs text-fg-tertiary">Spreads them evenly along the bar, left to right.</p>
+            <p className="text-2xs text-fg-tertiary">{t('layout.multi.spreadHint')}</p>
           </div>
         )}
       </Section>
-      <Section title="Mount">
-        <Select size="sm" aria-label="Mount for all selected" value="" options={[{ value: '', label: 'Set mount…', disabled: true }, ...MOUNT_OPTIONS]} onChange={(m) => { if (m) setMount(ids, m) }} />
+      <Section title={t('layout.multi.mount')}>
+        <Select size="sm" aria-label={t('layout.multi.mountAll')} value="" options={[{ value: '', label: t('layout.multi.setMount'), disabled: true }, ...mountOptions(t)]} onChange={(m) => { if (m) setMount(ids, m) }} />
       </Section>
       <div className="flex flex-col gap-1.5 px-3 py-3">
-        <Button size="sm" icon={LuFlipHorizontal2} onClick={() => flipFixtures(ids)}>Flip 180°</Button>
-        <Button size="sm" variant="danger-outline" icon={LuRotateCcw} onClick={() => void resetPlacement(ids)}>Reset placement</Button>
+        <Button size="sm" icon={LuFlipHorizontal2} onClick={() => flipFixtures(ids)}>{t('layout.actions.flip')}</Button>
+        <Button size="sm" variant="danger-outline" icon={LuRotateCcw} tooltip={t('layout.actions.resetHint')} shortcut="Delete" onClick={() => void resetPlacement(ids)}>{t('layout.actions.resetPlacement')}</Button>
       </div>
     </div>
   )
