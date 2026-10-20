@@ -20,23 +20,13 @@ import {
 } from '@renderer/components/ui'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { getChannelTypeColor } from '@renderer/lib/fixture-library'
+import { t as tr, useT, type TFunction } from '@renderer/i18n'
+import { channelTypeLabel } from './FixtureDetails'
 
 type ChannelType = FixtureChannel['type']
 
-const CHANNEL_TYPES: { value: ChannelType; label: string }[] = [
-  { value: 'intensity', label: 'Intensity' },
-  { value: 'color', label: 'Colour' },
-  { value: 'pan', label: 'Pan' },
-  { value: 'tilt', label: 'Tilt' },
-  { value: 'gobo', label: 'Gobo' },
-  { value: 'prism', label: 'Prism' },
-  { value: 'shutter', label: 'Shutter' },
-  { value: 'strobe', label: 'Strobe' },
-  { value: 'speed', label: 'Speed' },
-  { value: 'effect', label: 'Effect' },
-  { value: 'fog', label: 'Fog' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'generic', label: 'Generic' }
+const CHANNEL_TYPES: ChannelType[] = [
+  'intensity', 'color', 'pan', 'tilt', 'gobo', 'prism', 'shutter', 'strobe', 'speed', 'effect', 'fog', 'maintenance', 'generic'
 ]
 
 const COMMON_CATEGORIES = [
@@ -44,15 +34,16 @@ const COMMON_CATEGORIES = [
   'Matrix', 'Strobe', 'Blinder', 'Fog', 'Hazer', 'Laser', 'Effect'
 ]
 
-const PRESETS: { id: string; label: string; channels: [string, ChannelType, number?][] }[] = [
-  { id: 'dimmer', label: 'Dimmer', channels: [['Dimmer', 'intensity']] },
-  { id: 'rgb', label: 'RGB', channels: [['Red', 'color'], ['Green', 'color'], ['Blue', 'color']] },
-  { id: 'rgbw', label: 'RGBW', channels: [['Red', 'color'], ['Green', 'color'], ['Blue', 'color'], ['White', 'color']] },
-  { id: 'pantilt', label: 'Pan / Tilt 16-bit', channels: [['Pan', 'pan', 128], ['Pan Fine', 'pan', 0], ['Tilt', 'tilt', 128], ['Tilt Fine', 'tilt', 0]] },
-  { id: 'gobo', label: 'Gobo', channels: [['Gobo', 'gobo'], ['Gobo Rotation', 'gobo']] },
-  { id: 'shutter', label: 'Shutter', channels: [['Shutter', 'shutter']] },
-  { id: 'strobe', label: 'Strobe', channels: [['Strobe', 'strobe']] },
-  { id: 'colorwheel', label: 'Colour wheel', channels: [['Color Wheel', 'color']] }
+// Channel names stay English: they are data (type detection, OFL / QLC+ conventions)
+const PRESETS: { id: string; label: (t: TFunction) => string; channels: [string, ChannelType, number?][] }[] = [
+  { id: 'dimmer', label: (t) => t('common.dimmer'), channels: [['Dimmer', 'intensity']] },
+  { id: 'rgb', label: () => 'RGB', channels: [['Red', 'color'], ['Green', 'color'], ['Blue', 'color']] },
+  { id: 'rgbw', label: () => 'RGBW', channels: [['Red', 'color'], ['Green', 'color'], ['Blue', 'color'], ['White', 'color']] },
+  { id: 'pantilt', label: (t) => t('patch.editor.presets.panTilt'), channels: [['Pan', 'pan', 128], ['Pan Fine', 'pan', 0], ['Tilt', 'tilt', 128], ['Tilt Fine', 'tilt', 0]] },
+  { id: 'gobo', label: (t) => t('patch.channelTypes.gobo'), channels: [['Gobo', 'gobo'], ['Gobo Rotation', 'gobo']] },
+  { id: 'shutter', label: (t) => t('patch.channelTypes.shutter'), channels: [['Shutter', 'shutter']] },
+  { id: 'strobe', label: (t) => t('common.strobe'), channels: [['Strobe', 'strobe']] },
+  { id: 'colorwheel', label: (t) => t('patch.editor.presets.colorWheel'), channels: [['Color Wheel', 'color']] }
 ]
 
 const autoPrecedence = (type: ChannelType): 'HTP' | 'LTP' => (type === 'intensity' ? 'HTP' : 'LTP')
@@ -134,7 +125,7 @@ function initialState(fixture: FixtureDefinition | undefined, asCopy: boolean): 
   const p = fixture?.physical
   return {
     manufacturer: fixture?.manufacturer ?? '',
-    name: fixture ? (asCopy ? `${fixture.name} (custom)` : fixture.name) : '',
+    name: fixture ? (asCopy ? tr('patch.editor.customCopyName', { name: fixture.name }) : fixture.name) : '',
     categories: fixture?.categories ? [...fixture.categories] : [],
     channels,
     modes,
@@ -184,6 +175,7 @@ export interface FixtureEditorProps {
 }
 
 export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: FixtureEditorProps) {
+  const t = useT()
   const isEdit = !!fixture && !asCopy
   const [initial] = useState(() => initialState(fixture, asCopy))
   const [form, setForm] = useState<FormState>(initial)
@@ -193,6 +185,7 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
   const fixtures = usePatchStore((s) => s.fixtures)
   const patch = usePatchStore((s) => s.patch)
 
+  const channelTypeOptions = useMemo(() => CHANNEL_TYPES.map((value) => ({ value, label: channelTypeLabel(value) })), [t]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
   const dirty = snapshot(form) !== initialSnap.current
   const channelByKey = useMemo(() => new Map(form.channels.map((c) => [c.key, c])), [form.channels])
@@ -209,34 +202,34 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
 
   const issues = useMemo<Issues>(() => {
     const out: Issues = { list: [], channelNames: new Set(), modeNames: new Set(), emptyModes: new Set() }
-    if (!form.manufacturer.trim()) { out.manufacturer = 'Required'; out.list.push('Manufacturer is required') }
-    if (!form.name.trim()) { out.name = 'Required'; out.list.push('Name is required') }
+    if (!form.manufacturer.trim()) { out.manufacturer = t('common.required'); out.list.push(t('patch.editor.issues.manufacturer')) }
+    if (!form.name.trim()) { out.name = t('common.required'); out.list.push(t('patch.editor.issues.name')) }
     if (!isEdit && form.name.trim() && fixtures.some((f) => f.id === newId)) {
-      out.name = 'A fixture type with this maker and name already exists'
+      out.name = t('patch.editor.issues.exists')
       out.list.push(out.name)
     }
-    if (form.channels.length === 0) out.list.push('Add at least one channel')
+    if (form.channels.length === 0) out.list.push(t('patch.editor.issues.noChannels'))
     const seen = new Map<string, number>()
     for (const c of form.channels) seen.set(c.name.trim().toLowerCase(), (seen.get(c.name.trim().toLowerCase()) ?? 0) + 1)
     for (const c of form.channels) {
       if (!c.name.trim() || (seen.get(c.name.trim().toLowerCase()) ?? 0) > 1) out.channelNames.add(c.key)
     }
-    if (out.channelNames.size > 0) out.list.push('Channel names must be filled in and unique')
-    if (form.modes.length === 0) out.list.push('Add at least one mode')
+    if (out.channelNames.size > 0) out.list.push(t('patch.editor.issues.channelNames'))
+    if (form.modes.length === 0) out.list.push(t('patch.editor.issues.noModes'))
     const modeSeen = new Map<string, number>()
     for (const m of form.modes) modeSeen.set(m.name.trim().toLowerCase(), (modeSeen.get(m.name.trim().toLowerCase()) ?? 0) + 1)
     for (const m of form.modes) {
       if (!m.name.trim() || (modeSeen.get(m.name.trim().toLowerCase()) ?? 0) > 1) out.modeNames.add(m.key)
       if (m.channelKeys.length === 0) out.emptyModes.add(m.key)
     }
-    if (out.modeNames.size > 0) out.list.push('Mode names must be filled in and unique')
-    if (out.emptyModes.size > 0) out.list.push('Every mode needs at least one channel')
+    if (out.modeNames.size > 0) out.list.push(t('patch.editor.issues.modeNames'))
+    if (out.emptyModes.size > 0) out.list.push(t('patch.editor.issues.emptyModes'))
     for (const [modeName, n] of modeUsage) {
-      if (!form.modes.some((m) => m.origName === modeName)) out.list.push(`Mode “${modeName}” is used by ${n} patched fixture${n === 1 ? '' : 's'} and cannot be removed`)
+      if (!form.modes.some((m) => m.origName === modeName)) out.list.push(t('patch.editor.issues.modeInUse', { mode: modeName, count: n }))
     }
-    if (form.beamMin > 0 && form.beamMax > 0 && form.beamMin > form.beamMax) { out.beam = 'Min is larger than max'; out.list.push('Beam angle: min is larger than max') }
+    if (form.beamMin > 0 && form.beamMax > 0 && form.beamMin > form.beamMax) { out.beam = t('patch.editor.issues.beamField'); out.list.push(t('patch.editor.issues.beam')) }
     return out
-  }, [form, isEdit, fixtures, newId, modeUsage])
+  }, [form, isEdit, fixtures, newId, modeUsage, t])
 
   // ---- channels ----
   const addChannels = (list: [string, ChannelType, number?][]) => {
@@ -372,7 +365,7 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
       const def = build()
       const result = await window.photonboard.fixtures.save(def)
       if (result && result.success === false) {
-        toast.error('Fixture type not saved', { description: result.error ?? 'Unknown error' })
+        toast.error(tr('patch.editor.notSaved'), { description: result.error ?? tr('patch.shared.unknownError') })
         return
       }
       await usePatchStore.getState().loadFixtures()
@@ -387,12 +380,12 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
         }
         usePatchStore.getState().updateFixtures(updates)
       }
-      toast.success(isEdit ? `${def.name} updated` : `${def.name} added to the library`)
+      toast.success(isEdit ? tr('patch.editor.updated', { name: def.name }) : tr('patch.editor.added', { name: def.name }))
       initialSnap.current = snapshot(form)
       onSaved?.(def)
       onClose()
     } catch (e) {
-      toast.error('Fixture type not saved', { description: (e as Error).message })
+      toast.error(tr('patch.editor.notSaved'), { description: (e as Error).message })
     } finally {
       setSaving(false)
     }
@@ -401,18 +394,20 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
   const requestClose = async () => {
     if (!dirty) { onClose(); return }
     const choice = await ask({
-      title: 'Discard changes?',
-      message: 'Your changes to this fixture type have not been saved.',
+      title: tr('patch.editor.discardTitle'),
+      message: tr('patch.editor.discardMessage'),
       actions: [
         // Last = default (Enter): the safe choice
-        { id: 'discard', label: 'Discard changes', variant: 'danger-outline' },
-        { id: 'keep', label: 'Keep editing', variant: 'primary' }
+        { id: 'discard', label: tr('patch.editor.discardAction'), variant: 'danger-outline' },
+        { id: 'keep', label: tr('patch.editor.keepEditing'), variant: 'primary' }
       ]
     })
     if (choice === 'discard') onClose()
   }
 
-  const title = isEdit ? `Edit ${fixture!.name}` : asCopy ? `Custom copy of ${fixture!.name}` : 'New fixture type'
+  const title = isEdit
+    ? t('patch.editor.titleEdit', { name: fixture!.name })
+    : asCopy ? t('patch.editor.titleCopy', { name: fixture!.name }) : t('patch.editor.titleNew')
   const issueShown = showIssues && issues.list.length > 0
 
   return (
@@ -421,40 +416,40 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
       onClose={() => { void requestClose() }}
       size="xl"
       title={title}
-      description={asCopy ? 'Built-in types cannot be changed; this creates your own editable version.' : isEdit && fixture?.source !== 'user' ? 'Saved to your user library; capabilities and wheels from the original file are kept.' : undefined}
+      description={asCopy ? t('patch.editor.descriptionCopy') : isEdit && fixture?.source !== 'user' ? t('patch.editor.descriptionImported') : undefined}
       flush
       footer={(
         <>
           <div className="mr-auto min-w-0 flex-1">
             {issueShown ? (
               <p role="alert" className="truncate text-xs text-danger-fg" title={issues.list.join('\n')}>
-                {issues.list[0]}{issues.list.length > 1 ? ` (+${issues.list.length - 1} more)` : ''}
+                {issues.list[0]}{issues.list.length > 1 ? ` ${t('patch.editor.moreIssues', { count: issues.list.length - 1 })}` : ''}
               </p>
             ) : (
               <p className="truncate text-xs tabular text-fg-tertiary">
-                {form.channels.length} channel{form.channels.length === 1 ? '' : 's'} · {form.modes.length} mode{form.modes.length === 1 ? '' : 's'}
-                {dirty && <span className="text-warning-fg"> · unsaved changes</span>}
+                {t('patch.editor.footerSummary', { channels: t('common.channelCount', { count: form.channels.length }), modes: t('patch.shared.modeCount', { count: form.modes.length }) })}
+                {dirty && <span className="text-warning-fg"> · {t('patch.editor.unsaved')}</span>}
               </p>
             )}
           </div>
-          <Button variant="secondary" onClick={() => { void requestClose() }}>Cancel</Button>
-          <Button variant="primary" loading={saving} onClick={() => { void save() }}>{isEdit ? 'Save changes' : 'Create fixture type'}</Button>
+          <Button variant="secondary" onClick={() => { void requestClose() }}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={saving} onClick={() => { void save() }}>{isEdit ? t('patch.editor.saveChanges') : t('patch.editor.create')}</Button>
         </>
       )}
     >
       <div className="flex flex-col border-t border-line-subtle px-2">
-        <Section title="Identity">
+        <Section title={t('patch.editor.identity')}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field layout="stacked" label="Manufacturer" error={showIssues ? issues.manufacturer : undefined}>
-              {(id) => <TextInput id={id} data-autofocus="" value={form.manufacturer} placeholder="e.g. Generic" invalid={showIssues && !!issues.manufacturer} onChange={(e) => set('manufacturer', e.target.value)} />}
+            <Field layout="stacked" label={t('patch.editor.manufacturer')} error={showIssues ? issues.manufacturer : undefined}>
+              {(id) => <TextInput id={id} data-autofocus="" value={form.manufacturer} placeholder={t('patch.editor.manufacturerPlaceholder')} invalid={showIssues && !!issues.manufacturer} onChange={(e) => set('manufacturer', e.target.value)} />}
             </Field>
-            <Field layout="stacked" label="Name" error={showIssues ? issues.name : undefined} hint={!isEdit && form.name ? <span className="font-mono">{newId}</span> : undefined}>
-              {(id) => <TextInput id={id} value={form.name} placeholder="e.g. LED PAR 18x10W" invalid={showIssues && !!issues.name} onChange={(e) => set('name', e.target.value)} />}
+            <Field layout="stacked" label={t('common.name')} error={showIssues ? issues.name : undefined} hint={!isEdit && form.name ? <span className="font-mono">{newId}</span> : undefined}>
+              {(id) => <TextInput id={id} value={form.name} placeholder={t('patch.editor.namePlaceholder')} invalid={showIssues && !!issues.name} onChange={(e) => set('name', e.target.value)} />}
             </Field>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-fg-secondary">Categories</span>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Categories">
+            <span className="text-xs font-medium text-fg-secondary">{t('patch.editor.categories')}</span>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('patch.editor.categories')}>
               {[...new Set([...COMMON_CATEGORIES, ...form.categories])].map((c) => {
                 const on = form.categories.includes(c)
                 return (
@@ -466,30 +461,30 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
         </Section>
 
         <Section
-          title={`Channels (${form.channels.length})`}
-          actions={<Button size="sm" variant="ghost" icon={LuPlus} onClick={() => addChannels([['Channel', 'generic']])}>Channel</Button>}
+          title={t('patch.editor.channelsTitle', { count: form.channels.length })}
+          actions={<Button size="sm" variant="ghost" icon={LuPlus} onClick={() => addChannels([[tr('patch.editor.newChannelName'), 'generic']])}>{t('patch.editor.addChannel')}</Button>}
         >
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-xs text-fg-tertiary">Quick add</span>
+            <span className="mr-1 text-xs text-fg-tertiary">{t('patch.editor.quickAdd')}</span>
             {PRESETS.map((p) => (
-              <Button key={p.id} size="sm" variant="outline" icon={LuCirclePlus} onClick={() => addChannels(p.channels)}>{p.label}</Button>
+              <Button key={p.id} size="sm" variant="outline" icon={LuCirclePlus} onClick={() => addChannels(p.channels)}>{p.label(t)}</Button>
             ))}
           </div>
           {form.channels.length === 0 ? (
             <div className="rounded-lg bg-surface-0 ring-1 ring-inset ring-line">
-              <EmptyState size="sm" icon={LuListPlus} title="No channels yet" description="Use a quick-add preset or add channels one by one, in DMX order." />
+              <EmptyState size="sm" icon={LuListPlus} title={t('patch.editor.noChannelsTitle')} description={t('patch.editor.noChannelsDescription')} />
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg bg-surface-0 ring-1 ring-inset ring-line">
               <table className="w-full min-w-[680px] border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr className="text-left text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">
-                    <th className="h-control-sm w-10 border-b border-line px-2 text-right">#</th>
-                    <th className="border-b border-line px-2">Name</th>
-                    <th className="w-44 border-b border-line px-2">Type</th>
-                    <th className="w-28 border-b border-line px-2">Default</th>
-                    <th className="w-32 border-b border-line px-2">Merge</th>
-                    <th className="w-[108px] border-b border-line px-2 [[data-density=touch]_&]:w-[148px]"><span className="sr-only">Actions</span></th>
+                    <th className="h-control-sm w-10 border-b border-line px-2 text-right">{t('patch.editor.columns.number')}</th>
+                    <th className="border-b border-line px-2">{t('common.name')}</th>
+                    <th className="w-44 border-b border-line px-2">{t('patch.editor.columns.type')}</th>
+                    <th className="w-28 border-b border-line px-2">{t('patch.editor.columns.default')}</th>
+                    <th className="w-32 border-b border-line px-2">{t('patch.editor.columns.merge')}</th>
+                    <th className="w-[108px] border-b border-line px-2 [[data-density=touch]_&]:w-[148px]"><span className="sr-only">{t('patch.editor.columns.actions')}</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -502,12 +497,12 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
                           <div className="flex items-center gap-1.5">
                             <TextInput
                               size="sm"
-                              aria-label={`Channel ${i + 1} name`}
+                              aria-label={t('patch.editor.channelName', { n: i + 1 })}
                               value={c.name}
                               invalid={showIssues && issues.channelNames.has(c.key)}
                               onChange={(e) => updateChannel(c.key, { name: e.target.value })}
                             />
-                            {c.alias && <Badge size="xs" title="Fine channel declared as an alias of another channel">fine</Badge>}
+                            {c.alias && <Badge size="xs" title={t('patch.editor.fineTitle')}>{t('patch.editor.fine')}</Badge>}
                           </div>
                         </td>
                         <td className="border-b border-line-subtle px-2 py-1">
@@ -515,23 +510,23 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
                             <Icon size={14} aria-hidden className="shrink-0" style={{ color: getChannelTypeColor(c.type, c.name) }} />
                             <Select
                               size="sm"
-                              aria-label={`Channel ${i + 1} type`}
+                              aria-label={t('patch.editor.channelType', { n: i + 1 })}
                               value={c.type}
                               disabled={c.alias}
                               className="flex-1"
                               onChange={(type) => updateChannel(c.key, { type, precedence: autoPrecedence(type), defaultValue: autoDefault(type) })}
-                              options={CHANNEL_TYPES}
+                              options={channelTypeOptions}
                             />
                           </div>
                         </td>
                         <td className="border-b border-line-subtle px-2 py-1">
-                          <NumberField size="sm" aria-label={`Channel ${i + 1} default`} value={c.defaultValue} min={0} max={255} step={1} disabled={c.alias} onChange={(v) => updateChannel(c.key, { defaultValue: v })} />
+                          <NumberField size="sm" aria-label={t('patch.editor.channelDefault', { n: i + 1 })} value={c.defaultValue} min={0} max={255} step={1} disabled={c.alias} onChange={(v) => updateChannel(c.key, { defaultValue: v })} />
                         </td>
                         <td className="border-b border-line-subtle px-2 py-1">
                           <SegmentedControl
                             size="sm"
                             fullWidth
-                            aria-label={`Channel ${i + 1} merge`}
+                            aria-label={t('patch.editor.channelMerge', { n: i + 1 })}
                             value={c.precedence}
                             onChange={(precedence) => { if (!c.alias) updateChannel(c.key, { precedence }) }}
                             items={[{ value: 'HTP', label: 'HTP', disabled: c.alias }, { value: 'LTP', label: 'LTP', disabled: c.alias }]}
@@ -539,9 +534,9 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
                         </td>
                         <td className="border-b border-line-subtle px-1 py-1">
                           <div className="flex items-center justify-end gap-0.5">
-                            <IconButton size="sm" icon={LuArrowUp} label="Move up" disabled={i === 0} onClick={() => moveChannel(c.key, -1)} />
-                            <IconButton size="sm" icon={LuArrowDown} label="Move down" disabled={i === form.channels.length - 1} onClick={() => moveChannel(c.key, 1)} />
-                            <IconButton size="sm" icon={LuTrash2} label={`Remove ${c.name || 'channel'}`} onClick={() => removeChannel(c.key)} />
+                            <IconButton size="sm" icon={LuArrowUp} label={t('patch.editor.moveUp')} disabled={i === 0} onClick={() => moveChannel(c.key, -1)} />
+                            <IconButton size="sm" icon={LuArrowDown} label={t('patch.editor.moveDown')} disabled={i === form.channels.length - 1} onClick={() => moveChannel(c.key, 1)} />
+                            <IconButton size="sm" icon={LuTrash2} label={c.name ? t('patch.editor.removeChannel', { name: c.name }) : t('patch.editor.removeChannelUnnamed')} onClick={() => removeChannel(c.key)} />
                           </div>
                         </td>
                       </tr>
@@ -554,12 +549,12 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
         </Section>
 
         <Section
-          title={`Modes (${form.modes.length})`}
-          actions={<Button size="sm" variant="ghost" icon={LuPlus} onClick={addMode}>Mode</Button>}
+          title={t('patch.editor.modesTitle', { count: form.modes.length })}
+          actions={<Button size="sm" variant="ghost" icon={LuPlus} onClick={addMode}>{t('patch.editor.addModeShort')}</Button>}
         >
           {form.modes.length === 0 ? (
             <div className="rounded-lg bg-surface-0 ring-1 ring-inset ring-line">
-              <EmptyState size="sm" icon={LuListPlus} title="No modes" description="A mode is the list of channels the fixture uses, in DMX order." action={<Button size="sm" variant="primary" icon={LuPlus} onClick={addMode}>Add mode</Button>} />
+              <EmptyState size="sm" icon={LuListPlus} title={t('patch.editor.noModesTitle')} description={t('patch.editor.noModesDescription')} action={<Button size="sm" variant="primary" icon={LuPlus} onClick={addMode}>{t('patch.editor.addMode')}</Button>} />
             </div>
           ) : form.modes.map((m) => (
             <ModeCard
@@ -579,18 +574,18 @@ export function FixtureEditor({ fixture, asCopy = false, onClose, onSaved }: Fix
           ))}
         </Section>
 
-        <Section title="Physical" collapsible defaultOpen={!!fixture?.physical}>
-          <p className="text-xs text-fg-tertiary">Used by the 3D visualizer and position effects. Leave 0 when unknown.</p>
+        <Section title={t('patch.editor.physical')} collapsible defaultOpen={!!fixture?.physical}>
+          <p className="text-xs text-fg-tertiary">{t('patch.editor.physicalDescription')}</p>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Field layout="stacked" label="Pan range"><NumberField aria-label="Pan range" value={form.panRange} onChange={(v) => set('panRange', v)} min={0} max={720} step={1} unit="°" /></Field>
-            <Field layout="stacked" label="Tilt range"><NumberField aria-label="Tilt range" value={form.tiltRange} onChange={(v) => set('tiltRange', v)} min={0} max={360} step={1} unit="°" /></Field>
-            <Field layout="stacked" label="Beam min" error={showIssues ? issues.beam : undefined}><NumberField aria-label="Beam angle min" value={form.beamMin} onChange={(v) => set('beamMin', v)} min={0} max={180} step={0.5} unit="°" /></Field>
-            <Field layout="stacked" label="Beam max"><NumberField aria-label="Beam angle max" value={form.beamMax} onChange={(v) => set('beamMax', v)} min={0} max={180} step={0.5} unit="°" /></Field>
-            <Field layout="stacked" label="Width"><NumberField aria-label="Width" value={form.width} onChange={(v) => set('width', v)} min={0} max={5000} step={1} unit="mm" /></Field>
-            <Field layout="stacked" label="Height"><NumberField aria-label="Height" value={form.height} onChange={(v) => set('height', v)} min={0} max={5000} step={1} unit="mm" /></Field>
-            <Field layout="stacked" label="Depth"><NumberField aria-label="Depth" value={form.depth} onChange={(v) => set('depth', v)} min={0} max={5000} step={1} unit="mm" /></Field>
-            <Field layout="stacked" label="Weight"><NumberField aria-label="Weight" value={form.weight} onChange={(v) => set('weight', v)} min={0} max={500} step={0.1} unit="kg" /></Field>
-            <Field layout="stacked" label="Power"><NumberField aria-label="Power" value={form.power} onChange={(v) => set('power', v)} min={0} max={10000} step={1} unit="W" /></Field>
+            <Field layout="stacked" label={t('patch.details.physical.panRange')}><NumberField aria-label={t('patch.details.physical.panRange')} value={form.panRange} onChange={(v) => set('panRange', v)} min={0} max={720} step={1} unit="°" /></Field>
+            <Field layout="stacked" label={t('patch.details.physical.tiltRange')}><NumberField aria-label={t('patch.details.physical.tiltRange')} value={form.tiltRange} onChange={(v) => set('tiltRange', v)} min={0} max={360} step={1} unit="°" /></Field>
+            <Field layout="stacked" label={t('patch.editor.beamMin')} error={showIssues ? issues.beam : undefined}><NumberField aria-label={t('patch.editor.beamMinAria')} value={form.beamMin} onChange={(v) => set('beamMin', v)} min={0} max={180} step={0.5} unit="°" /></Field>
+            <Field layout="stacked" label={t('patch.editor.beamMax')}><NumberField aria-label={t('patch.editor.beamMaxAria')} value={form.beamMax} onChange={(v) => set('beamMax', v)} min={0} max={180} step={0.5} unit="°" /></Field>
+            <Field layout="stacked" label={t('patch.editor.width')}><NumberField aria-label={t('patch.editor.width')} value={form.width} onChange={(v) => set('width', v)} min={0} max={5000} step={1} unit="mm" /></Field>
+            <Field layout="stacked" label={t('patch.editor.height')}><NumberField aria-label={t('patch.editor.height')} value={form.height} onChange={(v) => set('height', v)} min={0} max={5000} step={1} unit="mm" /></Field>
+            <Field layout="stacked" label={t('patch.editor.depth')}><NumberField aria-label={t('patch.editor.depth')} value={form.depth} onChange={(v) => set('depth', v)} min={0} max={5000} step={1} unit="mm" /></Field>
+            <Field layout="stacked" label={t('patch.details.physical.weight')}><NumberField aria-label={t('patch.details.physical.weight')} value={form.weight} onChange={(v) => set('weight', v)} min={0} max={500} step={0.1} unit="kg" /></Field>
+            <Field layout="stacked" label={t('patch.details.physical.power')}><NumberField aria-label={t('patch.details.physical.power')} value={form.power} onChange={(v) => set('power', v)} min={0} max={10000} step={1} unit="W" /></Field>
           </div>
         </Section>
       </div>
@@ -611,29 +606,30 @@ function ModeCard({ mode, channels, channelByKey, nameInvalid, empty, usedBy, on
   onNone: () => void
   onRemove: () => void
 }) {
+  const t = useT()
   const included = new Set(mode.channelKeys)
   const excluded = channels.filter((c) => !included.has(c.key))
   return (
     <div className={cn('flex flex-col gap-2 rounded-lg bg-surface-0 p-2.5 ring-1 ring-inset', empty ? 'ring-danger/60' : 'ring-line')}>
       <div className="flex items-center gap-2">
         <div className="w-48 [[data-density=touch]_&]:w-60">
-          <TextInput size="sm" aria-label="Mode name" value={mode.name} invalid={nameInvalid} onChange={(e) => onRename(e.target.value)} />
+          <TextInput size="sm" aria-label={t('patch.editor.modeName')} value={mode.name} invalid={nameInvalid} onChange={(e) => onRename(e.target.value)} />
         </div>
-        <Badge mono>{mode.channelKeys.length} ch</Badge>
-        {usedBy > 0 && <Badge tone="info">{usedBy} patched</Badge>}
+        <Badge mono>{t('units.channelsShortValue', { count: mode.channelKeys.length })}</Badge>
+        {usedBy > 0 && <Badge tone="info">{t('patch.shared.patchedCount', { count: usedBy })}</Badge>}
         <div className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={onAll}>All</Button>
-        <Button size="sm" variant="ghost" onClick={onNone}>None</Button>
+        <Button size="sm" variant="ghost" onClick={onAll}>{t('common.all')}</Button>
+        <Button size="sm" variant="ghost" onClick={onNone}>{t('common.none')}</Button>
         <IconButton
           size="sm"
           icon={LuTrash2}
-          label={usedBy > 0 ? 'Used by patched fixtures' : `Remove mode ${mode.name}`}
+          label={usedBy > 0 ? t('patch.editor.usedByPatched') : t('patch.editor.removeMode', { name: mode.name })}
           disabled={usedBy > 0}
           onClick={onRemove}
         />
       </div>
-      <div className="flex flex-wrap gap-1" aria-label="Channels in this mode (tap to remove)">
-        {mode.channelKeys.length === 0 && <span className="text-xs text-danger-fg">No channels — tap channels below to add them.</span>}
+      <div className="flex flex-wrap gap-1" aria-label={t('patch.editor.modeChannelsAria')}>
+        {mode.channelKeys.length === 0 && <span className="text-xs text-danger-fg">{t('patch.editor.modeEmpty')}</span>}
         {mode.channelKeys.map((k, i) => {
           const c = channelByKey.get(k)
           if (!c) return null
@@ -644,7 +640,7 @@ function ModeCard({ mode, channels, channelByKey, nameInvalid, empty, usedBy, on
       </div>
       {excluded.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 border-t border-line-subtle pt-2">
-          <span className="mr-1 text-2xs text-fg-tertiary">Not in mode</span>
+          <span className="mr-1 text-2xs text-fg-tertiary">{t('patch.editor.notInMode')}</span>
           {excluded.map((c) => <ChannelChip key={c.key} row={c} onClick={() => onToggle(c.key)} />)}
         </div>
       )}
@@ -653,12 +649,13 @@ function ModeCard({ mode, channels, channelByKey, nameInvalid, empty, usedBy, on
 }
 
 function ChannelChip({ row, index, included, onClick }: { row: ChannelRow; index?: number; included?: boolean; onClick: () => void }) {
+  const t = useT()
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={!!included}
-      title={included ? 'Remove from this mode' : 'Add to this mode'}
+      title={included ? t('patch.editor.removeFromMode') : t('patch.editor.addToMode')}
       className={cn(
         'inline-flex h-control-xs items-center gap-1.5 rounded-sm px-2 text-xs transition-colors duration-fast',
         included ? 'bg-surface-3 text-fg-primary hover:bg-surface-4' : 'border border-dashed border-line-strong text-fg-tertiary hover:text-fg-primary'
@@ -666,7 +663,7 @@ function ChannelChip({ row, index, included, onClick }: { row: ChannelRow; index
     >
       {index !== undefined && <span className="font-mono text-2xs tabular text-fg-tertiary">{index}</span>}
       <span aria-hidden className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: getChannelTypeColor(row.type, row.name) }} />
-      {row.name || 'Unnamed'}
+      {row.name || t('patch.editor.unnamed')}
       {!included && <LuPlus size={10} aria-hidden />}
     </button>
   )

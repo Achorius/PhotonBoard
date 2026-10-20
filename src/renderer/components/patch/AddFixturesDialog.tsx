@@ -1,34 +1,39 @@
 // ============================================================
-// Add fixtures — choose a type (local library or Open Fixture
-// Library), a mode, how many, a name pattern and where: the
-// addresses are planned automatically (next free address, gap,
-// universe overflow) and checked against the patch before
-// anything is created. Overlaps are refused, with an offer to
-// shift to free addresses.
+// Add fixtures — choose a type (offline catalog, local library
+// or Open Fixture Library online), a mode, how many, a name
+// pattern and where: the addresses are planned automatically
+// (next free address, gap, universe overflow) and checked against
+// the patch before anything is created. Overlaps are refused,
+// with an offer to shift to free addresses.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-import { LuArrowRight, LuFileUp, LuLibrary, LuPencilRuler, LuWandSparkles } from 'react-icons/lu'
+import { LuArrowRight, LuCheck, LuFileUp, LuGlobe, LuLibrary, LuPackageSearch, LuPencilRuler, LuTriangleAlert, LuWandSparkles } from 'react-icons/lu'
 import type { FixtureDefinition } from '@shared/types'
 import {
   Badge, Button, EmptyState, Field, Modal, NumberField, Select, Switch, Tabs, TextInput, cn, fixtureCategoryIcon, formatAddressRange, toast
 } from '@renderer/components/ui'
+import { formatList, t as tr, useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { canImportFiles, importFixtureFiles, nextGroupColor, usePatchAnalysis } from './patch-hooks'
 import { expandNamePattern, findFreeAddress, planFixtures, UNIVERSE_SIZE } from './patch-utils'
 import { Notice, UniverseStrip, type StripSegment } from './patch-parts'
 import { LibraryBrowser, sourceLabel } from './LibraryBrowser'
 import { OFLSearchPanel } from './OFLSearchPanel'
+import { CatalogPanel, CatalogPreview } from './CatalogPanel'
+import { installFromCatalog, useCatalogInfo } from './catalog'
 import { ModeChannelList } from './FixtureDetails'
 import { FixtureEditor } from './FixtureEditor'
-import { UNIVERSE_OPTIONS } from './AddressDialog'
+import { useUniverseOptions } from './AddressDialog'
 
 export interface AddFixturesRequest {
   defId?: string
   universe?: number
   address?: number
 }
+
+type SourceTab = 'catalog' | 'library' | 'online'
 
 const MAX_COUNT = 256
 const NEW_GROUP = '__new'
@@ -38,10 +43,17 @@ function escapeRegExp(s: string): string {
 }
 
 export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRequest; onClose: () => void }) {
+  const t = useT()
+  const universeOpts = useUniverseOptions()
   const fixtures = usePatchStore((s) => s.fixtures)
   const groups = usePatchStore((s) => s.groups)
   const { patch, items } = usePatchAnalysis()
-  const [tab, setTab] = useState<'library' | 'online'>('library')
+  const catalog = useCatalogInfo()
+  const catalogOff = catalog?.available === false
+  // The offline catalog is the primary source; a type preselected from the Library opens the library
+  const [tab, setTab] = useState<SourceTab>(request.defId ? 'library' : 'catalog')
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const [catalogSeed, setCatalogSeed] = useState({ text: '', n: 0 })
   const [defId, setDefId] = useState<string | null>(request.defId ?? null)
   const [modeName, setModeName] = useState('')
   const [count, setCount] = useState(1)
@@ -57,16 +69,23 @@ export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRe
   const [newGroupName, setNewGroupName] = useState('')
   const [editor, setEditor] = useState(false)
 
+  const shownTab: SourceTab = tab === 'catalog' && catalogOff ? 'library' : tab
   const def = useMemo(() => fixtures.find((f) => f.id === defId) ?? null, [fixtures, defId])
   const mode = def?.modes.find((m) => m.name === modeName) ?? def?.modes[0]
   const channels = Math.max(1, mode?.channelCount ?? 1)
 
   const chooseDef = useCallback((d: FixtureDefinition) => {
     setDefId(d.id)
+    setPreviewId(null)
     setModeName((cur) => (d.modes.some((m) => m.name === cur) ? cur : d.modes[0]?.name ?? ''))
     setPattern(`${d.name} {n}`)
     setNumberManual(false)
   }, [])
+
+  const openCatalog = (text = '') => {
+    setCatalogSeed((s) => ({ text, n: s.n + 1 }))
+    setTab('catalog')
+  }
 
   // Preselected type (Library → "Patch…")
   useEffect(() => {
@@ -130,11 +149,11 @@ export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRe
       plan.map((p) => ({ fixtureDefId: def.id, modeName: mode.name, universe: p.universe, address: p.address, name: p.name })),
       gid
     )
-    if (ids.length === 0) { toast.error('Nothing was patched'); return }
+    if (ids.length === 0) { toast.error(tr('patch.add.nothingPatched')); return }
     store.selectFixtures(ids)
     const first = plan[0]
     const last = plan[plan.length - 1]
-    toast.success(ids.length === 1 ? `Patched ${first.name}` : `Patched ${ids.length} fixtures: ${def.name}`, {
+    toast.success(ids.length === 1 ? tr('patch.add.patchedOne', { name: first.name }) : tr('patch.add.patchedMany', { count: ids.length, type: def.name }), {
       description: ids.length === 1
         ? formatAddressRange(first.universe, first.address, channels)
         : `${formatAddressRange(first.universe, first.address, channels).split('–')[0]} → ${formatAddressRange(last.universe, last.address, channels)}`
@@ -143,21 +162,49 @@ export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRe
   }
 
   const groupOptions = useMemo(() => {
-    const out: { value: string; label: string }[] = [{ value: '', label: 'No group' }]
+    const out: { value: string; label: string }[] = [{ value: '', label: t('patch.parts.noGroup') }]
     const ids = new Set(groups.map((g) => g.id))
     const walk = (parent: string | undefined, depth: number) => {
       for (const g of groups.filter((x) => (x.parentGroupId && ids.has(x.parentGroupId) ? x.parentGroupId : undefined) === parent)) {
-        out.push({ value: g.id, label: `${'   '.repeat(depth)}${g.name}` })
+        out.push({ value: g.id, label: `${'   '.repeat(depth)}${g.name}` })
         walk(g.id, depth + 1)
       }
     }
     walk(undefined, 0)
-    out.push({ value: NEW_GROUP, label: 'New group…' })
+    out.push({ value: NEW_GROUP, label: t('patch.add.newGroupOption') })
     return out
-  }, [groups])
+  }, [groups, t])
 
   const Icon = fixtureCategoryIcon(def?.categories)
   const preview = plan.slice(0, 64)
+  const conflictNames = [...new Set(conflicts.flatMap((c) => c.conflictWith))].slice(0, 5).map((id) => names.get(id) ?? '?')
+  const nextUniverses = usedUniverses.filter((u) => u !== universe).map((u) => String(u + 1))
+
+  // Right pane while browsing the catalog: preview of the tapped fixture
+  const catalogPreview = shownTab === 'catalog' && previewId ? (
+    <CatalogPreview
+      id={previewId}
+      renderActions={(d) => {
+        const local = fixtures.find((f) => f.id === d.id)
+        return (
+          <>
+            {local && <Badge tone="go" icon={LuCheck}>{t('patch.shared.inLibrary')}</Badge>}
+            <Button
+              size="sm"
+              variant="primary"
+              icon={LuArrowRight}
+              onClick={() => {
+                if (local) chooseDef(local)
+                else void installFromCatalog(d).then((x) => { if (x) chooseDef(x) })
+              }}
+            >
+              {t('patch.shared.use')}
+            </Button>
+          </>
+        )
+      }}
+    />
+  ) : null
 
   return (
     <>
@@ -166,69 +213,96 @@ export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRe
         onClose={onClose}
         size="xl"
         flush
-        title="Add fixtures"
+        title={t('patch.add.title')}
         footer={(
           <>
-            <p className={cn('mr-auto text-xs tabular', def && (conflicts.length > 0 || overflow.length > 0) ? 'text-danger-fg' : 'text-fg-tertiary')}>
+            <p className={cn('mr-auto min-w-0 truncate text-xs tabular', def && (conflicts.length > 0 || overflow.length > 0) ? 'text-danger-fg' : 'text-fg-tertiary')}>
               {!def
-                ? 'Select a fixture type, then set quantity and address.'
+                ? t('patch.add.footerSelect')
                 : conflicts.length > 0 || overflow.length > 0
-                  ? 'Resolve the address problems above to patch.'
-                  : `${plan.length} fixture${plan.length === 1 ? '' : 's'} · ${channels} ch each · ${plan.length * channels} channels`}
+                  ? t('patch.add.footerResolve')
+                  : t('patch.add.footerSummary', {
+                      fixtures: t('common.fixtureCount', { count: plan.length }),
+                      per: channels,
+                      channels: t('common.channelCount', { count: plan.length * channels })
+                    })}
             </p>
-            <Button variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" disabled={!valid} onClick={add}>
-              {count > 1 ? `Patch ${count} fixtures` : 'Patch fixture'}
+            <Button variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button variant="primary" disabled={!valid} onClick={add} data-action="patch">
+              {count > 1 ? t('patch.add.patchMany', { count }) : t('patch.add.patchOne')}
             </Button>
           </>
         )}
       >
         <div className="flex h-[min(720px,calc(100vh-200px))] min-h-[360px] border-t border-line-subtle">
           {/* Type */}
-          <div className="flex w-[340px] shrink-0 flex-col border-r border-line-subtle [[data-density=touch]_&]:w-[380px]">
+          <div className="flex w-[340px] shrink-0 flex-col border-r border-line-subtle [[data-density=touch]_&]:w-[400px]">
             <div className="flex shrink-0 items-end gap-1 px-2.5 pt-1">
               <Tabs
                 size="sm"
-                aria-label="Fixture source"
-                value={tab}
+                fit
+                aria-label={t('patch.add.sourceAria')}
+                value={shownTab}
                 onChange={setTab}
-                items={[{ id: 'library', label: 'Library', icon: LuLibrary }, { id: 'online', label: 'Online (OFL)' }]}
+                items={[
+                  ...(catalogOff ? [] : [{ id: 'catalog' as const, label: t('patch.add.tabs.catalog'), icon: LuPackageSearch, 'data-source-tab': 'catalog' }]),
+                  { id: 'library' as const, label: t('patch.add.tabs.library'), icon: LuLibrary, 'data-source-tab': 'library' },
+                  { id: 'online' as const, label: t('patch.add.tabs.online'), icon: LuGlobe, 'data-source-tab': 'online' }
+                ]}
                 className="flex-1"
               />
             </div>
-            {tab === 'library' ? (
+            {catalogOff && (
+              <p className="flex shrink-0 items-center gap-1.5 px-3 pt-1.5 text-2xs text-warning-fg" title={catalog?.error}>
+                <LuTriangleAlert size={12} aria-hidden className="shrink-0" />
+                <span className="truncate">{t('patch.add.catalogUnavailable')}{catalog?.error ? ` — ${catalog.error}` : ''}</span>
+              </p>
+            )}
+            {shownTab === 'catalog' ? (
+              <CatalogPanel
+                key={catalogSeed.n}
+                className="flex-1"
+                info={catalog}
+                initialText={catalogSeed.text}
+                previewId={previewId ?? (def?.id ?? null)}
+                onPreview={(e) => setPreviewId(e.id)}
+                onFixtureDownloaded={chooseDef}
+              />
+            ) : shownTab === 'library' ? (
               <LibraryBrowser
                 className="flex-1"
                 selectedId={defId}
                 onSelect={chooseDef}
                 onActivate={(d) => { chooseDef(d) }}
-                emptyAction={<Button size="sm" variant="primary" onClick={() => setTab('online')}>Search online</Button>}
+                onSearchCatalog={catalogOff ? undefined : (q) => openCatalog(q)}
+                emptyAction={!catalogOff ? <Button size="sm" variant="primary" icon={LuPackageSearch} onClick={() => openCatalog()}>{t('patch.library.browseCatalog')}</Button> : undefined}
               />
             ) : (
               <OFLSearchPanel
                 className="flex-1"
+                onOpenCatalog={catalogOff ? undefined : () => openCatalog()}
                 onFixtureDownloaded={(d) => { chooseDef(d); setTab('library') }}
               />
             )}
             <div className="flex shrink-0 items-center gap-1 border-t border-line-subtle p-1.5">
-              <Button size="sm" variant="ghost" icon={LuPencilRuler} onClick={() => setEditor(true)}>New type</Button>
+              <Button size="sm" variant="ghost" icon={LuPencilRuler} onClick={() => setEditor(true)}>{t('patch.shared.newType')}</Button>
               {canImportFiles() && (
                 <Button size="sm" variant="ghost" icon={LuFileUp} onClick={async () => {
                   const ids = await importFixtureFiles()
                   const d = ids.length > 0 ? usePatchStore.getState().fixtures.find((f) => f.id === ids[0]) : undefined
                   if (d) { chooseDef(d); setTab('library') }
-                }}>Import file</Button>
+                }}>{t('patch.add.importFile')}</Button>
               )}
             </div>
           </div>
 
           {/* Configuration */}
           <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-            {!def || !mode ? (
+            {catalogPreview ?? (!def || !mode ? (
               <EmptyState
-                icon={LuLibrary}
-                title="Choose a fixture type"
-                description="Pick a type from your library, or search the Open Fixture Library online. Then choose how many fixtures to patch and where."
+                icon={shownTab === 'catalog' ? LuPackageSearch : LuLibrary}
+                title={t('patch.add.emptyTitle')}
+                description={t('patch.add.emptyDescription')}
               />
             ) : (
               <div className="flex flex-col gap-4 p-4">
@@ -243,103 +317,107 @@ export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRe
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-4">
-                  <Field layout="stacked" label="Mode" className="col-span-2">
+                  <Field layout="stacked" label={t('common.mode')} className="col-span-2">
                     {(id) => (
                       <Select
                         id={id}
                         value={mode.name}
                         onChange={setModeName}
-                        options={def.modes.map((m) => ({ value: m.name, label: `${m.name} — ${m.channelCount} ch` }))}
+                        options={def.modes.map((m) => ({ value: m.name, label: t('patch.shared.modeOption', { name: m.name, count: m.channelCount }) }))}
                       />
                     )}
                   </Field>
-                  <Field layout="stacked" label="Quantity">
-                    <NumberField aria-label="Quantity" value={count} onChange={setCount} min={1} max={MAX_COUNT} step={1} />
+                  <Field layout="stacked" label={t('patch.add.quantity')}>
+                    <NumberField aria-label={t('patch.add.quantity')} value={count} onChange={setCount} min={1} max={MAX_COUNT} step={1} />
                   </Field>
-                  <Field layout="stacked" label="Group">
+                  <Field layout="stacked" label={t('common.group')}>
                     {(id) => <Select id={id} value={groupId} onChange={setGroupId} options={groupOptions} />}
                   </Field>
                   {groupId === NEW_GROUP && (
-                    <Field layout="stacked" label="New group name" className="col-span-2 lg:col-span-4">
-                      {(id) => <TextInput id={id} value={newGroupName} placeholder="e.g. Back truss spots" onChange={(e) => setNewGroupName(e.target.value)} invalid={!newGroupName.trim()} />}
+                    <Field layout="stacked" label={t('patch.add.newGroupName')} className="col-span-2 lg:col-span-4">
+                      {(id) => <TextInput id={id} value={newGroupName} placeholder={t('patch.add.newGroupPlaceholder')} onChange={(e) => setNewGroupName(e.target.value)} invalid={!newGroupName.trim()} />}
                     </Field>
                   )}
                   <Field
                     layout="stacked"
-                    label="Name"
+                    label={t('common.name')}
                     className="col-span-2 lg:col-span-3"
-                    hint={<><code className="font-mono text-fg-secondary">{'{n}'}</code> = number, <code className="font-mono text-fg-secondary">{'{nn}'}</code> = 01, 02… — first: <span className="text-fg-secondary">{expandNamePattern(pattern, startNumber, count)}</span></>}
+                    hint={t.rich('patch.add.nameHint', {
+                      n: <code className="font-mono text-fg-secondary">{'{n}'}</code>,
+                      nn: <code className="font-mono text-fg-secondary">{'{nn}'}</code>,
+                      first: <span className="text-fg-secondary">{expandNamePattern(pattern, startNumber, count)}</span>
+                    })}
                   >
-                    {(id) => <TextInput id={id} value={pattern} onChange={(e) => setPattern(e.target.value)} placeholder="Spot {n}" />}
+                    {(id) => <TextInput id={id} value={pattern} onChange={(e) => setPattern(e.target.value)} placeholder={t('patch.add.namePlaceholder')} />}
                   </Field>
-                  <Field layout="stacked" label="First number">
-                    <NumberField aria-label="First number" value={startNumber} onChange={(v) => { setNumberManual(true); setStartNumber(v) }} min={0} max={9999} step={1} />
+                  <Field layout="stacked" label={t('patch.add.firstNumber')}>
+                    <NumberField aria-label={t('patch.add.firstNumber')} value={startNumber} onChange={(v) => { setNumberManual(true); setStartNumber(v) }} min={0} max={9999} step={1} />
                   </Field>
-                  <Field layout="stacked" label="Universe">
-                    {(id) => <Select id={id} value={String(universe)} onChange={(v) => setUniverse(Number(v))} options={UNIVERSE_OPTIONS} />}
+                  <Field layout="stacked" label={t('common.universe')}>
+                    {(id) => <Select id={id} value={String(universe)} onChange={(v) => setUniverse(Number(v))} options={universeOpts} />}
                   </Field>
-                  <Field layout="stacked" label="Start address" className="col-span-1 lg:col-span-2">
+                  <Field layout="stacked" label={t('patch.shared.startAddress')} className="col-span-1 lg:col-span-2">
                     <div className="flex gap-2">
-                      <NumberField aria-label="Start address" value={address} onChange={(v) => { setAddressManual(true); setAddress(v) }} min={1} max={UNIVERSE_SIZE} step={1} className="flex-1" />
+                      <NumberField aria-label={t('patch.shared.startAddress')} value={address} onChange={(v) => { setAddressManual(true); setAddress(v) }} min={1} max={UNIVERSE_SIZE} step={1} className="min-w-[72px] flex-1" />
                       <Button
                         variant="secondary"
                         icon={LuWandSparkles}
-                        tooltip="First free block in this universe"
+                        tooltip={t('patch.shared.nextFreeTooltip')}
                         onClick={() => { setAddressManual(false); setAddress(findFreeAddress(items, universe, channels) ?? 1) }}
                       >
-                        Next free
+                        {t('patch.shared.nextFree')}
                       </Button>
                     </div>
                   </Field>
-                  <Field layout="stacked" label="Gap">
-                    <NumberField aria-label="Gap between fixtures" value={gap} onChange={setGap} min={0} max={64} step={1} unit="ch" />
+                  <Field layout="stacked" label={t('patch.shared.gap')}>
+                    <NumberField aria-label={t('patch.shared.gapBetween')} value={gap} onChange={setGap} min={0} max={64} step={1} unit={t('units.channelsShort')} />
                   </Field>
                 </div>
 
                 <Switch
                   checked={avoid}
                   onChange={setAvoid}
-                  label="Skip used addresses"
-                  description="Place each fixture in the next free block (continuing on the next universe when full) instead of overlapping existing fixtures."
+                  label={t('patch.shared.skipUsed')}
+                  description={t('patch.add.skipUsedDescription')}
                 />
 
                 <div className="flex flex-col gap-2">
-                  {strips.map((s) => <UniverseStrip key={s.universe} label={`Universe ${s.universe + 1}`} segments={s.segs} />)}
+                  {strips.map((s) => <UniverseStrip key={s.universe} label={t('common.universeN', { n: s.universe + 1 })} segments={s.segs} />)}
                   <div className="flex items-center gap-3 text-2xs text-fg-tertiary">
-                    <Legend className="bg-surface-5">Patched</Legend>
-                    <Legend className="bg-accent">New</Legend>
-                    <Legend className="bg-danger">Overlap</Legend>
+                    <Legend className="bg-surface-5">{t('patch.add.legend.patched')}</Legend>
+                    <Legend className="bg-accent">{t('patch.add.legend.new')}</Legend>
+                    <Legend className="bg-danger">{t('patch.add.legend.overlap')}</Legend>
                   </div>
                 </div>
 
                 {conflicts.length > 0 && (
                   <Notice
                     tone="danger"
-                    title={`${conflicts.length === plan.length && plan.length > 1 ? 'All' : conflicts.length} new fixture${conflicts.length === 1 ? '' : 's'} would overlap patched fixtures`}
-                    action={<Button size="sm" variant="secondary" onClick={() => setAvoid(true)}>Shift to free addresses</Button>}
+                    title={conflicts.length === plan.length && plan.length > 1 ? t('patch.add.conflictsAll') : t('patch.add.conflictsSome', { count: conflicts.length })}
+                    action={<Button size="sm" variant="secondary" onClick={() => setAvoid(true)}>{t('patch.shared.shiftToFree')}</Button>}
                   >
-                    {[...new Set(conflicts.flatMap((c) => c.conflictWith))].slice(0, 5).map((id) => names.get(id)).join(', ')} already use{conflicts.length === 1 ? 's' : ''} these channels.
+                    {t('patch.shared.alreadyUse', { names: conflictNames.join(', '), count: conflictNames.length })}
                   </Notice>
                 )}
                 {overflow.length > 0 && (
                   <Notice
                     tone="danger"
-                    title={`${overflow.length} fixture${overflow.length === 1 ? ' does' : 's do'} not fit before channel ${UNIVERSE_SIZE}`}
-                    action={!avoid ? <Button size="sm" variant="secondary" onClick={() => setAvoid(true)}>Continue on next universe</Button> : undefined}
+                    title={t('patch.shared.overflowTitle', { count: overflow.length, max: UNIVERSE_SIZE })}
+                    action={!avoid ? <Button size="sm" variant="secondary" onClick={() => setAvoid(true)}>{t('patch.add.continueNext')}</Button> : undefined}
                   >
-                    {avoid ? 'There is no free room left in the following universes.' : 'Lower the start address or quantity, or let them continue on the next universe.'}
+                    {avoid ? t('patch.add.noRoomLeft') : t('patch.add.lowerOrContinue')}
                   </Notice>
                 )}
                 {spills && conflicts.length === 0 && overflow.length === 0 && (
-                  <Notice tone="info" title={`Continues on universe ${usedUniverses.filter((u) => u !== universe).map((u) => u + 1).join(', ')}`}>
-                    Universe {universe + 1} has no room for all of them from the start address.
+                  <Notice tone="info" title={t('patch.add.continuesOn', { list: formatList(nextUniverses), count: nextUniverses.length })}>
+                    {t('patch.add.noRoomFromStart', { n: universe + 1 })}
                   </Notice>
                 )}
 
                 <div className="overflow-hidden rounded-lg ring-1 ring-inset ring-line">
                   <div className="flex h-control-sm items-center justify-between bg-surface-2 px-3 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">
-                    <span>Preview</span>
-                    <span className="tabular">{plan.length} fixture{plan.length === 1 ? '' : 's'}</span>
+                    <span>{t('patch.add.preview')}</span>
+                    <span className="tabular">{t('common.fixtureCount', { count: plan.length })}</span>
                   </div>
                   <div className="max-h-[220px] overflow-y-auto bg-surface-0">
                     {preview.map((p) => (
@@ -348,24 +426,24 @@ export function AddFixturesDialog({ request, onClose }: { request: AddFixturesRe
                         <span className="min-w-0 flex-1 truncate text-fg-primary">{p.name}</span>
                         <LuArrowRight size={12} aria-hidden className="shrink-0 text-fg-tertiary" />
                         <span className={cn('font-mono text-xs tabular', p.overflow || p.conflictWith.length > 0 ? 'text-danger-fg' : 'text-accent-fg')}>
-                          {p.overflow ? 'no room' : formatAddressRange(p.universe, p.address, channels)}
+                          {p.overflow ? t('patch.add.noRoom') : formatAddressRange(p.universe, p.address, channels)}
                         </span>
-                        {p.conflictWith.length > 0 && <Badge size="xs" tone="danger">overlap</Badge>}
+                        {p.conflictWith.length > 0 && <Badge size="xs" tone="danger">{t('patch.add.overlapBadge')}</Badge>}
                       </div>
                     ))}
-                    {plan.length > preview.length && <p className="border-t border-line-subtle px-3 py-1.5 text-xs text-fg-tertiary">…and {plan.length - preview.length} more</p>}
+                    {plan.length > preview.length && <p className="border-t border-line-subtle px-3 py-1.5 text-xs text-fg-tertiary">{t('patch.add.andMore', { count: plan.length - preview.length })}</p>}
                   </div>
                 </div>
 
                 <details className="group rounded-lg ring-1 ring-inset ring-line">
                   <summary className="flex h-control-sm cursor-pointer list-none items-center gap-2 px-3 text-xs text-fg-secondary hover:text-fg-primary">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Channels</span>
-                    <span className="tabular text-fg-tertiary">{mode.channelCount} in {mode.name}</span>
+                    <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('common.channels')}</span>
+                    <span className="tabular text-fg-tertiary">{t('patch.add.channelsIn', { count: mode.channelCount, mode: mode.name })}</span>
                   </summary>
                   <div className="max-h-[240px] overflow-y-auto border-t border-line-subtle"><ModeChannelList def={def} modeName={mode.name} dense /></div>
                 </details>
               </div>
-            )}
+            ))}
           </div>
         </div>
       </Modal>

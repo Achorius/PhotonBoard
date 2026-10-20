@@ -13,6 +13,7 @@ import {
   Badge, Button, DropdownMenu, IconButton, SegmentedControl, SWATCH_COLORS, cn, fixtureCategoryIcon, formatAddress, formatAddressRange,
   palette, tint
 } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useGroupsByFixture, usePatchAnalysis, useRowSelection } from './patch-hooks'
 import { occupancy, universeStats, UNIVERSE_SIZE, type Footprint } from './patch-utils'
@@ -28,6 +29,7 @@ type ColorBy = 'fixture' | 'group'
 type Focus = { kind: 'fixture'; id: string } | { kind: 'free'; address: number } | null
 
 export function UniverseMap({ onAddAt }: { onAddAt: (universe: number, address: number) => void }) {
+  const t = useT()
   const { patch, defs, items, byId, conflicts, numbers, universes } = usePatchAnalysis()
   const groupsByFixture = useGroupsByFixture()
   const selectedIds = usePatchStore((s) => s.selectedFixtureIds)
@@ -89,30 +91,30 @@ export function UniverseMap({ onAddAt }: { onAddAt: (universe: number, address: 
       <div className="flex min-h-control-lg shrink-0 flex-wrap items-center gap-2 border-b border-line-subtle px-3 py-1.5">
         <SegmentedControl
           size="sm"
-          aria-label="Universe"
+          aria-label={t('common.universe')}
           value={universe}
           onChange={(u) => { setUniverse(u); setFocus(null) }}
-          items={shownUniverses.map((u) => ({ value: u, label: `Universe ${u + 1}` }))}
+          items={shownUniverses.map((u) => ({ value: u, label: t('common.universeN', { n: u + 1 }) }))}
         />
         {unused.length > 0 && (
           <DropdownMenu
-            items={unused.map((u) => ({ label: `Universe ${u + 1}`, description: 'Empty', onSelect: () => { setUniverse(u); setFocus(null) } }))}
-            trigger={(p) => <IconButton {...p} size="sm" icon={LuPlus} label="Show another universe" />}
+            items={() => unused.map((u) => ({ label: t('common.universeN', { n: u + 1 }), description: t('patch.map.empty'), onSelect: () => { setUniverse(u); setFocus(null) } }))}
+            trigger={(p) => <IconButton {...p} size="sm" icon={LuPlus} label={t('patch.map.showAnother')} />}
           />
         )}
         <div className="flex-1" />
         <dl className="flex items-center gap-4 text-xs">
-          <Stat label="Used" value={`${stats.used} / ${UNIVERSE_SIZE}`} />
-          <Stat label="Fixtures" value={String(stats.fixtures)} />
-          <Stat label="Largest free" value={`${stats.largestFree} ch`} />
-          {universeConflicts > 0 && <Badge tone="danger" icon={LuTriangleAlert}>{universeConflicts} in conflict</Badge>}
+          <Stat label={t('patch.map.used')} value={`${stats.used} / ${UNIVERSE_SIZE}`} />
+          <Stat label={t('common.fixtures')} value={String(stats.fixtures)} />
+          <Stat label={t('patch.map.largestFree')} value={t('units.channelsShortValue', { count: stats.largestFree })} />
+          {universeConflicts > 0 && <Badge tone="danger" icon={LuTriangleAlert}>{t('patch.map.inConflict', { count: universeConflicts })}</Badge>}
         </dl>
         <SegmentedControl
           size="sm"
-          aria-label="Colour by"
+          aria-label={t('patch.map.colourBy')}
           value={colorBy}
           onChange={setColorBy}
-          items={[{ value: 'fixture' as const, label: 'By fixture' }, { value: 'group' as const, label: 'By group' }]}
+          items={[{ value: 'fixture' as const, label: t('patch.map.byFixture') }, { value: 'group' as const, label: t('patch.map.byGroup') }]}
         />
       </div>
 
@@ -126,7 +128,7 @@ export function UniverseMap({ onAddAt }: { onAddAt: (universe: number, address: 
           </div>
           <div
             role="grid"
-            aria-label={`Universe ${universe + 1} address map`}
+            aria-label={t('patch.map.gridAria', { n: universe + 1 })}
             className="grid flex-1 gap-px overflow-hidden rounded bg-line-subtle ring-1 ring-line"
             style={{ gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${ROWS}, minmax(0, 1fr))` }}
             onClick={onCellClick}
@@ -196,6 +198,7 @@ const Cell = memo(function Cell({ address, ids, start, number, color, conflict, 
   highlighted: boolean
   focusedFree: boolean
 }) {
+  const t = useT() // memo leaf: re-render on a language change
   const used = ids.length > 0
   const style: React.CSSProperties | undefined = used && !conflict && color
     ? { backgroundColor: tint(color, highlighted ? 0.6 : 0.36), boxShadow: start ? `inset 3px 0 0 ${color}` : undefined }
@@ -204,7 +207,9 @@ const Cell = memo(function Cell({ address, ids, start, number, color, conflict, 
     <div
       data-a={address}
       role="gridcell"
-      aria-label={used ? `${String(address).padStart(3, '0')}: fixture ${number}${conflict ? ', conflict' : ''}` : `${address} free`}
+      aria-label={used
+        ? t(conflict ? 'patch.map.cellConflict' : 'patch.map.cellUsed', { address: String(address).padStart(3, '0'), number: String(number) })
+        : t('patch.map.cellFree', { address: String(address) })}
       aria-selected={selected || undefined}
       className={cn(
         'relative flex min-h-0 min-w-0 cursor-pointer select-none items-center justify-center overflow-hidden font-mono text-2xs tabular leading-none',
@@ -235,6 +240,7 @@ function InfoBar({ universe, focus, slots, byId, names, defs, modeOf, defIdOf, n
   onAddAt: (universe: number, address: number) => void
   onAddress: (id: string) => void
 }) {
+  const t = useT()
   let content: React.ReactNode
   if (focus?.kind === 'fixture' && byId.has(focus.id)) {
     const f = byId.get(focus.id)!
@@ -246,13 +252,13 @@ function InfoBar({ universe, focus, slots, byId, names, defs, modeOf, defIdOf, n
         <Icon size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
         <span className="font-mono text-xs tabular text-fg-tertiary">#{numbers.get(focus.id)}</span>
         <span className="truncate text-sm font-medium text-fg-primary">{names.get(focus.id)}</span>
-        <span className="hidden truncate text-xs text-fg-tertiary lg:inline">{def ? `${def.manufacturer} ${def.name}` : 'Missing type'} · {modeOf(focus.id)}</span>
+        <span className="hidden truncate text-xs text-fg-tertiary lg:inline">{def ? `${def.manufacturer} ${def.name}` : t('patch.shared.missingType')} · {modeOf(focus.id)}</span>
         <span className="font-mono text-xs tabular text-accent-fg">{formatAddressRange(f.universe, f.address, f.count)}</span>
-        <span className="text-xs tabular text-fg-tertiary">{f.count} ch</span>
+        <span className="text-xs tabular text-fg-tertiary">{t('units.channelsShortValue', { count: f.count })}</span>
         {(groups.get(focus.id) ?? []).slice(0, 2).map((g) => <Badge key={g.id} size="xs">{g.name}</Badge>)}
-        {others.length > 0 && <Badge tone="danger" icon={LuTriangleAlert}>Overlaps {others.join(', ')}</Badge>}
+        {others.length > 0 && <Badge tone="danger" icon={LuTriangleAlert}>{t('patch.table.overlaps', { names: others.join(', ') })}</Badge>}
         <div className="flex-1" />
-        <Button size="sm" variant="secondary" icon={LuHash} onClick={() => onAddress(focus.id)}>Change address</Button>
+        <Button size="sm" variant="secondary" icon={LuHash} onClick={() => onAddress(focus.id)}>{t('patch.table.changeAddress')}</Button>
       </>
     )
   } else if (focus?.kind === 'free') {
@@ -261,19 +267,19 @@ function InfoBar({ universe, focus, slots, byId, names, defs, modeOf, defIdOf, n
     content = (
       <>
         <span className="font-mono text-sm tabular text-fg-primary">{formatAddress(universe, focus.address)}</span>
-        <span className="text-sm text-fg-secondary">is free</span>
-        <span className="text-xs tabular text-fg-tertiary">
-          {run} free channel{run === 1 ? '' : 's'} from here{run > 1 ? ` (${formatAddressRange(universe, focus.address, run)})` : ''}
+        <span className="text-sm text-fg-secondary">{t('patch.map.isFree')}</span>
+        <span className="truncate text-xs tabular text-fg-tertiary">
+          {t('patch.map.freeFromHere', { count: run })}{run > 1 ? ` (${formatAddressRange(universe, focus.address, run)})` : ''}
         </span>
         <div className="flex-1" />
-        <Button size="sm" variant="primary" icon={LuPlus} onClick={() => onAddAt(universe, focus.address)}>Add fixtures here</Button>
+        <Button size="sm" variant="primary" icon={LuPlus} onClick={() => onAddAt(universe, focus.address)}>{t('patch.map.addHere')}</Button>
       </>
     )
   } else {
     content = (
       <>
         <LuMousePointerClick size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
-        <span className="text-sm text-fg-tertiary">Tap a fixture to select it, or a free slot to patch new fixtures there.</span>
+        <span className="truncate text-sm text-fg-tertiary">{t('patch.map.hint')}</span>
       </>
     )
   }
