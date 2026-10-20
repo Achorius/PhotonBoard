@@ -93,7 +93,11 @@ EOF
 # ============================================================
 
 apt_has() { # apt_has PKG -> 0 if PKG has an installation candidate
-  apt-cache policy "$1" 2>/dev/null | grep -q 'Candidate: [^(]'
+  # Not "apt-cache ... | grep -q": with pipefail, grep -q exiting early makes
+  # apt-cache die of SIGPIPE and the test fail at random.
+  local out
+  out=$(apt-cache policy "$1" 2>/dev/null) || return 1
+  grep -q 'Candidate: [^(]' <<< "$out"
 }
 
 pick_pkg() { # pick_pkg ALT1 ALT2... -> prints the first installable one
@@ -352,7 +356,7 @@ install_touch_helper() {
     # Piped install (curl | sudo bash): fetch the helper from the same place.
     tmp=$(mktemp)
     if curl -fsSL --retry 2 -o "$tmp" "$PB_RAW_BASE/photonboard-map-touch.sh" \
-       && head -n1 "$tmp" | grep -q '^#!' && bash -n "$tmp"; then
+       && [[ $(head -n1 "$tmp") == '#!'* ]] && bash -n "$tmp"; then
       install -m 0755 "$tmp" "$dst"
     else
       rm -f "$tmp"

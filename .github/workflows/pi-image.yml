@@ -107,7 +107,7 @@ jobs:
             if sudo "$@" >/dev/null 2>&1; then echo "OK    $d"; else echo "FAIL  $d"; fail=1; fi
           }
           check "PhotonBoard binary"            test -x "$R/opt/PhotonBoard/photonboard"
-          check "photonboard command"           test -e "$R/usr/bin/photonboard"
+          check "photonboard command"           sh -c "test -L '$R/usr/bin/photonboard' && readlink '$R/etc/alternatives/photonboard' | grep -qx /opt/PhotonBoard/photonboard"
           check "user photonboard (uid 1000)"   grep -q '^photonboard:x:1000:' "$R/etc/passwd"
           check "home /home/photonboard"        test -d "$R/home/photonboard"
           check "password photonboard"          python3 -c 'import crypt,sys; h=[l.split(":")[1] for l in open(sys.argv[1]) if l.startswith("photonboard:")][0]; sys.exit(crypt.crypt("photonboard", h) != h)' "$R/etc/shadow"
