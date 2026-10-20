@@ -6,8 +6,10 @@
 import type { Translation } from '../types'
 import { core } from './pro/core'
 import { cli } from './pro/cli'
+import { stage } from './pro/stage'
 
 export const pro: Translation['pro'] = {
   ...core,
-  cli
+  cli,
+  stage
 }

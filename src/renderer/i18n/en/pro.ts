@@ -7,8 +7,10 @@
 
 import { core } from './pro/core'
 import { cli } from './pro/cli'
+import { stage } from './pro/stage'
 
 export const pro = {
   ...core,
-  cli
+  cli,
+  stage
 }
