@@ -1,4 +1,4 @@
-// MIDI view model: readable labels for mapping sources and targets, the
+// MIDI view model: readable (translated) labels for mapping sources and targets, the
 // catalogue of learnable targets, and a name index of the show's objects.
 
 import { useMemo } from 'react'
@@ -7,6 +7,7 @@ import {
   LuActivity, LuClapperboard, LuCrosshair, LuFlag, LuGauge, LuPower, LuRefreshCw, LuRepeat, LuSkipBack,
   LuSlidersVertical, LuSparkles, LuSquare, LuSquareDashed, LuSun, LuZap, LuPlay, LuTimer
 } from 'react-icons/lu'
+import { t } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
@@ -17,52 +18,54 @@ export type TargetCategory = 'masters' | 'playback' | 'fixtures' | 'timeline'
 export type TargetRef = 'cuelist' | 'chase' | 'effect' | 'fixture' | 'marker' | 'zone'
 
 export interface TargetMeta {
-  label: string
   category: TargetCategory
   icon: IconType
   /** What `target.id` points to */
   ref?: TargetRef
   /** Continuous control (uses min/max/encoding) */
   continuous?: boolean
-  description: string
 }
 
 export const TARGETS: Record<MidiTargetType, TargetMeta> = {
-  master: { label: 'Grand Master', category: 'masters', icon: LuGauge, continuous: true, description: 'Overall output level' },
-  blackout: { label: 'Blackout', category: 'masters', icon: LuPower, description: 'Toggles blackout on each press' },
-  blinder: { label: 'Blinder', category: 'masters', icon: LuSun, description: 'Full white while held' },
-  strobe: { label: 'Strobe', category: 'masters', icon: LuZap, description: 'Strobe while held' },
-  reset: { label: 'Reset all', category: 'masters', icon: LuRefreshCw, description: 'Clears the programmer and releases playback' },
-  tap_tempo: { label: 'Tap tempo', category: 'masters', icon: LuActivity, ref: 'chase', description: 'Tap to set the tempo (the chase, or every playing chase)' },
-  cuelist_go: { label: 'Scene GO', category: 'playback', icon: LuClapperboard, ref: 'cuelist', description: 'Start / stop or step a scene' },
-  cuelist_fader: { label: 'Scene fader', category: 'playback', icon: LuSlidersVertical, ref: 'cuelist', continuous: true, description: 'Scene playback level' },
-  flash: { label: 'Scene flash', category: 'playback', icon: LuZap, ref: 'cuelist', description: 'Scene at full while held' },
-  chase_toggle: { label: 'Chase on / off', category: 'playback', icon: LuRepeat, ref: 'chase', description: 'Starts or stops a chase' },
-  chase_bpm: { label: 'Chase tempo', category: 'playback', icon: LuTimer, ref: 'chase', continuous: true, description: 'Chase speed (30–300 BPM)' },
-  effect_toggle: { label: 'Effect on / off', category: 'playback', icon: LuSparkles, ref: 'effect', description: 'Starts or stops an effect (trigger / flash: while held)' },
-  channel: { label: 'Fixture channel', category: 'fixtures', icon: LuCrosshair, ref: 'fixture', continuous: true, description: 'One channel of a fixture, in the programmer' },
-  timeline_play: { label: 'Timeline play / pause', category: 'timeline', icon: LuPlay, description: 'Toggles timeline playback' },
-  timeline_stop: { label: 'Timeline stop', category: 'timeline', icon: LuSquare, description: 'Stops the timeline' },
-  timeline_rewind: { label: 'Timeline rewind', category: 'timeline', icon: LuSkipBack, description: 'Back to the start' },
-  timeline_goto_marker: { label: 'Go to marker', category: 'timeline', icon: LuFlag, ref: 'marker', description: 'Jumps the timeline to a marker' },
-  timeline_goto_zone: { label: 'Go to section', category: 'timeline', icon: LuSquareDashed, ref: 'zone', description: 'Jumps the timeline to a section' }
+  master: { category: 'masters', icon: LuGauge, continuous: true },
+  blackout: { category: 'masters', icon: LuPower },
+  blinder: { category: 'masters', icon: LuSun },
+  strobe: { category: 'masters', icon: LuZap },
+  reset: { category: 'masters', icon: LuRefreshCw },
+  tap_tempo: { category: 'masters', icon: LuActivity, ref: 'chase' },
+  cuelist_go: { category: 'playback', icon: LuClapperboard, ref: 'cuelist' },
+  cuelist_fader: { category: 'playback', icon: LuSlidersVertical, ref: 'cuelist', continuous: true },
+  flash: { category: 'playback', icon: LuZap, ref: 'cuelist' },
+  chase_toggle: { category: 'playback', icon: LuRepeat, ref: 'chase' },
+  chase_bpm: { category: 'playback', icon: LuTimer, ref: 'chase', continuous: true },
+  effect_toggle: { category: 'playback', icon: LuSparkles, ref: 'effect' },
+  channel: { category: 'fixtures', icon: LuCrosshair, ref: 'fixture', continuous: true },
+  timeline_play: { category: 'timeline', icon: LuPlay },
+  timeline_stop: { category: 'timeline', icon: LuSquare },
+  timeline_rewind: { category: 'timeline', icon: LuSkipBack },
+  timeline_goto_marker: { category: 'timeline', icon: LuFlag, ref: 'marker' },
+  timeline_goto_zone: { category: 'timeline', icon: LuSquareDashed, ref: 'zone' }
 }
 
-export const CATEGORY_LABEL: Record<TargetCategory, string> = {
-  masters: 'Masters',
-  playback: 'Playback',
-  fixtures: 'Fixtures',
-  timeline: 'Timeline'
+/** Translated name of a target ("Scene fader"); unknown types (newer shows) show their raw type */
+export function targetLabel(type: MidiTargetType): string {
+  return type in TARGETS ? t(`midi.targets.${type}.label`) : type
 }
 
-export const BEHAVIORS = [
-  { value: 'direct', label: 'Direct', description: 'Follows the control (faders, knobs); GO on press for scenes' },
-  { value: 'toggle', label: 'Toggle', description: 'Press = on, press again = off' },
-  { value: 'trigger', label: 'Trigger', description: 'On while held, off on release' },
-  { value: 'flash', label: 'Flash', description: 'Full while held' }
-] as const
+export function targetDescription(type: MidiTargetType): string {
+  return type in TARGETS ? t(`midi.targets.${type}.description`) : ''
+}
 
-export type Behavior = (typeof BEHAVIORS)[number]['value']
+export function categoryLabel(category: TargetCategory): string {
+  return t(`midi.categories.${category}`)
+}
+
+export const BEHAVIORS = ['direct', 'toggle', 'trigger', 'flash'] as const
+
+export type Behavior = (typeof BEHAVIORS)[number]
+
+export const behaviorLabel = (b: Behavior): string => t(`midi.behaviors.${b}.label`)
+export const behaviorDescription = (b: Behavior): string => t(`midi.behaviors.${b}.description`)
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
@@ -71,7 +74,10 @@ export function noteName(n: number): string {
   return `${NOTE_NAMES[((n % 12) + 12) % 12]}${Math.floor(n / 12) - 1}`
 }
 
-export const SOURCE_LABEL: Record<MidiSourceType, string> = { cc: 'CC', note: 'Note', program: 'Program' }
+export const sourceLabel = (type: MidiSourceType): string => t(`midi.source.${type}`)
+
+/** "ch 3" / "can. 3" */
+export const channelShort = (channel: number): string => t('midi.source.channelShort', { channel })
 
 /** "CC 7", "Note 36 · C2", "PC 5" */
 export function formatSourceNumber(type: MidiSourceType | string, number: number): string {
@@ -137,12 +143,13 @@ export interface TargetDescription {
 }
 
 export function describeTarget(m: MidiMapping, index: NameIndex): TargetDescription {
-  const meta = TARGETS[m.target.type] ?? { label: m.target.type, category: 'masters', icon: LuGauge, description: '' }
-  if (!meta.ref) return { title: meta.label, missing: false, meta }
+  const meta = TARGETS[m.target.type] ?? { category: 'masters', icon: LuGauge }
+  const title = targetLabel(m.target.type)
+  if (!meta.ref) return { title, missing: false, meta }
   if (!m.target.id) {
-    return { title: meta.label, detail: meta.ref === 'chase' && m.target.type === 'tap_tempo' ? 'Playing chases' : 'Not set', missing: m.target.type !== 'tap_tempo', meta }
+    return { title, detail: meta.ref === 'chase' && m.target.type === 'tap_tempo' ? t('midi.target.playingChases') : t('midi.target.notSet'), missing: m.target.type !== 'tap_tempo', meta }
   }
   const name = index.byRef[meta.ref].get(m.target.id)
-  const detail = name === undefined ? 'Missing' : m.target.type === 'channel' && m.target.parameter ? `${name} · ${m.target.parameter}` : name
-  return { title: meta.label, detail, missing: name === undefined, meta }
+  const detail = name === undefined ? t('midi.target.missing') : m.target.type === 'channel' && m.target.parameter ? `${name} · ${m.target.parameter}` : name
+  return { title, detail, missing: name === undefined, meta }
 }

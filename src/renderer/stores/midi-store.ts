@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import type { MidiMapping, MidiDevice, MidiSourceType, MidiTargetType } from '@shared/types'
 import { detectCcEncoding } from '@renderer/lib/midi-learn'
+import { t } from '@renderer/i18n'
 
 /** How long MIDI learn keeps listening after the first CC to tell faders from encoders */
 export const LEARN_CAPTURE_MS = 450
@@ -135,9 +136,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
   initMidi: async () => {
     if (!navigator.requestMIDIAccess) {
-      const msg = 'Web MIDI API is not available in this browser/environment'
-      console.error('[MIDI]', msg)
-      set({ apiStatus: 'unavailable', apiError: msg, devices: [] })
+      console.error('[MIDI] Web MIDI API is not available in this browser/environment')
+      set({ apiStatus: 'unavailable', apiError: t('midi.api.unsupported'), devices: [] })
       return
     }
 
@@ -156,8 +156,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       access.inputs.forEach((input) => {
         devices.push({
           id: input.id,
-          name: input.name || 'Unknown',
-          manufacturer: input.manufacturer || 'Unknown',
+          name: input.name || t('common.unknown'),
+          manufacturer: input.manufacturer || '',
           type: 'input',
           connected: input.state === 'connected'
         })
@@ -205,8 +205,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       access.outputs.forEach((output) => {
         devices.push({
           id: output.id,
-          name: output.name || 'Unknown',
-          manufacturer: output.manufacturer || 'Unknown',
+          name: output.name || t('common.unknown'),
+          manufacturer: output.manufacturer || '',
           type: 'output',
           connected: output.state === 'connected'
         })

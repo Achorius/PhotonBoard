@@ -4,17 +4,29 @@
 // impossible to miss.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LuPiano, LuRefreshCw, LuTriangleAlert, LuX } from 'react-icons/lu'
 import { Badge, Button, ResizeHandle, Spinner, StatusDot, toast, useResizable } from '@renderer/components/ui'
+import { t as tGlobal, useT } from '@renderer/i18n'
+import { useSelectionActions } from '@renderer/lib/selection-actions'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { DevicesPanel } from './DevicesPanel'
 import { LearnButton } from './LearnMenu'
 import { MappingEditor } from './MappingEditor'
 import { MappingsTable } from './MappingsTable'
 import { MidiMonitor } from './MidiMonitor'
+import { deleteConfirmOptions, duplicateMapping, mappingLabel } from './midi-actions'
+
+/** Focus the name field of the open mapping editor (F2 / Enter) */
+function focusMappingName(): void {
+  const input = document.querySelector<HTMLInputElement>('[data-midi-mapping-name]')
+  input?.focus()
+  input?.select()
+}
 
 export function MidiView() {
+  const t = useT()
+  const rootRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const close = useCallback(() => setSelectedId(null), [])
   const left = useResizable({ initial: 300, min: 248, max: 440, storageKey: 'midi.left' })
@@ -22,12 +34,22 @@ export function MidiView() {
   const count = useMidiStore((s) => s.mappings.length)
   useSelectLearnedMapping(setSelectedId)
 
+  // Delete / Mod+D / F2 on the selected mapping (the editor shows it, with its own delete button)
+  const selected = useMidiStore((s) => (selectedId ? s.mappings.find((m) => m.id === selectedId) : undefined))
+  useSelectionActions(selected ? {
+    label: () => mappingLabel(selected),
+    delete: () => useMidiStore.getState().removeMapping(selected.id),
+    confirmDelete: deleteConfirmOptions(),
+    duplicate: () => { const id = duplicateMapping(selected.id); if (id) setSelectedId(id) },
+    rename: () => { requestAnimationFrame(focusMappingName) }
+  } : null, { scope: rootRef })
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-control-lg shrink-0 items-center gap-3 border-b border-line bg-surface-1 px-3 py-1.5">
         <LuPiano size={16} aria-hidden className="text-fg-tertiary" />
         <h1 className="text-sm font-semibold">MIDI</h1>
-        <span className="text-xs tabular text-fg-tertiary">{count} mapping{count === 1 ? '' : 's'}</span>
+        <span className="text-xs tabular text-fg-tertiary">{t('midi.view.mappingCount', { count })}</span>
         <ApiStatus />
         <div className="flex-1" />
         <LearnButton />
@@ -40,7 +62,7 @@ export function MidiView() {
           <MidiMonitor onSelectMapping={setSelectedId} />
         </div>
         <ResizeHandle {...left.handleProps} />
-        <section aria-label="Mappings" className="flex min-w-0 flex-1 flex-col">
+        <section aria-label={t('midi.view.mappings')} className="flex min-w-0 flex-1 flex-col">
           <MappingsTable selectedId={selectedId} onSelect={setSelectedId} compact={!!selectedId} />
         </section>
         {selectedId && (
@@ -64,25 +86,27 @@ function useSelectLearnedMapping(select: (id: string) => void) {
     const added = s.mappings.find((m) => !before.has(m.id))
     if (added) {
       select(added.id)
-      toast.success(`Mapped “${added.name}”`)
+      toast.success(tGlobal('midi.learn.mapped', { name: added.name }))
     }
   }), [select])
 }
 
 function ApiStatus() {
+  const t = useT()
   const status = useMidiStore((s) => s.apiStatus)
   const inputs = useMidiStore((s) => s.devices.filter((d) => d.type === 'input' && d.connected).length)
-  if (status === 'pending') return <Badge tone="neutral"><Spinner size={10} /> Connecting</Badge>
+  if (status === 'pending') return <Badge tone="neutral"><Spinner size={10} /> {t('midi.view.connecting')}</Badge>
   if (status !== 'available') return null
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
       <StatusDot tone={inputs > 0 ? 'go' : 'neutral'} />
-      {inputs > 0 ? `${inputs} input${inputs === 1 ? '' : 's'} connected` : 'No controller connected'}
+      {inputs > 0 ? t('midi.view.inputsConnected', { count: inputs }) : t('midi.view.noController')}
     </span>
   )
 }
 
 function LearnBanner() {
+  const t = useT()
   const isLearning = useMidiStore((s) => s.isLearning)
   const label = useMidiStore((s) => s.learnTarget?.label)
   if (!isLearning) return null
@@ -93,26 +117,29 @@ function LearnBanner() {
         <LuPiano size={16} aria-hidden className="relative" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-semibold text-fg-primary">Learning “{label ?? '…'}”</span>
-        <span className="truncate text-xs text-fg-secondary">Move a fader, turn a knob or press a pad on your controller.</span>
+        <span className="truncate text-sm font-semibold text-fg-primary">{t('midi.learn.learning', { label: label ?? '…' })}</span>
+        <span className="truncate text-xs text-fg-secondary">{t('midi.learn.hint')}</span>
       </div>
-      <Button variant="secondary" icon={LuX} onClick={() => useMidiStore.getState().cancelLearn()}>Cancel</Button>
+      <Button variant="secondary" icon={LuX} onClick={() => useMidiStore.getState().cancelLearn()}>{t('common.cancel')}</Button>
     </div>
   )
 }
 
 function ApiBanner() {
+  const t = useT()
   const status = useMidiStore((s) => s.apiStatus)
   const error = useMidiStore((s) => s.apiError)
   if (status !== 'unavailable' && status !== 'error') return null
+  const text = `${status === 'error' ? t('midi.api.failed') : t('midi.api.unsupported')} ${t('midi.api.kept')}`
   return (
     <div role="alert" className="flex shrink-0 items-center gap-3 border-b border-warning/40 bg-warning/10 px-3 py-2">
       <LuTriangleAlert size={16} aria-hidden className="shrink-0 text-warning-fg" />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-sm font-medium text-fg-primary">MIDI is not available on this system</span>
-        <span className="truncate text-xs text-fg-secondary">{error ?? 'Web MIDI is not supported here.'} Mappings are kept and work again when MIDI comes back.</span>
+        <span className="text-sm font-medium text-fg-primary">{t('midi.api.title')}</span>
+        {/* 'unavailable' = no Web MIDI at all; 'error' = the ports failed to open (the system's own, English, message in the tooltip) */}
+        <span className="truncate text-xs text-fg-secondary" title={[text, status === 'error' ? error : null].filter(Boolean).join('\n')}>{text}</span>
       </div>
-      <Button size="sm" variant="secondary" icon={LuRefreshCw} onClick={() => { void useMidiStore.getState().initMidi() }}>Retry</Button>
+      <Button size="sm" variant="secondary" icon={LuRefreshCw} onClick={() => { void useMidiStore.getState().initMidi() }}>{t('common.retry')}</Button>
     </div>
   )
 }
