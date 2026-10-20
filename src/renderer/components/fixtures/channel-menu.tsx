@@ -5,12 +5,16 @@ import { createContext, useCallback, useContext, useMemo } from 'react'
 import type React from 'react'
 import { LuEraser, LuPiano } from 'react-icons/lu'
 import { useContextMenu, type MenuEntry } from '@renderer/components/ui'
+import { t } from '@renderer/i18n'
 import { useMidiStore } from '@renderer/stores/midi-store'
 
 export interface ChannelMenuTarget {
   fixtureId: string
   fixtureName: string
+  /** Shown in the menu (translated attribute name or channel name) */
   channelName: string
+  /** MIDI learn parameter when it differs from channelName (untranslated attribute label) */
+  parameter?: string
   /** Release this channel / attribute from the programmer */
   onRelease?: () => void
   /** Extra label for multi-fixture attributes ("+3 more") */
@@ -25,20 +29,21 @@ const ChannelMenuContext = createContext<OpenMenu | null>(null)
 export function ChannelMenuProvider({ children }: { children: React.ReactNode }) {
   const ctx = useContextMenu()
   const { open } = ctx
-  const openMenu = useCallback<OpenMenu>((e, t) => {
+  const openMenu = useCallback<OpenMenu>((e, target) => {
     const learn = useMidiStore.getState().startLearn
+    const { fixtureId, fixtureName, channelName, note } = target
     const items: MenuEntry[] = [
-      { type: 'label', label: t.note ? `${t.fixtureName} · ${t.channelName} (${t.note})` : `${t.fixtureName} · ${t.channelName}` },
+      { type: 'label', label: note ? `${fixtureName} · ${channelName} (${note})` : `${fixtureName} · ${channelName}` },
       {
-        label: `MIDI learn: ${t.channelName}`,
+        label: t('fixtures.channelMenu.learn', { name: channelName }),
         icon: LuPiano,
-        description: t.note ? `Maps ${t.fixtureName}` : undefined,
-        onSelect: () => learn({ type: 'channel', id: t.fixtureId, parameter: t.channelName, label: `${t.fixtureName} → ${t.channelName}` })
+        description: note ? t('fixtures.channelMenu.maps', { name: fixtureName }) : undefined,
+        onSelect: () => learn({ type: 'channel', id: fixtureId, parameter: target.parameter ?? channelName, label: `${fixtureName} → ${channelName}` })
       },
-      { label: 'MIDI learn: Grand Master', icon: LuPiano, onSelect: () => learn({ type: 'master', label: 'Grand Master' }) },
-      { label: 'MIDI learn: Blackout', icon: LuPiano, onSelect: () => learn({ type: 'blackout', label: 'Blackout' }) }
+      { label: t('fixtures.channelMenu.learnGrandMaster'), icon: LuPiano, onSelect: () => learn({ type: 'master', label: t('common.grandMaster') }) },
+      { label: t('fixtures.channelMenu.learnBlackout'), icon: LuPiano, onSelect: () => learn({ type: 'blackout', label: t('common.blackout') }) }
     ]
-    if (t.onRelease) items.push({ type: 'separator' }, { label: 'Release', icon: LuEraser, onSelect: t.onRelease })
+    if (target.onRelease) items.push({ type: 'separator' }, { label: t('fixtures.release.label'), icon: LuEraser, onSelect: target.onRelease })
     open(e, items)
   }, [open])
   const value = useMemo(() => openMenu, [openMenu])

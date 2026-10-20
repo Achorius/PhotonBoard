@@ -10,7 +10,8 @@ import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'r
 import type React from 'react'
 import { LuEraser, LuX } from 'react-icons/lu'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
-import { Button, IconButton, NumberField, Slider, cn, formatAddress, useDensity } from '@renderer/components/ui'
+import { Button, IconButton, NumberField, Slider, cn, formatAddress, formatPercent, useDensity } from '@renderer/components/ui'
+import { t as translate, useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useUiStore } from '@renderer/stores/ui-store'
@@ -28,6 +29,7 @@ interface ChannelOwner {
 }
 
 export function DmxGrid({ universe }: { universe: number }) {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const fixtures = usePatchStore((s) => s.fixtures)
   const unit = useProgrammerView((s) => s.unit)
@@ -45,12 +47,12 @@ export function DmxGrid({ universe }: { universe: number }) {
       for (let i = 0; i < Math.max(count, names.length); i++) {
         const ch = entry.address - 1 + i
         if (ch < 0 || ch >= DMX_CHANNELS_PER_UNIVERSE) continue
-        const name = names[i] ?? `Ch ${i + 1}`
+        const name = names[i] ?? translate('fixtures.dmx.channelN', { n: i + 1 })
         map.set(ch, { fixtureName: entry.name, channelName: name, color: getChannelTypeColor(def?.channels[name]?.type ?? 'generic', name), start: i === 0 })
       }
     }
     return map
-  }, [patch, fixtures, universe])
+  }, [patch, fixtures, universe, t])
 
   const selected = useMemo(() => new Set(selection), [selection])
 
@@ -90,7 +92,7 @@ export function DmxGrid({ universe }: { universe: number }) {
       <div ref={areaRef} className="min-h-0 flex-1 overflow-y-auto p-3">
         <div
           role="listbox"
-          aria-label={`Universe ${universe + 1}, 512 channels`}
+          aria-label={t('fixtures.dmx.gridAria', { n: universe + 1 })}
           aria-multiselectable="true"
           className="grid gap-px overflow-hidden rounded-lg bg-line-subtle ring-1 ring-line"
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
@@ -113,6 +115,7 @@ const DmxCell = memo(function DmxCell({ universe, channel, owner, selected, unit
   unit: 'percent' | 'dmx'
   onSelect: (ch: number, e: React.MouseEvent) => void
 }) {
+  const t = useT()
   const value = useDmxStore((s) => s.values[universe]?.[channel] ?? 0)
   const touched = useProgrammerStore((s) => s.version >= 0 && getProgrammerValue(universe, channel) !== undefined)
   return (
@@ -120,7 +123,7 @@ const DmxCell = memo(function DmxCell({ universe, channel, owner, selected, unit
       type="button"
       role="option"
       aria-selected={selected}
-      title={`${formatAddress(universe, channel + 1)}${owner ? ` · ${owner.fixtureName} · ${owner.channelName}` : ' · unpatched'} · ${value}`}
+      title={`${formatAddress(universe, channel + 1)} · ${owner ? `${owner.fixtureName} · ${owner.channelName}` : t('fixtures.dmx.unpatched')} · ${value}`}
       onClick={(e) => onSelect(channel, e)}
       className={cn(
         'relative flex h-[34px] flex-col items-start justify-between overflow-hidden px-1 py-0.5 text-left [[data-density=touch]_&]:h-[44px]',
@@ -149,26 +152,27 @@ function EditBar({ universe, selection, owners, onClear }: {
   owners: Map<number, ChannelOwner>
   onClear: () => void
 }) {
+  const t = useT()
   const first = selection[0]
   const value = useDmxStore((s) => (first === undefined ? 0 : s.values[universe]?.[first] ?? 0))
   const set = (v: number) => { for (const ch of selection) programChannel(universe, ch, v) }
   const sorted = [...selection].sort((a, b) => a - b)
   const label = sorted.length === 0
-    ? 'Select channels to set them'
+    ? t('fixtures.dmx.selectHint')
     : sorted.length === 1
       ? `${formatAddress(universe, sorted[0] + 1)}${owners.get(sorted[0]) ? ` · ${owners.get(sorted[0])!.fixtureName} ${owners.get(sorted[0])!.channelName}` : ''}`
-      : `${sorted.length} channels · ${sorted[0] + 1}–${sorted[sorted.length - 1] + 1}`
+      : t('fixtures.dmx.selectionRange', { count: sorted.length, from: String(sorted[0] + 1), to: String(sorted[sorted.length - 1] + 1) })
   const disabled = selection.length === 0
   return (
     <div className="flex min-h-control-lg shrink-0 flex-wrap items-center gap-2 border-t border-line bg-surface-1 px-3 py-1.5">
       <span className={cn('min-w-[160px] truncate text-xs', disabled ? 'text-fg-tertiary' : 'text-fg-primary')}>{label}</span>
-      {!disabled && <IconButton icon={LuX} label="Deselect channels" size="xs" onClick={onClear} />}
-      <Slider value={value} onChange={set} disabled={disabled} showValue className="min-w-[160px] flex-1" aria-label="Level of the selected channels" />
+      {!disabled && <IconButton icon={LuX} label={t('fixtures.dmx.deselect')} size="xs" onClick={onClear} />}
+      <Slider value={value} onChange={set} disabled={disabled} showValue className="min-w-[160px] flex-1" aria-label={t('fixtures.dmx.levelAria')} />
       <NumberField value={value} onChange={set} min={0} max={255} disabled={disabled} label="DMX" className="w-[110px]" />
-      <Button size="sm" disabled={disabled} onClick={() => set(0)}>Out</Button>
-      <Button size="sm" disabled={disabled} onClick={() => set(128)}>50%</Button>
-      <Button size="sm" disabled={disabled} onClick={() => set(255)}>Full</Button>
-      <Button size="sm" variant="ghost" icon={LuEraser} disabled={disabled} onClick={() => releaseChannels({ [universe]: selection })}>Release</Button>
+      <Button size="sm" disabled={disabled} onClick={() => set(0)}>{t('fixtures.intensity.out')}</Button>
+      <Button size="sm" disabled={disabled} onClick={() => set(128)}>{formatPercent(50, 100)}</Button>
+      <Button size="sm" disabled={disabled} onClick={() => set(255)}>{t('fixtures.intensity.full')}</Button>
+      <Button size="sm" variant="ghost" icon={LuEraser} disabled={disabled} onClick={() => releaseChannels({ [universe]: selection })}>{t('fixtures.release.label')}</Button>
     </div>
   )
 }

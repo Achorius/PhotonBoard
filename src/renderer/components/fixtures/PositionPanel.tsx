@@ -6,6 +6,7 @@ import { memo, useMemo } from 'react'
 import { LuCrosshair, LuEraser, LuFlipHorizontal2, LuMove } from 'react-icons/lu'
 import type { FixtureDefinition, PatchEntry } from '@shared/types'
 import { Badge, Button, Encoder, NumberField, ToggleButton, cn } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { XYPad } from '../common/XYPad'
 import { readAttrNow, releaseAttrs, setAttr, useAnyTouched, useAttrSummary, useAttrTouched } from './attr-actions'
@@ -20,6 +21,7 @@ export interface PositionPanelProps {
 }
 
 export const PositionPanel = memo(function PositionPanel({ model, defs, firstName }: PositionPanelProps) {
+  const t = useT()
   const attrs = model.byFeature.position
   const pan = model.byKey.get('pan')
   const tilt = model.byKey.get('tilt')
@@ -40,8 +42,8 @@ export const PositionPanel = memo(function PositionPanel({ model, defs, firstNam
         <PadArea pan={pan} tilt={tilt} entries={model.entries} fine={fine} />
       ) : null}
       <div className="flex w-[260px] shrink-0 flex-col gap-3 [[data-density=touch]_&]:w-[300px]">
-        {pan && <AxisField attr={pan} label="Pan" />}
-        {tilt && <AxisField attr={tilt} label="Tilt" />}
+        {pan && <AxisField attr={pan} label={t('fixtures.position.pan')} />}
+        {tilt && <AxisField attr={tilt} label={t('fixtures.position.tilt')} />}
         <div className="grid grid-cols-2 gap-1.5">
           <ToggleButton
             pressed={fine}
@@ -49,31 +51,31 @@ export const PositionPanel = memo(function PositionPanel({ model, defs, firstNam
             icon={LuMove}
             tone="accent"
             size="sm"
-            tooltip="Fine: the pad moves at a tenth of the speed (relative drag)"
+            tooltip={t('fixtures.position.fineTooltip')}
           >
-            Fine
+            {t('fixtures.position.fine')}
           </ToggleButton>
-          <Button size="sm" icon={LuCrosshair} onClick={centre} tooltip="Centre pan and tilt (home)">Centre</Button>
-          <Button size="sm" icon={LuFlipHorizontal2} onClick={flip} disabled={!pan || !tilt} tooltip="Same beam position from the other side (pan ±180°, tilt mirrored)">
-            Flip
+          <Button size="sm" icon={LuCrosshair} onClick={centre} tooltip={t('fixtures.position.centreTooltip')}>{t('fixtures.position.centre')}</Button>
+          <Button size="sm" icon={LuFlipHorizontal2} onClick={flip} disabled={!pan || !tilt} tooltip={t('fixtures.position.flipTooltip')}>
+            {t('fixtures.position.flip')}
           </Button>
-          <Button size="sm" icon={LuEraser} onClick={() => releaseAttrs(attrs)} disabled={!anyTouched} tooltip="Release pan / tilt from the programmer">
-            Release
+          <Button size="sm" icon={LuEraser} onClick={() => releaseAttrs(attrs)} disabled={!anyTouched} tooltip={t('fixtures.release.positionTooltip')}>
+            {t('fixtures.release.label')}
           </Button>
         </div>
         {(pan || tilt) && (
           <div className="flex flex-col gap-2 rounded-lg bg-surface-1 p-2.5 ring-1 ring-inset ring-line-subtle">
-            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Fine adjust</span>
+            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('fixtures.position.fineAdjust')}</span>
             <div className="flex items-start justify-around">
-              {pan && <AxisEncoder attr={pan} label="Pan" />}
-              {tilt && <AxisEncoder attr={tilt} label="Tilt" />}
+              {pan && <AxisEncoder attr={pan} label={t('fixtures.position.pan')} />}
+              {tilt && <AxisEncoder attr={tilt} label={t('fixtures.position.tilt')} />}
             </div>
-            {(pan?.fine || tilt?.fine) && <p className="text-2xs text-fg-tertiary">16-bit: coarse and fine channels move together.</p>}
+            {(pan?.fine || tilt?.fine) && <p className="text-2xs text-fg-tertiary">{t('fixtures.position.sixteenBit')}</p>}
           </div>
         )}
         {others.length > 0 && (
           <div className="flex min-h-[180px] flex-1 flex-col gap-1.5">
-            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">More</span>
+            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('fixtures.position.more')}</span>
             <AttributeFaderBank attrs={others} selectionCount={count} firstName={firstName} className="flex-1" />
           </div>
         )}
@@ -84,6 +86,7 @@ export const PositionPanel = memo(function PositionPanel({ model, defs, firstNam
 
 /** The pad; re-renders with the positions of the selected fixtures only */
 function PadArea({ pan, tilt, entries, fine }: { pan?: Attribute; tilt?: Attribute; entries: PatchEntry[]; fine: boolean }) {
+  const t = useT()
   const max = pan?.fine || tilt?.fine ? 65535 : 255
   const ids = useMemo(() => entries.map((e) => e.id), [entries])
   // "x,y;x,y;…" for every selected fixture (first = reference)
@@ -108,7 +111,7 @@ function PadArea({ pan, tilt, entries, fine }: { pan?: Attribute; tilt?: Attribu
         fine={fine}
         markers={rest.map(([x, y]) => ({ x, y }))}
         readout={false}
-        label={entries.length > 1 ? `Pan / Tilt · ${entries.length} fixtures` : 'Pan / Tilt'}
+        label={entries.length > 1 ? t('fixtures.position.padLabelCount', { count: entries.length }) : t('fixtures.position.padLabel')}
         onChange={(x, y) => {
           if (pan) setAttr(pan, scale(x, max, pan.max))
           if (tilt) setAttr(tilt, scale(y, max, tilt.max))
@@ -124,6 +127,7 @@ function scale(v: number, from: number, to: number): number {
 
 /** Knob for slow, precise moves (a full turn ≈ a quarter of the range) */
 function AxisEncoder({ attr, label }: { attr: Attribute; label: string }) {
+  const t = useT()
   const unit = useProgrammerView((s) => s.unit)
   const sum = useAttrSummary(attr)
   return (
@@ -137,13 +141,14 @@ function AxisEncoder({ attr, label }: { attr: Attribute; label: string }) {
       color={attr.color}
       label={label}
       format={(v) => formatAttrValue(v, attr.max, unit, true)}
-      aria-label={`${label} fine adjust`}
+      aria-label={t('fixtures.position.fineAdjustAria', { name: label })}
     />
   )
 }
 
 /** Numeric pan / tilt entry in % or DMX (coarse.fraction for 16-bit) */
 function AxisField({ attr, label }: { attr: Attribute; label: string }) {
+  const t = useT()
   const unit = useProgrammerView((s) => s.unit)
   const sum = useAttrSummary(attr)
   const touched = useAttrTouched(attr.targets)
@@ -159,9 +164,9 @@ function AxisField({ attr, label }: { attr: Attribute; label: string }) {
         unit={unit === 'percent' ? '%' : undefined}
         onChange={(v) => setAttr(attr, fromField(v, attr, unit))}
         className={cn('flex-1', touched !== 'none' && '[&_input]:text-accent-fg')}
-        aria-label={`${label} value`}
+        aria-label={t('fixtures.attr.valueAria', { name: label })}
       />
-      {sum.min !== sum.max && <Badge size="xs" tone="warning" title="The selected fixtures have different values">Mixed</Badge>}
+      {sum.min !== sum.max && <Badge size="xs" tone="warning" title={t('fixtures.position.mixedTitle')}>{t('fixtures.position.mixed')}</Badge>}
     </div>
   )
 }

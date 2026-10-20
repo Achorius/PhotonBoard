@@ -6,6 +6,7 @@
 import { memo, useMemo, useRef } from 'react'
 import { LuEraser } from 'react-icons/lu'
 import { Button, Slider, cn } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { releaseAttrs, setAttrDmx, useAnyTouched } from './attr-actions'
 import { ColourWheel } from './ColourWheel'
@@ -13,9 +14,10 @@ import { hsvToRgb, rgbToHsv, type Rgb } from './colour-math'
 import { colourWrites, nearestSlot, rangeValue, summarize, type ProgrammerModel } from './programmer-model'
 import { AttributeFaderBank } from './AttributeFader'
 import { RangeCard } from './RangeCard'
+import type { ColourName } from './labels'
 
 interface Preset {
-  name: string
+  name: ColourName
   rgb: Rgb
   /** Emitters used instead when the fixture has them */
   extra?: Partial<Record<string, number>>
@@ -23,22 +25,22 @@ interface Preset {
 
 /** Colour presets (content colours sent to the fixtures) */
 export const COLOUR_PRESETS: Preset[] = [
-  { name: 'White', rgb: [255, 255, 255] },
-  { name: 'Warm white', rgb: [255, 196, 130] },
-  { name: 'Cool white', rgb: [200, 225, 255] },
-  { name: 'Red', rgb: [255, 0, 0] },
-  { name: 'Orange', rgb: [255, 100, 0] },
-  { name: 'Amber', rgb: [255, 150, 0], extra: { amber: 255 } },
-  { name: 'Yellow', rgb: [255, 230, 0] },
-  { name: 'Lime', rgb: [160, 255, 0], extra: { lime: 255 } },
-  { name: 'Green', rgb: [0, 255, 0] },
-  { name: 'Cyan', rgb: [0, 255, 255] },
-  { name: 'Light blue', rgb: [60, 160, 255] },
-  { name: 'Blue', rgb: [0, 0, 255] },
-  { name: 'Congo', rgb: [70, 0, 255] },
-  { name: 'UV', rgb: [90, 0, 200], extra: { uv: 255 } },
-  { name: 'Magenta', rgb: [255, 0, 255] },
-  { name: 'Pink', rgb: [255, 80, 160] }
+  { name: 'white', rgb: [255, 255, 255] },
+  { name: 'warmWhite', rgb: [255, 196, 130] },
+  { name: 'coolWhite', rgb: [200, 225, 255] },
+  { name: 'red', rgb: [255, 0, 0] },
+  { name: 'orange', rgb: [255, 100, 0] },
+  { name: 'amber', rgb: [255, 150, 0], extra: { amber: 255 } },
+  { name: 'yellow', rgb: [255, 230, 0] },
+  { name: 'lime', rgb: [160, 255, 0], extra: { lime: 255 } },
+  { name: 'green', rgb: [0, 255, 0] },
+  { name: 'cyan', rgb: [0, 255, 255] },
+  { name: 'lightBlue', rgb: [60, 160, 255] },
+  { name: 'blue', rgb: [0, 0, 255] },
+  { name: 'congo', rgb: [70, 0, 255] },
+  { name: 'uv', rgb: [90, 0, 200], extra: { uv: 255 } },
+  { name: 'magenta', rgb: [255, 0, 255] },
+  { name: 'pink', rgb: [255, 80, 160] }
 ]
 
 /** Colour a fixture is making, from its emitters / CMY / wheel slot (null if none) */
@@ -113,6 +115,7 @@ function useSelectionColour(model: ProgrammerModel) {
 
 /** Wheel + brightness (re-renders with the colour only) */
 function WheelArea({ model }: { model: ProgrammerModel }) {
+  const t = useT()
   const { ref, hsv, others } = useSelectionColour(model)
   const lastHue = useRef(hsv.h)
   if (hsv.s > 0.02 && hsv.v > 0.02) lastHue.current = hsv.h
@@ -128,17 +131,17 @@ function WheelArea({ model }: { model: ProgrammerModel }) {
         markers={markers}
         onChange={(h, s) => applyColour(model, hsvToRgb(h, s, brightness > 0.02 ? brightness : 1))}
         className="min-h-[180px] flex-1"
-        aria-label="Colour wheel"
+        aria-label={t('fixtures.colour.wheelAria')}
       />
       <div className="flex items-center gap-2">
-        <span className="w-16 shrink-0 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Bright</span>
+        <span className="min-w-16 shrink-0 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('fixtures.colour.brightness')}</span>
         <Slider
           value={Math.round(brightness * 255)}
           onChange={(v) => applyColour(model, hsvToRgb(lastHue.current, ref ? hsv.s : 0, v / 255))}
           defaultValue={255}
           showValue
           className="flex-1"
-          aria-label="Colour brightness"
+          aria-label={t('fixtures.colour.brightnessAria')}
         />
       </div>
     </div>
@@ -147,16 +150,17 @@ function WheelArea({ model }: { model: ProgrammerModel }) {
 
 /** Swatch + name + RGB of the current colour */
 function ColourReadout({ model }: { model: ProgrammerModel }) {
+  const t = useT()
   const { ref, mixed } = useSelectionColour(model)
   return (
     <>
       <span
-        aria-label={ref ? `Current colour rgb ${ref.join(' ')}` : 'No colour'}
+        aria-label={ref ? t('fixtures.colour.currentAria', { rgb: ref.join(' ') }) : t('fixtures.colour.none')}
         className="h-12 w-12 shrink-0 rounded-lg ring-1 ring-inset ring-line-strong"
         style={{ backgroundColor: ref ? `rgb(${ref[0]} ${ref[1]} ${ref[2]})` : undefined }}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-sm font-medium text-fg-primary">{mixed ? 'Mixed colours' : ref ? describe(ref) : 'No colour mixing'}</span>
+        <span className="text-sm font-medium text-fg-primary">{mixed ? t('fixtures.colour.mixed') : ref ? t(`fixtures.colour.names.${describe(ref)}`) : t('fixtures.colour.noMixing')}</span>
         <span className="font-mono text-2xs tabular text-fg-tertiary">{ref ? `R ${ref[0]} · G ${ref[1]} · B ${ref[2]}` : '—'}</span>
       </div>
     </>
@@ -164,6 +168,7 @@ function ColourReadout({ model }: { model: ProgrammerModel }) {
 }
 
 export const ColourPanel = memo(function ColourPanel({ model, firstName }: ColourPanelProps) {
+  const t = useT()
   const attrs = model.byFeature.colour
   const anyTouched = useAnyTouched(attrs)
   const canMix = attrs.some((a) => /^(red|cyan|magenta|yellow)( cells)?$/.test(a.key))
@@ -179,21 +184,21 @@ export const ColourPanel = memo(function ColourPanel({ model, firstName }: Colou
       <div className={cn('flex min-h-0 shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden', canMix ? 'w-[300px] [[data-density=touch]_&]:w-[340px]' : 'w-[min(100%,520px)]')}>
         <div className="flex items-center gap-3">
           <ColourReadout model={model} />
-          <Button size="sm" variant="ghost" icon={LuEraser} disabled={!anyTouched} onClick={() => releaseAttrs(attrs)} tooltip="Release colour from the programmer">
-            Release
+          <Button size="sm" variant="ghost" icon={LuEraser} disabled={!anyTouched} onClick={() => releaseAttrs(attrs)} tooltip={t('fixtures.release.colourTooltip')}>
+            {t('fixtures.release.label')}
           </Button>
         </div>
 
         {canPreset && (
-          <section aria-label="Colour presets" className="flex flex-col gap-1.5">
-            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Presets</span>
+          <section aria-label={t('fixtures.colour.presetsAria')} className="flex flex-col gap-1.5">
+            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('common.presets')}</span>
             <div className="grid grid-cols-8 gap-1">
               {COLOUR_PRESETS.map((p) => (
                 <button
                   key={p.name}
                   type="button"
-                  title={p.name}
-                  aria-label={p.name}
+                  title={t(`fixtures.colour.names.${p.name}`)}
+                  aria-label={t(`fixtures.colour.names.${p.name}`)}
                   onClick={() => applyColour(model, p.rgb, p.extra)}
                   className="aspect-square rounded ring-1 ring-inset ring-line-strong transition-[box-shadow,transform] duration-fast hover:ring-fg-secondary active:scale-95"
                   style={{ backgroundColor: `rgb(${p.rgb[0]} ${p.rgb[1]} ${p.rgb[2]})` }}
@@ -210,7 +215,7 @@ export const ColourPanel = memo(function ColourPanel({ model, firstName }: Colou
 
       {faderAttrs.length > 0 && (
         <div className="flex min-h-0 min-w-[120px] flex-1 flex-col gap-1.5">
-          <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Channels</span>
+          <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('common.channels')}</span>
           <AttributeFaderBank attrs={faderAttrs} selectionCount={model.entries.length} firstName={firstName} className="flex-1" />
         </div>
       )}
@@ -218,13 +223,13 @@ export const ColourPanel = memo(function ColourPanel({ model, firstName }: Colou
   )
 })
 
-/** Short name of a colour for the readout */
-function describe([r, g, b]: Rgb): string {
+/** Short name of a colour for the readout (key in fixtures.colour.names) */
+function describe([r, g, b]: Rgb): ColourName {
   const { h, s, v } = rgbToHsv(r, g, b)
-  if (v < 0.04) return 'Black'
-  if (s < 0.12) return v > 0.85 ? 'White' : 'Grey'
-  if (s < 0.35) return h < 60 || h > 300 ? 'Warm white' : 'Cool white'
-  const names: [number, string][] = [[15, 'Red'], [40, 'Orange'], [52, 'Amber'], [70, 'Yellow'], [100, 'Lime'], [150, 'Green'], [190, 'Cyan'], [215, 'Light blue'], [250, 'Blue'], [275, 'Congo'], [300, 'Violet'], [335, 'Magenta'], [350, 'Pink'], [361, 'Red']]
-  return names.find(([max]) => h < max)?.[1] ?? 'Colour'
+  if (v < 0.04) return 'black'
+  if (s < 0.12) return v > 0.85 ? 'white' : 'grey'
+  if (s < 0.35) return h < 60 || h > 300 ? 'warmWhite' : 'coolWhite'
+  const names: [number, ColourName][] = [[15, 'red'], [40, 'orange'], [52, 'amber'], [70, 'yellow'], [100, 'lime'], [150, 'green'], [190, 'cyan'], [215, 'lightBlue'], [250, 'blue'], [275, 'congo'], [300, 'violet'], [335, 'magenta'], [350, 'pink'], [361, 'red']]
+  return names.find(([max]) => h < max)?.[1] ?? 'colour'
 }
 
