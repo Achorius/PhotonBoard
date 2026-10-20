@@ -13,26 +13,27 @@ import { useDmxStore, useDmxUniverse } from '@renderer/stores/dmx-store'
 import { getChannelTypeColor } from '@renderer/lib/fixture-library'
 import { rgbToColorWheelDmx } from '@renderer/lib/dmx-channel-resolver'
 import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
+import { useT, type TranslationKey } from '@renderer/i18n'
 
 type Ch = { name: string; absoluteChannel: number; type: string }
 
-const PRESETS: Array<{ label: string; r: number; g: number; b: number }> = [
-  { label: 'Red', r: 255, g: 0, b: 0 },
-  { label: 'Amber', r: 255, g: 150, b: 0 },
-  { label: 'Yellow', r: 255, g: 230, b: 0 },
-  { label: 'Green', r: 0, g: 255, b: 0 },
-  { label: 'Cyan', r: 0, g: 255, b: 255 },
-  { label: 'Blue', r: 0, g: 0, b: 255 },
-  { label: 'Magenta', r: 255, g: 0, b: 255 },
-  { label: 'Warm white', r: 255, g: 200, b: 120 },
-  { label: 'White', r: 255, g: 255, b: 255 }
+const PRESETS: Array<{ label: TranslationKey; r: number; g: number; b: number }> = [
+  { label: 'visualizer.quick.colours.red', r: 255, g: 0, b: 0 },
+  { label: 'visualizer.quick.colours.amber', r: 255, g: 150, b: 0 },
+  { label: 'visualizer.quick.colours.yellow', r: 255, g: 230, b: 0 },
+  { label: 'visualizer.quick.colours.green', r: 0, g: 255, b: 0 },
+  { label: 'visualizer.quick.colours.cyan', r: 0, g: 255, b: 255 },
+  { label: 'visualizer.quick.colours.blue', r: 0, g: 0, b: 255 },
+  { label: 'visualizer.quick.colours.magenta', r: 255, g: 0, b: 255 },
+  { label: 'visualizer.quick.colours.warmWhite', r: 255, g: 200, b: 120 },
+  { label: 'visualizer.quick.colours.white', r: 255, g: 255, b: 255 }
 ]
 
-const SLIDERS: Array<{ label: string; names: string[] }> = [
-  { label: 'Dim', names: ['dimmer', 'intensity'] },
-  { label: 'Pan', names: ['pan'] },
-  { label: 'Tilt', names: ['tilt'] },
-  { label: 'Zoom', names: ['zoom'] }
+const SLIDERS: Array<{ label: TranslationKey; names: string[] }> = [
+  { label: 'visualizer.quick.sliders.dim', names: ['dimmer', 'intensity'] },
+  { label: 'visualizer.quick.sliders.pan', names: ['pan'] },
+  { label: 'visualizer.quick.sliders.tilt', names: ['tilt'] },
+  { label: 'visualizer.quick.sliders.zoom', names: ['zoom'] }
 ]
 
 function findCh(channels: Ch[], names: string[]): Ch | undefined {
@@ -66,6 +67,7 @@ export function SelectionControls() {
   const patch = usePatchStore((s) => s.patch)
   const groups = usePatchStore((s) => s.groups)
   const [open, setOpen] = useState(true)
+  const t = useT()
 
   const entries = useMemo(() => {
     const ids = new Set(selectedIds)
@@ -78,10 +80,10 @@ export function SelectionControls() {
   const isGroupSelected = (ids: string[]) => ids.length === selectedIds.length && ids.every((id) => selectedIds.includes(id))
 
   return (
-    <section aria-label="Selected fixtures" className="shrink-0 border-t border-line bg-surface-1">
+    <section aria-label={t('visualizer.quick.region')} className="shrink-0 border-t border-line bg-surface-1">
       <div className="flex min-h-control-lg items-center gap-2 px-3 py-1.5">
         <span className="shrink-0 text-xs font-semibold text-info-fg tabular">
-          {entries.length === 1 ? entries[0].name : `${entries.length} fixtures`}
+          {entries.length === 1 ? entries[0].name : t('common.fixtureCount', { count: entries.length })}
         </span>
         {topGroups.length > 0 && (
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
@@ -91,7 +93,7 @@ export function SelectionControls() {
                 color={g.color}
                 selected={isGroupSelected(g.fixtureIds)}
                 onClick={() => usePatchStore.getState().selectGroup(g.id)}
-                title={`Select ${g.name} (${g.fixtureIds.length})`}
+                title={t('visualizer.quick.selectGroup', { name: g.name, count: g.fixtureIds.length })}
               >
                 {g.name}
               </Tag>
@@ -99,23 +101,23 @@ export function SelectionControls() {
           </div>
         )}
         {topGroups.length === 0 && <div className="flex-1" />}
-        <div role="group" aria-label="Colour presets" className="flex shrink-0 items-center gap-1">
+        <div role="group" aria-label={t('visualizer.quick.colourPresets')} className="flex shrink-0 items-center gap-1">
           {PRESETS.map((p) => (
             <ColorSwatch
               key={p.label}
               size="md"
-              label={p.label}
+              label={t(p.label)}
               color={`rgb(${p.r} ${p.g} ${p.b})`}
               onClick={() => applyColor(entries, p.r, p.g, p.b)}
               className="[[data-density=touch]_&]:h-control-sm [[data-density=touch]_&]:w-control-sm"
             />
           ))}
         </div>
-        <Button size="xs" variant="ghost" icon={LuX} onClick={() => usePatchStore.getState().clearSelection()}>Clear</Button>
+        <Button size="xs" variant="ghost" icon={LuX} tooltip={t('visualizer.quick.clearSelection')} onClick={() => usePatchStore.getState().clearSelection()}>{t('common.clear')}</Button>
         <IconButton
           size="sm"
           icon={open ? LuChevronDown : LuChevronUp}
-          label={open ? 'Hide quick controls' : 'Show quick controls'}
+          label={t(open ? 'visualizer.quick.hide' : 'visualizer.quick.show')}
           onClick={() => setOpen(!open)}
         />
       </div>
@@ -127,14 +129,15 @@ export function SelectionControls() {
 function QuickSliders({ entries }: { entries: PatchEntry[] }) {
   const first = entries[0]
   const channels = useMemo(() => usePatchStore.getState().getFixtureChannels(first) as Ch[], [first])
+  const t = useT()
   const rows = SLIDERS.map((s) => ({ ...s, ch: findCh(channels, s.names) })).filter((s) => s.ch)
   if (rows.length === 0) {
-    return <p className="px-3 pb-2 text-xs text-fg-tertiary">No dimmer, pan, tilt or zoom channel on {first.name}.</p>
+    return <p className="px-3 pb-2 text-xs text-fg-tertiary">{t('visualizer.quick.noChannels', { name: first.name })}</p>
   }
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 px-3 pb-2.5 xl:grid-cols-4">
       {rows.map((r) => (
-        <ChannelSlider key={r.label} label={r.label} names={r.names} channel={r.ch!} first={first} entries={entries} />
+        <ChannelSlider key={r.label} label={t(r.label)} names={r.names} channel={r.ch!} first={first} entries={entries} />
       ))}
     </div>
   )
@@ -148,6 +151,7 @@ const ChannelSlider = memo(function ChannelSlider({ label, names, channel, first
   entries: PatchEntry[]
 }) {
   const values = useDmxUniverse(first.universe)
+  const t = useT()
   const value = values[channel.absoluteChannel] ?? 0
   const onChange = (v: number) => {
     const store = usePatchStore.getState()
@@ -167,7 +171,7 @@ const ChannelSlider = memo(function ChannelSlider({ label, names, channel, first
         color={getChannelTypeColor(channel.type as FixtureChannel['type'], channel.name)}
         showValue
         className="min-w-0 flex-1"
-        aria-label={`${label} of selected fixtures`}
+        aria-label={t('visualizer.quick.sliderAria', { label })}
       />
     </div>
   )

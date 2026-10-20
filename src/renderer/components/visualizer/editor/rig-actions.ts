@@ -4,18 +4,30 @@
 // ============================================================
 
 import type { MountingLocation, PatchEntry, Position3D, TrussBar } from '@shared/types'
-import { confirm } from '@renderer/components/ui'
+import { t, formatDecimal, type TFunction, type TranslationKey } from '@renderer/i18n'
+import { formatShortcut } from '@renderer/components/ui/Kbd'
+import { deleteWithUndo, type ConfirmDeleteOptions } from '@renderer/lib/selection-actions'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { cm, defaultHeight, distributeOnBar, fixturePosition, hangHeight } from '../scene/layout-math'
 
-export const MOUNT_OPTIONS: Array<{ value: MountingLocation; label: string }> = [
-  { value: 'ceiling', label: 'Ceiling / truss' },
-  { value: 'floor', label: 'Floor' },
-  { value: 'wall-left', label: 'Wall left' },
-  { value: 'wall-right', label: 'Wall right' },
-  { value: 'wall-back', label: 'Back wall' }
+const MOUNTS: Array<{ value: MountingLocation; key: TranslationKey }> = [
+  { value: 'ceiling', key: 'layout.mounts.ceiling' },
+  { value: 'floor', key: 'layout.mounts.floor' },
+  { value: 'wall-left', key: 'layout.mounts.wallLeft' },
+  { value: 'wall-right', key: 'layout.mounts.wallRight' },
+  { value: 'wall-back', key: 'layout.mounts.wallBack' }
 ]
+
+/** Mount choices in the current language (build inside the component: depends on `t`) */
+export function mountOptions(tr: TFunction = t): Array<{ value: MountingLocation; label: string }> {
+  return MOUNTS.map((m) => ({ value: m.value, label: tr(m.key) }))
+}
+
+/** A length in metres for the UI: (2.5, 2) → "2.50 m" / "2,50 m" */
+export function formatMetres(value: number, decimals = 2, tr: TFunction = t): string {
+  return tr('layout.metres', { value: formatDecimal(value, decimals, tr.locale) })
+}
 
 /** Effective position of a fixture (explicit, or where auto-layout puts it) */
 export function currentPosition(entry: PatchEntry): Position3D {
@@ -88,20 +100,41 @@ export function flipFixtures(ids: string[]): void {
   }
 }
 
+/** Selection label for "Delete …?" / "Deleted: …": what Delete removes in the plan / 3D is the placement */
+export function placementLabel(entries: PatchEntry[]): string {
+  return entries.length === 1
+    ? t('layout.selection.placementOne', { name: entries[0].name })
+    : t('layout.selection.placementMany', { count: entries.length })
+}
+
+/** Confirm dialog of a placement reset (Delete key, inspector button, context menu) */
+export function resetPlacementConfirm(entries: PatchEntry[]): ConfirmDeleteOptions {
+  return {
+    title: entries.length === 1
+      ? t('layout.actions.resetTitleOne', { name: entries[0].name })
+      : t('layout.actions.resetTitleMany', { count: entries.length }),
+    message: t('layout.actions.resetMessage', { count: entries.length }),
+    confirmLabel: t('layout.actions.resetPlacement')
+  }
+}
+
+/** Back to the automatic layout (synchronous; no confirm) */
+export function clearPlacement(ids: string[]): void {
+  const store = usePatchStore.getState()
+  for (const e of entriesFor(ids)) {
+    store.updateFixture(e.id, { position3D: undefined, rotation3D: undefined, mountingAngle: undefined, mountingPan: undefined, mountingLocation: undefined })
+  }
+}
+
+/**
+ * Reset placement (confirm, one undo step, Undo toast). The fixtures stay
+ * patched: deleting a fixture is a Patch operation, never a plan one.
+ */
 export async function resetPlacement(ids: string[]): Promise<void> {
   const entries = entriesFor(ids)
   if (entries.length === 0) return
-  const ok = await confirm({
-    title: entries.length === 1 ? `Reset “${entries[0].name}” placement?` : `Reset placement of ${entries.length} fixtures?`,
-    message: 'Position, mount and aim go back to the automatic layout.',
-    confirmLabel: 'Reset placement',
-    tone: 'danger'
-  })
-  if (!ok) return
-  const store = usePatchStore.getState()
-  for (const e of entries) {
-    store.updateFixture(e.id, { position3D: undefined, rotation3D: undefined, mountingAngle: undefined, mountingPan: undefined, mountingLocation: undefined })
-  }
+  const targetIds = entries.map((e) => e.id)
+  await deleteWithUndo({ label: placementLabel(entries), run: () => clearPlacement(targetIds), confirm: resetPlacementConfirm(entries) })
 }
 
 /** Fixtures hanging on a bar */
@@ -114,12 +147,26 @@ export function fixturesOnBar(bar: TrussBar, patch: PatchEntry[]): PatchEntry[] 
   })
 }
 
+/** Selection label of a truss bar: en 'truss bar “Bar 1”', fr 'le pont « Bar 1 »' */
+export function barLabel(bar: TrussBar): string {
+  return t('layout.selection.bar', { name: bar.name })
+}
+
+/** Confirm dialog of a bar deletion */
+export function deleteBarConfirm(): ConfirmDeleteOptions {
+  return { message: t('layout.bar.deleteMessage', { keys: formatShortcut('Mod+Z') }), confirmLabel: t('layout.bar.delete') }
+}
+
+/** Delete a truss bar (confirm, one undo step, Undo toast). Fixtures hung on it stay where they are. */
 export async function deleteBar(bar: TrussBar): Promise<void> {
-  const ok = await confirm({
-    title: `Delete “${bar.name}”?`,
-    message: 'Fixtures hung on it keep their position.',
-    confirmLabel: 'Delete bar',
-    tone: 'danger'
+  await deleteWithUndo({ label: barLabel(bar), run: () => useVisualizerStore.getState().removeTrussBar(bar.id), confirm: deleteBarConfirm() })
+}
+
+/** Copy of a bar just upstage of it (selected). Synchronous: one undo step via duplicateSelection / historyStep. */
+export function duplicateBar(bar: TrussBar): void {
+  const room = useVisualizerStore.getState().roomConfig
+  const z = bar.z + 0.5 <= room.depth / 2 ? bar.z + 0.5 : bar.z - 0.5
+  useVisualizerStore.getState().addTrussBar({
+    name: t('layout.bar.copyName', { name: bar.name }), z: cm(z), y: bar.y, width: bar.width, color: bar.color
   })
-  if (ok) useVisualizerStore.getState().removeTrussBar(bar.id)
 }

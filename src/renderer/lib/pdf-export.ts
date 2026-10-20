@@ -2,12 +2,27 @@ import { jsPDF } from 'jspdf'
 import type { PatchEntry, FixtureDefinition, RoomConfig, Group } from '@shared/types'
 import { getFixtureShape } from '@shared/types'
 import { fixturePosition } from '@renderer/components/visualizer/scene/layout-math'
+import { formatNumber, getLocale, t } from '@renderer/i18n'
 
 const MARGIN = 20
 const TITLE_HEIGHT = 30
 
 /**
- * Export the stage layout as a PDF lighting plot.
+ * jsPDF's built-in Helvetica only covers Latin-1: map the typographic
+ * characters of the dictionaries (narrow no-break space, curly quotes,
+ * ellipsis, dashes) to Latin-1 equivalents. « » é à ç × ° are Latin-1.
+ */
+function pdfText(s: string): string {
+  return s
+    .replace(/\u202F/g, '\u00A0')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u2013\u2014]/g, '-')
+}
+
+/**
+ * Export the stage layout as a PDF lighting plot, in the UI language.
  * Uses jsPDF to draw vector shapes for each fixture type.
  */
 export function exportStagePDF(
@@ -41,11 +56,16 @@ export function exportStagePDF(
   // --- Title ---
   doc.setFontSize(16)
   doc.setTextColor(0)
-  doc.text(showName || 'Lighting Plot', pageW / 2, MARGIN + 8, { align: 'center' })
+  doc.text(pdfText(showName || t('layout.pdf.title')), pageW / 2, MARGIN + 8, { align: 'center' })
   doc.setFontSize(8)
   doc.setTextColor(100)
+  const locale = getLocale()
   doc.text(
-    `Room: ${roomW}m x ${roomD}m x ${roomH}m  |  ${patch.length} fixtures  |  ${new Date().toLocaleDateString()}`,
+    pdfText(t('layout.pdf.summary', {
+      width: formatNumber(roomW), depth: formatNumber(roomD), height: formatNumber(roomH),
+      fixtures: t('layout.pdf.fixtureCount', { count: patch.length }),
+      date: new Date().toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-GB')
+    })),
     pageW / 2, MARGIN + 15, { align: 'center' }
   )
 
@@ -66,8 +86,8 @@ export function exportStagePDF(
   // Labels — stage at top, audience at bottom
   doc.setFontSize(6)
   doc.setTextColor(150)
-  doc.text('UPSTAGE', offsetX + roomW * scale / 2, stageY - 2, { align: 'center' })
-  doc.text('AUDIENCE', offsetX + roomW * scale / 2, stageY + 5, { align: 'center' })
+  doc.text(pdfText(t('layout.pdf.upstage')), offsetX + roomW * scale / 2, stageY - 2, { align: 'center' })
+  doc.text(pdfText(t('layout.pdf.audience')), offsetX + roomW * scale / 2, stageY + 5, { align: 'center' })
 
   // Truss lines from roomConfig
   doc.setDrawColor(160, 160, 180)
@@ -81,7 +101,7 @@ export function exportStagePDF(
     doc.line(leftX + 2, ty, rightX - 2, ty)
     doc.setFontSize(5)
     doc.setTextColor(120)
-    doc.text(bar.name, leftX, ty - 1)
+    doc.text(pdfText(bar.name), leftX, ty - 1)
   }
 
   // --- Fixtures ---
@@ -105,7 +125,7 @@ export function exportStagePDF(
     // Labels
     doc.setFontSize(5)
     doc.setTextColor(0)
-    doc.text(entry.name, px, py + iconSize / 2 + 3, { align: 'center' })
+    doc.text(pdfText(entry.name), px, py + iconSize / 2 + 3, { align: 'center' })
     doc.setFontSize(4)
     doc.setTextColor(100)
     doc.text(`U${entry.universe + 1}.${entry.address}`, px, py + iconSize / 2 + 6, { align: 'center' })
@@ -117,11 +137,11 @@ export function exportStagePDF(
   doc.setTextColor(80)
 
   const legendItems = [
-    { label: 'PAR / Wash', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['PAR']) },
-    { label: 'Moving Head', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'moving-head', ['Moving Head']) },
-    { label: 'Fresnel', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['Fresnel']) },
-    { label: 'Strip / Batten', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'strip', ['Pixel Bar']) },
-    { label: 'Profile', draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['Profile']) },
+    { label: t('layout.pdf.legend.par'), draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['PAR']) },
+    { label: t('layout.pdf.legend.movingHead'), draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'moving-head', ['Moving Head']) },
+    { label: t('layout.pdf.legend.fresnel'), draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['Fresnel']) },
+    { label: t('layout.pdf.legend.strip'), draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'strip', ['Pixel Bar']) },
+    { label: t('layout.pdf.legend.profile'), draw: (x: number, y: number) => drawFixtureIcon(doc, x, y, 3, 'par', ['Profile']) },
   ]
 
   let lx = MARGIN
@@ -129,12 +149,12 @@ export function exportStagePDF(
     item.draw(lx + 3, planBottom + 1)
     doc.setFontSize(5)
     doc.setTextColor(60)
-    doc.text(item.label, lx + 7, planBottom + 2.5)
+    doc.text(pdfText(item.label), lx + 7, planBottom + 2.5)
     lx += 30
   }
   doc.setFontSize(5)
   doc.setTextColor(100)
-  doc.text(`Scale: 1m = ${scale.toFixed(1)}mm`, pageW - MARGIN, planBottom + 2.5, { align: 'right' })
+  doc.text(pdfText(t('layout.pdf.scale', { mm: formatNumber(scale, { min: 1, max: 1 }) })), pageW - MARGIN, planBottom + 2.5, { align: 'right' })
 
   // --- Patch Table (below legend) ---
   const tableTop = planBottom + 8
@@ -157,7 +177,7 @@ export function exportStagePDF(
   // Table title
   doc.setFontSize(7)
   doc.setTextColor(0)
-  doc.text('Patch List', MARGIN, ty)
+  doc.text(pdfText(t('layout.pdf.patchList')), MARGIN, ty)
   ty += 4
 
   // Header row
@@ -166,14 +186,14 @@ export function exportStagePDF(
     doc.rect(MARGIN, y - 2.5, totalW, 4, 'F')
     doc.setFontSize(5.5)
     doc.setTextColor(40)
-    doc.text('#', colX.num + 1, y)
-    doc.text('Name', colX.name + 1, y)
-    doc.text('Manufacturer', colX.mfr + 1, y)
-    doc.text('Type', colX.type + 1, y)
-    doc.text('Mode', colX.mode + 1, y)
-    doc.text('Addr', colX.addr + 1, y)
-    doc.text('Ch', colX.chCount + 1, y)
-    doc.text('Group', colX.group + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.number')), colX.num + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.name')), colX.name + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.manufacturer')), colX.mfr + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.type')), colX.type + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.mode')), colX.mode + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.address')), colX.addr + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.channels')), colX.chCount + 1, y)
+    doc.text(pdfText(t('layout.pdf.columns.group')), colX.group + 1, y)
   }
   drawTableHeader(ty)
   ty += rowH + 1
@@ -216,16 +236,16 @@ export function exportStagePDF(
     doc.text(`${i + 1}`, colX.num + 1, ty)
 
     doc.setTextColor(20)
-    doc.text(entry.name.substring(0, 22), colX.name + 1, ty)
+    doc.text(pdfText(entry.name.substring(0, 22)), colX.name + 1, ty)
 
     doc.setTextColor(100)
-    doc.text((def?.manufacturer || '').substring(0, 18), colX.mfr + 1, ty)
+    doc.text(pdfText((def?.manufacturer || '').substring(0, 18)), colX.mfr + 1, ty)
 
     doc.setTextColor(80)
-    doc.text((def?.name || '?').substring(0, 20), colX.type + 1, ty)
+    doc.text(pdfText((def?.name || '?').substring(0, 20)), colX.type + 1, ty)
 
     doc.setTextColor(100)
-    doc.text((entry.modeName || '').substring(0, 10), colX.mode + 1, ty)
+    doc.text(pdfText((entry.modeName || '').substring(0, 10)), colX.mode + 1, ty)
 
     doc.setTextColor(0)
     doc.setFontSize(5.5)
@@ -236,7 +256,7 @@ export function exportStagePDF(
     doc.text(`${mode?.channelCount || '?'}`, colX.chCount + 1, ty)
 
     doc.setTextColor(80)
-    doc.text(entryGroups.join(', ').substring(0, 16), colX.group + 1, ty)
+    doc.text(pdfText(entryGroups.join(', ').substring(0, 16)), colX.group + 1, ty)
 
     ty += rowH
   }
@@ -249,10 +269,10 @@ export function exportStagePDF(
   // Footer
   doc.setFontSize(5)
   doc.setTextColor(150)
-  doc.text('Generated by PhotonBoard', pageW / 2, pageH - 5, { align: 'center' })
+  doc.text(pdfText(t('layout.pdf.footer')), pageW / 2, pageH - 5, { align: 'center' })
 
   // Save
-  doc.save(`${showName || 'LightingPlot'}_${new Date().toISOString().slice(0, 10)}.pdf`)
+  doc.save(`${showName || t('layout.pdf.fileName')}_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
 /**
