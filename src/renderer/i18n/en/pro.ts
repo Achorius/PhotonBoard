@@ -12,6 +12,7 @@ import { programmerUi } from './pro/programmer-ui'
 import { cliUi } from './pro/cli-ui'
 import { scenes } from './pro/scenes'
 import { pools } from './pro/pools'
+import { midi } from './pro/midi'
 
 export const pro = {
   ...core,
@@ -20,5 +21,6 @@ export const pro = {
   programmer: { ...programmer, ...programmerUi },
   cliUi,
   scenes,
-  pools
+  pools,
+  midi
 }

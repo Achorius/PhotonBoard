@@ -48,6 +48,13 @@ export function initMidiRouting(): void {
   setMappingCleanupFn((mappingId: string) => {
     delete toggleStates[mappingId]
   })
+
+  // Controller profiles (APC mini…): routing layer before the mappings,
+  // LED feedback, soft takeover. Loaded on demand: the layer pulls in the
+  // show and UI stores, which plain MIDI routing (and its tests) never need.
+  void import('./midi')
+    .then((m) => { m.startMidiControllers() })
+    .catch((e) => console.warn('[MIDI] controller profiles unavailable:', e))
 }
 
 /** Does an incoming message match a mapping's source? (device filter when set) */
@@ -110,7 +117,8 @@ function applyBehavior(mapping: MidiMapping, rawValue: number): number | null {
   }
 }
 
-function resolveChannelTarget(mapping: MidiMapping): { universe: number; channel: number } | undefined {
+/** DMX address of a 'channel' mapping's target (undefined when unpatched) */
+export function resolveChannelTarget(mapping: MidiMapping): { universe: number; channel: number } | undefined {
   const { target } = mapping
   if (!target.id || !target.parameter) return undefined
   const patchStore = usePatchStore.getState()
@@ -281,20 +289,22 @@ export function computeTapTempo(times: number[]): number | null {
 
 /**
  * Register a tap. Applies the tempo to `chaseId`, or to every playing chase
- * when no chase is given, and notifies the tap-tempo callback.
+ * when no chase is given, and notifies the tap-tempo callback. Returns the
+ * tempo (null until two taps).
  */
-export function handleTapTempo(chaseId?: string, now = clockNow()): void {
+export function handleTapTempo(chaseId?: string, now = clockNow()): number | null {
   const last = tapTempoTimes[tapTempoTimes.length - 1]
   if (last !== undefined && now - last > 3000) tapTempoTimes = []
   tapTempoTimes.push(now)
   if (tapTempoTimes.length > 8) tapTempoTimes.shift()
 
   const bpm = computeTapTempo(tapTempoTimes)
-  if (bpm === null) return
+  if (bpm === null) return null
   const playback = usePlaybackStore.getState()
   const targets = chaseId ? [chaseId] : playback.chases.filter(c => c.isPlaying).map(c => c.id)
   for (const id of targets) playback.setChaseBpm(id, bpm)
   tapTempoCallback?.(bpm)
+  return bpm
 }
 
 export function setTapTempoCallback(cb: (bpm: number) => void): void {
