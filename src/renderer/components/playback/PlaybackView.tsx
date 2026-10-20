@@ -5,27 +5,35 @@
 //   Right:  editor of the selected scene (cue list, effects,
 //           settings, big playback controls) or chase (steps).
 // Keyboard: Space = GO selected scene / start-stop selected chase
-// (global shortcut), ↑ ↓ in the list move the selection.
+// (global shortcut), ↑ ↓ in the list move the selection; Delete /
+// Backspace, Mod+D, F2 / Enter act on the selected scene or chase
+// (the cue / step tables register their own, innermost, actions).
 // ============================================================
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type React from 'react'
 import { LuCircleDot, LuClapperboard, LuListMusic, LuMousePointerClick } from 'react-icons/lu'
 import { Button, EmptyState, ResizeHandle, SegmentedControl, cn, usePopover, useResizable } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { recordFromProgrammer } from '@renderer/lib/programmer-utils'
 import { summaryCounts, useConsoleProgrammer } from '@renderer/lib/console-programmer'
 import { isRemoteMode } from '@renderer/lib/runtime'
+import { useSelectionActions } from '@renderer/lib/selection-actions'
 import { SceneList } from './SceneList'
 import { SceneDetail } from './SceneDetail'
 import { ChaseDetail, ChaseList } from './ChasePane'
 import { RecordPopover } from './RecordPopover'
 import { countFixtures } from './record'
 import { useExecutorSlots } from './scene-meta'
+import { chaseSelectionActions, sceneSelectionActions } from './actions'
 
 type Pane = 'scenes' | 'chases'
 
 export function PlaybackView() {
+  const t = useT()
+  const rootRef = useRef<HTMLDivElement>(null)
   const pane = usePlaybackStore((s) => s.editorPane)
   const sceneCount = usePlaybackStore((s) => s.cuelists.length)
   const chaseCount = usePlaybackStore((s) => s.chases.length)
@@ -58,17 +66,19 @@ export function PlaybackView() {
   const selectedCueId = cueSel && cueSel.owner === selectedCuelistId ? cueSel.id : null
   const selectedStepId = stepSel && stepSel.owner === selectedChaseId ? stepSel.id : null
 
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface-1">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-surface-1">
+      <ViewSelection scope={rootRef} pane={pane} cuelistId={selectedCuelistId} chaseId={selectedChaseId} />
       <header className="flex h-control-lg shrink-0 items-center gap-3 border-b border-line px-3">
         <SegmentedControl<Pane>
           size="sm"
-          aria-label="Show"
+          aria-label={t('scenes.view.paneAria')}
           value={pane}
           onChange={(p) => usePlaybackStore.getState().setEditorPane(p)}
           items={[
-            { value: 'scenes', icon: LuClapperboard, label: 'Scenes', title: `Scenes (${sceneCount})` },
-            { value: 'chases', icon: LuListMusic, label: 'Chases', title: `Chases (${chaseCount})` }
+            { value: 'scenes', icon: LuClapperboard, label: t('common.scenes'), title: t('common.sceneCount', { count: sceneCount }), 'data-pane': 'scenes' },
+            { value: 'chases', icon: LuListMusic, label: t('common.chases'), title: t('common.chaseCount', { count: chaseCount }), 'data-pane': 'chases' }
           ]}
         />
         <div className="flex-1" />
@@ -80,9 +90,10 @@ export function PlaybackView() {
           icon={LuCircleDot}
           active={rec.open}
           onClick={rec.toggle}
-          tooltip={pane === 'scenes' ? 'Record the programmer into a new scene, a new cue or an existing cue' : 'Record the programmer into a new chase, a new step or an existing step'}
+          tooltip={pane === 'scenes' ? t('scenes.view.recordSceneTooltip') : t('scenes.view.recordChaseTooltip')}
+          data-record-button=""
         >
-          Record…
+          {t('scenes.view.record')}
         </Button>
       </header>
 
@@ -114,7 +125,24 @@ export function PlaybackView() {
   )
 }
 
+/**
+ * Delete / Backspace, Mod+D, F2 / Enter on the selected scene (or chase) from
+ * anywhere in the view. A leaf: re-renders alone when that item changes.
+ */
+function ViewSelection({ scope, pane, cuelistId, chaseId }: {
+  scope: React.RefObject<HTMLDivElement | null>
+  pane: Pane
+  cuelistId: string | null
+  chaseId: string | null
+}) {
+  const scene = usePlaybackStore((s) => (pane === 'scenes' && cuelistId ? s.cuelists.find((c) => c.id === cuelistId) : undefined))
+  const chase = usePlaybackStore((s) => (pane === 'chases' && chaseId ? s.chases.find((c) => c.id === chaseId) : undefined))
+  useSelectionActions(scene ? sceneSelectionActions(scene) : chase ? chaseSelectionActions(chase) : null, { scope })
+  return null
+}
+
 function SelectedScene({ id, selectedCueId, onSelectCue }: { id: string | null; selectedCueId: string | null; onSelectCue: (id: string | null) => void }) {
+  const t = useT()
   const cuelist = usePlaybackStore((s) => (id ? s.cuelists.find((c) => c.id === id) : undefined))
   const number = usePlaybackStore((s) => s.cuelists.findIndex((c) => c.id === id) + 1)
   const slots = useExecutorSlots()
@@ -122,8 +150,8 @@ function SelectedScene({ id, selectedCueId, onSelectCue }: { id: string | null; 
     return (
       <EmptyState
         icon={LuMousePointerClick}
-        title="No scene selected"
-        description="Record a look as a scene, or pick one in the list to edit its cues and timing."
+        title={t('scenes.view.noSceneTitle')}
+        description={t('scenes.view.noSceneText')}
       />
     )
   }
@@ -131,14 +159,15 @@ function SelectedScene({ id, selectedCueId, onSelectCue }: { id: string | null; 
 }
 
 function SelectedChase({ id, selectedStepId, onSelectStep }: { id: string | null; selectedStepId: string | null; onSelectStep: (id: string | null) => void }) {
+  const t = useT()
   const chase = usePlaybackStore((s) => (id ? s.chases.find((c) => c.id === id) : undefined))
   const number = usePlaybackStore((s) => s.chases.findIndex((c) => c.id === id) + 1)
   if (!chase) {
     return (
       <EmptyState
         icon={LuMousePointerClick}
-        title="No chase selected"
-        description="Record a chase, or pick one in the list to edit its steps, tempo and direction."
+        title={t('scenes.view.noChaseTitle')}
+        description={t('scenes.view.noChaseText')}
       />
     )
   }
@@ -147,6 +176,7 @@ function SelectedChase({ id, selectedStepId, onSelectStep }: { id: string | null
 
 /** What Record would store: polled at 4 Hz, re-renders only when the counts change */
 function ProgrammerStatus() {
+  const t = useT()
   const [counts, setCounts] = useState<{ fixtures: number; channels: number }>({ fixtures: 0, channels: 0 })
   useEffect(() => {
     const poll = () => {
@@ -165,8 +195,8 @@ function ProgrammerStatus() {
       setCounts((cur) => (cur.fixtures === fixtures && cur.channels === channels ? cur : { fixtures, channels }))
     }
     poll()
-    const t = setInterval(poll, 250)
-    return () => clearInterval(t)
+    const timer = setInterval(poll, 250)
+    return () => clearInterval(timer)
   }, [])
   const active = counts.channels > 0
   return (
@@ -175,16 +205,16 @@ function ProgrammerStatus() {
         'hidden h-control-sm items-center gap-2 rounded-full px-3 text-xs md:inline-flex',
         active ? 'bg-accent/15 text-accent-fg' : 'bg-surface-2 text-fg-tertiary'
       )}
-      title={active ? 'Values in the programmer — Record stores these' : 'The programmer is empty — Record stores the live output'}
+      title={active ? t('scenes.programmer.activeTooltip') : t('scenes.programmer.emptyTooltip')}
     >
       <span aria-hidden className={cn('h-2 w-2 rounded-full', active ? 'bg-accent' : 'bg-surface-5')} />
       {active ? (
         <>
-          <span className="font-medium">Programmer</span>
-          <span className="font-mono tabular">{counts.fixtures} fix · {counts.channels} ch</span>
+          <span className="font-medium">{t('common.programmer')}</span>
+          <span className="font-mono tabular">{t('scenes.programmer.counts', { fixtures: counts.fixtures, channels: counts.channels })}</span>
         </>
       ) : (
-        <span>Programmer empty</span>
+        <span>{t('scenes.programmer.empty')}</span>
       )}
     </span>
   )

@@ -3,6 +3,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 import { isElectronRuntime } from '@renderer/lib/runtime'
 import { dismissToast, showToast } from './toast-store'
+import {
+  readLanguagePreference, resolveLanguage, setLocale, t, writeLanguagePreference, type LanguagePreference
+} from '@renderer/i18n'
+
+export type { LanguagePreference } from '@renderer/i18n'
 
 // ---- Device type detection ----
 
@@ -46,7 +51,7 @@ function getDefaultTab(): ViewTab {
   return 'visualizer'
 }
 
-export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
+export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live' | 'pools'
 
 /** Control sizing: 'compact' for mouse/trackpad, 'touch' for fingers (>= 44px targets) */
 export type Density = 'compact' | 'touch'
@@ -99,12 +104,20 @@ interface UiState {
   densityPreference: DensityPreference
   /** Density in effect (also set as data-density on <html>) */
   density: Density
+  /** UI language chosen in Settings › Display, per machine ('auto' = system / Pi kiosk default) */
+  languagePreference: LanguagePreference
   /** Left fixture sidebar visible */
   sidebarOpen: boolean
   /** Bottom executor bar visible */
   executorBarOpen: boolean
   /** Keyboard shortcut cheat sheet open */
   shortcutsOpen: boolean
+  /**
+   * Pro programming view (pools, numbers, selection tools, advanced cue
+   * columns…). Per machine (localStorage photonboard.ui.pro), default off.
+   * UI only: never changes how a show plays.
+   */
+  proMode: boolean
   // Last status message (also shown as a toast)
   statusMessage: string | null
   statusType: StatusType
@@ -119,11 +132,15 @@ interface UiState {
   setSelectedUniverse: (u: number) => void
   setStageMode: (on: boolean) => void
   setDensityPreference: (pref: DensityPreference) => void
+  /** Store the language choice on this device and switch the UI (no reload) */
+  setLanguagePreference: (pref: LanguagePreference) => void
   /** Re-evaluate 'auto' density (pointer type changed) */
   refreshDensity: () => void
   toggleSidebar: (open?: boolean) => void
   toggleExecutorBar: (open?: boolean) => void
   setShortcutsOpen: (open: boolean) => void
+  /** Turn the Pro programming view on / off (toggles when omitted); remembered on this machine */
+  setProMode: (on?: boolean) => void
   /** Show a status message as a toast; duration 0 = until replaced. A newer message is never cleared by an older timer. */
   showStatus: (message: string, type?: StatusType, duration?: number) => void
   clearStatus: () => void
@@ -138,15 +155,17 @@ export const useUiStore = create<UiState>((set, get) => ({
   activeTab: getDefaultTab(),
   // Phone/tablet: start in stage mode. Desktop browser: start in app mode.
   stageMode: !_isElectron && (isPhone() || isTablet()),
-  showName: 'New Show',
+  showName: t('file.defaultShowName'),
   isDirty: false,
   selectedUniverse: 0,
   densityPreference: initialDensityPreference,
   density: resolveDensity(initialDensityPreference),
+  languagePreference: readLanguagePreference(),
   // Narrow screens (tablets) start with the fixture list hidden
   sidebarOpen: readPref('sidebarOpen', window.innerWidth >= 1280),
   executorBarOpen: readPref('executorBarOpen', true),
   shortcutsOpen: false,
+  proMode: readPref('pro', false),
   statusMessage: null,
   statusType: 'info',
   pendingCuelistId: null,
@@ -160,6 +179,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   setDensityPreference: (pref) => {
     writePref('density', pref)
     set({ densityPreference: pref, density: resolveDensity(pref) })
+  },
+  setLanguagePreference: (pref) => {
+    writeLanguagePreference(pref)
+    set({ languagePreference: pref })
+    setLocale(resolveLanguage(pref))
   },
   refreshDensity: () => {
     const density = resolveDensity(get().densityPreference)
@@ -176,6 +200,11 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ executorBarOpen })
   },
   setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+  setProMode: (on) => {
+    const proMode = on ?? !get().proMode
+    writePref('pro', proMode)
+    if (proMode !== get().proMode) set({ proMode })
+  },
   showStatus: (message, type = 'info', duration = 3000) => {
     const token = ++statusToken
     if (statusTimer) {

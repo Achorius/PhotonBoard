@@ -9,6 +9,7 @@ import {
 import {
   Badge, Button, EmptyState, IconButton, Tabs, TextInput, cn, palette, useDensity, usePointerDrag
 } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import type { Cuelist, TimelineZone } from '@shared/types'
@@ -17,21 +18,22 @@ import { addMarkerAt, addZoneAt, seek } from './timeline-actions'
 import { getCanvasApi, getClockTime, useTimelineView, type LibraryTab } from './timeline-view-store'
 
 export function LibraryPanel() {
+  const t = useT()
   const tab = useTimelineView((s) => s.libraryTab)
   const counts = usePlaybackStore(useShallow((s) => ({ scenes: s.cuelists.length, markers: s.timelineMarkers.length, zones: s.timelineZones.length })))
   return (
-    <aside aria-label="Timeline library" className="flex h-full min-h-0 flex-col bg-surface-1">
+    <aside aria-label={t('timeline.library.aria')} className="flex h-full min-h-0 flex-col bg-surface-1">
       <Tabs<LibraryTab>
-        aria-label="Library"
+        aria-label={t('timeline.library.tabsAria')}
         size="sm"
         fit
         className="shrink-0 gap-0 px-1"
         value={tab}
-        onChange={(t) => useTimelineView.getState().setLibraryTab(t)}
+        onChange={(next) => useTimelineView.getState().setLibraryTab(next)}
         items={[
-          { id: 'scenes', label: 'Scenes', badge: counts.scenes },
-          { id: 'markers', label: 'Markers', badge: counts.markers },
-          { id: 'zones', label: 'Sections', badge: counts.zones }
+          { id: 'scenes', label: t('common.scenes'), badge: counts.scenes, 'data-library-tab': 'scenes' },
+          { id: 'markers', label: t('timeline.canvas.markers'), badge: counts.markers, 'data-library-tab': 'markers' },
+          { id: 'zones', label: t('timeline.canvas.sections'), badge: counts.zones, 'data-library-tab': 'zones' }
         ]}
       />
       <div role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
@@ -52,6 +54,7 @@ function targetTrack(): number {
 // ---------------------------------------------------------------- Scenes
 
 function ScenesTab() {
+  const t = useT()
   const cuelists = usePlaybackStore((s) => s.cuelists)
   const clips = usePlaybackStore((s) => s.timelineClips)
   const [query, setQuery] = useState('')
@@ -70,32 +73,33 @@ function ScenesTab() {
       <EmptyState
         size="sm"
         icon={LuClapperboard}
-        title="No scenes yet"
-        description="Record scenes in the Scenes view, then place them on the timeline."
-        action={<Button variant="primary" size="sm" onClick={() => useUiStore.getState().setActiveTab('playback')}>Open Scenes</Button>}
+        title={t('timeline.library.noScenesTitle')}
+        description={t('timeline.library.noScenesDescription')}
+        action={<Button variant="primary" size="sm" onClick={() => useUiStore.getState().setActiveTab('playback')}>{t('timeline.openScenes')}</Button>}
       />
     )
   }
   return (
     <>
       <div className="shrink-0 px-2.5 py-2">
-        <TextInput size="sm" icon={LuSearch} placeholder="Search scenes" value={query} onChange={(e) => setQuery(e.target.value)} onClear={() => setQuery('')} aria-label="Search scenes" />
+        <TextInput size="sm" icon={LuSearch} placeholder={t('timeline.library.searchScenes')} value={query} onChange={(e) => setQuery(e.target.value)} onClear={() => setQuery('')} aria-label={t('timeline.library.searchScenes')} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         {shown.length === 0 ? (
-          <EmptyState size="sm" icon={LuSearchX} title="No matching scene" action={<Button size="sm" variant="ghost" onClick={() => setQuery('')}>Clear search</Button>} />
+          <EmptyState size="sm" icon={LuSearchX} title={t('timeline.library.noMatch')} description={t('common.nothingMatches', { query: query.trim() })} action={<Button size="sm" variant="ghost" onClick={() => setQuery('')}>{t('timeline.library.clearSearch')}</Button>} />
         ) : shown.map((cl) => (
           <SceneRow key={cl.id} cuelist={cl} color={clipColorFor(cuelists, cl.id)} uses={uses.get(cl.id) ?? 0} />
         ))}
       </div>
       <p className="shrink-0 border-t border-line-subtle px-3 py-2 text-xs text-fg-tertiary">
-        Drag a scene by its grip onto a track, or press + to drop it at the playhead.
+        {t('timeline.library.scenesHint')}
       </p>
     </>
   )
 }
 
 const SceneRow = memo(function SceneRow({ cuelist, color, uses }: { cuelist: Cuelist; color: string; uses: number }) {
+  const t = useT()
   const drag = usePointerDrag({
     onStart: (s) => { useTimelineView.getState().setLibraryDrag({ cuelistId: cuelist.id, x: s.x, y: s.y, over: false }) },
     onMove: (s) => {
@@ -115,17 +119,17 @@ const SceneRow = memo(function SceneRow({ cuelist, color, uses }: { cuelist: Cue
   const addAtPlayhead = () => {
     const { snap, bpm } = useTimelineView.getState()
     const step = snapStep(snap, bpm)
-    const t = step > 0 ? Math.round(getClockTime() / step) * step : getClockTime()
-    const id = addSceneClip(cuelist.id, targetTrack(), t)
+    const at = step > 0 ? Math.round(getClockTime() / step) * step : getClockTime()
+    const id = addSceneClip(cuelist.id, targetTrack(), at)
     useTimelineView.getState().select({ kind: 'clip', id })
-    getCanvasApi()?.reveal(t)
+    getCanvasApi()?.reveal(at)
   }
   return (
     <div className="group flex min-h-row items-center gap-1 pl-1 pr-1.5 hover:bg-surface-2" onDoubleClick={addAtPlayhead}>
       <div
         {...drag}
         role="button"
-        aria-label={`Drag ${cuelist.name} onto the timeline`}
+        aria-label={t('timeline.library.dragScene', { name: cuelist.name })}
         className="flex h-control w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-fg-tertiary hover:bg-surface-3 hover:text-fg-primary active:cursor-grabbing"
       >
         <LuGripVertical size={14} aria-hidden />
@@ -134,12 +138,12 @@ const SceneRow = memo(function SceneRow({ cuelist, color, uses }: { cuelist: Cue
       <div className="flex min-w-0 flex-1 flex-col py-1 pl-1.5">
         <span className="truncate text-sm text-fg-primary">{cuelist.name}</span>
         <span className="flex items-center gap-1 truncate text-xs text-fg-tertiary">
-          {cuelist.cues.length} cue{cuelist.cues.length === 1 ? '' : 's'}
+          {t('common.cueCount', { count: cuelist.cues.length })}
           {fx > 0 && <><span aria-hidden>·</span><LuSparkles size={11} aria-hidden />{fx}</>}
         </span>
       </div>
-      {uses > 0 && <Badge size="xs" mono title={`Placed ${uses} time${uses === 1 ? '' : 's'} on the timeline`}>{uses}</Badge>}
-      <IconButton icon={LuPlus} label={`Add ${cuelist.name} at the playhead`} size="sm" onClick={addAtPlayhead} />
+      {uses > 0 && <Badge size="xs" mono title={t('timeline.library.placedCount', { count: uses })}>{uses}</Badge>}
+      <IconButton icon={LuPlus} label={t('timeline.library.addSceneAtPlayhead', { name: cuelist.name })} size="sm" onClick={addAtPlayhead} />
     </div>
   )
 })
@@ -147,16 +151,17 @@ const SceneRow = memo(function SceneRow({ cuelist, color, uses }: { cuelist: Cue
 // ---------------------------------------------------------------- Markers
 
 function MarkersTab() {
+  const t = useT()
   const markers = usePlaybackStore((s) => s.timelineMarkers)
   const selected = useTimelineView((s) => (s.selection?.kind === 'marker' ? s.selection.id : null))
   return (
     <>
       <div className="flex shrink-0 items-center px-2.5 py-2">
-        <Button size="sm" variant="secondary" icon={LuPlus} onClick={() => addMarkerAt(getClockTime())} fullWidth>Add marker at playhead</Button>
+        <Button size="sm" variant="secondary" icon={LuPlus} onClick={() => addMarkerAt(getClockTime())} fullWidth>{t('timeline.marker.addAtPlayhead')}</Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         {markers.length === 0 ? (
-          <EmptyState size="sm" icon={LuFlag} title="No markers" description="Markers name the moments you jump to (also from MIDI). Double-tap the ruler or press M." />
+          <EmptyState size="sm" icon={LuFlag} title={t('timeline.library.noMarkersTitle')} description={t('timeline.library.noMarkersDescription')} />
         ) : markers.map((m) => (
           <button
             key={m.id}
@@ -178,6 +183,7 @@ function MarkersTab() {
 // ---------------------------------------------------------------- Sections (zones)
 
 function ZonesTab() {
+  const t = useT()
   const zones = usePlaybackStore((s) => s.timelineZones)
   const selected = useTimelineView((s) => (s.selection?.kind === 'zone' ? s.selection.id : null))
   const sorted = useMemo(() => [...zones].sort((a, b) => a.order - b.order), [zones])
@@ -194,11 +200,11 @@ function ZonesTab() {
   return (
     <>
       <div className="flex shrink-0 items-center px-2.5 py-2">
-        <Button size="sm" variant="secondary" icon={LuPlus} onClick={addSection} fullWidth>Add section at playhead</Button>
+        <Button size="sm" variant="secondary" icon={LuPlus} onClick={addSection} fullWidth>{t('timeline.section.addAtPlayhead')}</Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         {sorted.length === 0 ? (
-          <EmptyState size="sm" icon={LuSquareDashed} title="No sections" description="Sections (verse, chorus…) group a stretch of the show. Drag across the Sections lane to create one; reorder them here to rearrange the show." />
+          <EmptyState size="sm" icon={LuSquareDashed} title={t('timeline.library.noSectionsTitle')} description={t('timeline.library.noSectionsDescription')} />
         ) : sorted.map((z, i) => (
           <ZoneRow
             key={z.id}
@@ -221,7 +227,7 @@ function ZonesTab() {
           />
         ))}
       </div>
-      {sorted.length > 1 && <p className="shrink-0 border-t border-line-subtle px-3 py-2 text-xs text-fg-tertiary">Drag a section by its grip to move it — its clips and markers move with it.</p>}
+      {sorted.length > 1 && <p className="shrink-0 border-t border-line-subtle px-3 py-2 text-xs text-fg-tertiary">{t('timeline.library.sectionsHint')}</p>}
     </>
   )
 }
@@ -246,6 +252,7 @@ const ZoneRow = memo(function ZoneRow({ zone, index, count, rowH, selected, shif
   onReorderDrag: (offset: number | null) => void
   onReorderDrop: (to: number) => void
 }) {
+  const t = useT()
   const dy = useRef(0)
   const drag = usePointerDrag({
     onStart: () => { dy.current = 0; onReorderDrag(0) },
@@ -267,7 +274,7 @@ const ZoneRow = memo(function ZoneRow({ zone, index, count, rowH, selected, shif
       style={{ height: rowH, transform: `translateY(${isDragging ? dy.current : shift * rowH}px)` }}
     >
       {selected && <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-info-fg" />}
-      <div {...drag} role="button" aria-label={`Move section ${zone.name}`} className="flex h-control w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-fg-tertiary hover:bg-surface-3 hover:text-fg-primary active:cursor-grabbing">
+      <div {...drag} role="button" aria-label={t('timeline.library.moveSection', { name: zone.name })} className="flex h-control w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-fg-tertiary hover:bg-surface-3 hover:text-fg-primary active:cursor-grabbing">
         <LuGripVertical size={14} aria-hidden />
       </div>
       <button

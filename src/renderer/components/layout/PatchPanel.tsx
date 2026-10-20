@@ -17,8 +17,10 @@ import { useUiStore } from '@renderer/stores/ui-store'
 import { getChannelShortLabel, getChannelTypeColor } from '@renderer/lib/fixture-library'
 import { COLOR_WHEEL_MAX_DMX, isColorWheelChannel } from '@renderer/lib/dmx-channel-resolver'
 import { setProgrammerChannel } from '@renderer/lib/dmx-mixer'
+import { useT } from '@renderer/i18n'
 
 export function PatchPanel() {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const fixtures = usePatchStore((s) => s.fixtures)
   const groups = usePatchStore((s) => s.groups)
@@ -61,13 +63,13 @@ export function PatchPanel() {
   const single = selectedIds.length === 1 ? patch.find((p) => p.id === selectedIds[0]) ?? null : null
 
   return (
-    <aside aria-label="Fixtures" className="flex w-[248px] shrink-0 flex-col border-r border-line bg-surface-1 [[data-density=touch]_&]:w-[296px]">
+    <aside aria-label={t('shell.sidebar.title')} className="flex w-[248px] shrink-0 flex-col border-r border-line bg-surface-1 [[data-density=touch]_&]:w-[296px]">
       <header className="flex h-control-lg shrink-0 items-center gap-2 pl-3 pr-1.5">
-        <h2 className="text-sm font-semibold text-fg-primary">Fixtures</h2>
+        <h2 className="text-sm font-semibold text-fg-primary">{t('shell.sidebar.title')}</h2>
         <span className="text-xs tabular text-fg-tertiary">{patch.length}</span>
         <div className="flex-1" />
-        <IconButton icon={LuPlus} label="Add fixtures (Patch)" size="sm" onClick={openPatch} />
-        <IconButton icon={LuX} label="Hide fixture list" size="sm" onClick={() => useUiStore.getState().toggleSidebar(false)} />
+        <IconButton icon={LuPlus} label={t('shell.sidebar.addFixtures')} size="sm" onClick={openPatch} />
+        <IconButton icon={LuX} label={t('shell.sidebar.hide')} size="sm" onClick={() => useUiStore.getState().toggleSidebar(false)} />
       </header>
 
       {patch.length > 0 && (
@@ -75,21 +77,21 @@ export function PatchPanel() {
           <TextInput
             size="sm"
             icon={LuSearch}
-            placeholder="Search name, type, address"
+            placeholder={t('shell.sidebar.searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onClear={() => setQuery('')}
             onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setQuery(''); e.currentTarget.blur() } }}
-            aria-label="Search fixtures"
+            aria-label={t('shell.sidebar.searchAria')}
           />
           {universes.length > 1 && (
             <SegmentedControl
               size="xs"
               fullWidth
-              aria-label="Universe"
+              aria-label={t('shell.sidebar.universeAria')}
               value={universe}
               onChange={setUniverse}
-              items={[{ value: 'all' as const, label: 'All' }, ...universes.map((u) => ({ value: u, label: `U${u + 1}` }))]}
+              items={[{ value: 'all' as const, label: t('common.all') }, ...universes.map((u) => ({ value: u, label: t('units.universeShort', { n: u + 1 }) }))]}
             />
           )}
           {groups.length > 0 && (
@@ -102,7 +104,7 @@ export function PatchPanel() {
                     color={g.color}
                     selected={inGroup}
                     onClick={() => (inGroup ? usePatchStore.getState().clearSelection() : usePatchStore.getState().selectGroup(g.id))}
-                    title={`${g.name} — ${g.fixtureIds.length} fixtures`}
+                    title={t('shell.sidebar.groupTitle', { name: g.name, count: g.fixtureIds.length })}
                   >
                     {g.name}
                   </Tag>
@@ -113,22 +115,22 @@ export function PatchPanel() {
         </div>
       )}
 
-      <div role="listbox" aria-multiselectable="true" aria-label="Patched fixtures" className="min-h-0 flex-1 overflow-y-auto py-1">
+      <div role="listbox" aria-multiselectable="true" aria-label={t('shell.sidebar.listAria')} className="min-h-0 flex-1 overflow-y-auto py-1">
         {patch.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuCable}
-            title="No fixtures patched"
-            description="Add fixtures from the library to start programming."
-            action={<Button size="sm" variant="primary" icon={LuPlus} onClick={openPatch}>Add fixtures</Button>}
+            title={t('shell.sidebar.emptyTitle')}
+            description={t('shell.sidebar.emptyDescription')}
+            action={<Button size="sm" variant="primary" icon={LuPlus} onClick={openPatch}>{t('shell.sidebar.emptyAction')}</Button>}
           />
         ) : displayed.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuSearchX}
-            title="No match"
-            description={query ? `Nothing matches “${query}”.` : 'No fixture on this universe.'}
-            action={<Button size="sm" variant="ghost" onClick={() => { setQuery(''); setUniverse('all') }}>Show all</Button>}
+            title={t('shell.sidebar.noMatchTitle')}
+            description={query ? t('shell.sidebar.noMatchQuery', { query }) : t('shell.sidebar.noMatchUniverse')}
+            action={<Button size="sm" variant="ghost" onClick={() => { setQuery(''); setUniverse('all') }}>{t('shell.sidebar.showAll')}</Button>}
           />
         ) : displayed.map((entry) => (
           <FixtureRow
@@ -143,10 +145,10 @@ export function PatchPanel() {
       </div>
 
       {selectedIds.length > 0 && (
-        <div className="flex h-control-lg shrink-0 items-center gap-1 border-t border-line pl-3 pr-1.5">
-          <span className="flex-1 text-xs text-info-fg">{selectedIds.length} selected</span>
-          <Button size="xs" variant="ghost" onClick={() => usePatchStore.getState().selectFixtures(displayed.map((p) => p.id))}>Select shown</Button>
-          <Button size="xs" variant="ghost" onClick={() => usePatchStore.getState().clearSelection()}>Clear</Button>
+        <div className="flex min-h-control-lg shrink-0 flex-wrap items-center justify-end gap-x-1 border-t border-line py-0.5 pl-3 pr-1.5">
+          <span className="mr-auto shrink-0 text-xs text-info-fg">{t('shell.sidebar.selectedCount', { count: selectedIds.length })}</span>
+          <Button size="xs" variant="ghost" onClick={() => usePatchStore.getState().selectFixtures(displayed.map((p) => p.id))}>{t('shell.sidebar.selectShown')}</Button>
+          <Button size="xs" variant="ghost" onClick={() => usePatchStore.getState().clearSelection()}>{t('shell.sidebar.clearSelection')}</Button>
         </div>
       )}
       {single && <QuickFaders entry={single} def={defs.get(single.fixtureDefId)} />}
@@ -161,13 +163,14 @@ const FixtureRow = memo(function FixtureRow({ entry, def, number, selected, onSe
   selected: boolean
   onSelect: (id: string, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => void
 }) {
+  const t = useT()
   const Icon = fixtureCategoryIcon(def?.categories)
   return (
     <div
       role="option"
       aria-selected={selected}
       tabIndex={0}
-      title={def ? `${def.manufacturer} ${def.name} · ${entry.modeName}` : 'Unknown fixture type'}
+      title={def ? `${def.manufacturer} ${def.name} · ${entry.modeName}` : t('shell.sidebar.unknownType')}
       onClick={(e) => onSelect(entry.id, e)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id, e) }
@@ -188,6 +191,7 @@ const FixtureRow = memo(function FixtureRow({ entry, def, number, selected, onSe
 
 /** Faders for the single selected fixture (re-renders with its universe, ~25 Hz) */
 function QuickFaders({ entry, def }: { entry: PatchEntry; def: FixtureDefinition | undefined }) {
+  const t = useT()
   const values = useDmxUniverse(entry.universe)
   const channels = useMemo(() => usePatchStore.getState().getFixtureChannels(entry), [entry, def])
   if (channels.length === 0) return null
@@ -195,8 +199,8 @@ function QuickFaders({ entry, def }: { entry: PatchEntry; def: FixtureDefinition
     <div className="shrink-0 border-t border-line bg-surface-0/60 px-2 pb-2 pt-1.5">
       <div className="mb-1 flex items-center gap-1 px-1">
         <span className="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{entry.name}</span>
-        <Tooltip content="Double-click a fader to reset it">
-          <span className="text-2xs text-fg-disabled">{channels.length} ch</span>
+        <Tooltip content={t('shell.sidebar.fadersHint')}>
+          <span className="text-2xs text-fg-disabled">{t('units.channelsShortValue', { count: channels.length })}</span>
         </Tooltip>
       </div>
       <div className="flex h-[150px] gap-1 overflow-x-auto pb-1 [[data-density=touch]_&]:h-[190px]">

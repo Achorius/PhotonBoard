@@ -9,12 +9,14 @@ import { LuCable, LuPlus } from 'react-icons/lu'
 import { Button, EmptyState, ResizeHandle, useResizable } from '@renderer/components/ui'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { useT } from '@renderer/i18n'
 import { TargetPane } from './TargetPane'
 import { EffectLibrary } from './EffectLibrary'
 import { EffectList } from './EffectList'
 import { EffectEditor } from './EffectEditor'
 
 export function EffectsView() {
+  const t = useT()
   const hasFixtures = usePatchStore((s) => s.patch.length > 0)
   const list = useResizable({ initial: 300, min: 150, max: 720, storageKey: 'effects.list', direction: -1, orientation: 'vertical' })
 
@@ -23,9 +25,9 @@ export function EffectsView() {
       <div className="flex h-full items-center justify-center bg-surface-0">
         <EmptyState
           icon={LuCable}
-          title="No fixtures patched"
-          description="Effects move, colour and pulse patched fixtures. Add fixtures in Patch first."
-          action={<Button variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>Add fixtures</Button>}
+          title={t('effects.view.noFixturesTitle')}
+          description={t('effects.view.noFixturesText')}
+          action={<Button variant="primary" icon={LuPlus} onClick={() => useUiStore.getState().setActiveTab('patch')}>{t('effects.view.addFixtures')}</Button>}
         />
       </div>
     )

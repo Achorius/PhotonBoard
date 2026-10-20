@@ -17,6 +17,8 @@ import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
+import { usePoolStore } from '@renderer/stores/pool-store'
+import { useProStore } from '@renderer/stores/pro-store'
 import { getTimelineState, onTimelinePlayStateChange } from './timeline-engine'
 import { getMixBuffer, getMixVersion, getProgrammerChannels } from './dmx-mixer'
 import { getBridge, isRemoteMode } from './runtime'
@@ -24,6 +26,7 @@ import { getContentState, onContentStateChange } from './content-sync'
 import { computeProgrammerSummary, type ProgrammerSummary } from './console-programmer'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
 import type { ContentState } from '@shared/remote-commands'
+import { getLocale, onLocaleChange, type Locale } from '@renderer/i18n'
 
 export interface SnapshotCue {
   id: string
@@ -61,6 +64,20 @@ export interface SnapshotChase {
   stepCount: number
 }
 
+/** Command line entry as published (last SNAPSHOT_CLI_LOG lines) */
+export interface SnapshotCliLine {
+  id: number
+  time: number
+  text: string
+  ok: boolean
+  message: string
+  level: 'info' | 'warning' | 'error'
+  origin?: string
+}
+
+/** Command-line lines carried by the snapshot */
+export const SNAPSHOT_CLI_LOG = 10
+
 export interface StateSnapshot {
   grandMaster: number
   blackout: boolean
@@ -72,14 +89,31 @@ export interface StateSnapshot {
   timelineTime?: number
   showName: string
   isDirty: boolean
+  /** Console UI language: the Stage window follows it (remote browsers keep their own) */
+  language?: Locale
   cuelists: SnapshotCuelist[]
   chases: SnapshotChase[]
   groups: { id: string; name: string; color: string; fixtureCount: number }[]
   selectedFixtureIds: string[]
   fixtureCount: number
+  /** Executor layout of the console's CURRENT page (legacy view: scene cells only) */
   executorGrid: (string | null)[][]
   executorColumns: { title: string; color: string }[]
   executorModes: string[][]
+  /** Executor page shown on the console (0-based) */
+  executorPage: number
+  /** Executor pages ('' name = default "Page n") */
+  pages: { id: string; name: string }[]
+  /** Pro: Blind / Highlight on the console */
+  blind: boolean
+  highlight: boolean
+  speedMasters: { id: string; number: number; name: string; bpm: number }[]
+  /** Pro: group master levels (0-255; missing = 255) */
+  groupMasters: Record<string, number>
+  /** Pro: what each column fader shows, "page:col" → 0-255 (pro-store.columnFaders) */
+  columnFaders: Record<string, number>
+  /** Last command lines run on the console (any origin), oldest first */
+  cliLog: SnapshotCliLine[]
   /** Ids of the running effects (remote effect buttons) */
   runningEffects: string[]
   /** Show content revisions per section: remotes refetch what they did not produce */
@@ -99,7 +133,8 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
   const { cuelists, chases } = usePlaybackStore.getState()
   const { showName, isDirty } = useUiStore.getState()
   const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
-  const { grid, columns, modes } = useExecutorStore.getState()
+  const { grid, columns, modes, currentPage, pages } = useExecutorStore.getState()
+  const { blind, highlight, cliLog, columnFaders } = useProStore.getState()
 
   cachedControl = {
     grandMaster,
@@ -110,6 +145,7 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
     timelinePlaying: getTimelineState().isPlaying,
     showName,
     isDirty,
+    language: getLocale(),
     cuelists: cuelists.map(cl => ({
       id: cl.id,
       name: cl.name,
@@ -154,6 +190,18 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
     executorGrid: grid,
     executorColumns: columns,
     executorModes: modes,
+    executorPage: currentPage,
+    pages: pages.map(p => ({ id: p.id, name: p.name })),
+    blind,
+    highlight,
+    speedMasters: usePoolStore.getState().speedMasters.map(m => ({ id: m.id, number: m.number, name: m.name, bpm: m.bpm })),
+    groupMasters: usePoolStore.getState().groupMasters,
+    columnFaders,
+    cliLog: cliLog.slice(-SNAPSHOT_CLI_LOG).map(l => {
+      const line: SnapshotCliLine = { id: l.id, time: l.time, text: l.text, ok: l.ok, message: l.message, level: l.level }
+      if (l.origin) line.origin = l.origin
+      return line
+    }),
     runningEffects: useEffectsStore.getState().effects.filter(e => e.isRunning).map(e => e.id),
     content: getContentState()
   }
@@ -306,7 +354,13 @@ export function startStateBroadcast(): () => void {
       }
     }),
     useExecutorStore.subscribe((s, p) => {
-      if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes) onControlChange()
+      if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes || s.pages !== p.pages || s.currentPage !== p.currentPage) onControlChange()
+    }),
+    useProStore.subscribe((s, p) => {
+      if (s.blind !== p.blind || s.highlight !== p.highlight || s.cliLog !== p.cliLog || s.columnFaders !== p.columnFaders) onControlChange()
+    }),
+    usePoolStore.subscribe((s, p) => {
+      if (s.speedMasters !== p.speedMasters || s.groupMasters !== p.groupMasters) onControlChange()
     }),
     usePatchStore.subscribe((s, p) => {
       if (s.patch !== p.patch || s.groups !== p.groups || s.selectedFixtureIds !== p.selectedFixtureIds) onControlChange()
@@ -320,7 +374,8 @@ export function startStateBroadcast(): () => void {
       if (running(s.effects) !== running(p.effects)) onControlChange()
     }),
     onContentStateChange(onControlChange),
-    onTimelinePlayStateChange(onControlChange)
+    onTimelinePlayStateChange(onControlChange),
+    onLocaleChange(onControlChange)
   ]
 
   // The playhead rides with the DMX part (same ~10 Hz rate)

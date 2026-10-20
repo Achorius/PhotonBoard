@@ -3,6 +3,7 @@ import type { IconType } from 'react-icons'
 import { LuX } from 'react-icons/lu'
 import { cn } from './cn'
 import type { Tone } from './tokens'
+import { t } from '@renderer/i18n'
 
 const SUBTLE: Record<Tone, string> = {
   neutral: 'bg-surface-4 text-fg-secondary',
@@ -101,7 +102,7 @@ export function Tag({ children, color, selected, onClick, onRemove, className, t
         </button>
       ) : body}
       {onRemove && (
-        <button type="button" aria-label="Remove" onClick={onRemove} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-fg-tertiary hover:bg-surface-4 hover:text-fg-primary [[data-density=touch]_&]:h-8 [[data-density=touch]_&]:w-8">
+        <button type="button" aria-label={t('ui.remove')} onClick={onRemove} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-fg-tertiary hover:bg-surface-4 hover:text-fg-primary [[data-density=touch]_&]:h-8 [[data-density=touch]_&]:w-8">
           <LuX size={12} aria-hidden />
         </button>
       )}

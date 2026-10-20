@@ -11,6 +11,7 @@ import { cn } from './cn'
 import { Portal } from './Portal'
 import { IconButton } from './IconButton'
 import { focusableIn, useOverlayLayer } from './overlay'
+import { t } from '@renderer/i18n'
 
 export interface ModalProps {
   open: boolean
@@ -89,7 +90,7 @@ export function Modal({ open, onClose, title, description, size = 'md', footer, 
               <h2 id={titleId} className="text-lg font-semibold text-fg-primary">{title}</h2>
               {description && <p id={descId} className="text-sm text-fg-secondary">{description}</p>}
             </div>
-            {dismissible && <IconButton icon={LuX} label="Close" size="sm" onClick={onClose} data-modal-close="" className="-mr-2 -mt-0.5" />}
+            {dismissible && <IconButton icon={LuX} label={t('ui.close')} size="sm" onClick={onClose} data-modal-close="" className="-mr-2 -mt-0.5" />}
           </header>
           {children !== undefined && children !== null && (
             <div className={cn('min-h-0 flex-1 overflow-y-auto', !flush && 'px-5 pb-4')}>{children}</div>

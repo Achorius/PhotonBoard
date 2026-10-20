@@ -1,14 +1,31 @@
 import { cn } from './cn'
+import { t, useLocale } from '@renderer/i18n'
 
 const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent)
 
-const KEY_LABELS: Record<string, string> = IS_MAC
-  ? { mod: '⌘', cmd: '⌘', ctrl: '⌃', shift: '⇧', alt: '⌥', option: '⌥', enter: '↵', backspace: '⌫', escape: 'Esc', esc: 'Esc', space: 'Space', up: '↑', down: '↓', left: '←', right: '→' }
-  : { mod: 'Ctrl', cmd: 'Ctrl', ctrl: 'Ctrl', shift: 'Shift', alt: 'Alt', option: 'Alt', enter: 'Enter', backspace: 'Backspace', escape: 'Esc', esc: 'Esc', space: 'Space', up: '↑', down: '↓', left: '←', right: '→' }
+/** Key cap labels; words come from the dictionary (fr: Maj, Entrée, Suppr, Échap, Espace) */
+function keyLabel(key: string): string | undefined {
+  switch (key) {
+    case 'mod': case 'cmd': return IS_MAC ? '⌘' : 'Ctrl'
+    case 'ctrl': return IS_MAC ? '⌃' : 'Ctrl'
+    case 'shift': return IS_MAC ? '⇧' : t('shortcuts.keys.shift')
+    case 'alt': case 'option': return IS_MAC ? '⌥' : 'Alt'
+    case 'enter': return IS_MAC ? '↵' : t('shortcuts.keys.enter')
+    case 'backspace': return IS_MAC ? '⌫' : t('shortcuts.keys.backspace')
+    case 'delete': case 'del': return IS_MAC ? '⌦' : t('shortcuts.keys.delete')
+    case 'escape': case 'esc': return t('shortcuts.keys.escape')
+    case 'space': return t('shortcuts.keys.space')
+    case 'up': return '↑'
+    case 'down': return '↓'
+    case 'left': return '←'
+    case 'right': return '→'
+    default: return undefined
+  }
+}
 
-/** "Mod+Shift+S" → ['⌘', '⇧', 'S'] on macOS, ['Ctrl', 'Shift', 'S'] elsewhere */
+/** "Mod+Shift+S" → ['⌘', '⇧', 'S'] on macOS, ['Ctrl', 'Shift', 'S'] elsewhere (fr: 'Maj') */
 export function shortcutParts(shortcut: string): string[] {
-  return shortcut.split('+').map((k) => KEY_LABELS[k.trim().toLowerCase()] ?? (k.length === 1 ? k.toUpperCase() : k))
+  return shortcut.split('+').map((k) => keyLabel(k.trim().toLowerCase()) ?? (k.length === 1 ? k.toUpperCase() : k))
 }
 
 /** Human-readable shortcut for tooltips / menus: "⌘⇧S" or "Ctrl+Shift+S" */
@@ -24,6 +41,7 @@ export interface KbdProps {
 
 /** Keyboard key cap(s) */
 export function Kbd({ keys, className }: KbdProps) {
+  useLocale() // key names follow the UI language
   return (
     <span className={cn('inline-flex items-center gap-0.5', className)}>
       {shortcutParts(keys).map((k, i) => (

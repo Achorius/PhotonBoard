@@ -1,40 +1,47 @@
-// MIDI ports with connection state and an activity LED per input.
+// MIDI ports with connection state and an activity LED per input, and the
+// recognised controllers (profiles) above them.
 
 import { memo, useEffect, useState } from 'react'
-import { LuArrowDownToLine, LuArrowUpFromLine, LuPiano, LuRefreshCw } from 'react-icons/lu'
+import { LuArrowDownToLine, LuArrowUpFromLine, LuLayoutGrid, LuPiano, LuRefreshCw } from 'react-icons/lu'
 import { EmptyState, IconButton, PanelHeader, StatusDot, cn } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { useMidiStore } from '@renderer/stores/midi-store'
+import { useControllerStore } from '@renderer/stores/controller-store'
 import type { MidiDevice } from '@shared/types'
+import { ControllersSection } from './ControllersSection'
 
 export function DevicesPanel() {
+  const t = useT()
   const devices = useMidiStore((s) => s.devices)
   const apiStatus = useMidiStore((s) => s.apiStatus)
   const inputs = devices.filter((d) => d.type === 'input')
   const outputs = devices.filter((d) => d.type === 'output')
   const connected = inputs.filter((d) => d.connected).length
+  const hasControllers = useControllerStore((s) => s.detected.length > 0)
 
   return (
-    <section aria-label="MIDI devices" className="flex min-h-0 shrink-0 flex-col border-b border-line">
+    <section aria-label={t('midi.devices.region')} className="flex min-h-0 shrink-0 flex-col border-b border-line">
       <PanelHeader
         icon={LuPiano}
-        title="Devices"
-        count={devices.length > 0 ? `${connected} in · ${outputs.filter((d) => d.connected).length} out` : undefined}
-        actions={<IconButton icon={LuRefreshCw} label="Rescan MIDI devices" size="sm" onClick={() => { void useMidiStore.getState().initMidi() }} />}
+        title={t('midi.devices.title')}
+        count={devices.length > 0 ? t('midi.devices.count', { inputs: connected, outputs: outputs.filter((d) => d.connected).length }) : undefined}
+        actions={<IconButton icon={LuRefreshCw} label={t('midi.devices.rescan')} size="sm" onClick={() => { void useMidiStore.getState().initMidi() }} />}
       />
-      <div className="max-h-[280px] overflow-y-auto py-1 [[data-density=touch]_&]:max-h-[340px]">
+      <div className={cn('overflow-y-auto py-1', hasControllers ? 'max-h-[440px] [[data-density=touch]_&]:max-h-[520px]' : 'max-h-[280px] [[data-density=touch]_&]:max-h-[340px]')}>
         {devices.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuPiano}
-            title={apiStatus === 'available' ? 'No MIDI devices' : 'MIDI unavailable'}
-            description={apiStatus === 'available' ? 'Connect a controller by USB — it appears here automatically (or press Rescan).' : 'This system gives no access to MIDI ports right now.'}
+            title={apiStatus === 'available' ? t('midi.devices.emptyTitle') : t('midi.devices.unavailableTitle')}
+            description={apiStatus === 'available' ? t('midi.devices.emptyText') : t('midi.devices.unavailableText')}
           />
         ) : (
           <>
-            <GroupLabel icon={LuArrowDownToLine} label="Inputs" />
-            {inputs.length === 0 ? <p className="px-3 pb-2 text-xs text-fg-tertiary">No input ports</p> : inputs.map((d) => <DeviceRow key={d.id} device={d} />)}
-            <GroupLabel icon={LuArrowUpFromLine} label="Outputs" />
-            {outputs.length === 0 ? <p className="px-3 pb-2 text-xs text-fg-tertiary">No output ports</p> : outputs.map((d) => <DeviceRow key={d.id} device={d} />)}
+            <ControllersSection label={<GroupLabel icon={LuLayoutGrid} label={t('pro.midi.controllers.title')} />} />
+            <GroupLabel icon={LuArrowDownToLine} label={t('midi.devices.inputs')} />
+            {inputs.length === 0 ? <p className="px-3 pb-2 text-xs text-fg-tertiary">{t('midi.devices.noInputs')}</p> : inputs.map((d) => <DeviceRow key={d.id} device={d} />)}
+            <GroupLabel icon={LuArrowUpFromLine} label={t('midi.devices.outputs')} />
+            {outputs.length === 0 ? <p className="px-3 pb-2 text-xs text-fg-tertiary">{t('midi.devices.noOutputs')}</p> : outputs.map((d) => <DeviceRow key={d.id} device={d} />)}
           </>
         )}
       </div>
@@ -52,13 +59,15 @@ function GroupLabel({ icon: Icon, label }: { icon: typeof LuPiano; label: string
 }
 
 const DeviceRow = memo(function DeviceRow({ device }: { device: MidiDevice }) {
+  const t = useT()
+  const state = device.connected ? t('midi.devices.connected') : t('midi.devices.disconnected')
   return (
     <div className="flex min-h-row items-center gap-2.5 px-3 py-1">
-      <StatusDot tone={device.connected ? 'go' : 'neutral'} label={device.connected ? 'Connected' : 'Disconnected'} />
+      <StatusDot tone={device.connected ? 'go' : 'neutral'} label={state} />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className={cn('truncate text-sm', device.connected ? 'text-fg-primary' : 'text-fg-tertiary')}>{device.name}</span>
         <span className="truncate text-xs text-fg-tertiary">
-          {device.connected ? (device.manufacturer && device.manufacturer !== 'Unknown' ? device.manufacturer : 'Connected') : 'Disconnected'}
+          {device.connected && device.manufacturer ? device.manufacturer : state}
         </span>
       </div>
       {device.type === 'input' && <ActivityLed name={device.name} />}
@@ -68,6 +77,7 @@ const DeviceRow = memo(function DeviceRow({ device }: { device: MidiDevice }) {
 
 /** Lights for a moment on every message from this input */
 function ActivityLed({ name }: { name: string }) {
+  const t = useT()
   const ts = useMidiStore((s) => (s.lastMessage?.deviceName === name ? s.lastMessage.ts ?? 0 : 0))
   const [lit, setLit] = useState(false)
   useEffect(() => {
@@ -79,8 +89,8 @@ function ActivityLed({ name }: { name: string }) {
   return (
     <span
       role="img"
-      aria-label={lit ? 'Receiving' : 'Idle'}
-      title="MIDI activity"
+      aria-label={lit ? t('midi.devices.receiving') : t('midi.devices.idle')}
+      title={t('midi.devices.activity')}
       className={cn('h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset transition-colors duration-fast', lit ? 'bg-midi-fg ring-midi-fg shadow-[0_0_8px_rgb(var(--pb-midi-fg))]' : 'bg-surface-3 ring-line-strong')}
     />
   )

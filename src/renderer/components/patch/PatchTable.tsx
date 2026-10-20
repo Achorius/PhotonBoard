@@ -16,8 +16,10 @@ import {
 import type { FixtureDefinition, Group, PatchEntry } from '@shared/types'
 import {
   Button, DropdownMenu, EmptyState, IconButton, SegmentedControl, Table, TBody, Td, Th, THead, TextInput, ToggleButton, Tooltip, Tr,
-  cn, confirm, contextMenuHandlers, fixtureCategoryIcon, formatAddressRange, prompt, toast, useContextMenu, type MenuEntry, type MenuPoint
+  cn, contextMenuHandlers, fixtureCategoryIcon, formatAddressRange, prompt, toast, useContextMenu, type MenuEntry, type MenuPoint
 } from '@renderer/components/ui'
+import { t as tr, useT } from '@renderer/i18n'
+import { deleteWithUndo, useSelectionActions } from '@renderer/lib/selection-actions'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { duplicateFixtures, nextGroupColor, useGroupsByFixture, usePatchAnalysis, useRowSelection } from './patch-hooks'
 import { GroupChips, InlineSelect } from './patch-parts'
@@ -37,7 +39,23 @@ function loadSort(): Sort {
   return { key: 'address', dir: 'asc' }
 }
 
+/** "fixture “Spot 1”" / "3 fixtures" — reads after "Delete …?" and "Deleted: …" */
+function fixturesLabel(ids: string[]): string {
+  if (ids.length === 1) {
+    const name = usePatchStore.getState().patch.find((p) => p.id === ids[0])?.name ?? ''
+    return tr('patch.selection.fixture', { name })
+  }
+  return tr('common.fixtureCount', { count: ids.length })
+}
+
+/** Delete fixtures from the patch: confirm, one undo step, Undo toast */
+function deleteFixtures(ids: string[]): void {
+  if (ids.length === 0) return
+  void deleteWithUndo({ label: fixturesLabel(ids), run: () => usePatchStore.getState().removeFixtures(ids) })
+}
+
 export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
+  const t = useT()
   const analysis = usePatchAnalysis()
   const { patch, defs, byId, conflicts, numbers, universes } = analysis
   const groupsByFixture = useGroupsByFixture()
@@ -51,6 +69,16 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
   const ctx = useContextMenu()
   const ctxOpen = ctx.open
   const tableRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Delete / Backspace, Mod+D, F2 / Enter on the selected fixtures
+  useSelectionActions(selectedIds.length > 0 ? {
+    label: () => fixturesLabel(usePatchStore.getState().selectedFixtureIds),
+    delete: () => usePatchStore.getState().removeFixtures(usePatchStore.getState().selectedFixtureIds),
+    duplicate: () => { duplicateFixtures(usePatchStore.getState().selectedFixtureIds) },
+    canRename: () => usePatchStore.getState().selectedFixtureIds.length === 1,
+    rename: () => setRenaming(usePatchStore.getState().selectedFixtureIds[0] ?? null)
+  } : null, { scope: rootRef })
 
   const setSort = (key: SortKey) => {
     const next: Sort = sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
@@ -100,36 +128,20 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
     return id && !sel.includes(id) ? [id] : sel
   }, [])
 
-  const removeWithConfirm = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) return
-    const names = usePatchStore.getState().patch.filter((p) => ids.includes(p.id)).map((p) => p.name)
-    const ok = await confirm({
-      title: ids.length === 1 ? `Delete “${names[0]}”?` : `Delete ${ids.length} fixtures?`,
-      message: ids.length === 1
-        ? 'The fixture is removed from the patch and its groups. Scenes keep their stored values.'
-        : `${names.slice(0, 6).join(', ')}${names.length > 6 ? '…' : ''} will be removed from the patch and their groups.`,
-      confirmLabel: ids.length === 1 ? 'Delete fixture' : `Delete ${ids.length} fixtures`,
-      tone: 'danger'
-    })
-    if (!ok) return
-    usePatchStore.getState().removeFixtures(ids)
-    toast.success(ids.length === 1 ? `Deleted ${names[0]}` : `Deleted ${ids.length} fixtures`)
-  }, [])
-
   const newGroupFrom = useCallback(async (ids: string[]) => {
     const name = await prompt({
-      title: 'New group',
-      message: `With ${ids.length === 1 ? 'this fixture' : `these ${ids.length} fixtures`}.`,
-      label: 'Group name',
-      placeholder: 'e.g. Front wash',
-      confirmLabel: 'Create group'
+      title: tr('patch.shared.newGroup'),
+      message: tr('patch.table.newGroupMessage', { count: ids.length }),
+      label: tr('patch.shared.groupName'),
+      placeholder: tr('patch.table.newGroupPlaceholder'),
+      confirmLabel: tr('patch.shared.createGroup')
     })
     if (!name) return
     const store = usePatchStore.getState()
     store.addGroup(name, nextGroupColor(store.groups))
     const created = usePatchStore.getState().groups.at(-1)
     if (created) store.addToGroup(created.id, ids)
-    toast.success(`Group “${name}” created`)
+    toast.success(tr('patch.table.groupCreated', { name }))
   }, [])
 
   const groupMenu = useCallback((ids: string[]): MenuEntry[] => {
@@ -143,10 +155,10 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
       }
     })
     return [
-      ...(entries.length > 0 ? [{ type: 'label' as const, label: 'Toggle membership' }, ...entries, { type: 'separator' as const }] : []),
-      { label: 'New group from selection…', icon: LuFolderPlus, onSelect: () => { void newGroupFrom(ids) } },
+      ...(entries.length > 0 ? [{ type: 'label' as const, label: tr('patch.table.menu.toggleMembership') }, ...entries, { type: 'separator' as const }] : []),
+      { label: tr('patch.table.menu.newGroupFromSelection'), icon: LuFolderPlus, onSelect: () => { void newGroupFrom(ids) } },
       {
-        label: 'Remove from all groups', icon: LuFolderMinus,
+        label: tr('patch.table.menu.removeFromAllGroups'), icon: LuFolderMinus,
         disabled: !allGroups.some((g) => ids.some((id) => g.fixtureIds.includes(id))),
         onSelect: () => { for (const g of usePatchStore.getState().groups) usePatchStore.getState().removeFromGroup(g.id, ids) }
       }
@@ -161,24 +173,24 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
     const def = defIds.size === 1 ? store.fixtures.find((f) => f.id === [...defIds][0]) : undefined
     const many = ids.length > 1
     return [
-      ...(many ? [{ type: 'label' as const, label: `${ids.length} fixtures` }] : []),
-      { label: 'Rename', icon: LuPencil, shortcut: 'F2', disabled: many, onSelect: () => setRenaming(id) },
-      { label: many ? 'Address…' : 'Change address…', icon: LuHash, onSelect: () => setAddressIds(ids) },
+      ...(many ? [{ type: 'label' as const, label: tr('common.fixtureCount', { count: ids.length }) }] : []),
+      { label: tr('common.rename'), icon: LuPencil, shortcut: 'F2', disabled: many, onSelect: () => setRenaming(id) },
+      { label: many ? tr('patch.table.menu.address') : tr('patch.table.menu.changeAddress'), icon: LuHash, onSelect: () => setAddressIds(ids) },
       {
-        label: 'Mode', icon: LuSlidersHorizontal, disabled: !def || def.modes.length < 2,
+        label: tr('common.mode'), icon: LuSlidersHorizontal, disabled: !def || def.modes.length < 2,
         submenu: def?.modes.map((m) => ({
           label: m.name,
-          description: `${m.channelCount} channels`,
+          description: tr('common.channelCount', { count: m.channelCount }),
           checked: entries.every((e) => e.modeName === m.name),
           onSelect: () => changeMode(ids, m.name)
         })) ?? []
       },
-      { label: 'Duplicate', icon: LuCopy, shortcut: 'Mod+D', onSelect: () => { duplicateFixtures(ids) } },
-      { label: 'Groups', icon: LuFolderPlus, submenu: groupMenu(ids) },
+      { label: tr('common.duplicate'), icon: LuCopy, shortcut: 'Mod+D', onSelect: () => { duplicateFixtures(ids) } },
+      { label: tr('common.groups'), icon: LuFolderPlus, submenu: groupMenu(ids) },
       { type: 'separator' },
-      { label: many ? `Delete ${ids.length} fixtures…` : 'Delete…', icon: LuTrash2, danger: true, shortcut: 'Delete', onSelect: () => { void removeWithConfirm(ids) } }
+      { label: many ? tr('patch.table.menu.deleteMany', { count: ids.length }) : tr('common.deleteEllipsis'), icon: LuTrash2, danger: true, shortcut: 'Backspace', onSelect: () => deleteFixtures(ids) }
     ]
-  }, [groupMenu, removeWithConfirm, targetIds])
+  }, [groupMenu, targetIds])
 
   const openRowMenu = useCallback((id: string, e: MenuPoint) => {
     const sel = usePatchStore.getState().selectedFixtureIds
@@ -186,19 +198,13 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
     ctxOpen(e, rowMenu(id))
   }, [ctxOpen, rowMenu])
 
+  // Delete / Mod+D / F2 go through the selection actions above (global keyboard handler)
   const onTableKeyDown = (e: React.KeyboardEvent) => {
     if ((e.target as HTMLElement).closest('input, select, textarea')) return
     const mod = e.metaKey || e.ctrlKey
-    const sel = usePatchStore.getState().selectedFixtureIds
     if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault(); e.stopPropagation()
       usePatchStore.getState().selectFixtures(displayedIds)
-    } else if (mod && e.key.toLowerCase() === 'd') {
-      e.preventDefault(); e.stopPropagation()
-      if (!e.repeat && sel.length > 0) duplicateFixtures(sel)
-    } else if ((e.key === 'Delete' || e.key === 'Backspace') && !mod && sel.length > 0) {
-      e.preventDefault(); e.stopPropagation()
-      if (!e.repeat) void removeWithConfirm(sel)
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       const rows = Array.from(tableRef.current?.querySelectorAll<HTMLElement>('tr[data-row]') ?? [])
       const i = rows.indexOf(document.activeElement as HTMLElement)
@@ -232,60 +238,60 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
     return (
       <EmptyState
         icon={LuCable}
-        title="No fixtures patched"
-        description="Pick fixture types from the library, choose how many and where — addresses are assigned automatically."
-        action={<Button variant="primary" icon={LuPlus} onClick={onAddFixtures}>Add fixtures</Button>}
+        title={t('patch.table.emptyTitle')}
+        description={t('patch.table.emptyDescription')}
+        action={<Button variant="primary" icon={LuPlus} onClick={onAddFixtures}>{t('patch.view.addFixtures')}</Button>}
       />
     )
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       {/* Filters + selection actions */}
       <div className="flex min-h-control-lg shrink-0 flex-wrap items-center gap-2 border-b border-line-subtle px-3 py-1.5">
         <div className="w-56 [[data-density=touch]_&]:w-72">
         <TextInput
           size="sm"
           icon={LuSearch}
-          placeholder="Search name, type, mode, address"
+          placeholder={t('patch.table.searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onClear={() => setQuery('')}
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setQuery(''); e.currentTarget.blur() } }}
-          aria-label="Search patch"
+          aria-label={t('patch.table.searchAria')}
         />
         </div>
         {universes.length > 1 && (
           <SegmentedControl
             size="sm"
-            aria-label="Universe"
+            aria-label={t('common.universe')}
             value={universe}
             onChange={setUniverse}
-            items={[{ value: 'all' as const, label: 'All' }, ...universes.map((u) => ({ value: u, label: `U${u + 1}` }))]}
+            items={[{ value: 'all' as const, label: t('common.all') }, ...universes.map((u) => ({ value: u, label: t('units.universeShort', { n: u + 1 }) }))]}
           />
         )}
         {conflicts.size > 0 && (
           <ToggleButton size="sm" tone="danger" icon={LuTriangleAlert} pressed={conflictsOnly} onPressedChange={setConflictsOnly}>
-            {conflicts.size} conflict{conflicts.size === 1 ? '' : 's'}
+            {t('patch.table.conflicts', { count: conflicts.size })}
           </ToggleButton>
         )}
         <div className="flex-1" />
         {selCount > 0 ? (
-          <div className="flex items-center gap-1" role="toolbar" aria-label="Selected fixtures">
-            <span className="mr-1 text-xs tabular text-info-fg">{selCount} selected</span>
-            <Button size="sm" variant="ghost" icon={LuHash} labelClassName="hidden xl:inline" aria-label="Address" onClick={() => setAddressIds(selectedIds)}>Address</Button>
-            <Button size="sm" variant="ghost" icon={LuCopy} labelClassName="hidden xl:inline" aria-label="Duplicate" onClick={() => duplicateFixtures(selectedIds)}>Duplicate</Button>
+          <div className="flex items-center gap-1" role="toolbar" aria-label={t('patch.table.selectionAria')}>
+            <span className="mr-1 text-xs tabular text-info-fg">{t('common.selected', { count: selCount })}</span>
+            <Button size="sm" variant="ghost" icon={LuHash} labelClassName="hidden xl:inline" aria-label={t('patch.table.address')} onClick={() => setAddressIds(selectedIds)}>{t('patch.table.address')}</Button>
+            <Button size="sm" variant="ghost" icon={LuCopy} labelClassName="hidden xl:inline" aria-label={t('common.duplicate')} tooltip={t('common.duplicate')} shortcut="Mod+D" onClick={() => duplicateFixtures(selectedIds)}>{t('common.duplicate')}</Button>
             <DropdownMenu
               placement="bottom-end"
               items={() => groupMenu(usePatchStore.getState().selectedFixtureIds)}
-              trigger={(p) => <Button {...p} size="sm" variant="ghost" icon={LuFolderPlus} labelClassName="hidden xl:inline" aria-label="Groups">Groups</Button>}
+              trigger={(p) => <Button {...p} size="sm" variant="ghost" icon={LuFolderPlus} labelClassName="hidden xl:inline" aria-label={t('common.groups')}>{t('common.groups')}</Button>}
             />
-            <Button size="sm" variant="danger-outline" icon={LuTrash2} labelClassName="hidden xl:inline" aria-label="Delete" onClick={() => { void removeWithConfirm(selectedIds) }}>Delete</Button>
-            <IconButton size="sm" icon={LuX} label="Clear selection" onClick={() => usePatchStore.getState().clearSelection()} />
+            <Button size="sm" variant="danger-outline" icon={LuTrash2} labelClassName="hidden xl:inline" aria-label={t('common.delete')} tooltip={t('common.delete')} shortcut="Backspace" onClick={() => deleteFixtures(selectedIds)}>{t('common.delete')}</Button>
+            <IconButton size="sm" icon={LuX} label={t('patch.table.clearSelection')} onClick={() => usePatchStore.getState().clearSelection()} />
           </div>
         ) : (
           <span className="text-xs tabular text-fg-tertiary">
-            {patch.length} fixture{patch.length === 1 ? '' : 's'} · {totalChannels} channels
+            {t('patch.table.summary', { fixtures: t('common.fixtureCount', { count: patch.length }), channels: t('common.channelCount', { count: totalChannels }) })}
           </span>
         )}
       </div>
@@ -294,12 +300,12 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
         {displayed.length === 0 ? (
           <EmptyState
             icon={LuSearchX}
-            title="No match"
-            description={query ? `No patched fixture matches “${query}”.` : 'No fixture matches these filters.'}
-            action={<Button variant="ghost" onClick={() => { setQuery(''); setUniverse('all'); setConflictsOnly(false) }}>Show all fixtures</Button>}
+            title={t('common.noMatch')}
+            description={query ? t('patch.table.noMatchQuery', { query }) : t('patch.table.noMatchFilters')}
+            action={<Button variant="ghost" onClick={() => { setQuery(''); setUniverse('all'); setConflictsOnly(false) }}>{t('patch.table.showAll')}</Button>}
           />
         ) : (
-          <Table aria-label="Patched fixtures" aria-multiselectable="true" role="grid" className="min-w-[760px] table-fixed">
+          <Table aria-label={t('patch.table.aria')} aria-multiselectable="true" role="grid" className="min-w-[760px] table-fixed">
             <colgroup>
               <col className="w-14" />
               <col className="w-[16%]" />
@@ -312,14 +318,14 @@ export function PatchTable({ onAddFixtures }: { onAddFixtures: () => void }) {
             </colgroup>
             <THead>
               <Tr>
-                <Th align="right" {...sortProps('number')}>#</Th>
-                <Th {...sortProps('name')}>Name</Th>
-                <Th {...sortProps('type')}>Type</Th>
-                <Th {...sortProps('mode')}>Mode</Th>
-                <Th {...sortProps('address')}>Address</Th>
-                <Th align="right" {...sortProps('channels')}>Ch</Th>
-                <Th>Groups</Th>
-                <Th><span className="sr-only">Actions</span></Th>
+                <Th align="right" {...sortProps('number')}>{t('patch.table.columns.number')}</Th>
+                <Th {...sortProps('name')}>{t('common.name')}</Th>
+                <Th {...sortProps('type')}>{t('patch.table.columns.type')}</Th>
+                <Th {...sortProps('mode')}>{t('common.mode')}</Th>
+                <Th {...sortProps('address')}>{t('common.address')}</Th>
+                <Th align="right" {...sortProps('channels')}>{t('patch.table.columns.channels')}</Th>
+                <Th>{t('common.groups')}</Th>
+                <Th><span className="sr-only">{t('patch.table.columns.actions')}</span></Th>
               </Tr>
             </THead>
             <TBody>
@@ -360,9 +366,9 @@ function conflictText(info: ConflictInfo | undefined, patch: PatchEntry[]): stri
   const parts: string[] = []
   if (info.with.length > 0) {
     const names = info.with.map((id) => patch.find((p) => p.id === id)?.name ?? '?')
-    parts.push(`Overlaps ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`)
+    parts.push(tr('patch.table.overlaps', { names: `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}` }))
   }
-  if (info.overflow) parts.push('Runs past channel 512')
+  if (info.overflow) parts.push(tr('patch.table.runsPast'))
   return parts.join(' · ')
 }
 
@@ -393,9 +399,9 @@ function warnNewConflicts(ids: string[]) {
   const hits = changed.filter((c) => c.address + count(c) - 1 > 512 || patch.some((o) => o.id !== c.id && o.universe === c.universe &&
     c.address <= o.address + count(o) - 1 && o.address <= c.address + count(c) - 1))
   if (hits.length > 0) {
-    toast.warning(hits.length === 1 ? `${hits[0].name} now overlaps another fixture` : `${hits.length} fixtures now overlap others`, {
-      description: 'The new mode uses more channels. Re-address them to fix the conflict.',
-      action: { label: 'Select them', onClick: () => usePatchStore.getState().selectFixtures(hits.map((h) => h.id)) }
+    toast.warning(tr('patch.table.nowOverlaps', { count: hits.length, name: hits[0].name }), {
+      description: tr('patch.table.nowOverlapsDescription'),
+      action: { label: tr('patch.table.selectThem'), onClick: () => usePatchStore.getState().selectFixtures(hits.map((h) => h.id)) }
     })
   }
 }
@@ -420,7 +426,9 @@ interface PatchRowProps {
 const PatchRow = memo(function PatchRow({
   entry, def, number, count, conflict, groups, selected, renaming, onSelect, onMenu, onRename, onCommitRename, onAddress, onModeChange
 }: PatchRowProps) {
+  const t = useT() // memo leaf: re-render on a language change
   const Icon = fixtureCategoryIcon(def?.categories)
+  const range = formatAddressRange(entry.universe, entry.address, count)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation()
   return (
     <Tr
@@ -436,7 +444,6 @@ const PatchRow = memo(function PatchRow({
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id, e) }
-        else if (e.key === 'F2') { e.preventDefault(); onRename(entry.id) }
       }}
     >
       <Td align="right" mono className={cn('text-fg-tertiary', conflict && 'shadow-[inset_2px_0_0_rgb(var(--pb-danger-fg))]')}>{number}</Td>
@@ -448,21 +455,21 @@ const PatchRow = memo(function PatchRow({
         )}
       </Td>
       <Td className="overflow-hidden">
-        <span className="flex min-w-0 items-center gap-2" title={def ? `${def.manufacturer} ${def.name}` : 'Fixture type missing from the library'}>
+        <span className="flex min-w-0 items-center gap-2" title={def ? `${def.manufacturer} ${def.name}` : t('patch.table.missingTypeTitle')}>
           <Icon size={14} aria-hidden className={cn('shrink-0', def ? 'text-fg-tertiary' : 'text-warning-fg')} />
           {def ? (
             <span className="min-w-0 truncate text-fg-secondary">
               {def.name} <span className="text-xs text-fg-tertiary">{def.manufacturer}</span>
             </span>
           ) : (
-            <span className="truncate text-warning-fg">Missing type</span>
+            <span className="truncate text-warning-fg">{t('patch.shared.missingType')}</span>
           )}
         </span>
       </Td>
       <Td className="overflow-hidden">
         {def && def.modes.length > 1 ? (
           <InlineSelect
-            aria-label={`Mode of ${entry.name}`}
+            aria-label={t('patch.table.modeOf', { name: entry.name })}
             value={entry.modeName}
             onChange={(v) => onModeChange(entry.id, v)}
             options={def.modes.map((m) => ({ value: m.name, label: m.name }))}
@@ -472,7 +479,7 @@ const PatchRow = memo(function PatchRow({
         )}
       </Td>
       <Td>
-        <Tooltip content={conflict ?? 'Change address'}>
+        <Tooltip content={conflict ?? t('patch.table.changeAddress')}>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onAddress(entry.id) }}
@@ -481,10 +488,10 @@ const PatchRow = memo(function PatchRow({
               '-ml-2 inline-flex h-control-sm items-center gap-1.5 rounded px-2 font-mono text-xs tabular hover:bg-surface-3',
               conflict ? 'text-danger-fg' : 'text-fg-primary'
             )}
-            aria-label={`Address ${formatAddressRange(entry.universe, entry.address, count)}${conflict ? ` — conflict: ${conflict}` : ''}`}
+            aria-label={conflict ? t('patch.table.addressConflictAria', { address: range, conflict }) : t('patch.table.addressAria', { address: range })}
           >
             {conflict && <LuTriangleAlert size={12} aria-hidden />}
-            {formatAddressRange(entry.universe, entry.address, count)}
+            {range}
           </button>
         </Tooltip>
       </Td>
@@ -494,7 +501,7 @@ const PatchRow = memo(function PatchRow({
         <IconButton
           size="sm"
           icon={LuEllipsis}
-          label={`Actions for ${entry.name}`}
+          label={t('patch.shared.actionsFor', { name: entry.name })}
           onDoubleClick={stop}
           onClick={(e) => {
             e.stopPropagation()
@@ -508,6 +515,7 @@ const PatchRow = memo(function PatchRow({
 })
 
 function RenameInput({ initial, onDone }: { initial: string; onDone: (value: string | null) => void }) {
+  const t = useT()
   const [value, setValue] = useState(initial)
   const done = useRef(false)
   const finish = (v: string | null) => {
@@ -518,7 +526,7 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (value: str
   return (
     <input
       autoFocus
-      aria-label="Fixture name"
+      aria-label={t('patch.table.renameAria')}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onFocus={(e) => e.currentTarget.select()}

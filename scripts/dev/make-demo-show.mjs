@@ -185,8 +185,10 @@ const timeline = {
 }
 
 // ---------------------------------------------------------------- MIDI
+// Pad mappings belong to a pad controller (Akai LPD8: pads on notes 36-43), so
+// they never take over the pads of a recognised controller (APC mini notes 0-63)
 const note = (name, n, target, behavior = 'toggle') => ({
-  id: id('midi'), name, source: { type: 'note', channel: 1, number: n }, target,
+  id: id('midi'), name, source: { deviceName: 'LPD8', type: 'note', channel: 1, number: n }, target,
   options: { min: 0, max: 255, inverted: false, encoding: 'absolute', behavior }
 })
 const midiMappings = [

@@ -9,6 +9,7 @@ import type React from 'react'
 import { LuSlidersVertical } from 'react-icons/lu'
 import type { FixtureDefinition, PatchEntry } from '@shared/types'
 import { EmptyState, Fader, cn, fixtureCategoryIcon, formatAddress } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useUiStore } from '@renderer/stores/ui-store'
@@ -29,6 +30,7 @@ export interface FixtureStripsProps {
 }
 
 export function FixtureStrips({ entries, defs, numbers, selectedIds, emptyTitle, emptyDescription }: FixtureStripsProps) {
+  const t = useT()
   const scroller = useRef<HTMLDivElement>(null)
   const selected = useMemo(() => new Set(selectedIds), [selectedIds])
   const first = selectedIds[0]
@@ -41,7 +43,7 @@ export function FixtureStrips({ entries, defs, numbers, selectedIds, emptyTitle,
   }, [first])
 
   if (entries.length === 0) {
-    return <EmptyState icon={LuSlidersVertical} title={emptyTitle ?? 'No fixtures here'} description={emptyDescription} />
+    return <EmptyState icon={LuSlidersVertical} title={emptyTitle ?? t('fixtures.empty.noFixturesHere')} description={emptyDescription} />
   }
 
   const jump = (id: string) => {
@@ -56,7 +58,7 @@ export function FixtureStrips({ entries, defs, numbers, selectedIds, emptyTitle,
         ))}
       </div>
       {entries.length > 1 && (
-        <nav aria-label="Jump to fixture" className="flex h-control-lg shrink-0 items-center gap-1 overflow-x-auto border-t border-line-subtle px-3">
+        <nav aria-label={t('fixtures.strips.jumpAria')} className="flex h-control-lg shrink-0 items-center gap-1 overflow-x-auto border-t border-line-subtle px-3">
           {entries.map((e) => (
             <button
               key={e.id}
@@ -82,6 +84,7 @@ const Strip = memo(function Strip({ entry, def, number, selected }: {
   number: number
   selected: boolean
 }) {
+  const t = useT()
   const channels = useMemo(() => {
     const mode = def?.modes.find((m) => m.name === entry.modeName)
     return (mode?.channels ?? []).map((name, i) => ({ name, channel: entry.address - 1 + i, chDef: def?.channels[name] }))
@@ -107,7 +110,7 @@ const Strip = memo(function Strip({ entry, def, number, selected }: {
         type="button"
         onClick={onSelect}
         aria-pressed={selected}
-        title={def ? `${def.manufacturer} ${def.name} · ${entry.modeName}` : 'Unknown fixture type'}
+        title={def ? `${def.manufacturer} ${def.name} · ${entry.modeName}` : t('fixtures.strips.unknownType')}
         className="flex min-h-control-sm min-w-0 items-center gap-1.5 rounded-t-lg border-b border-line-subtle px-2 text-left hover:bg-surface-2"
       >
         <span className="font-mono text-2xs tabular text-fg-tertiary">{number}</span>
@@ -116,7 +119,7 @@ const Strip = memo(function Strip({ entry, def, number, selected }: {
         <span className="font-mono text-2xs tabular text-fg-tertiary">{formatAddress(entry.universe, entry.address)}</span>
       </button>
       {channels.length === 0 ? (
-        <p className="p-3 text-xs text-warning-fg">Unknown fixture type</p>
+        <p className="p-3 text-xs text-warning-fg">{t('fixtures.strips.unknownType')}</p>
       ) : (
         <div className="flex min-h-0 flex-1 gap-1 px-1.5 pb-1.5 pt-1">
           {channels.map((c) => (

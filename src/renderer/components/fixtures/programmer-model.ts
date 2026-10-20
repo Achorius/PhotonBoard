@@ -8,13 +8,14 @@
 // Pure (no React, no stores) so it can be unit tested.
 // ============================================================
 
-import type { FixtureCapability, FixtureChannel, FixtureDefinition, PatchEntry } from '@shared/types'
+import type { FixtureCapability, FixtureChannel, FixtureDefinition, PatchEntry, PresetType } from '@shared/types'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
 import { classifyModeChannels, ChannelRole } from '@renderer/lib/channel-classify'
 import { getChannelShortLabel, getChannelTypeColor } from '@renderer/lib/fixture-library'
+import { canonicalAttributeKey, featureOfAttribute, presetFamilyOf, type AttributeFeature, type AttributeRole } from '@shared/attribute-families'
 import type { Rgb } from './colour-math'
 
-export type Feature = 'intensity' | 'position' | 'colour' | 'beam' | 'control'
+export type Feature = AttributeFeature
 
 export const FEATURES: { id: Feature; label: string }[] = [
   { id: 'intensity', label: 'Intensity' },
@@ -32,6 +33,8 @@ export interface AttrTarget {
   coarse: number
   /** 16-bit partner (0-based) or -1 */
   fine: number
+  /** Fixture channel name of the coarse channel (preset refs, programmer meta) */
+  channel?: string
 }
 
 /** A labelled DMX range of a channel (shutter "Open", gobo "Gobo 3", colour slot "Red") */
@@ -79,18 +82,6 @@ export interface ProgrammerModel {
 
 // ---------------------------------------------------------------- naming
 
-const ALIASES: Record<string, string> = {
-  intensity: 'dimmer', 'master dimmer': 'dimmer', master: 'dimmer', brightness: 'dimmer', dim: 'dimmer',
-  r: 'red', g: 'green', b: 'blue', w: 'white', a: 'amber', c: 'cyan', m: 'magenta', y: 'yellow',
-  ultraviolet: 'uv', 'ultra violet': 'uv', 'cold white': 'cool white',
-  colour: 'color wheel', color: 'color wheel', 'colour wheel': 'color wheel', 'color wheel effect': 'color wheel',
-  'colour macro': 'color macro', 'color macros': 'color macro',
-  'colour temperature': 'color temperature', cct: 'color temperature',
-  'shutter/strobe': 'shutter', 'strobe/shutter': 'shutter',
-  'gobo wheel': 'gobo', 'gobo 1': 'gobo', 'gobo selection': 'gobo', 'gobo rot': 'gobo rotation', 'gobo spin': 'gobo rotation',
-  'pan/tilt speed': 'speed', 'pt speed': 'speed', 'movement speed': 'speed'
-}
-
 const LABELS: Record<string, string> = {
   dimmer: 'Dimmer', pan: 'Pan', tilt: 'Tilt', red: 'Red', green: 'Green', blue: 'Blue', white: 'White', amber: 'Amber',
   uv: 'UV', lime: 'Lime', cyan: 'Cyan', magenta: 'Magenta', yellow: 'Yellow', 'color wheel': 'Colour wheel',
@@ -114,13 +105,11 @@ const PRIORITY: Record<string, number> = {
   zoom: 9, focus: 10
 }
 
-const COLOUR_NAME = /(^|\s)(red|green|blue|white|amber|uv|ultra ?violet|lime|indigo|cyan|magenta|yellow|cto|ctb|ctc|hue|saturation|colou?r)(\s|$)/i
-const BEAM_NAME = /(shutter|strobe|gobo|prism|zoom|focus|iris|frost|framing|blade|animation|beam|diffusion|edge)/i
 const CELL_SUFFIX = /^(.+?)\s+(\d+)$/
 
+/** Canonical attribute key ("Colour Wheel" → "color wheel"): shared/attribute-families */
 export function canonicalKey(name: string): string {
-  const n = name.trim().toLowerCase().replace(/\s+/g, ' ')
-  return ALIASES[n] ?? n
+  return canonicalAttributeKey(name)
 }
 
 function titleCase(s: string): string {
@@ -139,17 +128,21 @@ function attributeShort(key: string, rawName: string): string {
   return getChannelShortLabel(LABELS[key] ?? rawName)
 }
 
+/** channel-classify role → shared attribute role (ColorIntensity counts as colour) */
+function attributeRole(role: ChannelRole): AttributeRole {
+  switch (role) {
+    case ChannelRole.Dimmer: return 'dimmer'
+    case ChannelRole.Position: return 'position'
+    case ChannelRole.Shutter: return 'shutter'
+    case ChannelRole.Color:
+    case ChannelRole.ColorIntensity: return 'color'
+    default: return 'other'
+  }
+}
+
+/** Feature of an attribute: the shared classification (shared/attribute-families) */
 function featureOf(key: string, role: ChannelRole, type: FixtureChannel['type'] | undefined): Feature {
-  if (role === ChannelRole.Dimmer && !COLOUR_NAME.test(key)) return 'intensity'
-  if (role === ChannelRole.Position || type === 'pan' || type === 'tilt') return /speed/.test(key) ? 'control' : 'position'
-  if (type === 'speed' || type === 'maintenance' || type === 'fog' || /speed|reset|control|lamp|power|mode|program|sound|auto/.test(key)) {
-    return 'control'
-  }
-  if (role === ChannelRole.Color || role === ChannelRole.ColorIntensity || type === 'color' || COLOUR_NAME.test(key)) return 'colour'
-  if (role === ChannelRole.Shutter || type === 'gobo' || type === 'prism' || type === 'shutter' || type === 'strobe' || BEAM_NAME.test(key)) {
-    return 'beam'
-  }
-  return 'control'
+  return featureOfAttribute(key, attributeRole(role), type)
 }
 
 // ---------------------------------------------------------------- swatches
@@ -272,7 +265,7 @@ export function buildProgrammerModel(entries: PatchEntry[], fixtures: FixtureDef
         }
       }
       const fineCh = c.fineIndex !== -1 ? entry.address - 1 + c.fineIndex : -1
-      const target: AttrTarget = { fixtureId: entry.id, universe: entry.universe, coarse: channel, fine: fineCh >= 0 && fineCh < DMX_CHANNELS_PER_UNIVERSE ? fineCh : -1 }
+      const target: AttrTarget = { fixtureId: entry.id, universe: entry.universe, coarse: channel, fine: fineCh >= 0 && fineCh < DMX_CHANNELS_PER_UNIVERSE ? fineCh : -1, channel: c.name }
       keys.add(key)
       const existing = collected.get(key)
       if (existing) {
@@ -443,4 +436,26 @@ export function nearestSlot(ranges: readonly AttrRange[], rgb: Rgb): AttrRange |
 /** Centre DMX value of a range */
 export function rangeValue(r: AttrRange): number {
   return Math.round((r.from + r.to) / 2)
+}
+
+// ---------------------------------------------------------------- preset rows (Pro view)
+
+const BEAM_FAMILIES: PresetType[] = ['gobo', 'beam', 'focus']
+
+/** Preset families shown above a feature tab (Pro view): Dimmer first, then the tab's */
+export function presetFamiliesFor(tab: Feature | 'all', byFeature: Record<Feature, Pick<Attribute, 'key' | 'channelType'>[]>): PresetType[] {
+  const out: PresetType[] = byFeature.intensity.length > 0 ? ['intensity'] : []
+  switch (tab) {
+    case 'position': out.push('position'); break
+    case 'colour': out.push('color'); break
+    case 'control': out.push('control'); break
+    case 'all': out.push('full'); break
+    case 'beam': {
+      const present = new Set<PresetType>(byFeature.beam.map((a) => presetFamilyOf(a.key, a.channelType)))
+      out.push(...BEAM_FAMILIES.filter((f) => present.has(f)))
+      if (out.length === 0 || (out.length === 1 && out[0] === 'intensity')) out.push('beam')
+      break
+    }
+  }
+  return out
 }

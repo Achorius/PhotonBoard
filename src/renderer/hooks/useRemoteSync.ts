@@ -11,11 +11,22 @@
 // Fields the user is changing right now (fader drags…) are held for a
 // moment: broadcasts produced before the Pi received the change would
 // otherwise make the control jump back.
+//
+// Pro (v3 snapshot): the console's executor page (a page change made
+// here is sent as 'set-executor-page'), Blind / Highlight, speed master
+// BPMs and the command-line log are mirrored. The executor pages
+// themselves (cells, names) are show content: content sync.
+//
+// Console side (Electron, not remote): the same hook starts the touch
+// surface broadcast to the Stage window (stage-surface-broadcast.ts).
 // ============================================================
 
 import { useEffect } from 'react'
-import type { Chase, Cuelist, Effect } from '@shared/types'
+import type { Chase, Cuelist, Effect, SpeedMaster } from '@shared/types'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
+import { useExecutorStore } from '@renderer/stores/executor-store'
+import { useProStore, type CliLogEntry } from '@renderer/stores/pro-store'
+import { usePoolStore } from '@renderer/stores/pool-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { useUiStore } from '@renderer/stores/ui-store'
@@ -25,7 +36,8 @@ import { onShowApplied, withoutDirtyTracking } from '@renderer/lib/show-io'
 import { getTimelineState, mirrorTimelineState } from '@renderer/lib/timeline-engine'
 import { installRemoteContentSync, onConsoleContentState } from '@renderer/lib/content-sync'
 import { mirrorProgrammerSummary } from '@renderer/lib/console-programmer'
-import { getBridge, isLocallyHeld, isRemoteMode } from '@renderer/lib/runtime'
+import { getBridge, isLocallyHeld, isRemoteMode, markLocalChange, sendRemoteCommand } from '@renderer/lib/runtime'
+import { startStageSurfaceBroadcast } from '@renderer/components/stage/pages/stage-surface-broadcast'
 
 /** True when running in browser (remote mode) */
 export function isRemote(): boolean {
@@ -136,6 +148,94 @@ function mirrorDmx(data: Obj): void {
   useDmxStore.setState({ values, universeCount: Math.max(useDmxStore.getState().universeCount, values.length) })
 }
 
+// ---------------------------------------------------------------
+// Pro: executor page, Blind / Highlight, speed masters, command line
+// ---------------------------------------------------------------
+
+/** Page the console shows (re-applied when the pages content arrives later) */
+let consolePage: number | null = null
+/** True while a console value is being written (not a local change: never sent back) */
+let mirroringPage = false
+
+function applyConsolePage(): void {
+  if (consolePage === null || isLocallyHeld('executorPage')) return
+  const ex = useExecutorStore.getState()
+  if (ex.currentPage === consolePage || consolePage >= ex.pages.length) return
+  mirroringPage = true
+  try { ex.setPage(consolePage) } finally { mirroringPage = false }
+}
+
+function mirrorExecutorPage(data: Obj): void {
+  if (typeof data.executorPage !== 'number' || !Number.isInteger(data.executorPage) || data.executorPage < 0) return
+  consolePage = data.executorPage
+  applyConsolePage()
+}
+
+function mirrorPro(data: Obj): void {
+  const pro = useProStore.getState()
+  if (typeof data.blind === 'boolean' && data.blind !== pro.blind && !isLocallyHeld('blind')) pro.setBlind(data.blind)
+  if (typeof data.highlight === 'boolean' && data.highlight !== pro.highlight && !isLocallyHeld('highlight')) pro.setHighlight(data.highlight)
+  if (Array.isArray(data.cliLog)) {
+    const lines = data.cliLog.filter((l: unknown): l is CliLogEntry => !!l && typeof l === 'object' && typeof (l as Obj).id === 'number' && typeof (l as Obj).text === 'string')
+    const cur = useProStore.getState().cliLog
+    const same = lines.length === cur.length && lines.every((l: CliLogEntry, i: number) => l.id === cur[i].id && l.message === cur[i].message)
+    if (!same) {
+      useProStore.setState({
+        cliLog: lines.map((l: CliLogEntry) => {
+          const e: CliLogEntry = {
+            id: l.id, time: Number(l.time) || 0, text: l.text, ok: !!l.ok, message: String(l.message ?? ''),
+            level: l.level === 'warning' || l.level === 'error' ? l.level : 'info'
+          }
+          if (typeof l.origin === 'string') e.origin = l.origin
+          return e
+        })
+      })
+    }
+  }
+}
+
+/** Speed master BPMs (live values, not content: the rest comes with content sync) */
+function mirrorSpeedMasters(raw: unknown[]): void {
+  const byId = new Map(raw.filter(hasId).map((m: Obj) => [m.id as string, m]))
+  const local = usePoolStore.getState().speedMasters
+  let changed = false
+  const next: SpeedMaster[] = local.map((m) => {
+    const pi = byId.get(m.id)
+    if (!pi || typeof pi.bpm !== 'number' || !Number.isFinite(pi.bpm) || pi.bpm === m.bpm || isLocallyHeld(`speedBpm:${m.id}`)) return m
+    changed = true
+    return { ...m, bpm: pi.bpm }
+  })
+  if (changed) usePoolStore.setState({ speedMasters: next })
+}
+
+/** Group master levels (saved with the show, but moved live: mirrored like faders) */
+function mirrorGroupMasters(raw: unknown): void {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  const cur = usePoolStore.getState().groupMasters
+  const next: Record<string, number> = {}
+  for (const [id, v] of Object.entries(raw as Obj)) {
+    if (typeof v === 'number' && Number.isFinite(v)) next[id] = clampByte(v, 255)
+  }
+  for (const id of Object.keys(cur)) {
+    if (isLocallyHeld(`groupMaster:${id}`)) next[id] = cur[id]
+  }
+  const keys = Object.keys(next)
+  if (keys.length === Object.keys(cur).length && keys.every((k) => cur[k] === next[k])) return
+  usePoolStore.setState({ groupMasters: next })
+}
+
+/** What the console's column faders show (column levels, rates… live on the console only) */
+function mirrorColumnFaders(raw: unknown): void {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  const pro = useProStore.getState()
+  const next: Record<string, number> = {}
+  for (const [key, v] of Object.entries(raw as Obj)) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue
+    next[key] = isLocallyHeld(`column:${key}`) && key in pro.columnFaders ? pro.columnFaders[key] : clampByte(v, 255)
+  }
+  pro.setColumnFaders(next)
+}
+
 /** Apply one Pi state broadcast to the local stores. */
 export function applyRemoteState(data: unknown): void {
   if (!data || typeof data !== 'object') return
@@ -148,6 +248,11 @@ export function applyRemoteState(data: unknown): void {
       if (Array.isArray(d.runningEffects)) mirrorRunningEffects(d.runningEffects)
       mirrorMasters(d)
       mirrorDmx(d)
+      mirrorExecutorPage(d)
+      mirrorPro(d)
+      if (Array.isArray(d.speedMasters)) mirrorSpeedMasters(d.speedMasters)
+      if (d.groupMasters) mirrorGroupMasters(d.groupMasters)
+      if (d.columnFaders) mirrorColumnFaders(d.columnFaders)
       if (typeof d.timelinePlaying === 'boolean') {
         const local = getTimelineState()
         // Hold what this remote just did (Play / Stop / seek) until the console catches up
@@ -183,6 +288,25 @@ export function useRemoteSync(): void {
     return () => { off?.(); offApplied() }
   }, [])
 
+  // ---- browser → Pi: executor page changes made here ('set-executor-page') ----
+  useEffect(() => {
+    if (!isRemoteMode()) return
+    return useExecutorStore.subscribe((s, p) => {
+      if (s.pages !== p.pages) {
+        // Pages content arrived / changed: the console's page may exist now
+        applyConsolePage()
+        return
+      }
+      if (s.currentPage === p.currentPage || mirroringPage) return
+      markLocalChange('executorPage')
+      consolePage = s.currentPage
+      sendRemoteCommand('set-executor-page', s.currentPage)
+    })
+  }, [])
+
   // ---- browser ↔ Pi: show content edits (scenes, cues, patch, executor layout…) ----
   useEffect(() => installRemoteContentSync(), [])
+
+  // ---- console → Stage window: touch surface data (executor pages, stage pages) ----
+  useEffect(() => (isRemoteMode() ? undefined : startStageSurfaceBroadcast()), [])
 }

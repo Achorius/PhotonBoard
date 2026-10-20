@@ -2,7 +2,8 @@
 // in localStorage when available): view mode, feature tab, value unit.
 
 import { create } from 'zustand'
-import { formatPercent } from '@renderer/components/ui'
+import { formatPercent, percentOf } from '@renderer/components/ui'
+import { formatDecimal, getLocale } from '@renderer/i18n'
 
 export type ProgrammerMode = 'attributes' | 'faders' | 'sheet' | 'dmx'
 export type FeatureTab = 'position' | 'colour' | 'beam' | 'control' | 'all'
@@ -46,27 +47,33 @@ export const useProgrammerView = create<ProgrammerViewState>((set) => ({
   setFineXY: (fineXY) => set({ fineXY })
 }))
 
+/** "%" with the locale's spacing (fr: narrow no-break space before it) */
+export function percentSign(): string {
+  return getLocale() === 'fr' ? ' %' : '%'
+}
+
 /**
  * Format a value of an attribute range (max 255, or 65535 for 16-bit):
  * percent "75" / "75.4" (16-bit), DMX "191" / "191.4" (coarse.fraction).
+ * Decimal separator of the UI language ("75,4" in French).
  */
 export function formatAttrValue(value: number, max: number, unit: ValueUnit, withSign = false): string {
   if (unit === 'dmx') {
-    if (max > 255) return (Math.floor((value / 256) * 10) / 10).toFixed(1)
+    if (max > 255) return formatDecimal(Math.floor((value / 256) * 10) / 10, 1)
     return String(Math.round(value))
   }
   if (max > 255) {
-    const p = Math.round((value / max) * 1000) / 10
-    return withSign ? `${p.toFixed(1)}%` : p.toFixed(1)
+    const p = formatDecimal(Math.round((value / max) * 1000) / 10, 1)
+    return withSign ? `${p}${percentSign()}` : p
   }
-  const pct = formatPercent(value, max)
-  return withSign ? pct : pct.slice(0, -1)
+  return withSign ? formatPercent(value, max) : String(percentOf(value, max))
 }
 
-/** "75" or "20–80" for mixed values */
-export function formatRange(min: number, max: number, rangeMax: number, unit: ValueUnit): string {
-  if (min === max) return formatAttrValue(min, rangeMax, unit)
+/** "75" or "20–80" for mixed values (`withSign`: "75%", "20–80%") */
+export function formatRange(min: number, max: number, rangeMax: number, unit: ValueUnit, withSign = false): string {
+  const sign = withSign && unit === 'percent' ? percentSign() : ''
+  if (min === max) return formatAttrValue(min, rangeMax, unit) + sign
   const a = formatAttrValue(min, rangeMax, unit)
   const b = formatAttrValue(max, rangeMax, unit)
-  return `${a}–${b}`
+  return `${a}–${b}${sign}`
 }

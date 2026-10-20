@@ -13,6 +13,9 @@
 //   wheel / trackpad pinch     zoom at the cursor
 //   long-press / right-click   context menu (hang on bar, mount, flip, reset…)
 //   keys (canvas focused)      arrows nudge · F fit · + / - zoom · Esc deselect
+//   Delete / F2 / Mod+D        selection actions (editor/RigSelectionActions): a bar is
+//                              deleted / renamed / duplicated; fixtures get their placement
+//                              reset (never removed from the patch)
 //
 // The canvas reads the stores imperatively and redraws at most once per
 // animation frame (DMX ~25 Hz); React only renders the wrapper.
@@ -20,10 +23,12 @@
 
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef } from 'react'
 import {
-  LuAlignHorizontalSpaceAround, LuFlipHorizontal2, LuListChecks, LuMaximize, LuPencil, LuPlus, LuRotateCcw, LuTrash2
+  LuAlignHorizontalSpaceAround, LuCopy, LuFlipHorizontal2, LuListChecks, LuMaximize, LuPencil, LuPlus, LuRotateCcw, LuTrash2
 } from 'react-icons/lu'
 import type { FixtureDefinition, PatchEntry, RoomConfig, TrussBar } from '@shared/types'
-import { palette, prompt, useContextMenu, withAlpha, type MenuEntry } from '@renderer/components/ui'
+import { palette, useContextMenu, withAlpha, type MenuEntry } from '@renderer/components/ui'
+import { decimalSeparator, t, useT } from '@renderer/i18n'
+import { historyStep } from '@renderer/lib/history'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
@@ -32,7 +37,10 @@ import { resolveChannels, getEffectiveColor } from '@renderer/lib/dmx-channel-re
 import {
   aimDirection, clamp, cm, describeFixture, fixturePosition, rayToRoom, snap, type FixtureKind, type Vec3
 } from '../scene/layout-math'
-import { MOUNT_OPTIONS, deleteBar, fixturesOnBar, flipFixtures, hangOnBar, resetPlacement, setMount } from './rig-actions'
+import {
+  barLabel, deleteBar, duplicateBar, fixturesOnBar, flipFixtures, formatMetres, hangOnBar, mountOptions, resetPlacement, setMount
+} from './rig-actions'
+import { renameBarPrompt } from './RigSelectionActions'
 
 const MIN_SCALE = 6 // px per metre
 const MAX_SCALE = 400
@@ -91,6 +99,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
   const onScaleRef = useRef(onScaleChange)
   onScaleRef.current = onScaleChange
   const ctxMenu = useContextMenu()
+  const tr = useT()
 
   const isTouch = () => document.documentElement.dataset.density === 'touch'
   const rulers = () => (isTouch() ? { top: 24, left: 34 } : { top: 20, left: 30 })
@@ -233,10 +242,10 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
     ctx.textBaseline = 'middle'
     ctx.fillStyle = palette.fgDisabled
     ctx.textAlign = 'left'
-    if (edgeY - tl.y > 40) ctx.fillText('STAGE', tl.x + 10, tl.y + 14)
-    if (br.y - edgeY > 40) ctx.fillText('AUDIENCE', tl.x + 10, br.y - 14)
+    if (edgeY - tl.y > 40) ctx.fillText(t('layout.plan.stage'), tl.x + 10, tl.y + 14)
+    if (br.y - edgeY > 40) ctx.fillText(t('layout.plan.audience'), tl.x + 10, br.y - 14)
     ctx.textAlign = 'center'
-    if (tl.y - R.top > 16) ctx.fillText('CL', cx0, tl.y - 10)
+    if (tl.y - R.top > 16) ctx.fillText(t('layout.plan.centreLine'), cx0, tl.y - 10)
 
     // Room outline + dimensions
     ctx.strokeStyle = palette.lineStrong
@@ -255,7 +264,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
       ctx.moveTo(tl.x, dy - 4); ctx.lineTo(tl.x, dy + 4)
       ctx.moveTo(br.x, dy - 4); ctx.lineTo(br.x, dy + 4)
       ctx.stroke()
-      const label = `${room.width.toFixed(1)} m`
+      const label = formatMetres(room.width, 1)
       const lw = ctx.measureText(label).width + 10
       ctx.fillStyle = palette.surface0
       ctx.fillRect((tl.x + br.x) / 2 - lw / 2, dy - 8, lw, 16)
@@ -267,7 +276,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
     ctx.save()
     ctx.translate(br.x + 16, (tl.y + br.y) / 2)
     ctx.rotate(Math.PI / 2)
-    ctx.fillText(`${room.depth.toFixed(1)} m`, 0, 0)
+    ctx.fillText(formatMetres(room.depth, 1), 0, 0)
     ctx.restore()
 
     // Stage edge (draggable)
@@ -279,11 +288,12 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
     ctx.setLineDash([])
     {
       ctx.font = `600 ${touch ? 12 : 11}px ${UI}`
-      const pw = ctx.measureText('STAGE EDGE').width + 12
+      const edgeLabel = t('layout.plan.stageEdge')
+      const pw = ctx.measureText(edgeLabel).width + 12
       const px = tl.x - 8
       const style = { bg: palette.surface0, fg: palette.accentFg, border: withAlpha(palette.accent, 0.6), font: `600 ${touch ? 12 : 11}px ${UI}` }
-      if (px - pw > R.left + 4) pill(ctx, 'STAGE EDGE', px, edgeY, { ...style, align: 'right' })
-      else pill(ctx, 'STAGE EDGE', br.x + 8, edgeY, { ...style, align: 'left' })
+      if (px - pw > R.left + 4) pill(ctx, edgeLabel, px, edgeY, { ...style, align: 'right' })
+      else pill(ctx, edgeLabel, br.x + 8, edgeY, { ...style, align: 'left' })
     }
 
     // Truss bars
@@ -324,7 +334,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
         bg: isSel ? palette.info : palette.surface0, fg: isSel ? palette.fgPrimary : palette.fgSecondary,
         border: isSel ? palette.infoFg : palette.line, font: `500 ${touch ? 12 : 11}px ${UI}`
       }
-      const text = `${bar.name} · ${bar.y.toFixed(2)} m`
+      const text = t('layout.fixture.barOption', { name: bar.name, height: formatMetres(bar.y) })
       ctx.font = pillStyle.font
       const pw = ctx.measureText(text).width + 12
       const px = Math.min(a.x, tl.x) - 8
@@ -420,7 +430,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
       if (scale >= 22 || sel) {
         const below = spec.kind === 'strip' ? r * 0.7 + 4 : r + 5
         const mount = entry.mountingLocation
-        labels.push({ id: entry.id, x: p.x, y: p.y + below, name: entry.name, tag: mount && mount !== 'ceiling' ? (mount === 'floor' ? 'FLOOR' : 'WALL') : null, sel, maxW: Math.max(56, 1.6 * scale) })
+        labels.push({ id: entry.id, x: p.x, y: p.y + below, name: entry.name, tag: mount && mount !== 'ceiling' ? t(mount === 'floor' ? 'layout.plan.floorTag' : 'layout.plan.wallTag') : null, sel, maxW: Math.max(56, 1.6 * scale) })
       }
       list.push({ kind: 'fixture', id: entry.id, x: p.x, y: p.y, r: spec.kind === 'strip' ? Math.max(r, (spec.length * scale) / 2) : r })
     }
@@ -435,7 +445,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
       const text = truncate(ctx, l.name, l.maxW)
       const tw = ctx.measureText(text).width
       const rect = { id: l.id, x0: l.x - tw / 2 - 2, x1: l.x + tw / 2 + 2, y0: l.y, y1: l.y + lineH * (l.tag ? 2 : 1) }
-      if (!l.sel && taken.some((t) => t.id !== l.id && t.x0 < rect.x1 && t.x1 > rect.x0 && t.y0 < rect.y1 && t.y1 > rect.y0)) continue
+      if (!l.sel && taken.some((o) => o.id !== l.id && o.x0 < rect.x1 && o.x1 > rect.x0 && o.y0 < rect.y1 && o.y1 > rect.y0)) continue
       taken.push(rect)
       ctx.fillStyle = l.sel ? palette.fgPrimary : palette.fgSecondary
       ctx.textAlign = 'center'
@@ -516,7 +526,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
     ctx.fillStyle = palette.fgTertiary
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('m', R.left / 2, R.top / 2)
+    ctx.fillText(t('layout.plan.metreUnit'), R.left / 2, R.top / 2)
   }
 
   // ── hit testing ────────────────────────────────────────────────────
@@ -690,24 +700,24 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
       const entry = store.patch.find((p) => p.id === hit.id)
       const single = ids.length === 1
       items = [
-        { type: 'label', label: single ? entry?.name ?? 'Fixture' : `${ids.length} fixtures` },
+        { type: 'label', label: single ? entry?.name ?? t('layout.menu.fixtureFallback') : t('common.fixtureCount', { count: ids.length }) },
         {
-          label: single ? 'Hang on bar' : 'Hang on bar (spread)',
+          label: t(single ? 'layout.menu.hangOnBar' : 'layout.menu.hangOnBarSpread'),
           icon: LuAlignHorizontalSpaceAround,
           disabled: bars.length === 0,
-          submenu: bars.map((b) => ({ label: `${b.name} · ${b.y.toFixed(2)} m`, onSelect: () => hangOnBar(ids, b) }))
+          submenu: bars.map((b) => ({ label: t('layout.fixture.barOption', { name: b.name, height: formatMetres(b.y) }), onSelect: () => hangOnBar(ids, b) }))
         },
         {
-          label: 'Mount',
-          submenu: MOUNT_OPTIONS.map((m) => ({
+          label: t('layout.menu.mount'),
+          submenu: mountOptions().map((m) => ({
             label: m.label,
             checked: single ? (entry?.mountingLocation ?? 'ceiling') === m.value : undefined,
             onSelect: () => setMount(ids, m.value)
           }))
         },
-        { label: 'Flip 180°', icon: LuFlipHorizontal2, onSelect: () => flipFixtures(ids) },
+        { label: t('layout.actions.flip'), icon: LuFlipHorizontal2, onSelect: () => flipFixtures(ids) },
         { type: 'separator' },
-        { label: 'Reset placement…', icon: LuRotateCcw, danger: true, onSelect: () => void resetPlacement(ids) }
+        { label: t('layout.actions.resetPlacementEllipsis'), icon: LuRotateCcw, danger: true, shortcut: 'Delete', onSelect: () => void resetPlacement(ids) }
       ]
     } else if (hit?.kind === 'bar') {
       const bar = vis.roomConfig.trussBars.find((b) => b.id === hit.id)
@@ -716,20 +726,24 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
       const riders = fixturesOnBar(bar, store.patch)
       items = [
         { type: 'label', label: bar.name },
-        { label: 'Select fixtures on bar', icon: LuListChecks, disabled: riders.length === 0, onSelect: () => usePatchStore.getState().selectFixtures(riders.map((r) => r.id)) },
-        { label: 'Spread fixtures evenly', icon: LuAlignHorizontalSpaceAround, disabled: riders.length < 2, onSelect: () => hangOnBar(riders.map((r) => r.id), bar) },
-        { label: 'Rename…', icon: LuPencil, onSelect: () => void renameBar(bar) },
+        { label: t('layout.menu.selectOnBar'), icon: LuListChecks, disabled: riders.length === 0, onSelect: () => usePatchStore.getState().selectFixtures(riders.map((r) => r.id)) },
+        { label: t('layout.menu.spreadEvenly'), icon: LuAlignHorizontalSpaceAround, disabled: riders.length < 2, onSelect: () => hangOnBar(riders.map((r) => r.id), bar) },
+        { label: t('common.renameEllipsis'), icon: LuPencil, shortcut: 'F2', onSelect: () => void renameBarPrompt(bar.id) },
+        {
+          label: t('common.duplicate'), icon: LuCopy, shortcut: 'Mod+D',
+          onSelect: () => { historyStep(t('shell.editMenu.duplicateWhat', { what: barLabel(bar) }), () => duplicateBar(bar)) }
+        },
         { type: 'separator' },
-        { label: 'Delete bar…', icon: LuTrash2, danger: true, onSelect: () => void deleteBar(bar) }
+        { label: t('layout.bar.deleteEllipsis'), icon: LuTrash2, danger: true, shortcut: 'Delete', onSelect: () => void deleteBar(bar) }
       ]
     } else {
       const local0 = local({ clientX, clientY })
       const z = cm(snap(toWorld(local0.x, local0.y).z, 0.25))
       items = [
-        { label: `Add bar at Z ${z.toFixed(2)} m`, icon: LuPlus, onSelect: () => vis.addTrussBar({ z }) },
-        { label: 'Fit to view', icon: LuMaximize, shortcut: 'F', onSelect: fit },
+        { label: t('layout.menu.addBarAt', { z: formatMetres(z) }), icon: LuPlus, onSelect: () => vis.addTrussBar({ z }) },
+        { label: t('layout.menu.fit'), icon: LuMaximize, shortcut: 'F', onSelect: fit },
         { type: 'separator' },
-        { label: 'Snap to grid', checked: vis.snapToGrid, onSelect: () => vis.setSnapToGrid(!vis.snapToGrid) }
+        { label: t('layout.menu.snap'), checked: vis.snapToGrid, onSelect: () => vis.setSnapToGrid(!vis.snapToGrid) }
       ]
     }
     ctxMenu.open(at, items)
@@ -872,6 +886,9 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
     }
   }, [requestDraw])
 
+  // The canvas words (STAGE, AUDIENCE…) follow a language change
+  useEffect(() => { requestDraw() }, [tr, requestDraw])
+
   // Wheel zoom (non-passive so the page never scrolls)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -900,7 +917,7 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
         ref={canvasRef}
         tabIndex={0}
         role="application"
-        aria-label="Stage plan. Drag fixtures to move them, drag empty space to pan, pinch or scroll to zoom, long-press for actions. Arrow keys nudge the selection."
+        aria-label={tr('layout.plan.aria')}
         className="absolute inset-0 h-full w-full touch-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-info-fg/50"
         style={{ cursor: 'grab' }}
         onPointerDown={onPointerDown}
@@ -916,11 +933,6 @@ export const LayoutEditor2D = memo(forwardRef<LayoutEditorHandle, Props>(functio
     </div>
   )
 }))
-
-async function renameBar(bar: TrussBar): Promise<void> {
-  const name = await prompt({ title: 'Rename bar', label: 'Name', defaultValue: bar.name, confirmLabel: 'Rename' })
-  if (name && name.trim()) useVisualizerStore.getState().updateTrussBar(bar.id, { name: name.trim() })
-}
 
 // ── drawing helpers ──────────────────────────────────────────────────
 
@@ -984,12 +996,12 @@ function pill(
 
 function truncate(ctx: CanvasRenderingContext2D, text: string, max: number): string {
   if (ctx.measureText(text).width <= max) return text
-  let t = text
-  while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1)
-  return t + '…'
+  let s = text
+  while (s.length > 1 && ctx.measureText(s + '…').width > max) s = s.slice(0, -1)
+  return s + '…'
 }
 
 function fmtM(v: number): string {
   const r = Math.round(v * 10) / 10
-  return Number.isInteger(r) ? String(r) : r.toFixed(1)
+  return Number.isInteger(r) ? String(r) : r.toFixed(1).replace('.', decimalSeparator())
 }

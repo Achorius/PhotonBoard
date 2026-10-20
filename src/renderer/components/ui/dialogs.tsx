@@ -10,6 +10,7 @@ import { create } from 'zustand'
 import { Modal } from './Modal'
 import { Button, type ButtonVariant } from './Button'
 import { TextInput } from './TextInput'
+import { t } from '@renderer/i18n'
 
 export interface DialogAction<T extends string = string> {
   id: T
@@ -24,6 +25,11 @@ export interface AskOptions<T extends string = string> {
   actions: DialogAction<T>[]
   /** Esc / backdrop allowed → resolves null (default true) */
   dismissible?: boolean
+  /**
+   * Keypad-friendly (command line questions): numbered, large buttons;
+   * the digit keys 1-9 answer, Enter takes the default (last).
+   */
+  numbered?: boolean
 }
 
 export interface ConfirmOptions {
@@ -71,8 +77,8 @@ export async function confirm(opts: ConfirmOptions): Promise<boolean> {
     title: opts.title,
     message: opts.message,
     actions: [
-      { id: 'cancel', label: opts.cancelLabel ?? 'Cancel', variant: 'secondary' },
-      { id: 'ok', label: opts.confirmLabel ?? 'OK', variant: opts.tone === 'danger' ? 'danger' : 'primary' }
+      { id: 'cancel', label: opts.cancelLabel ?? t('ui.cancel'), variant: 'secondary' },
+      { id: 'ok', label: opts.confirmLabel ?? t('ui.ok'), variant: opts.tone === 'danger' ? 'danger' : 'primary' }
     ]
   })
   return result === 'ok'
@@ -104,6 +110,23 @@ function AskDialog({ pending }: { pending: Extract<Pending, { kind: 'ask' }> }) 
   const { opts, resolve } = pending
   const done = (id: string | null) => { settle(); resolve(id) }
   const dismissible = opts.dismissible !== false
+  const numbered = !!opts.numbered
+  // Keypad answers: 1-9 pick a choice (digit row or numpad)
+  useEffect(() => {
+    if (!numbered) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return
+      const n = /^[1-9]$/.test(e.key) ? Number(e.key) : 0
+      const a = n > 0 ? opts.actions[n - 1] : undefined
+      if (!a) return
+      e.preventDefault()
+      e.stopPropagation()
+      done(a.id)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numbered])
   return (
     <Modal
       open
@@ -114,10 +137,13 @@ function AskDialog({ pending }: { pending: Extract<Pending, { kind: 'ask' }> }) 
       footer={opts.actions.map((a, i) => (
         <Button
           key={a.id}
+          size={numbered ? 'lg' : undefined}
           variant={a.variant ?? (i === opts.actions.length - 1 ? 'primary' : 'secondary')}
           data-autofocus={i === opts.actions.length - 1 ? '' : undefined}
+          data-ask-choice={a.id}
           onClick={() => done(a.id)}
         >
+          {numbered && <span className="mr-1.5 font-mono text-xs opacity-70" aria-hidden>{i + 1}</span>}
           {a.label}
         </Button>
       ))}
@@ -136,7 +162,7 @@ function PromptDialog({ pending }: { pending: Extract<Pending, { kind: 'prompt' 
 
   const submit = () => {
     const v = value.trim()
-    if (!v) { setError('Required'); return }
+    if (!v) { setError(t('ui.required')); return }
     const err = opts.validate?.(v) ?? null
     if (err) { setError(err); return }
     done(v)
@@ -150,8 +176,8 @@ function PromptDialog({ pending }: { pending: Extract<Pending, { kind: 'prompt' 
       onClose={() => done(null)}
       footer={(
         <>
-          <Button variant="secondary" onClick={() => done(null)}>Cancel</Button>
-          <Button variant="primary" onClick={submit}>{opts.confirmLabel ?? 'OK'}</Button>
+          <Button variant="secondary" onClick={() => done(null)}>{t('ui.cancel')}</Button>
+          <Button variant="primary" onClick={submit}>{opts.confirmLabel ?? t('ui.ok')}</Button>
         </>
       )}
     >

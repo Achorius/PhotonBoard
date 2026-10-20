@@ -28,8 +28,13 @@ import { handleTapTempo } from './midi-manager'
 import { saveShow, adoptRemoteShow } from './show-io'
 import { applyContentFromRemote, collectCurrentContent, withContentBump } from './content-sync'
 import { ClientHolds } from './client-holds'
+import { t } from '@renderer/i18n'
 import { getBridge } from './runtime'
 import { performRecord } from '@renderer/components/playback/record'
+import { columnFader, defaultButtonFn, executorCellAt, executorPress } from './pro/executor-actions'
+import { tapSpeedMaster } from './pro/speed-masters'
+import { usePoolStore } from '@renderer/stores/pool-store'
+import { runCommandLine, runMacro } from './cli'
 
 export interface Command {
   type: string
@@ -41,14 +46,9 @@ export interface Command {
 /** What each web remote client is holding down (released when it disconnects) */
 const holds = new ClientHolds()
 
-/** Executor mode of a scene's cell (TRIG = held while pressed) */
+/** Executor mode of a scene's cell, current page first (TRIG = held while pressed) */
 function executorMode(cuelistId: string): string | undefined {
-  const { grid, modes } = useExecutorStore.getState()
-  for (let col = 0; col < grid.length; col++) {
-    const row = grid[col].indexOf(cuelistId)
-    if (row >= 0) return modes[col]?.[row]
-  }
-  return undefined
+  return useExecutorStore.getState().findCell('cuelist', cuelistId)?.cell.mode
 }
 
 /** A remote client went away: nothing it was holding may stay on */
@@ -82,12 +82,12 @@ async function saveForRemote(requestId: string | undefined): Promise<void> {
     if (!requestId) return
     if (result.status === 'error') {
       // When the save never reached main, main is still waiting: answer it (ignored otherwise)
-      getBridge()?.remote.replyToMain(requestId, { error: result.error || 'The console could not save the show.' })
+      getBridge()?.remote.replyToMain(requestId, { error: result.error || t('errors.consoleSaveFailed') })
       return
     }
     if (result.status !== 'busy') return
     if (Date.now() >= deadline) {
-      getBridge()?.remote.replyToMain(requestId, { error: 'The console is busy with another show operation (open / save dialog?) — try again.' })
+      getBridge()?.remote.replyToMain(requestId, { error: t('errors.consoleBusy') })
       return
     }
     await new Promise((resolve) => setTimeout(resolve, SAVE_RETRY_MS))
@@ -159,6 +159,56 @@ function releaseProgrammerFromPayload(payload: unknown): void {
     clean[universe] = channels.filter((c): c is number => Number.isInteger(c))
   }
   releaseProgrammerChannels(clean)
+}
+
+/** Longest command line accepted from a remote */
+const MAX_CLI_LENGTH = 1000
+
+/**
+ * 'executor' { page, col, row, phase }: press / release a cell. Held scene
+ * cells (TRIG / FLASH) are remembered per client and released when it
+ * disconnects, like 'go-cuelist' / 'flash-cuelist'.
+ */
+function pressExecutorFromPayload(p: unknown, clientId: string | undefined): void {
+  if (!isObj(p) || !Number.isInteger(p.col) || !Number.isInteger(p.row)) return
+  const phase = p.phase === 'up' ? 'up' : p.phase === 'down' ? 'down' : null
+  if (!phase) return
+  const ex = useExecutorStore.getState()
+  const page = p.page === 'current' || p.page === undefined ? ex.currentPage : Number.isInteger(p.page) ? (p.page as number) : -1
+  if (page < 0 || page >= ex.pages.length) return
+  const ref = { page, col: p.col as number, row: p.row as number }
+  const cell = executorCellAt(ref)
+  if (!cell) return
+  if (clientId && cell.kind === 'cuelist') {
+    const fn = cell.button ?? defaultButtonFn(cell.mode)
+    if (fn === 'temp') holds.trigger(clientId, cell.id, phase === 'down')
+    else if (fn === 'flash' || fn === 'swap') holds.flash(clientId, cell.id, phase === 'down')
+  }
+  executorPress(ref, phase, { clientId })
+}
+
+function setExecutorPageFromPayload(p: unknown): void {
+  const ex = useExecutorStore.getState()
+  if (Number.isInteger(p)) ex.setPage(p as number)
+  else if (isObj(p) && Number.isInteger(p.page)) ex.setPage(p.page as number)
+  else if (isObj(p) && (p.delta === 1 || p.delta === -1)) ex.setPage(ex.currentPage + (p.delta as number))
+}
+
+/** 'column-fader' { page, col, level }: the column's fader function, like the console's own fader */
+function columnFaderFromPayload(p: unknown): void {
+  if (!isObj(p) || !Number.isInteger(p.col)) return
+  const level = finite(p.level)
+  if (level === undefined) return
+  const ex = useExecutorStore.getState()
+  const page = p.page === 'current' || p.page === undefined ? ex.currentPage : Number.isInteger(p.page) ? (p.page as number) : -1
+  if (page < 0 || page >= ex.pages.length) return
+  columnFader(page, p.col as number, level)
+}
+
+function runMacroFromPayload(p: unknown): void {
+  if (isId(p)) runMacro(p)
+  else if (isObj(p) && isId(p.id)) runMacro(p.id)
+  else if (isObj(p) && Number.isInteger(p.number)) runMacro(p.number as number)
 }
 
 /** Execute one command. Unknown or malformed commands are ignored. */
@@ -318,6 +368,45 @@ export function handleCommand(cmd: Command): void {
         })
       }
       break
+    case 'set-executor-page':
+      setExecutorPageFromPayload(p)
+      break
+    case 'executor':
+      pressExecutorFromPayload(p, cmd.clientId)
+      break
+    case 'column-fader':
+      columnFaderFromPayload(p)
+      break
+
+    // ---- Pro: group / speed masters ----
+    case 'set-group-master': {
+      const level = isObj(p) ? finite(p.level) : undefined
+      if (isObj(p) && isId(p.id) && level !== undefined && usePatchStore.getState().groups.some(g => g.id === p.id)) {
+        usePoolStore.getState().setGroupMaster(p.id, level)
+      }
+      break
+    }
+    case 'tap-speed-master': {
+      const id = isId(p) ? p : isObj(p) && isId(p.id) ? p.id : undefined
+      if (id && usePoolStore.getState().speedMasters.some(m => m.id === id)) tapSpeedMaster(id)
+      break
+    }
+    case 'set-speed-master-bpm': {
+      const bpm = isObj(p) ? finite(p.bpm) : undefined
+      if (isObj(p) && isId(p.id) && bpm !== undefined && bpm > 0) usePoolStore.getState().setSpeedMasterBpm(p.id, bpm)
+      break
+    }
+
+    // ---- Pro: macros, command line ----
+    case 'run-macro':
+      runMacroFromPayload(p)
+      break
+    case 'cli':
+      if (isObj(p) && typeof p.text === 'string' && p.text.length <= MAX_CLI_LENGTH) {
+        const origin = typeof p.origin === 'string' && p.origin.length <= 64 ? p.origin : cmd.clientId
+        runCommandLine(p.text, origin)
+      }
+      break
 
     // ---- Web remote: content edits and recording ----
     case 'apply-show-content':
@@ -349,7 +438,7 @@ export function handleCommand(cmd: Command): void {
       try {
         answer = collectCurrentContent(origin, sections)
       } catch (e) {
-        answer = { success: false, error: e instanceof Error ? e.message : 'The console could not collect its show' }
+        answer = { success: false, error: e instanceof Error ? e.message : t('errors.consoleCollectFailed') }
       }
       getBridge()?.remote.replyToMain(p.requestId, answer)
       break

@@ -3,6 +3,7 @@
 import { memo, useRef, useState } from 'react'
 import { LuFlag, LuPencil, LuPiano, LuTrash2, LuSquareDashed } from 'react-icons/lu'
 import { cn, palette, tint, usePointerDrag, withAlpha } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import type { TimelineMarker, TimelineZone } from '@shared/types'
 import { useCanvas } from './canvas-context'
@@ -14,6 +15,7 @@ import { useTimelineView } from './timeline-view-store'
 // ---------------------------------------------------------------- Ruler
 
 export const Ruler = memo(function Ruler({ ticks, width, length }: { ticks: Tick[]; width: number; length: number }) {
+  const t = useT()
   const { zoom, g, timeAt, snap, openMenu } = useCanvas()
   const drag = usePointerDrag({
     onStart: (s) => { seek(timeAt(s.x)) },
@@ -25,12 +27,12 @@ export const Ruler = memo(function Ruler({ ticks, width, length }: { ticks: Tick
       data-ruler
       onDoubleClick={(e) => addMarkerAt(snap(timeAt(e.clientX)))}
       onContextMenu={(e) => {
-        const t = snap(timeAt(e.clientX))
-        openMenu(e, [{ label: `Add marker at ${formatShortTime(t)}`, icon: LuFlag, onSelect: () => addMarkerAt(t) }])
+        const at = snap(timeAt(e.clientX))
+        openMenu(e, [{ label: t('timeline.menu.addMarkerAt', { time: formatShortTime(at) }), icon: LuFlag, onSelect: () => addMarkerAt(at) }])
       }}
       className="relative cursor-text touch-none select-none overflow-hidden border-b border-line bg-surface-1"
       style={{ width, height: g.ruler }}
-      aria-label="Time ruler — tap or drag to move the playhead, double-tap to add a marker"
+      aria-label={t('timeline.canvas.rulerAria')}
     >
       {/* Past the end of the timeline */}
       <div className="absolute inset-y-0 bg-surface-0/60" style={{ left: length * zoom, right: 0 }} />
@@ -51,6 +53,7 @@ export const Ruler = memo(function Ruler({ ticks, width, length }: { ticks: Tick
 // ---------------------------------------------------------------- Markers
 
 export const MarkerLane = memo(function MarkerLane({ markers, width, selectedId }: { markers: TimelineMarker[]; width: number; selectedId: string | null }) {
+  const t = useT()
   const { g, timeAt, snap, openMenu } = useCanvas()
   const tap = usePointerDrag({
     onStart: (s) => {
@@ -64,8 +67,8 @@ export const MarkerLane = memo(function MarkerLane({ markers, width, selectedId 
       onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest('[data-marker]')) addMarkerAt(snap(timeAt(e.clientX))) }}
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest('[data-marker]')) return
-        const t = snap(timeAt(e.clientX))
-        openMenu(e, [{ label: `Add marker at ${formatShortTime(t)}`, icon: LuFlag, onSelect: () => addMarkerAt(t) }])
+        const at = snap(timeAt(e.clientX))
+        openMenu(e, [{ label: t('timeline.menu.addMarkerAt', { time: formatShortTime(at) }), icon: LuFlag, onSelect: () => addMarkerAt(at) }])
       }}
       className="relative touch-none select-none border-b border-line-subtle bg-surface-1"
       style={{ width, height: g.markerLane }}
@@ -76,6 +79,7 @@ export const MarkerLane = memo(function MarkerLane({ markers, width, selectedId 
 })
 
 const MarkerFlag = memo(function MarkerFlag({ marker, selected }: { marker: TimelineMarker; selected: boolean }) {
+  const t = useT()
   const { zoom, g, timeAt, snap, openMenu } = useCanvas()
   const color = marker.color || palette.warning
   const moved = useRef(false)
@@ -97,11 +101,11 @@ const MarkerFlag = memo(function MarkerFlag({ marker, selected }: { marker: Time
       {...drag}
       onContextMenu={(e) => openMenu(e, [
         { type: 'label', label: marker.name },
-        { label: 'Go to marker', icon: LuFlag, onSelect: () => seek(marker.time, true) },
-        { label: 'Rename / edit…', icon: LuPencil, onSelect: () => useTimelineView.getState().select({ kind: 'marker', id: marker.id }) },
-        { label: 'MIDI learn: go to marker', icon: LuPiano, onSelect: () => learnTimelineTarget({ type: 'timeline_goto_marker', id: marker.id, label: `Go to ${marker.name}` }) },
+        { label: t('timeline.marker.goTo'), icon: LuFlag, onSelect: () => seek(marker.time, true) },
+        { label: t('timeline.menu.renameEdit'), icon: LuPencil, onSelect: () => useTimelineView.getState().select({ kind: 'marker', id: marker.id }) },
+        { label: t('timeline.marker.midiLearnMenu'), icon: LuPiano, onSelect: () => learnTimelineTarget({ type: 'timeline_goto_marker', id: marker.id, label: t('timeline.midi.goTo', { name: marker.name }) }) },
         { type: 'separator' },
-        { label: 'Delete marker', icon: LuTrash2, danger: true, onSelect: () => { void deleteMarker(marker.id) } }
+        { label: t('timeline.marker.delete'), icon: LuTrash2, danger: true, onSelect: () => { void deleteMarker(marker.id) } }
       ])}
       className="absolute top-0 flex h-full cursor-grab touch-none items-center active:cursor-grabbing"
       style={{ left: marker.time * zoom }}
@@ -124,6 +128,7 @@ const MarkerFlag = memo(function MarkerFlag({ marker, selected }: { marker: Time
 // ---------------------------------------------------------------- Zones (sections)
 
 export const ZoneLane = memo(function ZoneLane({ zones, width, selectedId }: { zones: TimelineZone[]; width: number; selectedId: string | null }) {
+  const t = useT()
   const { zoom, g, timeAt, snap } = useCanvas()
   const [draft, setDraft] = useState<{ a: number; b: number } | null>(null)
   const anchor = useRef<number | null>(null)
@@ -151,7 +156,7 @@ export const ZoneLane = memo(function ZoneLane({ zones, width, selectedId }: { z
       {...create}
       className="relative touch-none select-none border-b border-line bg-surface-1"
       style={{ width, height: g.zoneLane }}
-      title="Drag on an empty part of this lane to create a section"
+      title={t('timeline.canvas.zoneLaneHint')}
     >
       {zones.map((z) => <ZoneBlock key={z.id} zone={z} selected={z.id === selectedId} />)}
       {draft && (
@@ -165,6 +170,7 @@ export const ZoneLane = memo(function ZoneLane({ zones, width, selectedId }: { z
 })
 
 const ZoneBlock = memo(function ZoneBlock({ zone, selected }: { zone: TimelineZone; selected: boolean }) {
+  const t = useT()
   const { zoom, g, timeAt, snap, openMenu } = useCanvas()
   const color = zone.color || palette.info
   const gs = useRef<{ mode: 'move' | 'start' | 'end'; grab: number; start: number; end: number; moved: boolean } | null>(null)
@@ -204,11 +210,11 @@ const ZoneBlock = memo(function ZoneBlock({ zone, selected }: { zone: TimelineZo
       {...drag}
       onContextMenu={(e) => openMenu(e, [
         { type: 'label', label: zone.name },
-        { label: 'Go to section', icon: LuSquareDashed, onSelect: () => seek(zone.startTime, true) },
-        { label: 'Rename / edit…', icon: LuPencil, onSelect: () => useTimelineView.getState().select({ kind: 'zone', id: zone.id }) },
-        { label: 'MIDI learn: go to section', icon: LuPiano, onSelect: () => learnTimelineTarget({ type: 'timeline_goto_zone', id: zone.id, label: `Go to ${zone.name}` }) },
+        { label: t('timeline.section.goTo'), icon: LuSquareDashed, onSelect: () => seek(zone.startTime, true) },
+        { label: t('timeline.menu.renameEdit'), icon: LuPencil, onSelect: () => useTimelineView.getState().select({ kind: 'zone', id: zone.id }) },
+        { label: t('timeline.section.midiLearnMenu'), icon: LuPiano, onSelect: () => learnTimelineTarget({ type: 'timeline_goto_zone', id: zone.id, label: t('timeline.midi.goTo', { name: zone.name }) }) },
         { type: 'separator' },
-        { label: 'Delete section', icon: LuTrash2, danger: true, onSelect: () => { void deleteZone(zone.id) } }
+        { label: t('timeline.section.delete'), icon: LuTrash2, danger: true, onSelect: () => { void deleteZone(zone.id) } }
       ])}
       className={cn('absolute inset-y-1 flex cursor-grab touch-none items-center overflow-hidden rounded-sm active:cursor-grabbing', selected && 'outline outline-2 outline-info-fg')}
       style={{ left, width: w, backgroundColor: withAlpha(color, 0.28), boxShadow: `inset 2px 0 0 ${color}, inset -2px 0 0 ${color}` }}

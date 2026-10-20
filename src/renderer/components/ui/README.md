@@ -180,17 +180,22 @@ Helpers: `fixtureCategoryIcon(def.categories)`, `channelTypeIcon(channel.type)`,
 
 ## 5. Formatting values (`format.ts`)
 
-| Value | Function | Example |
-|---|---|---|
-| DMX level shown to operators | `formatPercent(v)` | `78%` |
-| raw DMX (patch, channel sheet) | `formatDmx(v)` mono | `200` |
-| address | `formatAddress(u, a)` / `formatAddressRange` | `1.001`, `1.001–016` (universe is 1-based in the UI) |
-| fade / delay | `formatSeconds(s)` | `0.5s`, `2s`, `1:05.0` |
-| playhead | `formatClock(s)`; timecode: `formatTimecode` (timecode-engine) | `01:05.3` |
-| tempo / rate / angle | `formatBpm`, `formatHz`, `formatDegrees` | `128 BPM`, `0.5 Hz`, `45°` |
-| cue position | `formatCuePosition(index, count)` | `3/8`, `–/8` |
+Locale-aware: they follow the UI language (French: decimal comma, no-break space before the unit).
 
-Universes and fixture numbers are 1-based in the UI, 0-based in data.
+| Value | Function | en | fr |
+|---|---|---|---|
+| DMX level shown to operators | `formatPercent(v)` | `78%` | `78 %` |
+| raw DMX (patch, channel sheet) | `formatDmx(v)` mono | `200` | `200` |
+| address | `formatAddress(u, a)` / `formatAddressRange` | `1.001`, `1.001–016` | same (universe is 1-based in the UI) |
+| fade / delay | `formatSeconds(s)` | `0.5s`, `2s`, `1:05.0` | `0,5 s`, `2 s`, `1:05,0` |
+| playhead | `formatClock(s)`; timecode: `formatTimecode` (timecode-engine) | `01:05.3` | same (a readout, like timecode) |
+| tempo / rate / angle | `formatBpm`, `formatHz`, `formatDegrees` | `128 BPM`, `0.5 Hz`, `45°` | `92,5 BPM`, `0,5 Hz`, `45°` |
+| cue position | `formatCuePosition(index, count)` | `3/8`, `–/8` | same |
+| any other number | `formatNumber(n, { max })`, `formatDecimal(n, digits)` (`@renderer/i18n`) | `1,234.5` | `1 234,5` |
+| a list | `formatList(['A', 'B'])` | `A and B` | `A et B` |
+
+`NumberField` displays the locale's decimal separator and accepts `2,5` and `2.5` when typing
+(`parseLocaleNumber`). Universes and fixture numbers are 1-based in the UI, 0-based in data.
 
 ## 6. Rules (do / don't)
 
@@ -216,9 +221,11 @@ touches: prefer tap-on-release for toggles, explicit edit/arrange modes for rear
 **Empty states.** Every list, grid or canvas that can be empty shows `<EmptyState>` with what is
 missing and the one action that fixes it — never a blank panel or a lone grey sentence.
 
-**Keyboard.** Global shortcuts live in `hooks/useKeyboardShortcuts.ts` (`SHORTCUT_GROUPS` feeds the
+**Keyboard.** Global shortcuts live in `hooks/useKeyboardShortcuts.ts` (`getShortcutGroups(t)` feeds the
 `?` cheat sheet). View-local keys: handle them on the focused element, `stopPropagation` keys you
 consume, ignore `e.repeat` for actions, and never bind single keys globally from a view.
+Delete / Backspace / Mod+D / F2 / Enter on a selection go through **selection actions** (§8) — do not
+handle them yourself. Mod+Backspace clears the programmer; Backspace alone deletes the selection.
 
 **Classes.** `cn()` resolves Tailwind conflicts (tailwind-merge, taught our tokens in `cn.ts`): a
 component's `className` overrides its built-in classes (`<Td className="px-1.5">`, `<Button className="h-14">`).
@@ -232,3 +239,89 @@ from 1024×700 (tablet, sidebar closed) to 1920×1080 touch. No horizontal page 
 
 **Remote.** The same bundle runs in browsers (`isRemoteMode()`): store actions already forward to
 the console; hide console-only features (file dialogs, outputs config) rather than letting them fail.
+
+---
+
+## 7. Language (i18n)
+
+French and English, chosen per device in Settings › Display (`useUiStore.getState().setLanguagePreference('auto' | 'fr' | 'en')`,
+stored in localStorage; `auto` = French on the Pi kiosk, else the system / browser language). The Stage
+window follows the console (state snapshot `language`); a remote browser keeps its own choice.
+Switching re-renders live — no reload. Everything is in `src/renderer/i18n/`:
+
+```tsx
+import { useT } from '@renderer/i18n'
+const t = useT()                                   // in components: re-renders on a language change
+<Button>{t('common.save')}</Button>
+t('shell.sidebar.noMatchQuery', { query })          // {placeholders}; numbers are formatted for the locale
+t('common.fixtureCount', { count: n })              // plurals: { one, other } (+ zero) — fr: 0 and 1 are singular
+t.rich('settings.show.autosaveText', { keys: <Kbd keys="Mod+S" /> })   // React nodes in placeholders
+t.rich('common.fixtureCount', { count: <b>{n}</b> }, n)                 // styled number + plural: count as 3rd arg
+
+import { t } from '@renderer/i18n'                  // outside React (stores, lib, toasts, confirm(), menus built on open)
+toast.success(t('settings.outputs.applied'))
+```
+
+**Rules**
+- **No hard-coded user-facing string** — labels, tooltips, `aria-label`, placeholders, toasts, dialogs,
+  empty states, menu items, status text. Exceptions: user data (scene / group / fixture names), product
+  and protocol names (PhotonBoard, Art-Net, DMX), the command-line syntax, `console.*` logs.
+- **Keys**: `area.panel.thing`, camelCase, by meaning not by English wording (`patch.table.emptyTitle`,
+  not `patch.noFixturesPatched`). Each view owns one area file: `i18n/en/<area>.ts` (source of truth) +
+  `i18n/fr/<area>.ts` (typed `Translation['<area>']`: a missing or extra key does not compile). Areas:
+  common, units, ui, errors, shell, shortcuts, edit, file, settings, stage, remote, patch, fixtures,
+  effects, scenes, timeline, visualizer, layout, midi, follow. Reuse `common.*` (Save, Delete, Scene, Cue,
+  `common.fixtureCount`…) instead of duplicating. `other` is reserved for plurals.
+- **Never concatenate** sentence pieces (`'Delete ' + name`) or plural by hand (`fixture${n > 1 ? 's' : ''}`):
+  one key with placeholders / plural forms. Word order differs between languages.
+- **Module-level constants** with labels (`const LABELS = { a: 'Foo' }`) are evaluated once: store keys
+  or build the list inside the component / in a function (`getShortcutGroups(t)`).
+- `useMemo` / `useCallback` that produce text: put `t` in the dependencies (its identity changes with
+  the language). A `memo` leaf that renders text or `format*()` output calls `useT()` (or `useLocale()`).
+- **Terms**: `i18n/GLOSSARY.md` (what stays in English — Blackout, Cue, Chase, Fader, Programmer… —
+  and the French for everything else). French typography (no-break spaces before `: ; ! ?`, « »)
+  is applied automatically: type normal spaces.
+- **Length**: French is 20–30 % longer. Check your view in French (Settings › Display › Français, or
+  `LANG=fr_FR.UTF-8` for the screenshot scripts) at 1024 and 1600 px: labels truncate cleanly
+  (`truncate` + tooltip) or wrap, never overflow.
+- Tests: `i18n/i18n.test.ts` checks fr has exactly the en keys and the same placeholders.
+
+## 8. Selection, delete, duplicate, rename — and undo
+
+**Undo / redo** (`lib/history.ts`) is automatic: every change to show content (patch, groups, presets,
+scenes & cues, chases, effects, MIDI mappings, executor layout, timeline, stage layout) is recorded;
+edits within 400 ms — and everything during a pointer drag (`usePointerDrag` holds the history) — are
+one step; 100 steps; cleared on show load. Undo never stops playback (runtime state is kept, removed
+items are released, re-added ones come back stopped). Each device undoes its own edits (a remote's undo
+is a normal edit sent to the console). Mod+Z, Mod+Shift+Z / Ctrl+Y, Edit menu, top-bar buttons (≥ 1536 px).
+For an explicit, named step: `historyStep(label, () => { …synchronous store changes… })`.
+
+**Delete / duplicate / rename the selection**: a view says what is selected; the keyboard (Delete,
+Backspace, Mod+D, F2, Enter) and the Edit menu act on the active registration:
+
+```tsx
+import { useSelectionActions, deleteWithUndo } from '@renderer/lib/selection-actions'
+
+const listRef = useRef<HTMLDivElement>(null)
+useSelectionActions(selected ? {
+  label: () => t('scenes.selection.scene', { name: selected.name }),   // en 'scene “{name}”' · fr 'la scène « {name} »'
+  delete: () => usePlaybackStore.getState().removeCuelist(selected.id), // synchronous store changes
+  confirmDelete: true,                                                  // default; false for trivial items (a marker, an empty step)
+  duplicate: () => { usePlaybackStore.getState().duplicateCuelist(selected.id) },
+  rename: () => setEditingId(selected.id)                               // open your inline editor / prompt()
+} : null, { scope: listRef })                                           // null = nothing selected: keys do nothing
+return <div ref={listRef}>…</div>
+```
+
+- The **active** registration is the one whose `scope` element holds the last click / focus (the
+  innermost wins: a cue table inside a scene editor beats the scene list); otherwise the most recently
+  mounted / used one. `requireFocus: true` = only while focus is inside `scope` (executor bar).
+- `label()` is a noun phrase that reads after "Delete …?" and "Deleted: …" (French: with the article,
+  see the glossary). Multi-selection: `t('common.fixtureCount', { count })`.
+- Delete = danger `confirm()` (unless `confirmDelete: false`), ONE undo step, then a
+  "Supprimé : … — Annuler" toast whose button undoes it. **Use `deleteWithUndo({ label, run, confirm })`
+  for your trash buttons and "…" menu items too**, so every delete behaves the same.
+- Keys are ignored while typing in a field, with modifiers (except Mod+D), and while a dialog / menu is
+  open. Enter only renames when focus is not on a button / tab / menu item.
+- Executor bar: Delete on the focused cell deletes the **scene** (cells cannot be emptied: every scene
+  is auto-placed), F2 renames it, Mod+D duplicates it.

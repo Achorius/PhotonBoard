@@ -156,6 +156,23 @@ describe('normalizeShow', () => {
     expect(warnings.length).toBeGreaterThan(0)
   })
 
+  it('keeps the MIDI feedback option of user mappings (and drops bad values)', () => {
+    const { show } = normalizeShow({
+      version: '3',
+      patch: [],
+      midiMappings: [
+        { id: 'a', source: { type: 'note', channel: 1, number: 36 }, target: { type: 'blackout' }, options: { behavior: 'toggle', feedback: 'note' } },
+        { id: 'b', source: { type: 'cc', channel: 1, number: 7 }, target: { type: 'master' }, options: { feedback: 'cc' } },
+        { id: 'c', source: { type: 'cc', channel: 1, number: 8 }, target: { type: 'master' }, options: { feedback: 'sysex' } }
+      ]
+    })
+    expect(show.midiMappings.map((m) => m.options.feedback)).toEqual(['note', 'cc', undefined])
+    expect('feedback' in show.midiMappings[2].options).toBe(false)
+    // round trip
+    const again = normalizeShow(JSON.parse(JSON.stringify(show))).show
+    expect(again.midiMappings[0].options.feedback).toBe('note')
+  })
+
   it('rejects things that are not shows with a clear error', () => {
     expect(() => normalizeShow(null)).toThrow(/Not a PhotonBoard show/)
     expect(() => normalizeShow(42)).toThrow(/Not a PhotonBoard show/)

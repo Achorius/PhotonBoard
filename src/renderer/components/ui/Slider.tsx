@@ -27,6 +27,8 @@ export interface SliderProps {
   /** Readout after the track; true = default % / value format */
   showValue?: boolean | ((value: number) => string)
   disabled?: boolean
+  /** Where a physical (MIDI) fader that has not picked up the value is: a dashed tick */
+  ghost?: number | null
   onChangeStart?: () => void
   onChangeEnd?: () => void
   className?: string
@@ -45,6 +47,7 @@ export const Slider = memo(function Slider({
   bipolar,
   showValue,
   disabled,
+  ghost,
   onChangeStart,
   onChangeEnd,
   className,
@@ -107,6 +110,14 @@ export const Slider = memo(function Slider({
         className="group relative flex h-control-sm min-w-[48px] flex-1 cursor-pointer touch-none items-center rounded-sm focus-visible:outline-offset-0"
       >
         <div ref={trackRef} className="relative h-1 w-full rounded-full bg-surface-0 ring-1 ring-inset ring-line [[data-density=touch]_&]:h-1.5">
+          {ghost != null && Number.isFinite(ghost) && (
+            <span
+              aria-hidden
+              data-slider-ghost=""
+              className="absolute -inset-y-1.5 w-0 -translate-x-1/2 border-l-2 border-dashed border-fg-primary/70"
+              style={{ left: `${clampValue((ghost - min) / range, 0, 1) * 100}%` }}
+            />
+          )}
           <div
             className="absolute inset-y-0 rounded-full"
             style={{

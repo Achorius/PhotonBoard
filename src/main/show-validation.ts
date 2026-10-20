@@ -6,6 +6,7 @@
 // ============================================================
 
 import type { ShowFile } from '../shared/types'
+import { mt } from './messages'
 
 export const SHOW_EXTENSION = '.pbshow'
 /** Hard ceiling for a show file (a big rig with long cue lists is a few MB) */
@@ -14,7 +15,10 @@ export const MAX_SHOW_FILE_SIZE = 16 * 1024 * 1024
 /** Top-level keys a PhotonBoard show always had; at least one must be present */
 const SHOW_KEYS = ['version', 'patch', 'cuelists', 'groups', 'name', 'createdAt'] as const
 /** Keys that must be arrays when present */
-const ARRAY_KEYS = ['patch', 'groups', 'presets', 'cuelists', 'chases', 'effects', 'midiMappings', 'artnetConfig'] as const
+const ARRAY_KEYS = [
+  'patch', 'groups', 'presets', 'cuelists', 'chases', 'effects', 'midiMappings', 'artnetConfig',
+  'macros', 'speedMasters', 'stagePages', 'parked'
+] as const
 
 export type ShowParseResult =
   | { ok: true; show: ShowFile }
@@ -23,19 +27,19 @@ export type ShowParseResult =
 /** Validate an already-parsed value as "obviously a show" */
 export function checkShowObject(value: unknown): { ok: true; show: ShowFile } | { ok: false; error: string } {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return { ok: false, error: 'This file is not a PhotonBoard show (no show data inside).' }
+    return { ok: false, error: mt('notAShowNoData') }
   }
   const obj = value as Record<string, unknown>
   if (!SHOW_KEYS.some(k => k in obj)) {
-    return { ok: false, error: 'This file is not a PhotonBoard show (unknown format).' }
+    return { ok: false, error: mt('notAShowUnknown') }
   }
   for (const key of ARRAY_KEYS) {
     if (key in obj && obj[key] !== undefined && obj[key] !== null && !Array.isArray(obj[key])) {
-      return { ok: false, error: `This show file is damaged: "${key}" has the wrong type.` }
+      return { ok: false, error: mt('damagedKey', { key }) }
     }
   }
   if ('name' in obj && obj.name !== undefined && typeof obj.name !== 'string') {
-    return { ok: false, error: 'This show file is damaged: "name" has the wrong type.' }
+    return { ok: false, error: mt('damagedKey', { key: 'name' }) }
   }
   return { ok: true, show: obj as unknown as ShowFile }
 }
@@ -43,18 +47,18 @@ export function checkShowObject(value: unknown): { ok: true; show: ShowFile } | 
 /** Parse the text of a .pbshow file into a show, with a human-readable error */
 export function parseShowFileContent(text: string): ShowParseResult {
   if (text.length > MAX_SHOW_FILE_SIZE) {
-    return { ok: false, error: `This show file is too large (${(text.length / 1024 / 1024).toFixed(1)} MB, max ${MAX_SHOW_FILE_SIZE / 1024 / 1024} MB).` }
+    return { ok: false, error: mt('tooLarge', { size: (text.length / 1024 / 1024).toFixed(1), max: MAX_SHOW_FILE_SIZE / 1024 / 1024 }) }
   }
   const trimmed = text.replace(/^﻿/, '').trim()
   if (!trimmed) {
-    return { ok: false, error: 'This show file is empty (it may have been cut off by a crash or power loss).' }
+    return { ok: false, error: mt('emptyFile') }
   }
   let parsed: unknown
   try {
     parsed = JSON.parse(trimmed)
   } catch (e) {
     const detail = (e as Error).message
-    return { ok: false, error: `This show file is damaged and cannot be read (invalid JSON: ${detail}).` }
+    return { ok: false, error: mt('invalidJson', { detail }) }
   }
   return checkShowObject(parsed)
 }

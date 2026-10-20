@@ -6,22 +6,25 @@ import { LuPiano, LuSearch, LuSearchX, LuTrash2, LuTriangleAlert } from 'react-i
 import {
   Badge, Button, EmptyState, IconButton, SegmentedControl, TBody, THead, Table, Td, Th, TextInput, Tr, cn
 } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { mappingMatches } from '@renderer/lib/midi-manager'
 import type { MidiMapping } from '@shared/types'
-import { BEHAVIORS, CATEGORY_LABEL, SOURCE_LABEL, describeTarget, formatSourceNumber, useNameIndex, type NameIndex, type TargetCategory } from './midi-model'
+import { behaviorLabel, categoryLabel, channelShort, describeTarget, formatSourceNumber, sourceLabel, useNameIndex, type Behavior, type NameIndex, type TargetCategory } from './midi-model'
 import { LearnButton } from './LearnMenu'
 import { deleteMapping } from './midi-actions'
 
 type Filter = 'all' | TargetCategory
 
 export function MappingsTable({ selectedId, onSelect, compact }: { selectedId: string | null; onSelect: (id: string | null) => void; compact?: boolean }) {
+  const t = useT()
   const mappings = useMidiStore((s) => s.mappings)
   const index = useNameIndex()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
 
-  const rows = useMemo(() => mappings.map((m) => ({ m, target: describeTarget(m, index) })), [mappings, index])
+  // t: target titles are translated (re-describe on a language change)
+  const rows = useMemo(() => mappings.map((m) => ({ m, target: describeTarget(m, index) })), [mappings, index, t])
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: rows.length, masters: 0, playback: 0, fixtures: 0, timeline: 0 }
     for (const r of rows) c[r.target.meta.category]++
@@ -32,18 +35,18 @@ export function MappingsTable({ selectedId, onSelect, compact }: { selectedId: s
     return rows.filter(({ m, target }) => {
       if (filter !== 'all' && target.meta.category !== filter) return false
       if (!q) return true
-      const hay = `${m.name} ${target.title} ${target.detail ?? ''} ${formatSourceNumber(m.source.type, m.source.number)} ch ${m.source.channel} ${m.source.deviceName ?? ''}`.toLowerCase()
+      const hay = `${m.name} ${target.title} ${target.detail ?? ''} ${formatSourceNumber(m.source.type, m.source.number)} ${channelShort(m.source.channel)} ${m.source.deviceName ?? ''}`.toLowerCase()
       return hay.includes(q)
     })
-  }, [rows, query, filter])
+  }, [rows, query, filter, t])
 
   if (mappings.length === 0) {
     return (
       <EmptyState
         icon={LuPiano}
-        title="No MIDI mappings yet"
-        description="Press Learn, choose what to control, then move a control on your device. You can also right-click (or long-press) faders and buttons anywhere in PhotonBoard."
-        action={<LearnButton label="Learn a control" />}
+        title={t('midi.table.emptyTitle')}
+        description={t('midi.table.emptyText')}
+        action={<LearnButton label={t('midi.learn.learnControl')} />}
       />
     )
   }
@@ -55,35 +58,35 @@ export function MappingsTable({ selectedId, onSelect, compact }: { selectedId: s
         <TextInput
           size="sm"
           icon={LuSearch}
-          placeholder="Search name, target, CC / note"
+          placeholder={t('midi.table.searchPlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onClear={() => setQuery('')}
-          aria-label="Search mappings"
+          aria-label={t('midi.table.searchLabel')}
           className="w-[260px] max-w-full"
         />
         <SegmentedControl<Filter>
           size="sm"
-          aria-label="Filter by target"
+          aria-label={t('midi.table.filterLabel')}
           value={filter}
           onChange={setFilter}
-          items={filters.map((f) => ({ value: f, label: `${f === 'all' ? 'All' : CATEGORY_LABEL[f]} ${counts[f]}`, disabled: f !== 'all' && counts[f] === 0 }))}
+          items={filters.map((f) => ({ value: f, label: `${f === 'all' ? t('common.all') : categoryLabel(f)} ${counts[f]}`, disabled: f !== 'all' && counts[f] === 0 }))}
         />
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {shown.length === 0 ? (
-          <EmptyState size="sm" icon={LuSearchX} title="No mapping matches" action={<Button size="sm" variant="ghost" onClick={() => { setQuery(''); setFilter('all') }}>Clear filters</Button>} />
+          <EmptyState size="sm" icon={LuSearchX} title={t('midi.table.noMatch')} action={<Button size="sm" variant="ghost" onClick={() => { setQuery(''); setFilter('all') }}>{t('midi.table.clearFilters')}</Button>} />
         ) : (
           <Table>
             <THead>
               <Tr>
-                <Th className="w-8 px-0" aria-label="Activity" />
-                <Th>Name</Th>
-                <Th>Source</Th>
-                <Th>Target</Th>
-                <Th>Mode</Th>
-                {!compact && <Th align="right">Range</Th>}
-                <Th className="w-12" aria-label="Actions" />
+                <Th className="w-8 px-0" aria-label={t('midi.table.activity')} />
+                <Th>{t('common.name')}</Th>
+                <Th>{t('midi.table.source')}</Th>
+                <Th>{t('midi.table.target')}</Th>
+                <Th>{t('common.mode')}</Th>
+                {!compact && <Th align="right">{t('midi.table.range')}</Th>}
+                <Th className="w-12" aria-label={t('midi.table.actions')} />
               </Tr>
             </THead>
             <TBody>
@@ -105,9 +108,10 @@ const MappingRow = memo(function MappingRow({ mapping: m, index, selected, onSel
   selected: boolean
   onSelect: (id: string | null) => void
 }) {
+  const t = useT()
   const target = describeTarget(m, index)
   const Icon = target.meta.icon
-  const behavior = BEHAVIORS.find((b) => b.value === (m.options.behavior || 'direct'))
+  const behavior = (m.options.behavior || 'direct') as Behavior
   return (
     <Tr data-mapping-row={m.id} interactive selected={selected} onClick={() => onSelect(selected ? null : m.id)}>
       <Td className="w-8 px-0 text-center"><MappingActivity mapping={m} /></Td>
@@ -117,9 +121,9 @@ const MappingRow = memo(function MappingRow({ mapping: m, index, selected, onSel
       <Td>
         <div className="flex flex-col">
           <span className="whitespace-nowrap font-mono text-xs tabular text-fg-primary">
-            {formatSourceNumber(m.source.type, m.source.number)} <span className="text-fg-tertiary">· ch {m.source.channel}</span>
+            {formatSourceNumber(m.source.type, m.source.number)} <span className="text-fg-tertiary">· {channelShort(m.source.channel)}</span>
           </span>
-          <span className="truncate text-2xs text-fg-tertiary">{m.source.deviceName || `Any device · ${SOURCE_LABEL[m.source.type]}`}</span>
+          <span className="truncate text-2xs text-fg-tertiary">{m.source.deviceName || t('midi.table.anyDevice', { type: sourceLabel(m.source.type) })}</span>
         </div>
       </Td>
       <Td className="max-w-[240px]">
@@ -138,9 +142,9 @@ const MappingRow = memo(function MappingRow({ mapping: m, index, selected, onSel
       </Td>
       <Td>
         <div className="flex items-center gap-1">
-          <Badge size="xs" tone={m.options.behavior === 'flash' ? 'warning' : m.options.behavior === 'trigger' ? 'info' : 'neutral'}>{behavior?.label.toUpperCase() ?? 'DIRECT'}</Badge>
-          {m.source.type === 'cc' && <Badge size="xs" variant="outline" tone={m.options.encoding === 'relative' ? 'midi' : 'neutral'}>{m.options.encoding === 'relative' ? 'REL' : 'ABS'}</Badge>}
-          {m.options.inverted && <Badge size="xs" variant="outline">INV</Badge>}
+          <Badge size="xs" tone={m.options.behavior === 'flash' ? 'warning' : m.options.behavior === 'trigger' ? 'info' : 'neutral'}>{behaviorLabel(behavior).toLocaleUpperCase()}</Badge>
+          {m.source.type === 'cc' && <Badge size="xs" variant="outline" tone={m.options.encoding === 'relative' ? 'midi' : 'neutral'}>{m.options.encoding === 'relative' ? t('midi.table.relative') : t('midi.table.absolute')}</Badge>}
+          {m.options.inverted && <Badge size="xs" variant="outline">{t('midi.table.inverted')}</Badge>}
         </div>
       </Td>
       {!compact && (
@@ -149,7 +153,7 @@ const MappingRow = memo(function MappingRow({ mapping: m, index, selected, onSel
         </Td>
       )}
       <Td className="w-12 pr-1.5" onClick={(e) => e.stopPropagation()}>
-        <IconButton icon={LuTrash2} label={`Delete mapping ${m.name}`} size="sm" className="text-fg-tertiary hover:text-danger-fg"
+        <IconButton icon={LuTrash2} label={t('midi.table.deleteMapping', { name: m.name })} size="sm" className="text-fg-tertiary hover:text-danger-fg"
           onClick={() => { void deleteMapping(m.id).then((ok) => { if (ok && selected) onSelect(null) }) }} />
       </Td>
     </Tr>

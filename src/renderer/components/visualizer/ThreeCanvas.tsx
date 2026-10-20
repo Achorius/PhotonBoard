@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { LuMonitorX, LuRefreshCw, LuTriangleAlert } from 'react-icons/lu'
 import { Button, EmptyState, Spinner } from '@renderer/components/ui'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { useT } from '@renderer/i18n'
 import { useThreeScene } from './useThreeScene'
 import type { VisualizerEngine } from './scene/VisualizerEngine'
 
@@ -9,6 +10,7 @@ import type { VisualizerEngine } from './scene/VisualizerEngine'
 export function ThreeCanvas({ onEngine }: { onEngine?: (engine: VisualizerEngine | null) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { engine, status, error, restart } = useThreeScene(containerRef)
+  const t = useT()
 
   useEffect(() => {
     onEngine?.(status === 'ready' ? engine : null)
@@ -24,9 +26,9 @@ export function ThreeCanvas({ onEngine }: { onEngine?: (engine: VisualizerEngine
         <div className="absolute inset-0 bg-surface-0">
           <EmptyState
             icon={LuMonitorX}
-            title="3D is not available here"
-            description={`This device could not start WebGL${error ? ` (${error})` : ''}. The stage layout shows the same rig in 2D.`}
-            action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>Open stage layout</Button>}
+            title={t('visualizer.canvas.unsupportedTitle')}
+            description={error ? t('visualizer.canvas.unsupportedTextError', { error }) : t('visualizer.canvas.unsupportedText')}
+            action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>{t('visualizer.crash.openLayout')}</Button>}
           />
         </div>
       )}
@@ -34,9 +36,9 @@ export function ThreeCanvas({ onEngine }: { onEngine?: (engine: VisualizerEngine
         <div className="absolute inset-0 bg-surface-0">
           <EmptyState
             icon={LuTriangleAlert}
-            title="The 3D view was interrupted"
-            description="The graphics context was lost (GPU reset or memory pressure). Restart the 3D view to continue."
-            action={<Button variant="primary" icon={LuRefreshCw} onClick={restart}>Restart 3D</Button>}
+            title={t('visualizer.canvas.lostTitle')}
+            description={t('visualizer.canvas.lostText')}
+            action={<Button variant="primary" icon={LuRefreshCw} onClick={restart}>{t('visualizer.canvas.restart')}</Button>}
           />
         </div>
       )}

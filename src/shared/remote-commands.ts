@@ -37,7 +37,14 @@ export const REMOTE_COMMANDS = [
   'set-programmer-channels',     // payload: { [universe]: { [channel 0-511]: value 0-255 } }
   'release-programmer-channels', // payload: { [universe]: channel[] }
   'swap-cells',          // payload: { from:{col,row}, to:{col,row} }
-  'set-executor-layout'  // payload: { grid, columns, modes }
+  'set-executor-layout', // payload: { grid, columns, modes } (current executor page)
+  'run-macro',           // payload: macro id | { id } | { number } (macro number)
+  'set-executor-page',   // payload: page index (0-based) | { page } | { delta: +1 / -1 }
+  'executor',            // payload: ExecutorCommandPayload { page, col, row, phase }
+  'column-fader',        // payload: ColumnFaderCommandPayload { page, col, level } (its column fader function)
+  'set-group-master',    // payload: { id, level } (group id, 0-255)
+  'tap-speed-master',    // payload: speed master id | { id }
+  'set-speed-master-bpm' // payload: { id, bpm }
 ] as const
 
 export type RemoteCommandType = (typeof REMOTE_COMMANDS)[number]
@@ -61,7 +68,9 @@ export const WEB_REMOTE_COMMANDS = [
   // without stopping anything. payload: ApplyShowContentPayload
   'apply-show-content',
   // Record with the CONSOLE's programmer / output. payload: RecordCommandPayload
-  'record'
+  'record',
+  // A command line typed on the remote, run by the console. payload: CliCommandPayload
+  'cli'
 ] as const
 
 export type WebRemoteCommandType = (typeof WEB_REMOTE_COMMANDS)[number]
@@ -71,13 +80,46 @@ export function isWebRemoteCommandType(type: unknown): type is RemoteCommandType
   return isRemoteCommandType(type) || (typeof type === 'string' && (WEB_REMOTE_COMMANDS as readonly string[]).includes(type))
 }
 
+/**
+ * 'executor' command: press / release an executor cell. `page` is the
+ * 0-based page index ('current' = the console's current page); col 0-7,
+ * row 0-3 (row 0 = top).
+ */
+export interface ExecutorCommandPayload {
+  page: number | 'current'
+  col: number
+  row: number
+  phase: 'down' | 'up'
+}
+
+/**
+ * 'column-fader' command: move a column fader (0-255) the way the
+ * console's own fader does (column level, cell master, Grand Master,
+ * group / speed master, rate, X-fade: the column's fader function).
+ * `page` 0-based or 'current'; col 0-7.
+ */
+export interface ColumnFaderCommandPayload {
+  page: number | 'current'
+  col: number
+  level: number
+}
+
+/** 'cli' command: one command line typed on a web remote */
+export interface CliCommandPayload {
+  text: string
+  /** Remote page id (content-sync origin) */
+  origin?: string
+  /** Increases with every line sent by that page */
+  seq?: number
+}
+
 /** One changed section. List sections: a diff by id; the others: the whole value. */
 export interface SectionChange {
   upsert?: unknown[]
   remove?: string[]
   /** Item ids in their new order (items the remote does not know keep their place at the end) */
   order?: string[]
-  /** Whole-value sections (executor, timeline, roomConfig) */
+  /** Whole-value sections (executor, timeline, roomConfig, parked) */
   value?: unknown
 }
 
@@ -104,6 +146,14 @@ export interface RecordCommandPayload {
   name?: string
   includeEffects?: boolean
   mode?: 'merge' | 'replace'
+  /**
+   * Pro store mode (add-cue / update-cue on scenes): merge / overwrite /
+   * remove / cue only / block, with an optional feature filter. When set
+   * it replaces `mode`.
+   */
+  storeMode?: 'merge' | 'overwrite' | 'remove' | 'cueonly' | 'block'
+  /** Pro store filter: only these features are stored */
+  filter?: ('intensity' | 'position' | 'colour' | 'beam' | 'control')[]
 }
 
 /** Per-section revision as published in the state snapshot */

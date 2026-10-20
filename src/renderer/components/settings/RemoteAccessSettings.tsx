@@ -15,6 +15,7 @@ import {
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { QrCode } from './QrCode'
 import { Notice, SettingRow, SettingsCard, SettingsPage } from './settings-ui'
+import { t as translate, useT } from '@renderer/i18n'
 
 const STATUS_POLL_MS = 2000
 const PIN_RE = /^[A-Za-z0-9]{4,16}$/
@@ -33,7 +34,7 @@ function useRemoteStatus(): { status: RemoteStatus | null; error: string | null 
         if (json !== last) { last = json; setStatus(next) }
         setError(null)
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : 'Status unavailable')
+        if (alive) setError(e instanceof Error ? e.message : translate('settings.remoteAccess.statusUnavailable'))
       }
     }
     void poll()
@@ -46,9 +47,9 @@ function useRemoteStatus(): { status: RemoteStatus | null; error: string | null 
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text)
-    toast.success('Copied to the clipboard', { description: text })
+    toast.success(translate('errors.copied'), { description: text })
   } catch {
-    toast.error('Could not copy', { description: text })
+    toast.error(translate('errors.copyFailed'), { description: text })
   }
 }
 
@@ -59,26 +60,28 @@ function randomPin(): string {
 }
 
 function ServerState({ server, label }: { server: RemoteServerStatus | undefined; label: string }) {
-  if (!server) return <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><Spinner size={12} /> Checking…</span>
+  const t = useT()
+  if (!server) return <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><Spinner size={12} /> {t('settings.remoteAccess.checking')}</span>
   if (!server.listening) {
     return (
       <span className="flex items-center gap-1.5 text-xs text-danger-fg">
-        <StatusDot tone="danger" label={`${label} not running`} />
-        Not running{server.error ? ` — ${server.error}` : ''}
+        <StatusDot tone="danger" label={t('settings.remoteAccess.serverNotRunning', { label })} />
+        {server.error ? t('settings.remoteAccess.notRunningError', { error: server.error }) : t('settings.remoteAccess.notRunning')}
       </span>
     )
   }
   return (
     <span className="flex items-center gap-1.5 text-xs text-fg-secondary">
-      <StatusDot tone="go" label={`${label} running`} />
-      Port <span className="font-mono tabular">{server.port}</span>
+      <StatusDot tone="go" label={t('settings.remoteAccess.serverRunning', { label })} />
+      {t.rich('settings.remoteAccess.port', { port: <span className="font-mono tabular">{server.port}</span> })}
       <span className="text-fg-tertiary">·</span>
-      <span className="tabular">{server.clients}</span> connected
+      {t.rich('settings.remoteAccess.clients', { count: <span className="tabular">{server.clients}</span> }, server.clients)}
     </span>
   )
 }
 
 export function RemoteAccessSettings() {
+  const t = useT()
   const { status, error } = useRemoteStatus()
   const remote = isRemoteMode()
   const [settings, setSettings] = useState<RemoteSettings | null>(null)
@@ -100,36 +103,36 @@ export function RemoteAccessSettings() {
 
   return (
     <SettingsPage
-      title="Remote access"
-      description="Control this console from a phone or tablet browser on the same network, or from Bitfocus Companion."
+      title={t('settings.remoteAccess.title')}
+      description={t('settings.remoteAccess.description')}
     >
-      {error && !status && <Notice tone="danger">Could not read the remote servers' status: {error}</Notice>}
+      {error && !status && <Notice tone="danger">{t('settings.remoteAccess.statusError', { error })}</Notice>}
 
       <SettingsCard
         icon={LuSmartphone}
-        title="Web remote"
-        status={<ServerState server={status?.web} label="Web remote" />}
-        subtitle="Phones open the Stage view (scenes, Grand Master, blackout); tablets can switch to the full console."
+        title={t('settings.remoteAccess.webRemote')}
+        status={<ServerState server={status?.web} label={t('settings.remoteAccess.webRemote')} />}
+        subtitle={t('settings.remoteAccess.webRemoteSubtitle')}
       >
         {!status ? (
-          <div className="flex items-center gap-2 px-4 py-6 text-sm text-fg-tertiary"><Spinner size={16} /> Looking for network addresses…</div>
+          <div className="flex items-center gap-2 px-4 py-6 text-sm text-fg-tertiary"><Spinner size={16} /> {t('settings.remoteAccess.lookingForAddresses')}</div>
         ) : urls.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuWifiOff}
-            title="No network connection"
-            description="Connect this console to a network (Ethernet or Wi-Fi). The remote address and QR code appear here as soon as it has an IP address."
+            title={t('settings.remoteAccess.noNetwork')}
+            description={t('settings.remoteAccess.noNetworkDescription')}
           />
         ) : (
           <div className="flex flex-col gap-5 p-4 sm:flex-row sm:items-start">
             <div className="flex flex-col items-center gap-2">
-              <QrCode value={qrValue} size={184} label={`QR code to open ${current} on a phone`} />
-              <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><LuQrCode size={12} aria-hidden /> Scan with the phone camera</span>
+              <QrCode value={qrValue} size={184} label={t('settings.remoteAccess.qrLabel', { url: current })} />
+              <span className="flex items-center gap-1.5 text-xs text-fg-tertiary"><LuQrCode size={12} aria-hidden /> {t('settings.remoteAccess.scan')}</span>
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Remote address">
+              <div className="flex flex-col gap-1.5" role="radiogroup" aria-label={t('settings.remoteAccess.addressAria')}>
                 <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">
-                  {urls.length > 1 ? 'Addresses — pick the network the phone is on' : 'Address'}
+                  {urls.length > 1 ? t('settings.remoteAccess.addresses') : t('settings.remoteAccess.address')}
                 </span>
                 {urls.map((url, i) => {
                   const active = url === current
@@ -151,7 +154,7 @@ export function RemoteAccessSettings() {
                         <span className={cn('h-2 w-2 shrink-0 rounded-full', active ? 'bg-info-fg' : 'bg-fg-disabled')} aria-hidden />
                         <span className="truncate font-mono text-sm text-fg-primary">{url}</span>
                       </button>
-                      <IconButton icon={LuCopy} label={`Copy ${url}`} size="sm" onClick={() => { void copyText(url) }} />
+                      <IconButton icon={LuCopy} label={t('settings.remoteAccess.copy', { value: url })} size="sm" onClick={() => { void copyText(url) }} />
                     </div>
                   )
                 })}
@@ -160,13 +163,13 @@ export function RemoteAccessSettings() {
                 <Switch
                   checked={includePin}
                   onChange={setIncludePin}
-                  label="Put the PIN in the QR code"
-                  description="Phones connect without typing it. Anyone who sees the code can use the console."
+                  label={t('settings.remoteAccess.pinInQr')}
+                  description={t('settings.remoteAccess.pinInQrDescription')}
                 />
               )}
               {!remote && !pinActive && (
                 <Notice tone="warning" icon={LuShieldCheck}>
-                  Anyone on this network can control the console. Set a PIN below for shows on shared or public Wi-Fi.
+                  {t('settings.remoteAccess.openWarning')}
                 </Notice>
               )}
             </div>
@@ -175,8 +178,8 @@ export function RemoteAccessSettings() {
       </SettingsCard>
 
       {remote ? (
-        <SettingsCard icon={LuKeyRound} title="Access PIN">
-          <SettingRow label="PIN settings live on the console" description="Open Settings → Remote access on the console to set or change the PIN." />
+        <SettingsCard icon={LuKeyRound} title={t('settings.remoteAccess.pinTitle')}>
+          <SettingRow label={t('settings.remoteAccess.pinOnConsole')} description={t('settings.remoteAccess.pinOnConsoleDescription')} />
         </SettingsCard>
       ) : (
         <PinCard settings={settings} onSaved={setSettings} />
@@ -184,27 +187,29 @@ export function RemoteAccessSettings() {
 
       <SettingsCard
         icon={LuPlug}
-        title="Companion & API"
-        status={<ServerState server={status?.api} label="API" />}
-        subtitle="WebSocket API for Bitfocus Companion (Stream Deck), OSC bridges and custom controllers."
+        title={t('settings.remoteAccess.companion')}
+        status={<ServerState server={status?.api} label={t('settings.remoteAccess.api')} />}
+        subtitle={t('settings.remoteAccess.companionSubtitle')}
       >
         <div className="flex flex-col gap-3 p-4">
           <div className="flex flex-col gap-1.5">
-            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Companion connection</span>
+            <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('settings.remoteAccess.companionConnection')}</span>
             <div className="flex flex-wrap gap-2">
               {addresses.length === 0 ? (
-                <span className="text-sm text-fg-tertiary">Host: this console's IP address · Port <span className="font-mono">{apiPort}</span></span>
+                <span className="text-sm text-fg-tertiary">{t.rich('settings.remoteAccess.companionHost', { port: <span className="font-mono">{apiPort}</span> })}</span>
               ) : addresses.map((a) => (
                 <span key={a} className="flex h-control-sm items-center gap-1 rounded-md bg-surface-2 pl-2.5 pr-0.5 ring-1 ring-inset ring-line">
                   <span className="font-mono text-xs text-fg-primary">{a}:{apiPort}</span>
-                  <IconButton icon={LuCopy} label={`Copy ${a}:${apiPort}`} size="xs" onClick={() => { void copyText(`ws://${a}:${apiPort}`) }} />
+                  <IconButton icon={LuCopy} label={t('settings.remoteAccess.copy', { value: `${a}:${apiPort}` })} size="xs" onClick={() => { void copyText(`ws://${a}:${apiPort}`) }} />
                 </span>
               ))}
             </div>
           </div>
           <p className="text-xs text-fg-tertiary">
-            In Companion, add the <span className="text-fg-secondary">PhotonBoard</span> module (companion-module-photonboard), enter this host and port
-            {pinActive ? ', and the PIN.' : '.'} Buttons can fire scenes, chases, masters and the timeline; feedbacks follow the console state.
+            {t.rich('settings.remoteAccess.companionHelp', {
+              module: <span className="text-fg-secondary">PhotonBoard</span>,
+              pin: pinActive ? t('settings.remoteAccess.companionHelpPin') : t('settings.remoteAccess.companionHelpNoPin')
+            })}
           </p>
         </div>
       </SettingsCard>
@@ -213,6 +218,7 @@ export function RemoteAccessSettings() {
 }
 
 function PinCard({ settings, onSaved }: { settings: RemoteSettings | null; onSaved: (s: RemoteSettings) => void }) {
+  const t = useT()
   const [enabled, setEnabled] = useState(false)
   const [pin, setPin] = useState('')
   const [reveal, setReveal] = useState(false)
@@ -229,8 +235,8 @@ function PinCard({ settings, onSaved }: { settings: RemoteSettings | null; onSav
 
   if (!settings) {
     return (
-      <SettingsCard icon={LuKeyRound} title="Access PIN">
-        <div className="flex items-center gap-2 px-4 py-6 text-sm text-fg-tertiary"><Spinner size={16} /> Loading…</div>
+      <SettingsCard icon={LuKeyRound} title={t('settings.remoteAccess.pinTitle')}>
+        <div className="flex items-center gap-2 px-4 py-6 text-sm text-fg-tertiary"><Spinner size={16} /> {t('settings.remoteAccess.loading')}</div>
       </SettingsCard>
     )
   }
@@ -246,16 +252,16 @@ function PinCard({ settings, onSaved }: { settings: RemoteSettings | null; onSav
       const next: RemoteSettings = { pinEnabled: enabled, pin: enabled ? pin : settings.pin && PIN_RE.test(settings.pin) ? settings.pin : '' }
       const res = await getBridge()!.remote.setSettings(next)
       if (!res.success) {
-        setError(res.error ?? 'The PIN could not be saved')
-        toast.error('PIN not saved', { description: res.error })
+        setError(res.error ?? translate('settings.remoteAccess.pinSaveFailed'))
+        toast.error(translate('settings.remoteAccess.pinNotSaved'), { description: res.error })
         return
       }
       onSaved(res.settings ?? next)
-      toast.success(enabled ? 'PIN saved — remotes must enter it to connect' : 'PIN turned off')
+      toast.success(enabled ? translate('settings.remoteAccess.pinSaved') : translate('settings.remoteAccess.pinOff'))
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
+      const msg = e instanceof Error ? e.message : translate('errors.unknown')
       setError(msg)
-      toast.error('PIN not saved', { description: msg })
+      toast.error(translate('settings.remoteAccess.pinNotSaved'), { description: msg })
     } finally {
       setSaving(false)
     }
@@ -264,15 +270,15 @@ function PinCard({ settings, onSaved }: { settings: RemoteSettings | null; onSav
   return (
     <SettingsCard
       icon={LuKeyRound}
-      title="Access PIN"
-      status={settings.pinEnabled ? <Badge size="xs" tone="go" icon={LuShieldCheck}>Protected</Badge> : <Badge size="xs" tone="warning">Open</Badge>}
-      subtitle="Applies to the web remote and the Companion API."
+      title={t('settings.remoteAccess.pinTitle')}
+      status={settings.pinEnabled ? <Badge size="xs" tone="go" icon={LuShieldCheck}>{t('settings.remoteAccess.protected')}</Badge> : <Badge size="xs" tone="warning">{t('settings.remoteAccess.open')}</Badge>}
+      subtitle={t('settings.remoteAccess.pinSubtitle')}
     >
-      <SettingRow label="Require a PIN" description="Remotes and Companion must send the PIN before they can control the console.">
-        <Switch checked={enabled} onChange={(on) => { setEnabled(on); setError(null); if (on && !pin) { setPin(randomPin()); setReveal(true) } }} aria-label="Require a PIN" />
+      <SettingRow label={t('settings.remoteAccess.requirePin')} description={t('settings.remoteAccess.requirePinDescription')}>
+        <Switch checked={enabled} onChange={(on) => { setEnabled(on); setError(null); if (on && !pin) { setPin(randomPin()); setReveal(true) } }} aria-label={t('settings.remoteAccess.requirePin')} />
       </SettingRow>
       {enabled && (
-        <SettingRow label="PIN" description="4 to 16 letters or digits." htmlFor="settings-remote-pin">
+        <SettingRow label={t('settings.remoteAccess.pin')} description={t('settings.remoteAccess.pinRule')} htmlFor="settings-remote-pin">
           <div className="w-[220px]">
           <TextInput
             id="settings-remote-pin"
@@ -284,20 +290,20 @@ function PinCard({ settings, onSaved }: { settings: RemoteSettings | null; onSav
             invalid={pinInvalid && pin.length > 0}
             onChange={(e) => { setPin(e.target.value.replace(/[^A-Za-z0-9]/g, '')); setError(null) }}
             trailing={
-              <IconButton icon={reveal ? LuEyeOff : LuEye} label={reveal ? 'Hide PIN' : 'Show PIN'} size="xs" onClick={() => setReveal((r) => !r)} />
+              <IconButton icon={reveal ? LuEyeOff : LuEye} label={reveal ? t('settings.remoteAccess.hidePin') : t('settings.remoteAccess.showPin')} size="xs" onClick={() => setReveal((r) => !r)} />
             }
           />
           </div>
-          <Button variant="ghost" icon={LuDices} onClick={() => { setPin(randomPin()); setReveal(true) }}>Generate</Button>
+          <Button variant="ghost" icon={LuDices} onClick={() => { setPin(randomPin()); setReveal(true) }}>{t('settings.remoteAccess.generate')}</Button>
         </SettingRow>
       )}
       {(changed || error) && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line-subtle bg-surface-2/50 px-4 py-3">
           <span className={cn('min-w-0 flex-1 text-xs', error ? 'text-danger-fg' : 'text-fg-tertiary')}>
-            {error ?? (pinInvalid ? 'The PIN must be 4 to 16 letters or digits.' : 'Saving disconnects every remote and Companion; they reconnect with the new PIN.')}
+            {error ?? (pinInvalid ? t('settings.remoteAccess.pinInvalid') : t('settings.remoteAccess.pinDisconnects'))}
           </span>
-          <Button variant="ghost" onClick={reset} disabled={saving}>Cancel</Button>
-          <Button variant="primary" loading={saving} disabled={pinInvalid || !changed} onClick={() => { void save() }}>Save PIN</Button>
+          <Button variant="ghost" onClick={reset} disabled={saving}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={saving} disabled={pinInvalid || !changed} onClick={() => { void save() }}>{t('settings.remoteAccess.savePin')}</Button>
         </div>
       )}
     </SettingsCard>

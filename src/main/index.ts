@@ -5,6 +5,7 @@ import { DmxEngine } from './dmx-engine'
 import { DmxOutputManager } from './dmx-output-manager'
 import { ShowFileManager } from './show-file'
 import { OFLService } from './ofl-service'
+import { FixtureCatalog, defaultCatalogDirs, installCatalogFixture, installMissingShowFixtures, isCatalogId, sanitizeCatalogQuery } from './fixture-catalog'
 import { IPC, MAX_UNIVERSES, type DmxOutputsConfig } from '../shared/types'
 import type { RemoteStatus, ShowLoadResult, ShowSaveResult } from '../shared/photonboard-api'
 import { startApiServer, stopApiServer, broadcastState, disconnectApiClients, getApiServerStatus } from './api-server'
@@ -16,6 +17,7 @@ import { PiSaveCoordinator } from './pi-save-coordinator'
 import { lanAddresses } from './remote-access'
 import { parseShowArg } from './remote-invoke'
 import { sanitizeShowName, SHOW_EXTENSION } from './show-validation'
+import { mt, setMainLanguage } from './messages'
 
 /**
  * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
@@ -50,6 +52,7 @@ let dmxEngine: DmxEngine
 let outputManager: DmxOutputManager | undefined
 let showManager: ShowFileManager
 let oflService: OFLService
+let fixtureCatalog: FixtureCatalog
 let remoteSettings: RemoteSettingsStore
 let piSave: PiSaveCoordinator
 let cleanedUp = false
@@ -65,92 +68,117 @@ function sendToMainWindow(channel: string, ...args: unknown[]): boolean {
   return true
 }
 
+/** Native menu labels, in the console UI language (renderer → app:set-language) */
+const MENU_LABELS = {
+  en: {
+    about: 'About PhotonBoard', hide: 'Hide PhotonBoard', hideOthers: 'Hide Others', unhide: 'Show All', quit: 'Quit PhotonBoard',
+    file: 'File', newShow: 'New Show', open: 'Open…', save: 'Save', saveAs: 'Save As…', close: 'Close Window',
+    edit: 'Edit', undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
+    view: 'View', reload: 'Reload', forceReload: 'Force Reload', devTools: 'Toggle Developer Tools',
+    resetZoom: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
+    window: 'Window', minimize: 'Minimize', zoom: 'Zoom', stage: 'Stage Window', front: 'Bring All to Front'
+  },
+  fr: {
+    about: 'À propos de PhotonBoard', hide: 'Masquer PhotonBoard', hideOthers: 'Masquer les autres', unhide: 'Tout afficher', quit: 'Quitter PhotonBoard',
+    file: 'Fichier', newShow: 'Nouveau show', open: 'Ouvrir…', save: 'Enregistrer', saveAs: 'Enregistrer sous…', close: 'Fermer la fenêtre',
+    edit: 'Édition', undo: 'Annuler', redo: 'Rétablir', cut: 'Couper', copy: 'Copier', paste: 'Coller', selectAll: 'Tout sélectionner',
+    view: 'Présentation', reload: 'Recharger', forceReload: 'Forcer le rechargement', devTools: 'Outils de développement',
+    resetZoom: 'Taille réelle', zoomIn: 'Agrandir', zoomOut: 'Réduire', fullscreen: 'Plein écran',
+    window: 'Fenêtre', minimize: 'Placer dans le Dock', zoom: 'Réduire/agrandir', stage: 'Fenêtre Stage', front: 'Tout ramener au premier plan'
+  }
+} as const
+
+type MenuLanguage = keyof typeof MENU_LABELS
+let menuLanguage: MenuLanguage = 'en'
+
 function createMenu(): void {
   const isMac = process.platform === 'darwin'
+  const L = MENU_LABELS[menuLanguage]
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{
       label: app.name,
       submenu: [
-        { role: 'about' as const },
+        { role: 'about' as const, label: L.about },
         { type: 'separator' as const },
-        { role: 'hide' as const },
-        { role: 'hideOthers' as const },
-        { role: 'unhide' as const },
+        { role: 'hide' as const, label: L.hide },
+        { role: 'hideOthers' as const, label: L.hideOthers },
+        { role: 'unhide' as const, label: L.unhide },
         { type: 'separator' as const },
-        { role: 'quit' as const }
+        { role: 'quit' as const, label: L.quit }
       ]
     }] : []),
     {
-      label: 'File',
+      label: L.file,
       submenu: [
         {
-          label: 'New Show',
+          label: L.newShow,
           accelerator: 'CmdOrCtrl+N',
           click: () => sendToMainWindow('menu:new')
         },
         { type: 'separator' },
         {
-          label: 'Open…',
+          label: L.open,
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToMainWindow('menu:load')
         },
         { type: 'separator' },
         {
-          label: 'Save',
+          label: L.save,
           accelerator: 'CmdOrCtrl+S',
           click: () => sendToMainWindow('menu:save')
         },
         {
-          label: 'Save As…',
+          label: L.saveAs,
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendToMainWindow('menu:save-as')
         },
         { type: 'separator' },
-        isMac ? { role: 'close' as const } : { role: 'quit' as const }
+        isMac ? { role: 'close' as const, label: L.close } : { role: 'quit' as const, label: L.quit }
       ]
     },
     {
-      label: 'Edit',
+      label: L.edit,
       submenu: [
-        { role: 'undo' as const },
-        { role: 'redo' as const },
+        // The renderer decides: text undo inside a field, show undo (lib/history.ts) elsewhere
+        { label: L.undo, accelerator: 'CmdOrCtrl+Z', click: () => sendToMainWindow('menu:undo') },
+        { label: L.redo, accelerator: isMac ? 'Shift+CmdOrCtrl+Z' : 'CmdOrCtrl+Y', click: () => sendToMainWindow('menu:redo') },
         { type: 'separator' as const },
-        { role: 'cut' as const },
-        { role: 'copy' as const },
-        { role: 'paste' as const },
-        { role: 'selectAll' as const }
+        { role: 'cut' as const, label: L.cut },
+        { role: 'copy' as const, label: L.copy },
+        { role: 'paste' as const, label: L.paste },
+        { role: 'selectAll' as const, label: L.selectAll }
       ]
     },
     {
-      label: 'View',
+      label: L.view,
       submenu: [
-        { role: 'reload' as const },
-        { role: 'forceReload' as const },
-        { role: 'toggleDevTools' as const },
+        { role: 'reload' as const, label: L.reload },
+        { role: 'forceReload' as const, label: L.forceReload },
+        { role: 'toggleDevTools' as const, label: L.devTools },
         { type: 'separator' as const },
-        { role: 'resetZoom' as const },
-        { role: 'zoomIn' as const },
-        { role: 'zoomOut' as const },
+        { role: 'resetZoom' as const, label: L.resetZoom },
+        { role: 'zoomIn' as const, label: L.zoomIn },
+        { role: 'zoomOut' as const, label: L.zoomOut },
         { type: 'separator' as const },
-        { role: 'togglefullscreen' as const }
+        { role: 'togglefullscreen' as const, label: L.fullscreen }
       ]
     },
     {
-      label: 'Window',
+      label: L.window,
       submenu: [
-        { role: 'minimize' as const },
-        { role: 'zoom' as const },
+        { role: 'minimize' as const, label: L.minimize },
+        { role: 'zoom' as const, label: L.zoom },
         { type: 'separator' as const },
         {
-          label: 'Stage Window',
+          label: L.stage,
           accelerator: 'CmdOrCtrl+Shift+W',
           click: () => toggleStageWindow()
         },
         ...(isMac ? [
           { type: 'separator' as const },
-          { role: 'front' as const }
+          { role: 'front' as const, label: L.front }
         ] : [
-          { role: 'close' as const }
+          { role: 'close' as const, label: L.close }
         ])
       ]
     }
@@ -390,7 +418,7 @@ function registerIpcHandlers(): void {
     const saveResult = await showManager.save(show)
     if (saveResult.needsSaveAs) {
       const result = await showSaveDialog(event, {
-        filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+        filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
         defaultPath: defaultSavePath(show.name)
       })
       if (result.canceled || !result.filePath) return { success: false, canceled: true }
@@ -402,7 +430,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SHOW_LOAD, async (event): Promise<ShowLoadResult> => {
     const result = await showOpenDialog(event, {
-      filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+      filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
       defaultPath: showManager.getDefaultShowsDir(),
       properties: ['openFile']
     })
@@ -415,7 +443,7 @@ function registerIpcHandlers(): void {
     try { show = parseShowArg(showArg) } catch (e) { return { success: false, error: (e as Error).message } }
     const currentPath = showManager.getCurrentPath()
     const result = await showSaveDialog(event, {
-      filters: [{ name: 'PhotonBoard Show', extensions: ['pbshow'] }],
+      filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
       defaultPath: typeof opts?.name === 'string' ? defaultSavePath(opts.name) : currentPath || defaultSavePath(show.name)
     })
     if (result.canceled || !result.filePath) return { success: false, canceled: true }
@@ -428,7 +456,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SHOW_LOAD_BY_NAME, async (_event, name: unknown): Promise<ShowLoadResult> => {
     const path = showManager.findShowByName(name)
-    if (!path) return { success: false, error: `No show named "${String(name)}" was found.` }
+    if (!path) return { success: false, error: mt('showNotFound', { name: String(name) }) }
     return showManager.load(path)
   })
 
@@ -460,14 +488,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.FIXTURES_IMPORT, async (event) => {
     const result = await showOpenDialog(event, {
       filters: [
-        { name: 'All Fixture Formats', extensions: ['json', 'gdtf', 'qxf', 'd4', 'r20', 'xml', 'csv', 'tsv'] },
-        { name: 'GDTF Files', extensions: ['gdtf'] },
-        { name: 'QLC+ Files', extensions: ['qxf'] },
-        { name: 'Avolites Personalities', extensions: ['d4', 'r20'] },
-        { name: 'XML Fixtures (GrandMA, etc.)', extensions: ['xml'] },
-        { name: 'JSON (OFL / PhotonBoard)', extensions: ['json'] },
-        { name: 'CSV / TSV', extensions: ['csv', 'tsv'] },
-        { name: 'All Files', extensions: ['*'] }
+        { name: mt('fixtureFilterAll'), extensions: ['json', 'gdtf', 'qxf', 'd4', 'r20', 'xml', 'csv', 'tsv'] },
+        { name: mt('fixtureFilterGdtf'), extensions: ['gdtf'] },
+        { name: mt('fixtureFilterQlc'), extensions: ['qxf'] },
+        { name: mt('fixtureFilterAvo'), extensions: ['d4', 'r20'] },
+        { name: mt('fixtureFilterXml'), extensions: ['xml'] },
+        { name: mt('fixtureFilterJson'), extensions: ['json'] },
+        { name: mt('fixtureFilterCsv'), extensions: ['csv', 'tsv'] },
+        { name: mt('allFiles'), extensions: ['*'] }
       ],
       properties: ['openFile', 'multiSelections']
     })
@@ -486,6 +514,23 @@ function registerIpcHandlers(): void {
     // Save to user fixtures dir
     showManager.saveUserFixture(fixture)
     return fixture
+  })
+
+  // --- Offline fixture catalog (OFL + QLC+, bundled) ---
+  ipcMain.handle(IPC.FIXTURES_CATALOG_INFO, () => fixtureCatalog.info())
+
+  ipcMain.handle(IPC.FIXTURES_CATALOG_SEARCH, (_e, query: unknown) => fixtureCatalog.search(sanitizeCatalogQuery(query)))
+
+  // Definitions are returned as JSON text (see FIXTURES_GET_ALL)
+  ipcMain.handle(IPC.FIXTURES_CATALOG_GET, async (_e, id: unknown) => {
+    if (!isCatalogId(id)) throw new Error('Invalid fixture ID')
+    const def = await fixtureCatalog.get(id)
+    return def ? JSON.stringify(def) : null
+  })
+
+  ipcMain.handle(IPC.FIXTURES_CATALOG_INSTALL, async (_e, id: unknown) => {
+    if (!isCatalogId(id)) throw new Error('Invalid fixture ID')
+    return JSON.stringify(await installCatalogFixture(fixtureCatalog, showManager, id))
   })
 
   ipcMain.handle(IPC.FIXTURES_SAVE, async (_e, fixtureJson: unknown) => {
@@ -543,6 +588,16 @@ function registerIpcHandlers(): void {
     app.quit()
   })
 
+  // Console UI language → native menus
+  ipcMain.on(IPC.APP_SET_LANGUAGE, (_event, locale: unknown) => {
+    const next: MenuLanguage = locale === 'fr' ? 'fr' : 'en'
+    // Dialogs, show file errors and remote answers follow it too
+    setMainLanguage(next)
+    if (next === menuLanguage) return
+    menuLanguage = next
+    createMenu()
+  })
+
   // --- Stage Window ---
   ipcMain.on(IPC.STAGE_OPEN, () => {
     createStageWindow()
@@ -593,7 +648,7 @@ function createStageWindow(): void {
     fullscreen: true,
     frame: false,
     backgroundColor: '#0a0a0f',
-    title: 'PhotonBoard — Stage',
+    title: mt('stageWindowTitle'),
     webPreferences: {
       preload: join(__dirname, '../preload/stage-preload.mjs'),
       sandbox: false,
@@ -685,7 +740,17 @@ function startApp(): void {
   app.whenReady().then(() => {
     const userData = app.getPath('userData')
     showManager = new ShowFileManager(userData)
+    // The user library (OFL downloads, imports, installed catalog fixtures) survives restarts
+    showManager.scanFixtures(join(userData, 'fixtures'))
     oflService = new OFLService()
+    fixtureCatalog = new FixtureCatalog(defaultCatalogDirs({
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+      appPath: app.getAppPath(),
+      mainDir: __dirname
+    }))
+    void fixtureCatalog.load() // index in the background: the first search is instant
+    // A show made on another machine: install the fixture types it uses from the catalog
+    showManager.setShowReadHook((show) => installMissingShowFixtures(fixtureCatalog, showManager, show))
     remoteSettings = new RemoteSettingsStore(join(userData, 'config', 'remote.json'))
     piSave = new PiSaveCoordinator((command) => sendToMainWindow(IPC.STAGE_COMMAND, command))
     initDmxEngine()
@@ -714,6 +779,7 @@ function startApp(): void {
       outputManager: outputManager!,
       showManager,
       oflService,
+      fixtureCatalog,
       piSave,
       userDataPath: userData,
       getVersion: () => app.getVersion(),

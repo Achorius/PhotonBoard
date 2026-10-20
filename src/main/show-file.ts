@@ -36,6 +36,7 @@ export class ShowFileManager {
   private recentFiles: string[] = []
   private fixtureCache: Map<string, FixtureDefinition> = new Map()
   private saveLock = new Mutex()
+  private showReadHook: ((show: ShowFile) => Promise<unknown> | unknown) | null = null
 
   constructor(userDataPath: string, opts: { documentsShowsPath?: string } = {}) {
     this.userDataPath = userDataPath
@@ -132,9 +133,13 @@ export class ShowFileManager {
    */
   async readWithBackup(filePath: string): Promise<ShowLoadResult> {
     const result = await this.readShow(filePath)
-    if (result.success) return result
+    if (result.success) {
+      await this.runShowReadHook(result.show!)
+      return result
+    }
     const backup = await this.readShow(backupPathFor(filePath))
     if (backup.success) {
+      await this.runShowReadHook(backup.show!)
       const name = basename(filePath, SHOW_EXTENSION)
       console.warn(`[Show] ${filePath}: ${result.error} — loaded the backup copy`)
       return {
@@ -145,6 +150,24 @@ export class ShowFileManager {
       }
     }
     return result
+  }
+
+  /**
+   * Called with every show read successfully (before the result is returned),
+   * e.g. to install fixture types the show uses from the offline catalog.
+   */
+  setShowReadHook(hook: ((show: ShowFile) => Promise<unknown> | unknown) | null): void {
+    this.showReadHook = hook
+  }
+
+  /** Runs the show-read hook; its failures are logged, never fail the load */
+  async runShowReadHook(show: ShowFile): Promise<void> {
+    if (!this.showReadHook) return
+    try {
+      await this.showReadHook(show)
+    } catch (e) {
+      console.warn('[Show] Show read hook failed:', (e as Error).message)
+    }
   }
 
   /** Load a show and make it the current one (only on success) */

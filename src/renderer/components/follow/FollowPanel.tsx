@@ -15,6 +15,7 @@ import {
   Badge, Button, Checkbox, EmptyState, Fader, Field, NumberField, PanelHeader, Section, Slider,
   StatusDot, cn, fixtureCategoryIcon, formatAddress, formatDegrees, formatPercent
 } from '@renderer/components/ui'
+import { formatDecimal, useT } from '@renderer/i18n'
 import { useFollowStore } from '@renderer/stores/follow-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
@@ -62,6 +63,7 @@ function useMovingHeads(): FollowFixture[] {
 }
 
 export function FollowPanel() {
+  const t = useT()
   const heads = useMovingHeads()
   const { fixtureIds, active, gamepadConnected } = useFollowStore(useShallow((s) => ({ fixtureIds: s.fixtureIds, active: s.active, gamepadConnected: s.gamepadConnected })))
   const assigned = useMemo(() => new Set(fixtureIds), [fixtureIds])
@@ -83,14 +85,14 @@ export function FollowPanel() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-control-lg shrink-0 flex-wrap items-center gap-3 border-b border-line bg-surface-1 px-3 py-1.5">
         <LuCrosshair size={16} aria-hidden className="text-fg-tertiary" />
-        <h1 className="text-sm font-semibold">Follow spot</h1>
-        <Badge tone={active ? 'go' : 'neutral'} variant={active ? 'solid' : 'subtle'}>{active ? 'TRACKING' : 'STANDBY'}</Badge>
-        <span className="text-xs text-fg-tertiary">{fixtureIds.length} fixture{fixtureIds.length === 1 ? '' : 's'} in the group</span>
+        <h1 className="text-sm font-semibold">{t('follow.title')}</h1>
+        <Badge tone={active ? 'go' : 'neutral'} variant={active ? 'solid' : 'subtle'}>{active ? t('follow.badgeTracking') : t('follow.badgeStandby')}</Badge>
+        <span className="text-xs text-fg-tertiary">{t('follow.groupCount', { count: fixtureIds.length })}</span>
         <div className="flex-1" />
         <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
           <LuGamepad2 size={14} aria-hidden className="text-fg-tertiary" />
           <StatusDot tone={gamepadConnected ? 'go' : 'neutral'} />
-          {gamepadConnected ? 'Gamepad ready' : 'No gamepad'}
+          {gamepadConnected ? t('follow.gamepadReady') : t('follow.gamepad.none')}
         </span>
         <Button
           data-follow-activate
@@ -100,11 +102,11 @@ export function FollowPanel() {
           active={active}
           icon={LuCrosshair}
           disabled={!active && usable === 0}
-          tooltip={usable === 0 ? 'Add fixtures that have a stage position' : active ? 'Release the fixtures' : 'Aim the group at the target'}
+          tooltip={usable === 0 ? t('follow.startDisabledTooltip') : active ? t('follow.stopTooltip') : t('follow.startTooltip')}
           onClick={toggle}
           className="min-w-[156px]"
         >
-          {active ? 'Stop follow' : 'Start follow'}
+          {active ? t('follow.stop') : t('follow.start')}
         </Button>
       </header>
 
@@ -120,16 +122,17 @@ export function FollowPanel() {
 // ---------------------------------------------------------------- Fixtures
 
 function FixturesColumn({ heads, assigned }: { heads: FollowFixture[]; assigned: Set<string> }) {
+  const t = useT()
   const st = useFollowStore.getState
   return (
-    <aside aria-label="Follow fixtures" className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-1 xl:w-[300px] xl:[[data-density=touch]_&]:w-[340px]">
+    <aside aria-label={t('follow.fixtures.aria')} className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-1 xl:w-[300px] xl:[[data-density=touch]_&]:w-[340px]">
       <PanelHeader
-        title="Fixtures"
-        count={heads.length > 0 ? `${heads.filter((h) => assigned.has(h.id)).length} of ${heads.length}` : undefined}
+        title={t('common.fixtures')}
+        count={heads.length > 0 ? t('follow.fixtures.assignedOf', { n: heads.filter((h) => assigned.has(h.id)).length, total: heads.length }) : undefined}
         actions={heads.length > 0 && (
           <>
-            <Button size="xs" variant="ghost" onClick={() => heads.forEach((h) => st().addFixture(h.id))}>All</Button>
-            <Button size="xs" variant="ghost" onClick={() => heads.forEach((h) => st().removeFixture(h.id))}>None</Button>
+            <Button size="xs" variant="ghost" tooltip={t('follow.fixtures.allTooltip')} onClick={() => heads.forEach((h) => st().addFixture(h.id))}>{t('common.all')}</Button>
+            <Button size="xs" variant="ghost" tooltip={t('follow.fixtures.noneTooltip')} onClick={() => heads.forEach((h) => st().removeFixture(h.id))}>{t('common.none')}</Button>
           </>
         )}
       />
@@ -138,20 +141,21 @@ function FixturesColumn({ heads, assigned }: { heads: FollowFixture[]; assigned:
           <EmptyState
             size="sm"
             icon={LuCable}
-            title="No moving heads patched"
-            description="Follow aims moving heads at a target. Patch some first."
-            action={<Button size="sm" variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>Open Patch</Button>}
+            title={t('follow.fixtures.emptyTitle')}
+            description={t('follow.fixtures.emptyDescription')}
+            action={<Button size="sm" variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>{t('follow.fixtures.openPatch')}</Button>}
           />
         ) : heads.map((h) => <FixtureRow key={h.id} fixture={h} checked={assigned.has(h.id)} />)}
       </div>
       <p className="shrink-0 border-t border-line-subtle px-3 py-2 text-xs text-fg-tertiary">
-        Aiming uses each fixture&apos;s stage position and its pan / tilt range.
+        {t('follow.fixtures.footnote')}
       </p>
     </aside>
   )
 }
 
 const FixtureRow = memo(function FixtureRow({ fixture: f, checked }: { fixture: FollowFixture; checked: boolean }) {
+  const t = useT()
   const Icon = fixtureCategoryIcon(f.categories)
   const toggle = () => {
     const st = useFollowStore.getState()
@@ -169,7 +173,7 @@ const FixtureRow = memo(function FixtureRow({ fixture: f, checked }: { fixture: 
       className={cn('relative flex min-h-row cursor-pointer items-center gap-2.5 px-3 py-1.5', checked ? 'bg-info/10 hover:bg-info/15' : 'hover:bg-surface-2')}
     >
       <span onClick={(e) => e.stopPropagation()} className="flex">
-        <Checkbox checked={checked} onChange={toggle} aria-label={`Follow with ${f.name}`} />
+        <Checkbox checked={checked} onChange={toggle} aria-label={t('follow.fixtures.rowAria', { name: f.name })} />
       </span>
       <Icon size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -177,12 +181,14 @@ const FixtureRow = memo(function FixtureRow({ fixture: f, checked }: { fixture: 
           <span className="truncate text-sm text-fg-primary">{f.name}</span>
           <span className="shrink-0 font-mono text-2xs tabular text-fg-tertiary">{f.address}</span>
         </span>
-        <span className="truncate text-xs text-fg-tertiary" title={f.rangesFromDef ? 'From the fixture profile' : 'Profile has no range: default used'}>
-          Pan {formatDegrees(f.pan)} · Tilt {formatDegrees(f.tilt)}{f.rangesFromDef ? '' : ' (default)'}
+        <span className="truncate text-xs text-fg-tertiary" title={f.rangesFromDef ? t('follow.fixtures.rangeFromProfile') : t('follow.fixtures.rangeDefaultTooltip')}>
+          {f.rangesFromDef
+            ? t('follow.fixtures.range', { pan: formatDegrees(f.pan), tilt: formatDegrees(f.tilt) })
+            : t('follow.fixtures.rangeDefault', { pan: formatDegrees(f.pan), tilt: formatDegrees(f.tilt) })}
         </span>
       </div>
       {!f.position && (
-        <Badge size="xs" tone="warning" icon={LuTriangleAlert} title="Place it in Stage layout so follow can aim it">NO POSITION</Badge>
+        <Badge size="xs" tone="warning" icon={LuTriangleAlert} title={t('follow.fixtures.noPositionTooltip')}>{t('follow.fixtures.noPosition')}</Badge>
       )}
     </div>
   )
@@ -191,45 +197,46 @@ const FixtureRow = memo(function FixtureRow({ fixture: f, checked }: { fixture: 
 // ---------------------------------------------------------------- Pad
 
 function PadColumn({ fixtures, hasFixtures }: { fixtures: PadFixture[]; hasFixtures: boolean }) {
+  const t = useT()
   const roomHeight = useVisualizerStore((s) => s.roomConfig.height)
   const targetY = useFollowStore((s) => s.targetY)
   const home = useFollowStore((s) => s.targetHeight)
   const missingPositions = hasFixtures && fixtures.length === 0
   return (
-    <section aria-label="Stage pad" className="flex min-w-0 flex-1 flex-col">
+    <section aria-label={t('follow.pad.aria')} className="flex min-w-0 flex-1 flex-col">
       <PanelHeader
         icon={LuMapPin}
-        title="Target"
-        subtitle="Stage seen from above — drag to aim · Shift / second finger = fine"
+        title={t('follow.pad.title')}
+        subtitle={t('follow.pad.subtitle')}
         actions={
-          <Button size="sm" variant="secondary" icon={LuHouse} tooltip={`Centre stage at ${home.toFixed(1)} m`}
-            onClick={() => useFollowStore.getState().setTarget(0, home, 0)}>Centre</Button>
+          <Button size="sm" variant="secondary" icon={LuHouse} tooltip={t('follow.pad.centreTooltip', { height: formatDecimal(home, 1) })}
+            onClick={() => useFollowStore.getState().setTarget(0, home, 0)}>{t('follow.pad.centre')}</Button>
         }
       />
       <div className="flex min-h-0 flex-1 gap-4 p-4">
         {missingPositions ? (
           <EmptyState
             icon={LuMapPin}
-            title="Moving heads have no stage position"
-            description="Place them in Stage layout: follow needs to know where each one hangs."
-            action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>Open Stage layout</Button>}
+            title={t('follow.pad.noPositionTitle')}
+            description={t('follow.pad.noPositionDescription')}
+            action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>{t('follow.pad.openStageLayout')}</Button>}
           />
         ) : (
           <>
             <FollowPad fixtures={fixtures} />
             <div className="flex shrink-0 flex-col items-center gap-2 pb-6 pt-5">
               <Fader
-                aria-label="Target height"
+                aria-label={t('follow.pad.heightAria')}
                 value={targetY}
                 min={0}
                 max={Math.max(1, roomHeight)}
                 step={0.05}
                 defaultValue={home}
-                readout={(v) => v.toFixed(2)}
+                readout={(v) => formatDecimal(v, 2)}
                 onChange={(v) => { const st = useFollowStore.getState(); st.setTarget(st.targetX, v, st.targetZ) }}
                 className="min-h-0 flex-1"
               />
-              <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Height m</span>
+              <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{t('follow.pad.heightCaption')}</span>
             </div>
           </>
         )}
@@ -241,6 +248,7 @@ function PadColumn({ fixtures, hasFixtures }: { fixtures: PadFixture[]; hasFixtu
 // ---------------------------------------------------------------- Settings
 
 function SettingsColumn() {
+  const t = useT()
   const cfg = useFollowStore(useShallow((s) => ({
     followDimmer: s.followDimmer, sensitivity: s.sensitivity, targetHeight: s.targetHeight
   })))
@@ -251,31 +259,31 @@ function SettingsColumn() {
     if (st.active) st.setTarget(st.targetX, st.targetY, st.targetZ)
   }
   return (
-    <aside aria-label="Follow settings" className="flex w-[272px] shrink-0 flex-col border-l border-line bg-surface-1 xl:w-[320px] xl:[[data-density=touch]_&]:w-[360px]">
-      <PanelHeader title="Settings" />
+    <aside aria-label={t('follow.settings.aria')} className="flex w-[272px] shrink-0 flex-col border-l border-line bg-surface-1 xl:w-[320px] xl:[[data-density=touch]_&]:w-[360px]">
+      <PanelHeader title={t('common.settings')} />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Output">
-          <Field label="Dimmer">
-            <Slider aria-label="Follow dimmer" value={cfg.followDimmer} min={0} max={255} defaultValue={255}
+        <Section title={t('common.output')}>
+          <Field label={t('common.dimmer')}>
+            <Slider aria-label={t('follow.settings.dimmerAria')} value={cfg.followDimmer} min={0} max={255} defaultValue={255}
               showValue={(v) => formatPercent(v)} onChange={(v) => { setConfig({ followDimmer: Math.round(v) }); reapply() }} />
           </Field>
         </Section>
-        <Section title="Movement">
-          <Field label="Speed" hint="Gamepad: metres per second at full stick">
-            <Slider aria-label="Gamepad speed" value={cfg.sensitivity} min={0.5} max={12} step={0.5} defaultValue={8}
-              showValue={(v) => v.toFixed(1)} onChange={(v) => setConfig({ sensitivity: v })} />
+        <Section title={t('follow.settings.movement')}>
+          <Field label={t('follow.settings.speed')} hint={t('follow.settings.speedHint')}>
+            <Slider aria-label={t('follow.settings.speedAria')} value={cfg.sensitivity} min={0.5} max={12} step={0.5} defaultValue={8}
+              showValue={(v) => formatDecimal(v, 1)} onChange={(v) => setConfig({ sensitivity: v })} />
           </Field>
-          <Field label="Home height" hint="Height used by Centre (1.5 m ≈ chest)">
-            <NumberField aria-label="Home height" value={cfg.targetHeight} min={0} max={10} step={0.1} unit="m" onChange={(v) => setConfig({ targetHeight: v })} />
+          <Field label={t('follow.settings.homeHeight')} hint={t('follow.settings.homeHeightHint', { height: formatDecimal(1.5, 1) })}>
+            <NumberField aria-label={t('follow.settings.homeHeight')} value={cfg.targetHeight} min={0} max={10} step={0.1} unit="m" onChange={(v) => setConfig({ targetHeight: v })} />
           </Field>
         </Section>
         <GamepadSection />
-        <Section title="How it works" collapsible defaultOpen={false}>
+        <Section title={t('follow.help.title')} collapsible defaultOpen={false}>
           <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-fg-secondary">
-            <li>Tick the moving heads that should follow, and place them in Stage layout.</li>
-            <li>Start follow (or hold the gamepad trigger), then drag on the pad.</li>
-            <li>Left stick: left / right and height. Right stick: depth.</li>
-            <li>Stopping gives the fixtures back to what they were doing.</li>
+            <li>{t('follow.help.step1')}</li>
+            <li>{t('follow.help.step2')}</li>
+            <li>{t('follow.help.step3')}</li>
+            <li>{t('follow.help.step4')}</li>
           </ul>
         </Section>
       </div>

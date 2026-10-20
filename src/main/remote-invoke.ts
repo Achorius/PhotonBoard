@@ -21,16 +21,20 @@ import type { ShowFileManager } from './show-file'
 import type { OFLService } from './ofl-service'
 import { isOflKey } from './ofl-service'
 import type { PiSaveCoordinator } from './pi-save-coordinator'
+import { installCatalogFixture, isCatalogId, sanitizeCatalogQuery, type FixtureCatalog } from './fixture-catalog'
 import { MAX_SHOW_FILE_SIZE, checkShowObject, parseShowFileContent, sanitizeShowName } from './show-validation'
 import { isWebRemoteCommandType } from '../shared/remote-commands'
 import type { ShowFile } from '../shared/types'
 import type { ShowLoadResult, ShowSaveResult, RemoteStatus } from '../shared/photonboard-api'
+import { mt } from './messages'
 
 export interface RemoteInvokeDeps {
   dmxEngine: DmxEngine
   outputManager: DmxOutputManager
   showManager: ShowFileManager
   oflService: OFLService
+  /** Offline fixture catalog; absent: the catalog channels report it as unavailable */
+  fixtureCatalog?: FixtureCatalog
   piSave: PiSaveCoordinator
   userDataPath: string
   getVersion: () => string
@@ -85,7 +89,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
     success: false,
     exists: true,
     path,
-    error: `A show named "${name}" already exists. Choose another name or confirm overwriting it.`
+    error: mt('showExists', { name })
   })
 
   async function remoteSave(showArg: unknown, rawOpts: unknown, mode: 'save' | 'save-as'): Promise<ShowSaveResult> {
@@ -121,8 +125,10 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
     const name = sanitizeShowName(fileName, 'Uploaded Show')
     const destPath = showManager.pathForName(name)
     if (existsSync(destPath) && opts.overwrite !== true) {
-      return { success: false, path: destPath, error: `A show named "${name}" already exists. Confirm overwriting it, or rename the file.` }
+      return { success: false, exists: true, path: destPath, error: mt('showExistsUpload', { name }) }
     }
+    // Fixture types the show uses but this console lacks come from the offline catalog
+    await showManager.runShowReadHook(parsed.show)
     // Explicit remote action: this becomes the Pi's current show
     const saved = await showManager.saveAs(parsed.show, destPath)
     if (!saved.success) return { success: false, error: saved.error, path: destPath }
@@ -135,7 +141,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
     const opts = optionsArg(rawOpts)
     if (typeof name !== 'string' || name.length === 0 || name.length > 200) throw new RemoteInputError('Invalid show name')
     const path = showManager.findShowByName(name)
-    if (!path) return { success: false, error: `No show named "${name}" was found.` }
+    if (!path) return { success: false, error: mt('showNotFound', { name: String(name) }) }
     if (opts.apply === true) {
       const result = await showManager.load(path)
       if (result.success && result.show) {
@@ -180,7 +186,7 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
       case IPC.SHOW_SAVE_AS:
         return remoteSave(args[0], args[1], 'save-as')
       case IPC.SHOW_LOAD:
-        return { success: false, error: 'There is no file dialog in the remote UI — pick a show from the list.' } satisfies ShowLoadResult
+        return { success: false, error: mt('noFileDialogRemote') } satisfies ShowLoadResult
       case IPC.SHOW_LIST:
         return showManager.listShowNames()
       case IPC.SHOW_LOAD_BY_NAME:
@@ -241,6 +247,23 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
       case IPC.FIXTURES_DELETE:
         if (typeof args[0] !== 'string' || args[0].length > 256) throw new RemoteInputError('Invalid fixture ID')
         return showManager.deleteUserFixture(args[0])
+
+      // Offline fixture catalog
+      case IPC.FIXTURES_CATALOG_INFO:
+        if (!deps.fixtureCatalog) return { available: false, error: 'unavailable', fixtureCount: 0, sources: [], manufacturers: [], categories: [] }
+        return deps.fixtureCatalog.info()
+      case IPC.FIXTURES_CATALOG_SEARCH: {
+        let query
+        try { query = sanitizeCatalogQuery(args[0]) } catch (e) { throw new RemoteInputError((e as Error).message) }
+        return deps.fixtureCatalog ? deps.fixtureCatalog.search(query) : { total: 0, entries: [] }
+      }
+      case IPC.FIXTURES_CATALOG_GET:
+        if (!isCatalogId(args[0])) throw new RemoteInputError('Invalid fixture ID')
+        return deps.fixtureCatalog ? deps.fixtureCatalog.get(args[0]) : null
+      case IPC.FIXTURES_CATALOG_INSTALL:
+        if (!isCatalogId(args[0])) throw new RemoteInputError('Invalid fixture ID')
+        if (!deps.fixtureCatalog) throw new RemoteInputError('The offline fixture library is not available')
+        return installCatalogFixture(deps.fixtureCatalog, showManager, args[0])
 
       // App
       case IPC.APP_GET_VERSION:

@@ -10,6 +10,9 @@ import type {
   DmxOutputConfig,
   DmxOutputsConfig,
   DmxOutputsStatus,
+  FixtureCatalogInfo,
+  FixtureCatalogQuery,
+  FixtureCatalogSearchResult,
   FixtureDefinition,
   OFLSearchResult,
   SerialPortInfo,
@@ -33,6 +36,8 @@ export interface ShowLoadResult {
   show?: ShowFile
   path?: string
   error?: string
+  /** Remote upload refused: a show with that name exists (retry with overwrite:true) */
+  exists?: boolean
   warning?: string
   canceled?: boolean
 }
@@ -180,6 +185,20 @@ export interface PhotonBoardAPI {
     oflDownload(manufacturerKey: string, fixtureKey: string): Promise<FixtureDefinition>
     save(fixture: FixtureDefinition): Promise<SimpleResult>
     delete(fixtureId: string): Promise<SimpleResult>
+    /**
+     * Offline fixture catalog (Open Fixture Library + QLC+, shipped with the app,
+     * no network): sources / licenses, counts, manufacturers, categories.
+     */
+    catalogInfo(): Promise<FixtureCatalogInfo>
+    /** Search / browse the offline catalog (paged; `total` = all matches) */
+    catalogSearch(query: FixtureCatalogQuery): Promise<FixtureCatalogSearchResult>
+    /** Full definition of a catalog fixture, for preview — NOT added to the library. Null when unknown. */
+    catalogGet(id: string): Promise<FixtureDefinition | null>
+    /**
+     * Copy a catalog fixture into the user library (like an OFL download) and
+     * return it. Idempotent: an already installed definition is returned unchanged.
+     */
+    catalogInstall(id: string): Promise<FixtureDefinition>
   }
 
   /** Replaces (not accumulates) the handler for a menu channel */
@@ -189,6 +208,8 @@ export interface PhotonBoardAPI {
     getVersion(): Promise<string>
     /** Quit the application (no-op in remote mode) */
     quit(): void
+    /** UI language of the console ('fr' | 'en'): main localises its native menus. Optional (older bridges, remote). */
+    setLanguage?(locale: string): void
   }
 
   stage: {

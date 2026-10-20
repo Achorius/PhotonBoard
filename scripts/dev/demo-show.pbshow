@@ -3796,6 +3796,7 @@
       "id": "midi-094",
       "name": "Warm Wash GO",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 36
@@ -3816,6 +3817,7 @@
       "id": "midi-095",
       "name": "Cool Blue GO",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 37
@@ -3836,6 +3838,7 @@
       "id": "midi-096",
       "name": "Chorus Punch",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 38
@@ -3856,6 +3859,7 @@
       "id": "midi-097",
       "name": "Strobe Hits",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 39
@@ -3876,6 +3880,7 @@
       "id": "midi-098",
       "name": "Blackout",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 40
@@ -3895,6 +3900,7 @@
       "id": "midi-099",
       "name": "Blinder",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 41
@@ -3914,6 +3920,7 @@
       "id": "midi-100",
       "name": "Par Chase",
       "source": {
+        "deviceName": "LPD8",
         "type": "note",
         "channel": 1,
         "number": 42

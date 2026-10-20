@@ -110,6 +110,12 @@ export interface FixtureCapability {
   colorTemperature?: string
   wheel?: string
   comment?: string
+  /** All colours of this range (split colour-wheel slots, double colour macros); `color` is the first */
+  colors?: string[]
+  /** Wheel slot number (1-based) this range selects, when it maps to a slot of `wheel` */
+  wheelSlot?: number
+  /** Gobo / slot picture reference from the source library (e.g. OFL "gobos/aerial", QLC+ "Others/open.svg") */
+  image?: string
 }
 
 export interface FixtureChannel {
@@ -123,6 +129,8 @@ export interface FixtureChannel {
   dmxBreak?: number
   physicalFrom?: number
   physicalTo?: number
+  /** Fine (LSB) channel: name of its coarse channel */
+  fineOf?: string
 }
 
 export interface FixtureMode {
@@ -151,10 +159,15 @@ export interface FixturePhysical {
 }
 
 export interface FixtureWheelSlot {
-  type: 'Color' | 'Gobo' | 'Prism' | 'Animation' | 'Open'
+  type: 'Color' | 'Gobo' | 'Prism' | 'Animation' | 'Open' | 'Closed' | 'Iris' | 'Frost'
   name: string
   color?: string
   imageFile?: string
+  /** All colours of the slot (dichroic split filters); `color` is the first */
+  colors?: string[]
+  colorTemperature?: string
+  /** Prism slots */
+  facets?: number
 }
 
 export interface FixtureWheel {
@@ -179,9 +192,81 @@ export interface FixtureDefinition {
   modes: FixtureMode[]
   physical?: FixturePhysical
   wheels?: FixtureWheel[]
-  source?: 'builtin' | 'ofl' | 'user' | 'gdtf'
+  source?: 'builtin' | 'ofl' | 'user' | 'gdtf' | 'qlcplus'
   sourceUrl?: string
   lastModified?: string
+  shortName?: string
+  /** Provenance of a definition that came from the offline fixture catalog */
+  catalog?: FixtureCatalogProvenance
+}
+
+// --- Offline fixture catalog (resources/fixture-library) ---
+
+export type FixtureCatalogSource = 'ofl' | 'qlcplus'
+
+export interface FixtureCatalogProvenance {
+  source: FixtureCatalogSource
+  /** Path of the original file in the source repository */
+  path: string
+  /** Commit SHA of the source repository the definition was converted from */
+  revision: string
+  license: string
+  authors?: string[]
+}
+
+/** One fixture of the offline catalog (search result / browse row; no channels) */
+export interface FixtureCatalogEntry {
+  /** Catalog id, also the FixtureDefinition id once installed: 'ofl/<maker>/<model>' or 'qlc/<maker>/<model>' */
+  id: string
+  name: string
+  manufacturer: string
+  shortName?: string
+  categories: string[]
+  modes: { name: string; channelCount: number }[]
+  source: FixtureCatalogSource
+}
+
+export interface FixtureCatalogQuery {
+  /** Free text: maker, model, short name (accent-insensitive, prefix + small typo tolerance) */
+  text?: string
+  /** Manufacturer name (case/accent-insensitive exact match) */
+  manufacturer?: string
+  /** Category (e.g. 'Moving Head'), exact */
+  category?: string
+  /** Only fixtures with a mode of exactly this many channels */
+  channelCount?: number
+  source?: FixtureCatalogSource
+  /** Default 50, max 500 */
+  limit?: number
+  offset?: number
+}
+
+export interface FixtureCatalogSearchResult {
+  total: number
+  entries: FixtureCatalogEntry[]
+}
+
+export interface FixtureCatalogSourceInfo {
+  id: FixtureCatalogSource
+  name: string
+  url: string
+  revision: string
+  /** ISO date of the source commit */
+  date: string
+  license: string
+  fixtureCount: number
+}
+
+export interface FixtureCatalogInfo {
+  /** False when the bundle is missing or unreadable (see `error`) */
+  available: boolean
+  error?: string
+  fixtureCount: number
+  sources: FixtureCatalogSourceInfo[]
+  /** Every manufacturer with its fixture count, sorted by name */
+  manufacturers: { name: string; count: number }[]
+  /** Every category with its fixture count, sorted by name */
+  categories: { name: string; count: number }[]
 }
 
 // --- 3D Visualizer ---
@@ -322,6 +407,8 @@ export interface PatchEntry {
   panInvert?: boolean   // invert pan direction for moving heads
   tiltInvert?: boolean  // invert tilt direction for moving heads
   pixelInvert?: boolean // reverse cell/pixel order for multi-cell fixtures
+  /** Fixture ID (stable number for the command line / pro views); v3 migration: list index + 1 */
+  fid?: number
 }
 
 // --- Groups ---
@@ -332,17 +419,44 @@ export interface Group {
   color: string
   fixtureIds: string[] // PatchEntry ids
   parentGroupId?: string // for sub-groups
+  /** Group number (command line / pools); v3 migration: list index + 1 */
+  number?: number
 }
 
 // --- Presets ---
 
-export type PresetType = 'intensity' | 'color' | 'position' | 'gobo' | 'beam' | 'full'
+/** Preset family (pool). 'full' = "All" (any attribute) */
+export type PresetType = 'intensity' | 'color' | 'position' | 'gobo' | 'beam' | 'focus' | 'control' | 'full'
+
+/** Pool number of each preset family: "Preset 4.2" = colour preset 2 */
+export const PRESET_FAMILY_NUMBER: Record<PresetType, number> =
+  { full: 0, intensity: 1, position: 2, gobo: 3, color: 4, beam: 5, focus: 6, control: 7 }
+
+/** Preset families in pool order (by PRESET_FAMILY_NUMBER) */
+export const PRESET_TYPES: readonly PresetType[] = ['full', 'intensity', 'position', 'gobo', 'color', 'beam', 'focus', 'control']
+
+/**
+ * selective = values per fixture (`values`) · global = per fixture type (`typeValues`)
+ * · universal = per attribute for any fixture (`universal`). Resolution order:
+ * selective → global → universal (lib/pro/preset-resolve.ts).
+ */
+export type PresetScope = 'selective' | 'global' | 'universal'
 
 export interface Preset {
   id: string
   name: string
   type: PresetType
-  values: Record<string, Record<string, number>> // fixtureId → { channelName → value }
+  values: Record<string, Record<string, number>> // fixtureId → { channelName → value } (selective)
+  /** Number within its family (pool slot, 1-based); v3 migration numbers each family in list order */
+  number?: number
+  /** Default 'selective' */
+  scope?: PresetScope
+  /** Global values: fixtureDefId → { channelName → value } */
+  typeValues?: Record<string, Record<string, number>>
+  /** Universal values: canonical attribute key (shared/attribute-families canonicalAttributeKey) → value */
+  universal?: Record<string, number>
+  /** Pool tile colour */
+  color?: string
 }
 
 // --- Cues & Cuelists ---
@@ -350,7 +464,26 @@ export interface Preset {
 export interface CueChannelValue {
   fixtureId: string
   channelName: string
+  /** ALWAYS the resolved DMX value (also when `presetId` is set): what a v2 reader plays */
   value: number
+  /** The value came from this preset (live update when the preset changes) */
+  presetId?: string
+  /** Per-value timing (seconds) — overrides part / feature / cue timing */
+  fade?: number
+  delay?: number
+  /** Cue part index (Cue.parts) */
+  part?: number
+}
+
+/** Attribute features used by per-feature cue timing and store filters */
+export type CueFeature = 'intensity' | 'position' | 'colour' | 'beam' | 'control'
+
+export interface CuePart {
+  index: number
+  name?: string
+  fade?: number
+  fadeOut?: number
+  delay?: number
 }
 
 export interface Cue {
@@ -363,6 +496,23 @@ export interface Cue {
   delay: number // seconds
   followTime: number | null // null = manual GO, number = auto-follow seconds
   color?: string // UI color tag
+  /** Per-feature timing (seconds) — overrides the cue's fadeIn / delay for that feature */
+  featureTiming?: Partial<Record<CueFeature, { fade?: number; delay?: number }>>
+  /** Cue parts (values pick one with CueChannelValue.part) */
+  parts?: CuePart[]
+  /** Follow counts from the end of the fade (default) or from the GO */
+  followMode?: 'after-fade' | 'after-go'
+  /** Block cue: tracking stops here (values are hard-stored) */
+  block?: boolean
+}
+
+/** Move-In-Black settings of a sequence */
+export interface MibSettings {
+  enabled: boolean
+  /** Seconds after the fixture went dark */
+  delay: number
+  /** Seconds */
+  fade: number
 }
 
 export interface Cuelist {
@@ -377,6 +527,16 @@ export interface Cuelist {
   flash: boolean
   goGeneration?: number // bumped on each GO to force re-trigger
   effectSnapshots?: Effect[] // Effects captured at record time, restarted on GO
+  /** Sequence number (command line / pools); v3 migration: list index + 1 */
+  number?: number
+  /** Tracking (default true): false = each cue plays only its own values */
+  tracking?: boolean
+  mib?: MibSettings
+  /** Playback rate 0.25-4 (times are divided by it); default 1 */
+  rate?: number
+  /** Default 'normal' */
+  priorityMode?: 'normal' | 'swap' | 'super'
+  speedMasterId?: string
 }
 
 // --- Chases ---
@@ -393,6 +553,10 @@ export interface Chase {
   direction: 'forward' | 'backward' | 'bounce' | 'random'
   faderLevel: number
   priority?: number // 0-100, defaults to 50
+  /** Chase number (command line / pools); v3 migration: list index + 1 */
+  number?: number
+  /** Tempo follows this speed master */
+  speedMasterId?: string
 }
 
 export interface ChaseStep {
@@ -446,6 +610,11 @@ export interface Effect {
   /** Size fade when the effect is started / stopped from the Effects view (seconds, default 0) */
   fadeIn?: number
   fadeOut?: number
+  /** Effect number (command line / pools); v3 migration: list index + 1 */
+  number?: number
+  /** Speed follows this speed master (× speedMultiplier) */
+  speedMasterId?: string
+  speedMultiplier?: number
 }
 
 // --- Timeline ---
@@ -516,6 +685,8 @@ export interface MidiMapping {
     inverted: boolean
     encoding: 'absolute' | 'relative' // absolute = 0-127 fader, relative = encoder (1=CW, 127=CCW)
     behavior: 'direct' | 'toggle' | 'trigger' | 'flash' // direct = continuous, toggle = on/off on press, trigger = momentary, flash = full while held
+    /** Echo the target's state to the device's output port: 'note' (pad LED on/off) or 'cc' (value: motor fader, LED ring) */
+    feedback?: 'note' | 'cc'
   }
 }
 
@@ -574,11 +745,104 @@ export interface ShowTimecodeSettings {
 
 export type ExecutorSceneMode = 'toggle' | 'trigger' | 'flash'
 
-/** Executor grid (8 columns × 4 rows of cuelist ids) shown in the bottom bar / Stage window */
+/** What an executor cell plays */
+export type ExecutorTargetKind = 'cuelist' | 'chase' | 'effect' | 'macro' | 'group' | 'speed'
+
+/** Button function of an executor cell (default derived from `mode`: toggle / temp / flash) */
+export type ExecutorButtonFn = 'toggle' | 'go' | 'goBack' | 'flash' | 'temp' | 'off' | 'select' | 'swap' | 'pause' | 'learn'
+
+/** What a column fader drives (default: the column's cells, `{ kind: 'column' }`) */
+export type ExecutorColumnFader =
+  | { kind: 'column' }
+  | { kind: 'cell'; row: number }
+  | { kind: 'grandmaster' }
+  | { kind: 'speed'; id: string }
+  | { kind: 'group'; id: string }
+  | { kind: 'rate'; row: number }
+  | { kind: 'xfade'; row: number }
+
+export interface ExecutorCell {
+  kind: ExecutorTargetKind
+  id: string
+  mode: ExecutorSceneMode
+  button?: ExecutorButtonFn
+}
+
+export interface ExecutorColumn {
+  title: string
+  color: string
+  fader?: ExecutorColumnFader
+}
+
+/** One page of executors: 8 columns × 4 rows */
+export interface ExecutorPage {
+  id: string
+  /** '' = default name ("Page 2") */
+  name: string
+  /** [col][row], 8 × 4 */
+  cells: (ExecutorCell | null)[][]
+  columns: ExecutorColumn[]
+}
+
+/**
+ * Executor layout. `grid` / `columns` / `modes` are the v2 format: in a v3
+ * file they MIRROR pages[0] (cuelist cells only) so PhotonBoard 1.0 still
+ * plays it; `pages` (v3) is the truth when present.
+ */
 export interface ShowExecutorLayout {
   grid: (string | null)[][]
   columns: { title: string; color: string }[]
   modes: ExecutorSceneMode[][]
+  pages?: ExecutorPage[]
+}
+
+// --- Pro programming: macros, speed masters, stage pages ---
+
+export interface MacroLine {
+  /** Command line text (English keywords) */
+  command: string
+  /** Seconds to wait after this line (default 0) */
+  wait?: number
+}
+
+export interface Macro {
+  id: string
+  number: number
+  name: string
+  color?: string
+  lines: MacroLine[]
+}
+
+export interface SpeedMaster {
+  id: string
+  number: number
+  name: string
+  bpm: number
+}
+
+export type StageWidgetKind = 'executor' | 'fader' | 'macro' | 'preset' | 'group' | 'master' | 'speed' | 'go' | 'clock' | 'label'
+
+export interface StageWidget {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  kind: StageWidgetKind
+  /** Target object id (or executor "page.col.row") */
+  ref?: string
+  label?: string
+  color?: string
+  options?: Record<string, string | number | boolean>
+}
+
+/** User touch page (Stage window, tablet remote, in-app Stage view) */
+export interface StagePage {
+  id: string
+  name: string
+  cols: number
+  rows: number
+  widgets: StageWidget[]
 }
 
 /**
@@ -607,6 +871,14 @@ export interface ShowFile {
   roomConfig?: RoomConfig
   timeline?: ShowTimeline
   executor?: ShowExecutorLayout
+  // --- v3 (pro programming); every field optional ---
+  macros?: Macro[]
+  speedMasters?: SpeedMaster[]
+  stagePages?: StagePage[]
+  /** Parked channels (output frozen at these values) */
+  parked?: CueChannelValue[]
+  /** Group master levels 0-255 by group id (missing = 255) */
+  groupMasters?: Record<string, number>
 }
 
 // --- IPC Channel Names ---
@@ -645,6 +917,10 @@ export const IPC = {
   FIXTURES_OFL_DOWNLOAD: 'fixtures:ofl-download',
   FIXTURES_SAVE: 'fixtures:save',
   FIXTURES_DELETE: 'fixtures:delete',
+  FIXTURES_CATALOG_INFO: 'fixtures:catalog-info',
+  FIXTURES_CATALOG_SEARCH: 'fixtures:catalog-search',
+  FIXTURES_CATALOG_GET: 'fixtures:catalog-get',
+  FIXTURES_CATALOG_INSTALL: 'fixtures:catalog-install',
 
   // Show helpers
   SHOW_GET_PATH: 'show:get-path',
@@ -656,6 +932,7 @@ export const IPC = {
   // App
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit',
+  APP_SET_LANGUAGE: 'app:set-language',
 
   // Stage Window
   STAGE_OPEN: 'stage:open',

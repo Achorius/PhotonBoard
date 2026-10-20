@@ -35,6 +35,15 @@ describe('parseShowFileContent', () => {
     expect(parseShowFileContent('{"version":"1","patch":{}}').ok).toBe(false)
     expect(checkShowObject({ name: 5 }).ok).toBe(false)
   })
+
+  it('checks the v3 lists too (format v3 writes "3")', () => {
+    expect(parseShowFileContent('{"version":"3","patch":[],"macros":[],"speedMasters":[],"stagePages":[],"parked":[]}').ok).toBe(true)
+    for (const key of ['macros', 'speedMasters', 'stagePages', 'parked']) {
+      const r = parseShowFileContent(JSON.stringify({ version: '3', patch: [], [key]: { broken: true } }))
+      expect(r.ok, key).toBe(false)
+      if (!r.ok) expect(r.error).toContain(key)
+    }
+  })
 })
 
 describe('sanitizeShowName', () => {

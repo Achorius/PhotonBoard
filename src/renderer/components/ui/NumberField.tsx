@@ -11,6 +11,7 @@ import type React from 'react'
 import { cn } from './cn'
 import { FIELD_BASE, INPUT_SIZE, type InputSize } from './TextInput'
 import { usePointerDrag } from './usePointerDrag'
+import { formatDecimal, parseLocaleNumber, useLocale } from '@renderer/i18n'
 
 export interface NumberFieldProps {
   value: number
@@ -63,8 +64,10 @@ export function NumberField({
   onScrubEnd,
   ...aria
 }: NumberFieldProps) {
+  const locale = useLocale()
   const decimals = precision ?? decimalsOf(step)
-  const format = (v: number) => (Number.isFinite(v) ? v.toFixed(decimals) : '')
+  // Decimal comma in French; typing accepts both "," and "."
+  const format = (v: number) => formatDecimal(v, decimals, locale)
   const [draft, setDraft] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrub = useRef<{ start: number; scrubbing: boolean; acc: number } | null>(null)
@@ -75,7 +78,7 @@ export function NumberField({
   }
   const commit = (raw: string) => {
     setDraft(null)
-    const parsed = parseFloat(raw.replace(',', '.'))
+    const parsed = parseLocaleNumber(raw)
     if (Number.isFinite(parsed)) {
       const v = clamp(parsed)
       if (v !== value) onChange(v)

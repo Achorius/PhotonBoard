@@ -8,10 +8,16 @@
 //  - DMX: the 512 raw channels of a universe (expert mode).
 // Orange = in the programmer. Release (per attribute, feature or
 // selection) hands channels back to playbacks; Clear is in the top bar.
+// Keyboard: nothing here is deletable — Delete / Backspace do nothing in
+// this view (a null selection registration keeps them from reaching
+// another view's selection); Mod+Backspace clears the programmer (global).
 // Subscriptions: patch / selection here; live values only in leaves.
+// Pro view: selection tools strip under the header (Next / Prev, MAtricks,
+// Align, Highlight, Blind, time, Park); attributes then act on the ACTIVE
+// fixtures (MAtricks + step); preset rows and "P4.2" chips in the panels.
 // ============================================================
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   LuBoxes, LuCable, LuChevronDown, LuEraser, LuGrid3X3, LuListChecks, LuLocateFixed, LuMousePointerClick,
   LuPanelLeftOpen, LuSlidersHorizontal, LuSlidersVertical, LuTable
@@ -19,9 +25,11 @@ import {
 import {
   Badge, Button, DropdownMenu, EmptyState, SegmentedControl, Tag, toast, type MenuEntry
 } from '@renderer/components/ui'
+import { t as translate, useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { locateFixtures, releaseFixtures, useProgrammerStore, useProgrammerWatch } from '@renderer/lib/programmer-utils'
+import { useSelectionActions } from '@renderer/lib/selection-actions'
 import { getProgrammerValue } from '@renderer/lib/dmx-mixer'
 import { buildProgrammerModel } from './programmer-model'
 import { useProgrammerView, type ProgrammerMode } from './programmer-view-store'
@@ -30,28 +38,47 @@ import { FixtureStrips } from './FixtureStrips'
 import { FixtureSheet } from './FixtureSheet'
 import { DmxGrid } from './DmxGrid'
 import { ChannelMenuProvider } from './channel-menu'
+import { SelectionToolsStrip } from './SelectionToolsStrip'
+import { usePresetMetaWatch } from './preset-meta'
+import { useSelectionStore } from '@renderer/stores/selection-store'
+import { applyMatricks } from '@renderer/lib/pro/selection-tools'
 
-const MODES: { value: ProgrammerMode; label: string; icon: typeof LuTable; title: string }[] = [
-  { value: 'attributes', label: 'Attributes', icon: LuSlidersHorizontal, title: 'Program by attribute (intensity, position, colour, beam)' },
-  { value: 'faders', label: 'Faders', icon: LuSlidersVertical, title: 'Channel faders per fixture' },
-  { value: 'sheet', label: 'Sheet', icon: LuTable, title: 'Spreadsheet of every fixture' },
-  { value: 'dmx', label: 'DMX', icon: LuGrid3X3, title: 'Raw DMX channels of a universe' }
+const MODES: { value: ProgrammerMode; icon: typeof LuTable }[] = [
+  { value: 'attributes', icon: LuSlidersHorizontal },
+  { value: 'faders', icon: LuSlidersVertical },
+  { value: 'sheet', icon: LuTable },
+  { value: 'dmx', icon: LuGrid3X3 }
 ]
 
 export function FixtureControlView() {
   useProgrammerWatch()
+  const t = useT()
+  const rootRef = useRef<HTMLDivElement>(null)
+  // The programmer has no deletable objects: clicking here makes Delete / Backspace
+  // (and Mod+D, F2) do nothing instead of acting on another view's selection.
+  useSelectionActions(null, { scope: rootRef })
   const patch = usePatchStore((s) => s.patch)
   const fixtures = usePatchStore((s) => s.fixtures)
   const selectedIds = usePatchStore((s) => s.selectedFixtureIds)
   const mode = useProgrammerView((s) => s.mode)
   const unit = useProgrammerView((s) => s.unit)
   const universe = useUiStore((s) => s.selectedUniverse)
+  const proMode = useUiStore((s) => s.proMode)
+  const matricks = useSelectionStore((s) => s.matricks)
+  const step = useSelectionStore((s) => s.step)
+  usePresetMetaWatch(proMode)
 
   const defs = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures])
   const byId = useMemo(() => new Map(patch.map((p) => [p.id, p])), [patch])
   const numbers = useMemo(() => new Map(patch.map((p, i) => [p.id, i + 1])), [patch])
   const selectedEntries = useMemo(() => selectedIds.map((id) => byId.get(id)).filter((e) => e !== undefined), [selectedIds, byId])
-  const model = useMemo(() => buildProgrammerModel(selectedEntries, fixtures), [selectedEntries, fixtures])
+  // Pro view: the attributes act on the active fixtures (MAtricks, Next / Prev step)
+  const activeEntries = useMemo(() => {
+    if (!proMode) return selectedEntries
+    const active = applyMatricks(selectedIds, matricks, step).active
+    return active.map((id) => byId.get(id)).filter((e) => e !== undefined)
+  }, [proMode, selectedEntries, selectedIds, matricks, step, byId])
+  const model = useMemo(() => buildProgrammerModel(activeEntries, fixtures), [activeEntries, fixtures])
 
   const universes = useMemo(() => {
     const n = Math.max(...patch.map((p) => p.universe + 1), 1)
@@ -76,39 +103,44 @@ export function FixtureControlView() {
 
   const locate = () => {
     locateFixtures(selectedIds)
-    toast.info(`Locate: ${count} fixture${count > 1 ? 's' : ''} open, white, centred`, { description: 'Release or Clear to bring them back.' })
+    toast.info(translate('fixtures.locate.toast', { count }), { description: translate('fixtures.locate.toastDescription') })
   }
 
   return (
     <ChannelMenuProvider>
-      <div className="flex h-full flex-col">
+      <div ref={rootRef} className="flex h-full flex-col">
         <header className="flex h-control-lg shrink-0 items-center gap-2 border-b border-line px-3">
-          <h2 className="text-sm font-semibold text-fg-primary">Programmer</h2>
+          <h2 className="shrink-0 text-sm font-semibold text-fg-primary">{t('common.programmer')}</h2>
           <SelectionSummary names={selectedEntries.map((e) => e.name)} />
           <div className="min-w-2 flex-1" />
           <div className="flex shrink-0 items-center gap-1.5">
             <SegmentedControl
               size="sm"
-              aria-label="View"
+              aria-label={t('fixtures.modes.aria')}
               value={mode}
               onChange={(m) => useProgrammerView.getState().setMode(m)}
-              items={MODES.map((m) => ({ value: m.value, label: <span data-mode={m.value} className="hidden lg:inline">{m.label}</span>, icon: m.icon, title: m.title }))}
+              items={MODES.map((m) => ({
+                value: m.value,
+                label: <span data-mode={m.value} className="hidden lg:inline">{t(`fixtures.modes.${m.value}`)}</span>,
+                icon: m.icon,
+                title: t(`fixtures.modes.${m.value}Title`)
+              }))}
             />
             {(mode === 'faders' || mode === 'dmx') && universes.length > 1 && (
               <SegmentedControl
                 size="sm"
-                aria-label="Universe"
+                aria-label={t('fixtures.universeAria')}
                 value={universe}
                 onChange={(u) => useUiStore.getState().setSelectedUniverse(u)}
-                items={universes.map((u) => ({ value: u, label: `U${u + 1}`, title: `Universe ${u + 1}` }))}
+                items={universes.map((u) => ({ value: u, label: `U${u + 1}`, title: t('common.universeN', { n: u + 1 }) }))}
               />
             )}
             <SegmentedControl
               size="sm"
-              aria-label="Values in"
+              aria-label={t('fixtures.unit.aria')}
               value={unit}
               onChange={(u) => useProgrammerView.getState().setUnit(u)}
-              items={[{ value: 'percent', label: '%', title: 'Percent' }, { value: 'dmx', label: 'DMX', title: 'DMX 0–255' }]}
+              items={[{ value: 'percent', label: '%', title: t('fixtures.unit.percent') }, { value: 'dmx', label: 'DMX', title: t('fixtures.unit.dmx') }]}
             />
             <GroupMenu />
             <Button
@@ -117,25 +149,26 @@ export function FixtureControlView() {
               data-action="locate"
               disabled={count === 0}
               onClick={locate}
-              tooltip="Locate: selected fixtures at full, open white, centred (into the programmer)"
+              tooltip={t('fixtures.locate.tooltip')}
               labelClassName="hidden xl:inline"
-              aria-label="Locate selected fixtures"
+              aria-label={t('fixtures.locate.aria')}
             >
-              Locate
+              {t('fixtures.locate.label')}
             </Button>
             <ReleaseSelectionButton ids={selectedIds} />
           </div>
         </header>
+        {proMode && <SelectionToolsStrip selection={selectedIds} />}
 
         {!hasPatch && mode !== 'dmx' ? (
           <EmptyState
             icon={LuCable}
-            title="No fixtures patched"
-            description="Patch fixtures to program them by attribute, or drive raw DMX channels directly."
+            title={t('fixtures.empty.noPatchTitle')}
+            description={t('fixtures.empty.noPatchDescription')}
             action={
               <>
-                <Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>Add fixtures</Button>
-                <Button icon={LuGrid3X3} onClick={() => useProgrammerView.getState().setMode('dmx')}>Raw DMX</Button>
+                <Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>{t('fixtures.empty.addFixtures')}</Button>
+                <Button icon={LuGrid3X3} onClick={() => useProgrammerView.getState().setMode('dmx')}>{t('fixtures.empty.rawDmx')}</Button>
               </>
             }
           />
@@ -143,7 +176,7 @@ export function FixtureControlView() {
           count === 0 ? (
             <NoSelection />
           ) : model.attributes.length === 0 ? (
-            <EmptyState icon={LuBoxes} title="Nothing to program" description="The selected fixtures have no known channels (missing fixture definition?)." />
+            <EmptyState icon={LuBoxes} title={t('fixtures.empty.nothingTitle')} description={t('fixtures.empty.nothingDescription')} />
           ) : (
             <ProgrammerAttributes model={model} defs={defs} />
           )
@@ -153,8 +186,8 @@ export function FixtureControlView() {
             defs={defs}
             numbers={numbers}
             selectedIds={selectedIds}
-            emptyTitle={`No fixtures on universe ${universe + 1}`}
-            emptyDescription="Pick another universe above, or patch fixtures on this one."
+            emptyTitle={t('fixtures.empty.universeTitle', { n: universe + 1 })}
+            emptyDescription={t('fixtures.empty.universeDescription')}
           />
         ) : mode === 'sheet' ? (
           <FixtureSheet />
@@ -167,7 +200,8 @@ export function FixtureControlView() {
 }
 
 function SelectionSummary({ names }: { names: string[] }) {
-  if (names.length === 0) return <span className="truncate text-xs text-fg-tertiary">No selection</span>
+  const t = useT()
+  if (names.length === 0) return <span className="truncate text-xs text-fg-tertiary">{t('fixtures.noSelection')}</span>
   const text = names.length <= 3 ? names.join(', ') : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -178,20 +212,27 @@ function SelectionSummary({ names }: { names: string[] }) {
 }
 
 function GroupMenu() {
+  const t = useT()
   const items = (): MenuEntry[] => {
     const { groups, patch } = usePatchStore.getState()
     const store = usePatchStore.getState()
     return [
-      { label: 'All fixtures', icon: LuListChecks, description: `${patch.length} fixtures`, onSelect: () => store.selectAll(), disabled: patch.length === 0 },
-      ...(groups.length > 0 ? [{ type: 'separator' as const }, { type: 'label' as const, label: 'Groups' }] : []),
+      {
+        label: translate('fixtures.groupMenu.allFixtures'),
+        icon: LuListChecks,
+        description: translate('common.fixtureCount', { count: patch.length }),
+        onSelect: () => store.selectAll(),
+        disabled: patch.length === 0
+      },
+      ...(groups.length > 0 ? [{ type: 'separator' as const }, { type: 'label' as const, label: translate('common.groups') }] : []),
       ...groups.map((g) => ({
         label: g.name,
-        description: `${g.fixtureIds.length} fixtures`,
+        description: translate('common.fixtureCount', { count: g.fixtureIds.length }),
         onSelect: () => store.selectGroup(g.id),
         disabled: g.fixtureIds.length === 0
       })),
       { type: 'separator' },
-      { label: 'Clear selection', onSelect: () => store.clearSelection() }
+      { label: translate('fixtures.groupMenu.clearSelection'), onSelect: () => store.clearSelection() }
     ]
   }
   return (
@@ -199,8 +240,8 @@ function GroupMenu() {
       items={items}
       placement="bottom-end"
       trigger={(p) => (
-        <Button {...p} size="sm" variant="ghost" icon={LuBoxes} iconRight={LuChevronDown} labelClassName="hidden xl:inline" aria-label="Select a group">
-          Select
+        <Button {...p} data-action="select-group" size="sm" variant="ghost" icon={LuBoxes} iconRight={LuChevronDown} labelClassName="hidden xl:inline" aria-label={t('fixtures.groupMenu.aria')}>
+          {t('common.select')}
         </Button>
       )}
     />
@@ -208,6 +249,7 @@ function GroupMenu() {
 }
 
 function ReleaseSelectionButton({ ids }: { ids: string[] }) {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const fixtures = usePatchStore((s) => s.fixtures)
   // Any channel of the selection in the programmer?
@@ -228,38 +270,39 @@ function ReleaseSelectionButton({ ids }: { ids: string[] }) {
       icon={LuEraser}
       disabled={!active}
       onClick={() => releaseFixtures(ids)}
-      tooltip="Release the selected fixtures from the programmer"
+      tooltip={t('fixtures.release.selectionTooltip')}
       labelClassName="hidden xl:inline"
-      aria-label="Release selected fixtures"
+      aria-label={t('fixtures.release.selectionAria')}
     >
-      Release
+      {t('fixtures.release.label')}
     </Button>
   )
 }
 
 function NoSelection() {
+  const t = useT()
   const groups = usePatchStore((s) => s.groups)
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
   return (
     <EmptyState
       icon={LuMousePointerClick}
-      title="Select fixtures to program"
-      description="Pick fixtures in the fixture list, or select a group. Attributes appear for the channels the selection has."
+      title={t('fixtures.empty.selectTitle')}
+      description={t('fixtures.empty.selectDescription')}
       action={
         <div className="flex max-w-xl flex-col items-center gap-3">
           {groups.length > 0 && (
             <div className="flex flex-wrap justify-center gap-1.5">
               {groups.map((g) => (
-                <Tag key={g.id} color={g.color} onClick={() => usePatchStore.getState().selectGroup(g.id)} title={`${g.fixtureIds.length} fixtures`}>
+                <Tag key={g.id} color={g.color} onClick={() => usePatchStore.getState().selectGroup(g.id)} title={t('common.fixtureCount', { count: g.fixtureIds.length })}>
                   {g.name}
                 </Tag>
               ))}
             </div>
           )}
-          <div className="flex gap-2">
-            <Button icon={LuListChecks} onClick={() => usePatchStore.getState().selectAll()}>Select all</Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button icon={LuListChecks} onClick={() => usePatchStore.getState().selectAll()}>{t('common.selectAll')}</Button>
             {!sidebarOpen && (
-              <Button icon={LuPanelLeftOpen} onClick={() => useUiStore.getState().toggleSidebar(true)}>Show fixture list</Button>
+              <Button icon={LuPanelLeftOpen} onClick={() => useUiStore.getState().toggleSidebar(true)}>{t('fixtures.empty.showFixtureList')}</Button>
             )}
           </div>
         </div>

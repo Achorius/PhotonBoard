@@ -6,6 +6,7 @@ import { LuAudioWaveform } from 'react-icons/lu'
 import {
   Button, Field, NumberField, Popover, SegmentedControl, Select, StatusDot, Switch, cn, usePopover
 } from '@renderer/components/ui'
+import { formatDecimal, t as translate, useT } from '@renderer/i18n'
 import {
   FRAMERATES, enableTimecode, formatTimecode, getTimecodeDropoutMs, getTimecodeFramerate, getTimecodeOffset,
   getTimecodePosition, isTimecodeChase, isTimecodeEnabled, isTimecodeReceiving, setTimecodeChase,
@@ -37,11 +38,13 @@ function useTcStatus(): [TcStatus, () => void] {
   return [status, refresh]
 }
 
+/** "25 fps", "29.97 df" (fr "29,97 df") */
 export function fpsLabel(fps: TimecodeFramerate): string {
-  return fps === 29.97 ? '29.97 df' : `${fps} fps`
+  return fps === 29.97 ? translate('timeline.timecode.dropFrame', { fps: formatDecimal(29.97, 2) }) : translate('units.fpsValue', { value: fps })
 }
 
 export function TimecodeButton() {
+  const t = useT()
   const pop = usePopover()
   const [status, refresh] = useTcStatus()
   const tone = !status.enabled ? 'neutral' : status.receiving ? 'go' : 'warning'
@@ -56,17 +59,17 @@ export function TimecodeButton() {
         active={pop.open}
         tone="neutral"
         onClick={pop.toggle}
-        tooltip="Timecode source & chase"
+        tooltip={t('timeline.timecode.buttonTooltip')}
         className="gap-2 font-mono"
       >
         <StatusDot tone={tone} pulse={status.enabled && !status.receiving} />
         <span className="text-xs">
-          {!status.enabled ? 'INT' : status.receiving ? 'MTC LOCK' : 'MTC'}
+          {!status.enabled ? t('timeline.timecode.badgeInternal') : status.receiving ? t('timeline.timecode.badgeLocked') : 'MTC'}
         </span>
-        {status.enabled && <span className="text-2xs text-fg-tertiary">{status.fps === 29.97 ? '29.97' : status.fps}</span>}
-        {status.enabled && status.chase && <span className="rounded-sm bg-info/20 px-1 text-[10px] font-semibold text-info-fg">CHASE</span>}
+        {status.enabled && <span className="text-2xs text-fg-tertiary">{status.fps === 29.97 ? formatDecimal(29.97, 2) : status.fps}</span>}
+        {status.enabled && status.chase && <span className="rounded-sm bg-info/20 px-1 text-[10px] font-semibold text-info-fg">{t('timeline.timecode.badgeChase')}</span>}
       </Button>
-      <Popover {...pop.props} placement="bottom-start" aria-label="Timecode" className="w-[340px] [[data-density=touch]_&]:w-[400px]">
+      <Popover {...pop.props} placement="bottom-start" aria-label={t('timeline.timecode.title')} className="w-[340px] [[data-density=touch]_&]:w-[400px]">
         <TimecodeSettings status={status} onChange={refresh} />
       </Popover>
     </>
@@ -74,6 +77,7 @@ export function TimecodeButton() {
 }
 
 function TimecodeSettings({ status, onChange }: { status: TcStatus; onChange: () => void }) {
+  const t = useT()
   const [dropout, setDropout] = useState(getTimecodeDropoutMs)
   const [offset, setOffset] = useState(getTimecodeOffset)
   const [position, setPosition] = useState(() => formatTimecode(getTimecodePosition()))
@@ -88,24 +92,24 @@ function TimecodeSettings({ status, onChange }: { status: TcStatus; onChange: ()
   }, [status.enabled])
 
   const statusText = !status.enabled
-    ? 'Internal clock — the timeline runs on its own'
-    : status.receiving ? `Locked to incoming MTC · ${fpsLabel(status.fps)}` : 'Waiting for MIDI timecode…'
+    ? t('timeline.timecode.statusInternal')
+    : status.receiving ? t('timeline.timecode.statusLocked', { fps: fpsLabel(status.fps) }) : t('timeline.timecode.statusWaiting')
 
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 border-b border-line-subtle px-3 py-2.5">
         <LuAudioWaveform size={16} aria-hidden className="text-fg-tertiary" />
-        <h2 className="flex-1 text-sm font-semibold">Timecode</h2>
+        <h2 className="flex-1 text-sm font-semibold">{t('timeline.timecode.title')}</h2>
       </div>
 
       <div className="flex flex-col gap-3 p-3">
         <SegmentedControl
           fullWidth
           size="md"
-          aria-label="Clock source"
+          aria-label={t('timeline.timecode.clockSource')}
           value={status.enabled ? 'mtc' : 'internal'}
           onChange={(v) => { enableTimecode(v === 'mtc'); onChange() }}
-          items={[{ value: 'internal', label: 'Internal' }, { value: 'mtc', label: 'MIDI timecode' }]}
+          items={[{ value: 'internal', label: t('timeline.timecode.internal') }, { value: 'mtc', label: t('timeline.timecode.mtc') }]}
         />
 
         <div className={cn('flex items-center gap-3 rounded-lg px-3 py-2.5 ring-1 ring-inset',
@@ -117,7 +121,7 @@ function TimecodeSettings({ status, onChange }: { status: TcStatus; onChange: ()
           </div>
         </div>
 
-        <Field label="Frame rate" hint={status.enabled ? 'Follows the incoming timecode once locked' : undefined}>
+        <Field label={t('timeline.timecode.frameRate')} hint={status.enabled ? t('timeline.timecode.frameRateHint') : undefined}>
           {(id) => (
             <Select
               id={id}
@@ -132,13 +136,13 @@ function TimecodeSettings({ status, onChange }: { status: TcStatus; onChange: ()
           checked={status.chase}
           disabled={!status.enabled}
           onChange={(on) => { setTimecodeChase(on); onChange() }}
-          label="Chase timecode"
-          description="Start, follow and stop the timeline with the incoming timecode"
+          label={t('timeline.timecode.chase')}
+          description={t('timeline.timecode.chaseDescription')}
         />
 
-        <Field label="Dropout" hint="Stop the chased timeline after this much silence">
+        <Field label={t('timeline.timecode.dropout')} hint={t('timeline.timecode.dropoutHint')}>
           <NumberField
-            aria-label="Dropout time"
+            aria-label={t('timeline.timecode.dropoutAria')}
             value={dropout}
             min={100}
             max={10000}
@@ -149,9 +153,9 @@ function TimecodeSettings({ status, onChange }: { status: TcStatus; onChange: ()
           />
         </Field>
 
-        <Field label="Offset" hint="Added to incoming timecode (negative = earlier)">
+        <Field label={t('timeline.timecode.offset')} hint={t('timeline.timecode.offsetHint')}>
           <NumberField
-            aria-label="Timecode offset"
+            aria-label={t('timeline.timecode.offsetAria')}
             value={offset}
             min={-36000}
             max={36000}

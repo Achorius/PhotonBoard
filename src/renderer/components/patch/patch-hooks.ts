@@ -8,6 +8,7 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { isRemoteMode } from '@renderer/lib/runtime'
 import { SWATCH_COLORS, toast } from '@renderer/components/ui'
+import { t } from '@renderer/i18n'
 import { findConflicts, footprints, planFixtures, nextName, type ConflictInfo, type Footprint } from './patch-utils'
 
 export function useFixtureDefs(): Map<string, FixtureDefinition> {
@@ -105,7 +106,7 @@ export async function importFixtureFiles(): Promise<string[]> {
   try {
     results = await window.photonboard.fixtures.import()
   } catch (e) {
-    toast.error('Import failed', { description: (e as Error).message })
+    toast.error(t('patch.hooks.importFailed'), { description: (e as Error).message })
     return []
   }
   if (!results || results.length === 0) return []
@@ -113,13 +114,15 @@ export async function importFixtureFiles(): Promise<string[]> {
   const failed = results.filter((r) => !r.success)
   await usePatchStore.getState().loadFixtures()
   if (ok.length > 0) {
-    toast.success(ok.length === 1 ? `Imported ${ok[0].fixture!.name}` : `Imported ${ok.length} fixtures`, {
-      description: ok.length > 1 ? ok.map((r) => r.fixture!.name).join(', ') : `${ok[0].fixture!.manufacturer} · ${ok[0].fixture!.modes.length} modes`
+    toast.success(ok.length === 1 ? t('patch.hooks.importedOne', { name: ok[0].fixture!.name }) : t('patch.hooks.importedMany', { count: ok.length }), {
+      description: ok.length > 1
+        ? ok.map((r) => r.fixture!.name).join(', ')
+        : `${ok[0].fixture!.manufacturer} · ${t('patch.shared.modeCount', { count: ok[0].fixture!.modes.length })}`
     })
   }
   if (failed.length > 0) {
-    toast.error(failed.length === 1 ? 'A file could not be imported' : `${failed.length} files could not be imported`, {
-      description: failed.map((r) => r.error ?? 'Unknown format').join(' · ')
+    toast.error(t('patch.hooks.importFailedFiles', { count: failed.length }), {
+      description: failed.map((r) => r.error ?? t('patch.hooks.unknownFormat')).join(' · ')
     })
   }
   return ok.map((r) => r.fixture!.id)
@@ -160,7 +163,7 @@ export function duplicateFixtures(ids: string[]): string[] {
   }
   const newIds = store.addFixtures(created)
   if (newIds.length > 0) store.selectFixtures(newIds)
-  if (newIds.length < ids.length) toast.warning(`${ids.length - newIds.length} fixture(s) not duplicated`, { description: 'No free DMX addresses left.' })
-  else toast.success(newIds.length === 1 ? `Duplicated as ${created[0].name}` : `Duplicated ${newIds.length} fixtures`)
+  if (newIds.length < ids.length) toast.warning(t('patch.hooks.notDuplicated', { count: ids.length - newIds.length }), { description: t('patch.hooks.noFreeAddresses') })
+  else toast.success(newIds.length === 1 ? t('patch.hooks.duplicatedAs', { name: created[0].name }) : t('patch.hooks.duplicatedMany', { count: newIds.length }))
   return newIds
 }

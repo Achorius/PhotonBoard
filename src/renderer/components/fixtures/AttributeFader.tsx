@@ -6,10 +6,14 @@
 import { memo, useCallback } from 'react'
 import { LuX } from 'react-icons/lu'
 import { Fader, IconButton, cn } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { releaseAttrs, setAttr, useAttrSummary, useAttrTouched } from './attr-actions'
 import type { Attribute } from './programmer-model'
 import { formatRange, useProgrammerView } from './programmer-view-store'
 import { useChannelMenu } from './channel-menu'
+import { attrLabel } from './labels'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { PresetChip } from './PresetRow'
 
 export interface AttributeFaderProps {
   attr: Attribute
@@ -23,24 +27,30 @@ export interface AttributeFaderProps {
 }
 
 export const AttributeFader = memo(function AttributeFader({ attr, selectionCount, firstName, label, className }: AttributeFaderProps) {
+  const t = useT()
   const unit = useProgrammerView((s) => s.unit)
   const sum = useAttrSummary(attr)
   const touched = useAttrTouched(attr.targets)
   const openMenu = useChannelMenu()
+  const proMode = useUiStore((s) => s.proMode)
   const onChange = useCallback((v: number) => setAttr(attr, v), [attr])
   const release = useCallback(() => releaseAttrs([attr]), [attr])
   const mixed = sum.min !== sum.max
   const coverage = attr.fixtureIds.length < selectionCount ? `${attr.fixtureIds.length}/${selectionCount}` : null
+  const name = attrLabel(attr, t)
+  let title = attr.fine ? t('fixtures.attr.fine', { name }) : name
+  if (attr.cells) title = t('fixtures.attr.allCells', { name: title })
 
   return (
     <div
       data-attr={attr.key}
-      title={`${attr.label}${attr.fine ? ' (16-bit)' : ''}${attr.cells ? ' — all cells' : ''}`}
+      title={title}
       onContextMenu={(e) => openMenu(e, {
         fixtureId: attr.targets[0].fixtureId,
         fixtureName: firstName,
-        channelName: attr.label,
-        note: attr.fixtureIds.length > 1 ? `${attr.fixtureIds.length} fixtures` : undefined,
+        channelName: name,
+        parameter: attr.label,
+        note: attr.fixtureIds.length > 1 ? t('common.fixtureCount', { count: attr.fixtureIds.length }) : undefined,
         onRelease: touched !== 'none' ? release : undefined
       })}
       className={cn(
@@ -54,10 +64,11 @@ export const AttributeFader = memo(function AttributeFader({ attr, selectionCoun
       </span>
       <span
         className={cn('h-4 w-full truncate text-center font-mono text-2xs leading-4 tabular', mixed ? 'text-warning-fg' : sum.first > 0 ? 'text-fg-primary' : 'text-fg-tertiary')}
-        aria-label={mixed ? 'Mixed values' : undefined}
+        aria-label={mixed ? t('fixtures.attr.mixedValues') : undefined}
       >
         {formatRange(sum.min, sum.max, attr.max, unit)}
       </span>
+      {proMode && touched !== 'none' && <PresetChip targets={attr.targets} className="max-w-full" />}
       <div className="flex min-h-0 w-full flex-1 justify-center">
         <Fader
           value={sum.first}
@@ -66,14 +77,14 @@ export const AttributeFader = memo(function AttributeFader({ attr, selectionCoun
           defaultValue={attr.defaultValue}
           color={attr.color}
           readout={false}
-          aria-label={attr.label}
+          aria-label={name}
         />
       </div>
       <div className="flex h-control-sm w-full items-center justify-center">
         {touched !== 'none' ? (
-          <IconButton icon={LuX} label={`Release ${attr.label}`} size="sm" variant="ghost" onClick={release} className="text-accent-fg" />
+          <IconButton icon={LuX} label={t('fixtures.release.attribute', { name })} size="sm" variant="ghost" onClick={release} className="text-accent-fg" />
         ) : coverage ? (
-          <span className="font-mono text-2xs tabular text-fg-tertiary" title={`${attr.fixtureIds.length} of ${selectionCount} selected fixtures`}>{coverage}</span>
+          <span className="font-mono text-2xs tabular text-fg-tertiary" title={t('fixtures.attr.coverage', { count: attr.fixtureIds.length, total: selectionCount })}>{coverage}</span>
         ) : null}
       </div>
     </div>

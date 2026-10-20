@@ -6,26 +6,61 @@
 
 import { useEffect } from 'react'
 import { create } from 'zustand'
+import { t } from '@renderer/i18n'
 import {
-  clearProgrammer, getProgrammerChannels, getProgrammerValue, releaseProgrammerChannels, setProgrammerChannel
+  clearProgrammer, getProgrammerChannels, getProgrammerValue, releaseProgrammerChannels, setProgrammerChannel,
+  type LayerChannels
 } from './dmx-mixer'
 import { ChannelRole, classifyModeChannels } from './channel-classify'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import type { CueChannelValue, FixtureDefinition, PatchEntry } from '@shared/types'
 
+// ============================================================
+// Programmer overlay (pro programmer engine): fades in progress and
+// preset / timing references live in lib/pro/programmer-engine.ts,
+// which registers itself here — recording sees TARGET values (not a
+// mid-fade value, and values still waiting for their delay) and,
+// with `withMeta`, the preset refs and timing.
+// ============================================================
+
+export interface ProgrammerOverlay {
+  /** Target of every channel being faded / delayed: universe → channel → value */
+  targets(): ReadonlyMap<number, ReadonlyMap<number, number>>
+  /** Preset ref / timing of a fixture channel */
+  meta(fixtureId: string, channelName: string): { presetId?: string; fade?: number; delay?: number } | undefined
+}
+
+let overlay: ProgrammerOverlay | null = null
+
+/** Register the programmer engine's overlay (null = none) */
+export function setProgrammerOverlay(o: ProgrammerOverlay | null): void {
+  overlay = o
+}
+
 /**
  * Capture the current programmer state as an array of CueChannelValues.
  * Reverse-resolves absolute DMX addresses (universe + channel) back to
  * fixture IDs and channel names using the current patch.
+ * Channels being faded record their target. `withMeta`: the preset
+ * reference and the fade / delay of each value are copied too.
  *
  * Returns empty array if programmer has no active values.
  */
-export function recordFromProgrammer(): CueChannelValue[] {
+export function recordFromProgrammer(opts: { withMeta?: boolean } = {}): CueChannelValue[] {
   const programmerChannels = getProgrammerChannels()
+  const targets = overlay?.targets()
+  if (targets) {
+    for (const [u, chMap] of targets) {
+      let uniMap = programmerChannels.get(u)
+      if (!uniMap) { uniMap = new Map(); programmerChannels.set(u, uniMap) }
+      for (const [ch, v] of chMap) uniMap.set(ch, v)
+    }
+  }
   if (programmerChannels.size === 0) return []
 
   const { patch, fixtures } = usePatchStore.getState()
   const values: CueChannelValue[] = []
+  const withMeta = !!opts.withMeta && !!overlay
 
   // Build a reverse lookup: for each patched fixture, map its absolute channels
   // back to fixture ID + channel name
@@ -42,11 +77,18 @@ export function recordFromProgrammer(): CueChannelValue[] {
       const absChannel = entry.address - 1 + index
       const value = uniMap.get(absChannel)
       if (value !== undefined) {
-        values.push({
+        const v: CueChannelValue = {
           fixtureId: entry.id,
           channelName: chName,
           value
-        })
+        }
+        if (withMeta) {
+          const m = overlay!.meta(entry.id, chName)
+          if (m?.presetId) v.presetId = m.presetId
+          if (m?.fade !== undefined && m.fade > 0) v.fade = m.fade
+          if (m?.delay !== undefined && m.delay > 0) v.delay = m.delay
+        }
+        values.push(v)
       }
     })
   }
@@ -60,9 +102,12 @@ export function recordFromProgrammer(): CueChannelValue[] {
  */
 export function getProgrammerSummary(): string {
   const values = recordFromProgrammer()
-  if (values.length === 0) return 'Empty'
+  if (values.length === 0) return t('fixtures.summary.empty')
   const fixtureCount = new Set(values.map(v => v.fixtureId)).size
-  return `${fixtureCount} fixture${fixtureCount > 1 ? 's' : ''}, ${values.length} ch`
+  return t('fixtures.summary.contents', {
+    fixtures: t('common.fixtureCount', { count: fixtureCount }),
+    channels: t('fixtures.summary.channels', { count: values.length })
+  })
 }
 
 // ============================================================
@@ -202,18 +247,19 @@ function openCapabilityValue(caps: { dmxRange: [number, number]; type: string; l
 }
 
 /**
- * Locate / highlight: open white beams, centred, at full — the classic
- * "where is this fixture" look. Values go into the programmer (Release or
- * Clear brings the fixtures back). Returns the number of channels set.
+ * The locate look of fixtures: open white beams at full, and (with
+ * `centre`) pan / tilt centred. Calls `set(universe, channel, value)` for
+ * every channel it decides. Highlight uses it without centring (grandMA:
+ * the beam lights up where it is).
  */
-export function locateFixtures(fixtureIds: readonly string[]): number {
+export function forEachLocateValue(
+  fixtureIds: readonly string[], centre: boolean, set: (universe: number, channel: number, value: number) => void
+): void {
   const { patch, fixtures } = usePatchStore.getState()
   const ids = new Set(fixtureIds)
-  let n = 0
-  const set = (u: number, ch: number, v: number) => {
+  const put = (u: number, ch: number, v: number) => {
     if (ch < 0 || ch >= 512) return
-    setProgrammerChannel(u, ch, v)
-    n++
+    set(u, ch, v)
   }
   for (const entry of patch) {
     if (!ids.has(entry.id)) continue
@@ -229,25 +275,50 @@ export function locateFixtures(fixtureIds: readonly string[]): number {
       const fine = c.fineIndex !== -1 ? entry.address - 1 + c.fineIndex : -1
       const u = entry.universe
       if (c.role === ChannelRole.Dimmer) {
-        set(u, ch, chDef?.highlightValue ?? 255)
-        if (fine >= 0) set(u, fine, 255)
+        put(u, ch, chDef?.highlightValue ?? 255)
+        if (fine >= 0) put(u, fine, 255)
       } else if (c.role === ChannelRole.Position) {
-        set(u, ch, chDef?.defaultValue ?? 128)
-        if (fine >= 0) set(u, fine, def.channels[mode.channels[c.fineIndex]]?.defaultValue ?? 0)
+        if (!centre) return
+        put(u, ch, chDef?.defaultValue ?? 128)
+        if (fine >= 0) put(u, fine, def.channels[mode.channels[c.fineIndex]]?.defaultValue ?? 0)
       } else if (c.role === ChannelRole.Shutter) {
-        if (c.blinderValue >= 0) set(u, ch, c.blinderValue)
+        if (c.blinderValue >= 0) put(u, ch, c.blinderValue)
       } else if (LOCATE_OPEN_WHEEL.test(name)) {
-        set(u, ch, openCapabilityValue(chDef?.capabilities) ?? 0)
+        put(u, ch, openCapabilityValue(chDef?.capabilities) ?? 0)
       } else if (c.role === ChannelRole.Color || c.role === ChannelRole.ColorIntensity) {
-        if (LOCATE_FULL_COLOUR.test(name)) set(u, ch, 255)
-        else if (LOCATE_ZERO.test(name)) set(u, ch, 0)
+        if (LOCATE_FULL_COLOUR.test(name)) put(u, ch, 255)
+        else if (LOCATE_ZERO.test(name)) put(u, ch, 0)
         else return
-        if (fine >= 0) set(u, fine, LOCATE_FULL_COLOUR.test(name) ? 255 : 0)
+        if (fine >= 0) put(u, fine, LOCATE_FULL_COLOUR.test(name) ? 255 : 0)
       } else if (LOCATE_ZERO.test(name) && !/rotat|speed|shake/i.test(name)) {
-        set(u, ch, openCapabilityValue(chDef?.capabilities) ?? 0)
+        put(u, ch, openCapabilityValue(chDef?.capabilities) ?? 0)
       }
     })
   }
+}
+
+/** Highlight look of fixtures as a mixer layer (full, open white; positions untouched) */
+export function highlightChannels(fixtureIds: readonly string[]): LayerChannels {
+  const layer: LayerChannels = new Map()
+  forEachLocateValue(fixtureIds, false, (u, ch, v) => {
+    let uniMap = layer.get(u)
+    if (!uniMap) { uniMap = new Map(); layer.set(u, uniMap) }
+    uniMap.set(ch, v)
+  })
+  return layer
+}
+
+/**
+ * Locate / highlight: open white beams, centred, at full — the classic
+ * "where is this fixture" look. Values go into the programmer (Release or
+ * Clear brings the fixtures back). Returns the number of channels set.
+ */
+export function locateFixtures(fixtureIds: readonly string[]): number {
+  let n = 0
+  forEachLocateValue(fixtureIds, true, (u, ch, v) => {
+    setProgrammerChannel(u, ch, v)
+    n++
+  })
   refreshProgrammerState()
   return n
 }

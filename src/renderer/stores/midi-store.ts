@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import type { MidiMapping, MidiDevice, MidiSourceType, MidiTargetType } from '@shared/types'
 import { detectCcEncoding } from '@renderer/lib/midi-learn'
+import { t } from '@renderer/i18n'
+import { controllersWantSysex } from '@renderer/lib/midi/controller-sysex'
 
 /** How long MIDI learn keeps listening after the first CC to tell faders from encoders */
 export const LEARN_CAPTURE_MS = 450
@@ -135,9 +137,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
 
   initMidi: async () => {
     if (!navigator.requestMIDIAccess) {
-      const msg = 'Web MIDI API is not available in this browser/environment'
-      console.error('[MIDI]', msg)
-      set({ apiStatus: 'unavailable', apiError: msg, devices: [] })
+      console.error('[MIDI] Web MIDI API is not available in this browser/environment')
+      set({ apiStatus: 'unavailable', apiError: t('midi.api.unsupported'), devices: [] })
       return
     }
 
@@ -147,8 +148,26 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       if (currentMidiAccess) {
         access = currentMidiAccess
       } else {
-        access = await navigator.requestMIDIAccess({ sysex: false })
+        access = await requestAccess(controllersWantSysex([]))
         currentMidiAccess = access
+      }
+
+      // A recognised controller needs SysEx (RGB LEDs, mode switch, fader
+      // positions) and this access has none: ask again, once, with SysEx.
+      if (!access.sysexEnabled && !sysexDenied) {
+        const names: string[] = []
+        access.inputs.forEach((input) => { if (input.name) names.push(input.name) })
+        if (controllersWantSysex(names)) {
+          try {
+            const withSysex = await navigator.requestMIDIAccess({ sysex: true })
+            detachAccess(access)
+            access = withSysex
+            currentMidiAccess = withSysex
+          } catch (e) {
+            sysexDenied = true
+            console.warn('[MIDI] SysEx refused; controllers use palette LEDs and fader pickup:', e)
+          }
+        }
       }
 
       const devices: MidiDevice[] = []
@@ -156,8 +175,8 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       access.inputs.forEach((input) => {
         devices.push({
           id: input.id,
-          name: input.name || 'Unknown',
-          manufacturer: input.manufacturer || 'Unknown',
+          name: input.name || t('common.unknown'),
+          manufacturer: input.manufacturer || '',
           type: 'input',
           connected: input.state === 'connected'
         })
@@ -168,8 +187,12 @@ export const useMidiStore = create<MidiState>((set, get) => ({
           const [status, data1, data2] = event.data
           const deviceName = input.name || undefined
 
-          // Route system messages (MTC quarter frame 0xF1) to timecode engine
+          // Route system messages (MTC quarter frame 0xF1) to timecode engine,
+          // SysEx replies (controller fader positions) to the controller layer
           if (status >= 0xf0) {
+            if (status === 0xf0 && deviceName && controllerHooks.sysex) {
+              try { controllerHooks.sysex(event.data, deviceName) } catch (e) { console.error('[MIDI] SysEx handling failed:', e) }
+            }
             if (timecodeProcessor) timecodeProcessor(status, data1 || 0, data2 || 0)
             return
           }
@@ -188,10 +211,12 @@ export const useMidiStore = create<MidiState>((set, get) => ({
             // Note On
             get().setLastMessage({ type: 'note', channel, number: data1, value: data2, deviceName })
             if (get().isLearning) get().completeLearn({ type: 'note', channel, number: data1, deviceName })
+            if (deviceName) noteHeld(deviceName, channel, data1, true)
             handleMidiInput('note', channel, data1, data2, deviceName)
           } else if (type === 0x80 || (type === 0x90 && data2 === 0)) {
             // Note Off
             get().logMessage({ type: 'noteoff', channel, number: data1, value: 0, deviceName })
+            if (deviceName) noteHeld(deviceName, channel, data1, false)
             handleMidiInput('note', channel, data1, 0, deviceName)
           } else if (type === 0xc0) {
             // Program Change: momentary trigger (no release message exists)
@@ -205,15 +230,22 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       access.outputs.forEach((output) => {
         devices.push({
           id: output.id,
-          name: output.name || 'Unknown',
-          manufacturer: output.manufacturer || 'Unknown',
+          name: output.name || t('common.unknown'),
+          manufacturer: output.manufacturer || '',
           type: 'output',
           connected: output.state === 'connected'
         })
       })
 
       // Listen for device changes — use module-level debounce to prevent reinit loop
-      access.onstatechange = () => {
+      access.onstatechange = (event: Event) => {
+        // A device unplugged: release what it held at once (flash, blinder,
+        // TRIG scenes…) — nothing may stay stuck until the reinit
+        const port = (event as MIDIConnectionEvent).port
+        if (port && port.state === 'disconnected' && port.name) {
+          if (port.type === 'input') releaseHeldNotes(port.name)
+          try { controllerHooks.portDisconnected?.(port.name, port.type) } catch (e) { console.error('[MIDI] disconnect handling failed:', e) }
+        }
         // Don't reinit while learning
         if (get().isLearning) return
         if (reinitTimeout) clearTimeout(reinitTimeout)
@@ -221,6 +253,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
       }
 
       set({ devices, apiStatus: 'available', apiError: null })
+      try { controllerHooks.access?.(access) } catch (e) { console.error('[MIDI] controller sync failed:', e) }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('[MIDI] Failed to access Web MIDI API:', msg, e)
@@ -355,6 +388,88 @@ function finishLearn(source: LearnSource, encoding: 'absolute' | 'relative'): vo
   })
 }
 
+// ---- Controller layer hooks (lib/midi/controller-runtime) ----
+
+export interface MidiControllerHooks {
+  /** A message: true = consumed by a controller profile (user mappings skipped) */
+  route?: (type: MidiSourceType, channel: number, number: number, value: number, deviceName?: string) => boolean
+  /** A SysEx message from an input */
+  sysex?: (data: Uint8Array, deviceName: string) => void
+  /** Ports enumerated (initMidi / rescan / reconnect) */
+  access?: (access: MIDIAccess) => void
+  /** A port went away */
+  portDisconnected?: (name: string, type: MIDIPortType) => void
+}
+
+let controllerHooks: MidiControllerHooks = {}
+
+export function setMidiControllerHooks(hooks: MidiControllerHooks): void {
+  controllerHooks = hooks
+}
+
+/** The current Web MIDI access (null before initMidi / when unavailable) */
+export function getMidiAccess(): MIDIAccess | null {
+  return currentMidiAccess
+}
+
+let sysexDenied = false
+
+async function requestAccess(sysex: boolean): Promise<MIDIAccess> {
+  if (sysex && !sysexDenied) {
+    try {
+      return await navigator.requestMIDIAccess({ sysex: true })
+    } catch (e) {
+      sysexDenied = true
+      console.warn('[MIDI] SysEx refused, opening MIDI without it:', e)
+    }
+  }
+  return navigator.requestMIDIAccess({ sysex: false })
+}
+
+/** Stop listening to an access we replace (else every message arrives twice) */
+function detachAccess(access: MIDIAccess): void {
+  access.inputs.forEach((input) => { input.onmidimessage = null })
+  access.onstatechange = null
+}
+
+// Notes held down per input (note-on without its note-off yet)
+const heldNotes = new Map<string, Set<number>>()
+
+function noteHeld(deviceName: string, channel: number, note: number, down: boolean): void {
+  const key = (channel - 1) * 128 + note
+  let set = heldNotes.get(deviceName)
+  if (down) {
+    if (!set) { set = new Set(); heldNotes.set(deviceName, set) }
+    set.add(key)
+  } else if (set) {
+    set.delete(key)
+    if (set.size === 0) heldNotes.delete(deviceName)
+  }
+}
+
+/**
+ * Device gone: send a note-off for every note it still held, through the
+ * normal routing — flash / trigger mappings and controller holds release
+ * exactly as if the pad had been let go.
+ */
+export function releaseHeldNotes(deviceName: string): void {
+  const set = heldNotes.get(deviceName)
+  if (!set) return
+  heldNotes.delete(deviceName)
+  for (const key of set) handleMidiInput('note', Math.floor(key / 128) + 1, key % 128, 0, deviceName)
+}
+
+/** Tests: forget the cached access and module state */
+export function __resetMidiForTests(): void {
+  currentMidiAccess = null
+  sysexDenied = false
+  heldNotes.clear()
+  controllerHooks = {}
+  midiRouter = null
+  if (reinitTimeout) clearTimeout(reinitTimeout)
+  reinitTimeout = null
+}
+
 // Module-level debounce for device state changes (must persist across initMidi calls)
 let reinitTimeout: ReturnType<typeof setTimeout> | null = null
 // Track the current MIDIAccess to avoid re-registering listeners
@@ -389,6 +504,15 @@ export function setMappingCleanupFn(fn: (mappingId: string) => void): void {
 }
 
 function handleMidiInput(type: MidiSourceType, channel: number, number: number, value: number, deviceName?: string): void {
+  // Controller profiles first: they report `consumed` unless a user mapping
+  // claims the same (device, type, channel, number) or MIDI learn is on
+  if (controllerHooks.route) {
+    try {
+      if (controllerHooks.route(type, channel, number, value, deviceName)) return
+    } catch (e) {
+      console.error('[MIDI] controller routing failed:', e)
+    }
+  }
   if (!midiRouter) return
   try {
     midiRouter(type, channel, number, value, deviceName)

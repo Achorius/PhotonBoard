@@ -32,6 +32,8 @@ export interface FaderProps {
   /** Draw scale ticks (0/25/50/75/100) */
   ticks?: boolean
   disabled?: boolean
+  /** Where a physical (MIDI) fader that has not picked up the value is: a dashed tick */
+  ghost?: number | null
   onChangeStart?: () => void
   onChangeEnd?: () => void
   className?: string
@@ -53,6 +55,7 @@ export const Fader = memo(function Fader({
   readout = 'percent',
   ticks = true,
   disabled,
+  ghost,
   onChangeStart,
   onChangeEnd,
   className,
@@ -134,6 +137,14 @@ export const Fader = memo(function Fader({
           <div className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 overflow-hidden rounded-full bg-surface-0 ring-1 ring-inset ring-line">
             <div className="absolute inset-x-0 bottom-0 rounded-full" style={{ height: `${pct}%`, backgroundColor: fill }} />
           </div>
+          {ghost != null && Number.isFinite(ghost) && (
+            <span
+              aria-hidden
+              data-fader-ghost=""
+              className="absolute inset-x-0 h-0 border-t-2 border-dashed border-fg-primary/70"
+              style={{ bottom: `${clampValue((ghost - min) / range, 0, 1) * 100}%` }}
+            />
+          )}
           <div
             ref={capRef}
             aria-hidden

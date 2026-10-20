@@ -4,6 +4,7 @@ import { LuCircleCheck, LuCircleAlert, LuInfo, LuTriangleAlert, LuX } from 'reac
 import { cn } from './cn'
 import { usePointerDrag } from './usePointerDrag'
 import { dismissToast, useToastStore, type Toast, type ToastType } from '@renderer/stores/toast-store'
+import { t } from '@renderer/i18n'
 
 const ICON: Record<ToastType, IconType> = {
   info: LuInfo,
@@ -108,7 +109,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       </div>
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t('ui.dismiss')}
         onClick={() => dismissToast(toast.id)}
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-tertiary hover:bg-surface-4 hover:text-fg-primary [[data-density=touch]_&]:h-8 [[data-density=touch]_&]:w-8"
       >

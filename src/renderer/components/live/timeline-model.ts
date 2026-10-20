@@ -9,6 +9,7 @@ import { usePlaybackStore } from '@renderer/stores/playback-store'
 // Direct module imports (not the ui index) keep this file usable in unit tests
 import { SWATCH_COLORS } from '@renderer/components/ui/tokens'
 import { formatClock } from '@renderer/components/ui/format'
+import { t as translate, type TFunction } from '@renderer/i18n'
 import type { Cuelist, TimelineClip } from '@shared/types'
 
 // ---------------- Geometry ----------------
@@ -41,14 +42,17 @@ export function clampZoom(z: number): number {
 
 export type SnapMode = 'off' | '0.25' | '0.5' | '1' | 'beat' | 'bar'
 
-export const SNAP_OPTIONS: { value: SnapMode; label: string }[] = [
-  { value: 'off', label: 'Snap off' },
-  { value: '0.25', label: '¼ s' },
-  { value: '0.5', label: '½ s' },
-  { value: '1', label: '1 s' },
-  { value: 'beat', label: 'Beat' },
-  { value: 'bar', label: 'Bar' }
-]
+/** Snap choices for the transport bar (labels in the current language) */
+export function snapOptions(t: TFunction): { value: SnapMode; label: string }[] {
+  return [
+    { value: 'off', label: t('timeline.snap.off') },
+    { value: '0.25', label: t('timeline.snap.quarterSecond') },
+    { value: '0.5', label: t('timeline.snap.halfSecond') },
+    { value: '1', label: t('timeline.snap.oneSecond') },
+    { value: 'beat', label: t('timeline.snap.beat') },
+    { value: 'bar', label: t('timeline.snap.bar') }
+  ]
+}
 
 export const BEATS_PER_BAR = 4
 
@@ -216,8 +220,9 @@ export function splitClip(id: string, t: number): string | null {
 
 // ---------------- Tracks ----------------
 
+/** Track name: the custom one, else "Track 3" / "Piste 3" */
 export function trackName(names: string[], index: number): string {
-  return names[index] || `Track ${index + 1}`
+  return names[index] || translate('timeline.defaults.trackName', { n: index + 1 })
 }
 
 export function addTrack(afterIndex?: number): void {

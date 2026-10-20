@@ -399,7 +399,16 @@ export function createRemoteAPI(): PhotonBoardAPI {
       save: (fixture) =>
         invoke('fixtures:save', fixture),
       delete: (fixtureId) =>
-        invoke('fixtures:delete', fixtureId)
+        invoke('fixtures:delete', fixtureId),
+      // Offline fixture catalog on the console (no internet needed on either side)
+      catalogInfo: () =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'fixtures:catalog-info'),
+      catalogSearch: (query) =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'fixtures:catalog-search', query),
+      catalogGet: (id) =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'fixtures:catalog-get', id),
+      catalogInstall: (id) =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'fixtures:catalog-install', id)
     },
 
     onMenuEvent: () => {

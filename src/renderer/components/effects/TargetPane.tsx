@@ -11,8 +11,10 @@ import { LuLayers, LuX } from 'react-icons/lu'
 import type { FixtureDefinition, Group, PatchEntry } from '@shared/types'
 import { Button, Checkbox, EmptyState, cn, fixtureCategoryIcon, formatAddress } from '@renderer/components/ui'
 import { usePatchStore } from '@renderer/stores/patch-store'
+import { useT } from '@renderer/i18n'
 
 export function TargetPane() {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const fixtures = usePatchStore((s) => s.fixtures)
   const groups = usePatchStore((s) => s.groups)
@@ -30,23 +32,23 @@ export function TargetPane() {
   }
 
   return (
-    <aside aria-label="Effect targets" className="flex w-[216px] shrink-0 flex-col border-r border-line bg-surface-1 [[data-density=touch]_&]:w-[264px]">
+    <aside aria-label={t('effects.targets.region')} className="flex w-[216px] shrink-0 flex-col border-r border-line bg-surface-1 [[data-density=touch]_&]:w-[264px]">
       <header className="flex h-control-lg shrink-0 items-center gap-2 border-b border-line-subtle pl-3 pr-1.5">
-        <h2 className="text-sm font-semibold text-fg-primary">Targets</h2>
+        <h2 className="text-sm font-semibold text-fg-primary">{t('effects.targets.title')}</h2>
         <span className={cn('text-xs tabular', selectedIds.length ? 'text-info-fg' : 'text-fg-tertiary')}>
           {selectedIds.length}/{patch.length}
         </span>
         <div className="flex-1" />
         {selectedIds.length > 0 && (
           <Button size="xs" variant="ghost" icon={LuX} data-fx-clear-targets onClick={() => usePatchStore.getState().clearSelection()}>
-            Clear
+            {t('common.clear')}
           </Button>
         )}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1.5">
         <TargetRow
-          label="All fixtures"
+          label={t('effects.targets.allFixtures')}
           count={patch.length}
           state={allState}
           onSelect={toggleAll}
@@ -54,14 +56,14 @@ export function TargetPane() {
           className="mb-1"
         />
 
-        <SectionLabel>Groups</SectionLabel>
+        <SectionLabel>{t('effects.targets.groups')}</SectionLabel>
         {groups.length === 0 ? (
-          <EmptyState size="sm" icon={LuLayers} title="No groups" description="Create groups in Patch to target sets of fixtures in one tap." className="h-auto" />
+          <EmptyState size="sm" icon={LuLayers} title={t('effects.targets.noGroupsTitle')} description={t('effects.targets.noGroupsText')} className="h-auto" />
         ) : (
           groups.map((g) => <GroupRow key={g.id} group={g} selected={selected} selectedCount={selectedIds.length} />)
         )}
 
-        <SectionLabel>Fixtures</SectionLabel>
+        <SectionLabel>{t('effects.targets.fixtures')}</SectionLabel>
         {sortedPatch.map((p) => (
           <FixtureRow key={p.id} entry={p} def={defs.get(p.fixtureDefId)} selected={selected.has(p.id)} />
         ))}
@@ -84,6 +86,7 @@ function TargetRow({ label, count, color, state, onSelect, onToggle, className, 
   className?: string
   [data: `data-${string}`]: string | undefined
 }) {
+  const t = useT()
   return (
     <div
       role="option"
@@ -102,7 +105,7 @@ function TargetRow({ label, count, color, state, onSelect, onToggle, className, 
     >
       {state === true && <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-info-fg" />}
       <span onClick={(e) => e.stopPropagation()} className="flex">
-        <Checkbox checked={state} onChange={onToggle} aria-label={`Add or remove ${label}`} />
+        <Checkbox checked={state} onChange={onToggle} aria-label={t('effects.targets.toggle', { name: label })} />
       </span>
       {color && <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />}
       <span className="min-w-0 flex-1 truncate text-sm">{label}</span>

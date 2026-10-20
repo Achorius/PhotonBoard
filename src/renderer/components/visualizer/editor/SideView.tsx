@@ -8,12 +8,14 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { FixtureDefinition } from '@shared/types'
 import { palette, withAlpha } from '@renderer/components/ui'
+import { formatNumber, t, useT } from '@renderer/i18n'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { useCanvasSize } from '@renderer/hooks/useCanvasSize'
 import { getEffectiveColor, resolveChannels } from '@renderer/lib/dmx-channel-resolver'
 import { aimDirection, clamp, cm, describeFixture, fixturePosition, rayToRoom, snap } from '../scene/layout-math'
+import { formatMetres } from './rig-actions'
 
 interface Dot { id: string; x: number; y: number }
 
@@ -26,6 +28,7 @@ export function SideView({ className = '' }: { className?: string }) {
   const dots = useRef<Dot[]>([])
   const raf = useRef(0)
   const drag = useRef<{ id: string; pointerId: number; sy: number; y0: number; moved: boolean; mods: boolean } | null>(null)
+  const tr = useT()
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -72,7 +75,7 @@ export function SideView({ className = '' }: { className?: string }) {
     for (let y = 0; y <= room.height + 1e-6; y += hStep) {
       const sy = Math.round(Y(y)) + 0.5
       ctx.moveTo(X(-hd), sy); ctx.lineTo(X(hd), sy)
-      ctx.fillText(`${y} m`, X(-hd) - 6, sy)
+      ctx.fillText(t('layout.metres', { value: formatNumber(y) }), X(-hd) - 6, sy)
     }
     ctx.stroke()
     // Walls / floor / ceiling (audience side open)
@@ -95,12 +98,12 @@ export function SideView({ className = '' }: { className?: string }) {
     ctx.textBaseline = 'alphabetic'
     ctx.textAlign = 'left'
     ctx.fillStyle = palette.fgDisabled
-    ctx.fillText('AUDIENCE', X(-hd) + 6, Y(0) - 6)
+    ctx.fillText(t('layout.section.audience'), X(-hd) + 6, Y(0) - 6)
     ctx.textAlign = 'right'
-    ctx.fillText('UPSTAGE', X(hd) - 6, Y(0) - 6)
+    ctx.fillText(t('layout.section.upstage'), X(hd) - 6, Y(0) - 6)
     ctx.textAlign = 'left'
     ctx.fillStyle = palette.fgTertiary
-    ctx.fillText('SECTION · seen from stage left', 8, touch ? 18 : 16)
+    ctx.fillText(t('layout.section.title'), 8, touch ? 18 : 16)
 
     // Truss bars (cross-section)
     for (const bar of room.trussBars) {
@@ -119,7 +122,7 @@ export function SideView({ className = '' }: { className?: string }) {
       if (!spec.emits || spec.kind === 'moving-head') continue
       const d = aimDirection(entry)
       const hit = rayToRoom(pos, d, room, true)
-      const t = hit ? hit.t : room.height
+      const dist = hit ? hit.t : room.height
       const sel = selected.has(entry.id)
       let col: string = palette.fgDisabled
       if (!dmx.blackout) {
@@ -129,7 +132,7 @@ export function SideView({ className = '' }: { className?: string }) {
       ctx.strokeStyle = sel ? palette.infoFg : col
       ctx.globalAlpha = sel ? 0.9 : 0.35
       ctx.lineWidth = sel ? 1.5 : 1
-      ctx.beginPath(); ctx.moveTo(X(pos.z), Y(pos.y)); ctx.lineTo(X(pos.z + d.z * t), Y(pos.y + d.y * t)); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(X(pos.z), Y(pos.y)); ctx.lineTo(X(pos.z + d.z * dist), Y(pos.y + d.y * dist)); ctx.stroke()
       ctx.globalAlpha = 1
     }
     const r = touch ? 6 : 4.5
@@ -148,7 +151,7 @@ export function SideView({ className = '' }: { className?: string }) {
         ctx.fillStyle = palette.infoFg
         ctx.textAlign = 'left'
         ctx.textBaseline = 'middle'
-        ctx.fillText(`${pos.y.toFixed(2)} m`, x + r + 6, y)
+        ctx.fillText(formatMetres(pos.y), x + r + 6, y)
       }
       list.push({ id: entry.id, x, y })
     }
@@ -174,6 +177,9 @@ export function SideView({ className = '' }: { className?: string }) {
       raf.current = 0
     }
   }, [requestDraw])
+
+  // The canvas words follow a language change
+  useEffect(() => { requestDraw() }, [tr, requestDraw])
 
   const pick = (sx: number, sy: number): string | null => {
     const touch = document.documentElement.dataset.density === 'touch'
@@ -236,7 +242,7 @@ export function SideView({ className = '' }: { className?: string }) {
     <div ref={wrapRef} className={`relative overflow-hidden bg-surface-0 ${className}`}>
       <canvas
         ref={canvasRef}
-        aria-label="Section view: drag a fixture up or down to change its height"
+        aria-label={tr('layout.section.aria')}
         className="absolute inset-0 h-full w-full touch-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

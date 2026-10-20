@@ -5,7 +5,8 @@
 // ============================================================
 
 import { memo, useRef } from 'react'
-import { cn, usePointerDrag } from '@renderer/components/ui'
+import { cn, formatPercent, usePointerDrag } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { useSquareFit } from '@renderer/hooks/useSquareFit'
 
 export interface ColourWheelProps {
@@ -35,6 +36,7 @@ const WHEEL_BG = [
 export const ColourWheel = memo(function ColourWheel({
   hue, sat, value = 1, onChange, size = 200, fill, markers, onChangeStart, onChangeEnd, className, ...aria
 }: ColourWheelProps) {
+  const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const live = useRef({ hue, sat })
   const [fitRef, fitSize] = useSquareFit<HTMLDivElement>(!!fill)
@@ -79,7 +81,7 @@ export const ColourWheel = memo(function ColourWheel({
         ref={ref}
         role="group"
         tabIndex={0}
-        aria-label={aria['aria-label'] ?? `Colour: hue ${Math.round(hue)}°, saturation ${Math.round(sat * 100)}%`}
+        aria-label={aria['aria-label'] ?? t('fixtures.colour.wheelValueAria', { hue: Math.round(hue), sat: formatPercent(sat, 1) })}
         onKeyDown={(e) => {
           const step = e.shiftKey ? 10 : 2
           if (e.key === 'ArrowLeft') onChange((hue - step + 360) % 360, sat)

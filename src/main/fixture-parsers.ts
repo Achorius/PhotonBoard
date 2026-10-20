@@ -9,6 +9,8 @@ import { readFileSync, statSync } from 'fs'
 import { XMLParser } from 'fast-xml-parser'
 import AdmZip from 'adm-zip'
 import type { FixtureDefinition, FixtureChannel, FixtureMode, FixtureCapability, FixturePhysical } from '../shared/types'
+import { convertOflFixture } from './fixture-convert-ofl'
+import { convertQxfFixture } from './fixture-convert-qxf'
 
 // Security: max file sizes to prevent denial-of-service
 const MAX_FIXTURE_FILE_SIZE = 10 * 1024 * 1024  // 10 MB max fixture file
@@ -107,76 +109,22 @@ export function detectFormat(filePath: string, rawContent?: string): FixtureForm
 // ── Parser: OFL JSON ─────────────────────────────────────────────────
 
 export function parseOFL(data: any, manufacturer?: string): FixtureDefinition {
-  const mfr = manufacturer || data.manufacturer?.name || 'Unknown'
-  const name = data.name || 'Unknown Fixture'
-  const id = `${slugify(mfr)}/${slugify(name)}`
-
-  const channels: Record<string, FixtureChannel> = {}
-
-  if (data.availableChannels) {
-    for (const [chName, chDef] of Object.entries(data.availableChannels) as [string, any][]) {
-      const type = inferType(chName)
-      const rawCaps = chDef?.capability ? [chDef.capability] : chDef?.capabilities || []
-      const capabilities: FixtureCapability[] = rawCaps.map((cap: any) => ({
-        dmxRange: cap.dmxRange || [0, 255] as [number, number],
-        type: cap.type || 'Generic',
-        label: cap.comment || cap.type || chName,
-        color: cap.color?.startsWith('#') ? cap.color : cap.colors?.allColors?.[0]
-      }))
-
-      channels[chName] = makeChannel(chName, type, capabilities)
-      if (chDef?.defaultValue != null) {
-        channels[chName].defaultValue = typeof chDef.defaultValue === 'string'
-          ? parseInt(chDef.defaultValue) || 0
-          : chDef.defaultValue
-      }
-      if (chDef?.fineChannelAliases) {
-        channels[chName].fineChannelAliases = chDef.fineChannelAliases
-      }
-    }
+  const mfr = manufacturer || data?.manufacturer?.name || 'Unknown'
+  const name = data?.name || 'Unknown Fixture'
+  const json = { ...data }
+  // A bare channel list without modes: one mode with every channel
+  if (!Array.isArray(json.modes) || json.modes.length === 0) {
+    json.modes = [{ name: 'Default', channels: Object.keys(json.availableChannels ?? {}) }]
   }
-
-  const modes: FixtureMode[] = (data.modes || []).map((mode: any) => {
-    const modeChannels = (mode.channels || []).filter((ch: any) => ch !== null && typeof ch === 'string')
-    return { name: mode.name || 'Default', shortName: mode.shortName, channels: modeChannels, channelCount: modeChannels.length }
+  const def = convertOflFixture(json, {
+    manufacturerKey: slugify(mfr) || 'unknown',
+    fixtureKey: slugify(name) || 'fixture',
+    manufacturerName: mfr,
+    source: 'ofl',
+    stampNow: true
   })
-  if (modes.length === 0) {
-    modes.push({ name: 'Default', channels: Object.keys(channels), channelCount: Object.keys(channels).length })
-  }
-
-  let physical: FixturePhysical | undefined
-  if (data.physical) {
-    physical = {
-      dimensions: data.physical.dimensions,
-      weight: data.physical.weight,
-      power: data.physical.power,
-      DMXconnector: data.physical.DMXconnector,
-      bulb: data.physical.bulb,
-      lens: data.physical.lens?.degreesMinMax ? { degreesMinMax: data.physical.lens.degreesMinMax } : undefined,
-      panRange: data.physical.focus?.panMax,
-      tiltRange: data.physical.focus?.tiltMax
-    }
-  }
-
-  let wheels: any[] | undefined
-  if (data.wheels) {
-    wheels = Object.entries(data.wheels).map(([wName, wData]: [string, any]) => ({
-      name: wName,
-      slots: (Array.isArray(wData) ? wData : wData.slots || []).map((s: any) => ({
-        type: s.type === 'Color' ? 'Color' : s.type === 'Open' ? 'Open' : 'Gobo',
-        name: s.name || 'Unknown',
-        color: s.colors?.[0]
-      }))
-    }))
-  }
-
-  return {
-    id, name, manufacturer: mfr,
-    categories: data.categories || ['Other'],
-    channels, modes,
-    physical, wheels: wheels?.length ? wheels : undefined,
-    source: 'ofl', lastModified: new Date().toISOString()
-  }
+  delete def.sourceUrl // a local file: the slugs need not be OFL keys
+  return def
 }
 
 // ── Parser: GDTF (.gdtf = ZIP containing description.xml) ───────────
@@ -348,103 +296,8 @@ function gdtfAttributeToName(attr: string): string {
 // ── Parser: QLC+ (.qxf) ─────────────────────────────────────────────
 
 export function parseQLCPlus(content: string): FixtureDefinition {
-  const parser = new XMLParser(SAFE_XML_OPTIONS)
-  const doc = parser.parse(content)
-  const fd = doc.FixtureDefinition || {}
-
-  const mfr = fd.Manufacturer || 'Unknown'
-  const name = fd.Model || 'QLC+ Fixture'
-  const id = `${slugify(mfr)}/${slugify(name)}`
-
-  const channels: Record<string, FixtureChannel> = {}
-
-  // Parse channels
-  const chNodes = fd.Channel
-  const chList = Array.isArray(chNodes) ? chNodes : chNodes ? [chNodes] : []
-
-  for (const ch of chList) {
-    const chName = ch['@_Name'] || `Channel ${Object.keys(channels).length + 1}`
-    const group = (ch.Group || '').toString().toLowerCase()
-    const type = qlcGroupToType(group, chName)
-
-    const caps: FixtureCapability[] = []
-    const capNodes = ch.Capability
-    const capList = Array.isArray(capNodes) ? capNodes : capNodes ? [capNodes] : []
-    for (const cap of capList) {
-      caps.push({
-        dmxRange: [parseInt(cap['@_Min']) || 0, parseInt(cap['@_Max']) || 255],
-        type: cap['@_Preset'] || type,
-        label: (typeof cap === 'object' && cap['#text']) || cap['@_Preset'] || chName,
-        color: cap['@_Color']
-      })
-    }
-
-    channels[chName] = makeChannel(chName, type, caps)
-  }
-
-  // Parse modes
-  const modeNodes = fd.Mode
-  const modeList = Array.isArray(modeNodes) ? modeNodes : modeNodes ? [modeNodes] : []
-  const modes: FixtureMode[] = []
-
-  for (const mode of modeList) {
-    const modeName = mode['@_Name'] || 'Default'
-    const modeChannels: string[] = []
-
-    const chRefs = mode.Channel
-    const refList = Array.isArray(chRefs) ? chRefs : chRefs ? [chRefs] : []
-    for (const ref of refList) {
-      const chName = typeof ref === 'string' ? ref : ref['#text'] || ref['@_Name'] || ''
-      if (chName && channels[chName]) modeChannels.push(chName)
-    }
-
-    if (modeChannels.length > 0) {
-      modes.push({ name: modeName, channels: modeChannels, channelCount: modeChannels.length })
-    }
-  }
-
-  if (modes.length === 0 && Object.keys(channels).length > 0) {
-    modes.push({ name: 'Default', channels: Object.keys(channels), channelCount: Object.keys(channels).length })
-  }
-
-  // Physical
-  let physical: FixturePhysical | undefined
-  const phys = fd.Physical
-  if (phys) {
-    const dims = phys.Dimensions
-    const lens = phys.Lens
-    const bulb = phys.Bulb
-    physical = {
-      dimensions: dims ? [parseInt(dims['@_Width']) || 0, parseInt(dims['@_Height']) || 0, parseInt(dims['@_Depth']) || 0] : undefined,
-      weight: parseFloat(dims?.['@_Weight']) || undefined,
-      power: parseFloat(bulb?.['@_PowerConsumption']) || undefined,
-      bulb: bulb ? { type: bulb['@_Type'], lumens: parseInt(bulb['@_Lumens']) || undefined, colorTemperature: parseInt(bulb['@_ColourTemperature']) || undefined } : undefined,
-      lens: lens ? { degreesMinMax: [parseFloat(lens['@_DegreesMin']) || 0, parseFloat(lens['@_DegreesMax']) || 0] } : undefined,
-      DMXconnector: phys.Technical?.['@_DMXconnector']
-    }
-  }
-
-  const cat = fd.Type || ''
-  return {
-    id, name, manufacturer: mfr,
-    categories: cat ? [cat] : guessCategories(name, channels),
-    channels, modes, physical,
-    source: 'user', lastModified: new Date().toISOString()
-  }
-}
-
-function qlcGroupToType(group: string, name: string): FixtureChannel['type'] {
-  if (group.includes('intensity') || group.includes('dimmer')) return 'intensity'
-  if (group.includes('colour') || group.includes('color')) return 'color'
-  if (group.includes('pan')) return 'pan'
-  if (group.includes('tilt')) return 'tilt'
-  if (group.includes('gobo')) return 'gobo'
-  if (group.includes('shutter')) return 'shutter'
-  if (group.includes('prism')) return 'prism'
-  if (group.includes('speed')) return 'speed'
-  if (group.includes('effect')) return 'effect'
-  if (group.includes('maintenance') || group.includes('nothing')) return 'maintenance'
-  return inferType(name)
+  // Same converter as the offline catalog (presets, 16-bit pairs, heads → pixel layouts)
+  return convertQxfFixture(content, { source: 'user', stampNow: true })
 }
 
 // ── Parser: Avolites Personality (.d4) ───────────────────────────────
