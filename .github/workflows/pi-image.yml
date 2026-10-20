@@ -87,6 +87,7 @@ jobs:
           args=(--deb "$(ls deb/*_arm64.deb | head -n1)" --output "$PWD/out/$NAME" --work "$RUNNER_TEMP/pi-image-work" --keep-img)
           [ -n "$BASE_URL" ] && args+=(--base-url "$BASE_URL")
           sudo scripts/build-pi-image.sh "${args[@]}"
+          sudo chown -R "$(id -u):$(id -g)" out
           ls -l out/
 
       - name: Smoke check the image
