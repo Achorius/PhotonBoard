@@ -23,6 +23,7 @@ import { storeIntoCue, storePreset, updateFromProgrammer, type KeyMetaFn } from 
 import { refreshCueValuesFromPresets, resolvePreset } from './preset-resolve'
 import { effectiveBpm, effectiveSpeed, tapSpeedMaster, __resetSpeedTapsForTests } from './speed-masters'
 import { columnFader, executorPress, selectExecutor, selectedExecutor } from './executor-actions'
+import { getColumnLevel } from '@renderer/lib/playback-controller'
 import { applyPreset, clearProgrammerMeta, getProgrammerMeta, setAttributeValues } from './programmer-engine'
 import {
   executeLine, getCommand, isMacroRunning, listCommands, parse, registerCommand, runMacro, setCliContext, stopMacro, type CliContext
@@ -198,8 +199,11 @@ describe('executor actions (same as the executor bar)', () => {
     selectExecutor(null)
     expect(selectedExecutor()).toBeNull()
 
+    // 'column' fader = column level (scales the masters of its scenes, WP3); scene faders untouched
     columnFader(0, 0, 100)
-    expect(usePlaybackStore.getState().cuelists.map(c => c.faderLevel)).toEqual([100, 100, 100])
+    expect(getColumnLevel(0, 0)).toBe(100)
+    expect(usePlaybackStore.getState().cuelists.map(c => c.faderLevel)).toEqual([255, 255, 255])
+    columnFader(0, 0, 255)
     useExecutorStore.getState().setColumnFader(0, 1, { kind: 'grandmaster' })
     columnFader(0, 1, 64)
     expect(useDmxStore.getState().grandMaster).toBe(64)

@@ -12,6 +12,9 @@
 //  - Output values are raw; the chase fader is applied by the mixer as
 //    the layer master (intensity channels only).
 //  - Time is injected (`now` in ms).
+//  - Pro: update() takes an optional BPM (speed master × rate fader)
+//    used instead of chase.bpm — the phase is kept, so a tempo change
+//    never jumps; a paused chase holds its step and phase.
 // ============================================================
 
 import type { Chase, ChaseStep } from '@shared/types'
@@ -30,6 +33,8 @@ interface RunningChase {
   bounced: boolean
   /** non-looping chase reached its last step */
   finished: boolean
+  /** paused: the phase does not advance */
+  paused: boolean
 }
 
 export interface ChaseFrame {
@@ -50,11 +55,11 @@ function stepValues(step: ChaseStep | undefined): Map<string, number> {
   return map
 }
 
-/** Duration of a step in ms (holdTime overrides the BPM). */
-export function stepDurationMs(chase: Chase, stepIndex: number): number {
+/** Duration of a step in ms (holdTime overrides the BPM). `bpmOverride` replaces chase.bpm (speed master). */
+export function stepDurationMs(chase: Chase, stepIndex: number, bpmOverride?: number): number {
   const hold = Number(chase.steps[stepIndex]?.holdTime)
   if (Number.isFinite(hold) && hold > 0) return hold * 1000
-  const bpm = Number(chase.bpm)
+  const bpm = Number(bpmOverride ?? chase.bpm)
   return 60000 / (Number.isFinite(bpm) && bpm > 0 ? Math.min(999, bpm) : 120)
 }
 
@@ -75,7 +80,8 @@ export class ChaseEngine {
       lastUpdate: now,
       forward: true,
       bounced: false,
-      finished: false
+      finished: false,
+      paused: false
     }
     run.nextIndex = this.pickNext(chase, run)
     this.running.set(chase.id, run)
@@ -97,8 +103,23 @@ export class ChaseEngine {
     return Array.from(this.running.keys())
   }
 
-  /** Advance a chase to `now` and compute its output. */
-  update(chase: Chase, now: number): ChaseFrame | null {
+  /** Pause (true) / resume (false) / toggle (undefined) a running chase; returns the new state. */
+  setPaused(id: string, paused?: boolean): boolean {
+    const run = this.running.get(id)
+    if (!run) return false
+    run.paused = paused ?? !run.paused
+    return run.paused
+  }
+
+  isPaused(id: string): boolean {
+    return !!this.running.get(id)?.paused
+  }
+
+  /**
+   * Advance a chase to `now` and compute its output. `bpm` (optional)
+   * replaces chase.bpm for this frame (speed master / rate).
+   */
+  update(chase: Chase, now: number, bpm?: number): ChaseFrame | null {
     const run = this.running.get(chase.id)
     if (!run) return null
     const count = chase.steps.length
@@ -111,8 +132,8 @@ export class ChaseEngine {
     const dt = Math.max(0, now - run.lastUpdate)
     run.lastUpdate = now
 
-    if (!run.finished) {
-      run.phase += dt / stepDurationMs(chase, run.stepIndex)
+    if (!run.finished && !run.paused) {
+      run.phase += dt / stepDurationMs(chase, run.stepIndex, bpm)
       let guard = 0
       while (run.phase >= 1 && !run.finished && guard++ < 1000) {
         if (this.isLastStep(chase, run) && !chase.isLooping) {
@@ -121,10 +142,10 @@ export class ChaseEngine {
           break
         }
         // carry the overshoot into the next step, rescaled to its duration
-        const overshootMs = (run.phase - 1) * stepDurationMs(chase, run.stepIndex)
+        const overshootMs = (run.phase - 1) * stepDurationMs(chase, run.stepIndex, bpm)
         run.stepIndex = run.nextIndex
         run.nextIndex = this.pickNext(chase, run)
-        run.phase = overshootMs / stepDurationMs(chase, run.stepIndex)
+        run.phase = overshootMs / stepDurationMs(chase, run.stepIndex, bpm)
       }
     }
 

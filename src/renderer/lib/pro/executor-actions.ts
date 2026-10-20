@@ -3,19 +3,33 @@
 // bar, stage pages, MIDI controller profiles, the command line and
 // remote commands ('executor' { page, col, row, phase }).
 //
-// WP0 basic implementation (WP3 completes it): every button function
-// maps onto the existing playback actions — exactly what the
-// ExecutorBar does today for TOG / TRIG / FLASH scene cells:
-//   toggle  down: GO when stopped, STOP when playing
-//   temp    down: GO · up: STOP           (TRIG mode)
-//   flash   full while held               (FLASH mode)
-//   go / goBack / off                     down only
+// Button functions (cell.button, default from the cell's mode):
+//   toggle  down: GO when stopped, STOP when playing     (TOG mode)
+//   temp    down: GO · up: STOP                          (TRIG mode)
+//   flash   full while held                              (FLASH mode)
+//   go / goBack / off                                    down only
 //   select  down: this executor becomes the GO / Back target
-//   swap    flash for now · pause, learn: no-op (WP3 / WP4)
+//   swap    flash while held + the scene's intensity is swapped
+//           (mixer swap flag) — chases / effects: like flash
+//   pause   down: pause / resume the running fade (scene), the step
+//           (chase) or the phase (effect)
+//   learn   down: MIDI learn for this executor (scene GO with the
+//           cell's mode, chase / effect toggle)
 // Chases, effects, macros, groups and speed masters get the obvious
-// equivalents. Column faders: 'column' sets the fader of every scene /
-// chase of the column, 'cell' one cell, 'grandmaster', 'group' (group
-// master); 'speed', 'rate', 'xfade' are WP3.
+// equivalents. Pressing a scene / chase remembers the executor it was
+// fired from: its column level scales its master.
+//
+// Column faders (column.fader, default 'column'):
+//   column       column level (0-255): scales the master of the scenes /
+//                chases fired from (or placed in) the column; group
+//                cells of the column get it as their group master
+//   cell         the fader of one cell (scene / chase / group master)
+//   grandmaster  Grand Master
+//   group        group master
+//   speed        speed master BPM (lib/pro/speed-masters speedFaderToBpm)
+//   rate         runtime rate of the scene / chase in that row
+//                (centre = 1×, 0.25×..4×)
+//   xfade        manual crossfade of the scene in that row
 // ============================================================
 
 import type { ExecutorButtonFn, ExecutorCell, ExecutorSceneMode } from '@shared/types'
@@ -26,8 +40,13 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
 import { usePoolStore } from '@renderer/stores/pool-store'
 import { useProStore } from '@renderer/stores/pro-store'
+import { useMidiStore } from '@renderer/stores/midi-store'
 import { runMacro, stopMacro } from '@renderer/lib/cli'
-import { tapSpeedMaster } from './speed-masters'
+import { setEffectPaused } from '@renderer/lib/effect-engine'
+import {
+  crossfadeFader, noteFiredFrom, pauseChase, pauseCuelist, setColumnLevel, setRuntimeRate, setSwapHold
+} from '@renderer/lib/playback-controller'
+import { rateFaderToRate, speedFaderToBpm, tapSpeedMaster } from './speed-masters'
 import type { ExecutorRef } from './contracts'
 
 export type { ExecutorRef } from './contracts'
@@ -43,6 +62,37 @@ export function executorCellAt(ref: ExecutorRef): ExecutorCell | null {
   return page?.cells[ref.col]?.[ref.row] ?? null
 }
 
+/** Name of the object in a cell (MIDI learn label) */
+function cellLabel(cell: ExecutorCell): string {
+  switch (cell.kind) {
+    case 'cuelist': return usePlaybackStore.getState().cuelists.find(c => c.id === cell.id)?.name ?? ''
+    case 'chase': return usePlaybackStore.getState().chases.find(c => c.id === cell.id)?.name ?? ''
+    case 'effect': return useEffectsStore.getState().effects.find(e => e.id === cell.id)?.name ?? ''
+    default: return ''
+  }
+}
+
+/** MIDI learn for an executor cell: scenes learn their GO (with the cell's mode), chases / effects their toggle */
+export function learnExecutor(ref: ExecutorRef): boolean {
+  const cell = executorCellAt(ref)
+  if (!cell) return false
+  const midi = useMidiStore.getState()
+  const label = cellLabel(cell)
+  switch (cell.kind) {
+    case 'cuelist':
+      midi.startLearn({ type: 'cuelist_go', id: cell.id, label, behavior: cell.mode })
+      return true
+    case 'chase':
+      midi.startLearn({ type: 'chase_toggle', id: cell.id, label })
+      return true
+    case 'effect':
+      midi.startLearn({ type: 'effect_toggle', id: cell.id, label })
+      return true
+    default:
+      return false
+  }
+}
+
 /** Press (`down`) or release (`up`) an executor. `opts.fn` overrides the cell's button function. */
 export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn?: ExecutorButtonFn; clientId?: string } = {}): void {
   const cell = executorCellAt(ref)
@@ -53,11 +103,16 @@ export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn
     if (down) selectExecutor(ref)
     return
   }
+  if (fn === 'learn') {
+    if (down) learnExecutor(ref)
+    return
+  }
   switch (cell.kind) {
     case 'cuelist': {
       const pb = usePlaybackStore.getState()
       const cl = pb.cuelists.find((c) => c.id === cell.id)
       if (!cl) return
+      if (down && fn !== 'off' && fn !== 'pause') noteFiredFrom('cuelist', cl.id, ref)
       switch (fn) {
         case 'toggle':
           if (down) { if (cl.isPlaying) pb.stopCuelist(cl.id); else pb.goCuelist(cl.id) }
@@ -67,13 +122,22 @@ export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn
           else pb.stopCuelist(cl.id)
           break
         case 'flash':
-        case 'swap':
           pb.flashCuelist(cl.id, down)
+          break
+        case 'swap':
+          if (down) {
+            setSwapHold(cl.id, true)
+            pb.flashCuelist(cl.id, true)
+          } else {
+            pb.flashCuelist(cl.id, false)
+            setSwapHold(cl.id, false)
+          }
           break
         case 'go': if (down) pb.goCuelist(cl.id); break
         case 'goBack': if (down) pb.goBackCuelist(cl.id); break
         case 'off': if (down) pb.stopCuelist(cl.id); break
-        default: break // pause, learn: WP3 / WP4
+        case 'pause': if (down) pauseCuelist(cl.id); break
+        default: break
       }
       return
     }
@@ -81,6 +145,7 @@ export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn
       const pb = usePlaybackStore.getState()
       const ch = pb.chases.find((c) => c.id === cell.id)
       if (!ch) return
+      if (down && fn !== 'off' && fn !== 'pause') noteFiredFrom('chase', ch.id, ref)
       switch (fn) {
         case 'toggle': if (down) pb.toggleChase(ch.id); break
         case 'temp':
@@ -88,6 +153,7 @@ export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn
         case 'swap': pb.toggleChase(ch.id, down); break
         case 'go': if (down) pb.toggleChase(ch.id, true); break
         case 'off': if (down) pb.toggleChase(ch.id, false); break
+        case 'pause': if (down) pauseChase(ch.id); break
         default: break
       }
       return
@@ -103,6 +169,7 @@ export function executorPress(ref: ExecutorRef, phase: 'down' | 'up', opts: { fn
         case 'swap': fx.setEffectRunning(effect.id, down); break
         case 'go': if (down) fx.setEffectRunning(effect.id, true); break
         case 'off': if (down) fx.setEffectRunning(effect.id, false); break
+        case 'pause': if (down) setEffectPaused(effect.id); break
         default: break
       }
       return
@@ -137,7 +204,10 @@ export function columnFader(page: number, col: number, level: number): void {
   }
   switch (fader.kind) {
     case 'column':
-      for (const cell of p.cells[col] ?? []) setCellLevel(cell)
+      setColumnLevel(page, col, v)
+      for (const cell of p.cells[col] ?? []) {
+        if (cell?.kind === 'group') usePoolStore.getState().setGroupMaster(cell.id, v)
+      }
       break
     case 'cell':
       setCellLevel(p.cells[col]?.[fader.row] ?? null)
@@ -148,8 +218,24 @@ export function columnFader(page: number, col: number, level: number): void {
     case 'group':
       usePoolStore.getState().setGroupMaster(fader.id, v)
       break
+    case 'speed':
+      usePoolStore.getState().setSpeedMasterBpm(fader.id, speedFaderToBpm(v))
+      break
+    case 'rate': {
+      const cell = p.cells[col]?.[fader.row]
+      if (cell?.kind === 'cuelist' || cell?.kind === 'chase') setRuntimeRate(cell.kind, cell.id, rateFaderToRate(v))
+      break
+    }
+    case 'xfade': {
+      const cell = p.cells[col]?.[fader.row]
+      if (cell?.kind === 'cuelist') {
+        noteFiredFrom('cuelist', cell.id, { page, col, row: fader.row })
+        crossfadeFader(cell.id, v)
+      }
+      break
+    }
     default:
-      break // speed, rate, xfade: WP3
+      break
   }
 }
 
