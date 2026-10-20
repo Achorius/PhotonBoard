@@ -2,19 +2,23 @@
 // Cue list table of the selected scene: inline timing edits
 // (NumberField, 0.1 s), pointer-drag reordering on the grip,
 // current / next / selected cue states, row menu with GO-to-cue,
-// update from programmer, move and delete.
+// update from programmer, move, duplicate, rename and delete.
 // ============================================================
 
 import { memo, useMemo } from 'react'
-import { LuArrowDown, LuArrowUp, LuChevronRight, LuEllipsis, LuGripVertical, LuHand, LuPlay, LuRefreshCw, LuReplace, LuTimer, LuTrash2, LuX } from 'react-icons/lu'
+import {
+  LuArrowDown, LuArrowUp, LuChevronRight, LuCopy, LuEllipsis, LuGripVertical, LuHand, LuPencil, LuPlay, LuRefreshCw, LuReplace, LuTimer, LuTrash2, LuX
+} from 'react-icons/lu'
 import type { Cue, Cuelist } from '@shared/types'
 import {
-  Button, DropdownMenu, IconButton, NumberField, TBody, THead, Table, Td, Th, Tr, cn, confirm, toast, type MenuEntry
+  Button, DropdownMenu, IconButton, NumberField, TBody, THead, Table, Td, Th, Tr, cn, toast, type MenuEntry
 } from '@renderer/components/ui'
+import { t, useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { isRemoteMode } from '@renderer/lib/runtime'
 import { trackedCounts } from './scene-meta'
-import { capture, recordUpdateCue } from './record'
+import { capture, captureSummary, recordUpdateCue } from './record'
+import { deleteCue, duplicateCue, focusNameField, formatCueNumber } from './actions'
 import { dropIndicator, useReorder, type ReorderState } from './useReorder'
 
 const MAX_TIME = 600
@@ -30,6 +34,7 @@ export function CueTable({ cuelist: cl, selectedCueId, onSelectCue, columns }: {
   onSelectCue: (id: string) => void
   columns: CueColumns
 }) {
+  const t = useT()
   const tracked = useMemo(() => trackedCounts(cl.cues), [cl.cues])
   const { drag, handleProps } = useReorder((from, to) => usePlaybackStore.getState().moveCue(cl.id, from, to))
   const next = cl.isPlaying
@@ -52,16 +57,16 @@ export function CueTable({ cuelist: cl, selectedCueId, onSelectCue, columns }: {
       </colgroup>
       <THead>
         <Tr>
-          <Th className="px-0"><span className="sr-only">Reorder</span></Th>
-          <Th className="pl-2">Cue</Th>
-          <Th className="pl-2">Name</Th>
-          <Th align="right" className="px-1.5" title="Fade in: intensity going up and every other attribute">Fade in</Th>
-          <Th align="right" className="px-1.5" title="Fade out: intensity going down">Fade out</Th>
-          {columns.delay && <Th align="right" className="px-1.5" title="Wait before the fade starts">Delay</Th>}
-          <Th className="px-1.5" title="Auto-follow: the next cue starts this long after this cue's fade ends">Follow</Th>
-          <Th align="right" className="px-1.5" title="Channels stored in this cue">Ch</Th>
-          {columns.tracked && <Th align="right" className="px-1.5" title="Channels on stage with tracking (this cue and the cues before it)">Tracked</Th>}
-          <Th className="px-0"><span className="sr-only">Actions</span></Th>
+          <Th className="px-0"><span className="sr-only">{t('scenes.table.reorder')}</span></Th>
+          <Th className="pl-2">{t('common.cue')}</Th>
+          <Th className="pl-2">{t('common.name')}</Th>
+          <Th align="right" className="truncate px-1.5" title={t('scenes.cues.fadeInTitle')}>{t('scenes.cues.fadeIn')}</Th>
+          <Th align="right" className="truncate px-1.5" title={t('scenes.cues.fadeOutTitle')}>{t('scenes.cues.fadeOut')}</Th>
+          {columns.delay && <Th align="right" className="truncate px-1.5" title={t('scenes.cues.delayTitle')}>{t('scenes.cues.delay')}</Th>}
+          <Th className="truncate px-1.5" title={t('scenes.cues.followTitle')}>{t('scenes.cues.follow')}</Th>
+          <Th align="right" className="px-1.5" title={t('scenes.cues.channelsTitle')}>{t('scenes.cues.channelsShort')}</Th>
+          {columns.tracked && <Th align="right" className="truncate px-1.5" title={t('scenes.cues.trackedTitle')}>{t('scenes.cues.tracked')}</Th>}
+          <Th className="px-0"><span className="sr-only">{t('scenes.table.actions')}</span></Th>
         </Tr>
       </THead>
       <TBody>
@@ -101,13 +106,16 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
   handleProps: ReturnType<typeof useReorder>['handleProps']
   onSelect: (id: string) => void
 }) {
+  const t = useT()
   const update = (u: Partial<Cue>) => usePlaybackStore.getState().updateCue(cuelistId, cue.id, u)
   const dragging = drag?.from === index
+  const number = formatCueNumber(cue.number)
 
   return (
     <Tr
       data-reorder-index={index}
       selected={selected}
+      data-cue-row={cue.id}
       onClick={() => onSelect(cue.id)}
       className={cn(
         'cursor-default',
@@ -119,8 +127,8 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
       <Td className="px-0">
         <button
           type="button"
-          aria-label={`Drag to reorder cue ${cue.number}`}
-          title="Drag to reorder"
+          aria-label={t('scenes.cues.dragAria', { number })}
+          title={t('scenes.table.dragTitle')}
           {...handleProps(index)}
           className="flex h-row w-full cursor-grab touch-none items-center justify-center text-fg-tertiary hover:text-fg-primary active:cursor-grabbing"
         >
@@ -130,34 +138,35 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
       <Td className="pl-2 pr-1">
         <span className="flex items-center gap-1">
           {current ? (
-            <LuPlay size={12} aria-label="On stage" className="shrink-0 fill-current text-go-fg" />
+            <LuPlay size={12} aria-label={t('scenes.cues.onStage')} className="shrink-0 fill-current text-go-fg" />
           ) : next ? (
-            <LuChevronRight size={12} aria-label="Next" className="shrink-0 text-accent-fg" />
+            <LuChevronRight size={12} aria-label={t('scenes.onStage.next')} className="shrink-0 text-accent-fg" />
           ) : (
             <span className="w-3 shrink-0" />
           )}
-          <span className={cn('font-mono text-xs font-semibold tabular', current ? 'text-go-fg' : 'text-fg-primary')}>{formatCueNumber(cue.number)}</span>
+          <span className={cn('font-mono text-xs font-semibold tabular', current ? 'text-go-fg' : 'text-fg-primary')}>{number}</span>
         </span>
       </Td>
       <Td className="pl-2 pr-1.5">
         <input
-          aria-label={`Cue ${cue.number} name`}
+          aria-label={t('scenes.cues.nameAria', { number })}
+          data-name-field={`cue:${cue.id}`}
           value={cue.name}
-          placeholder="Untitled"
+          placeholder={t('common.untitled')}
           onChange={(e) => update({ name: e.target.value })}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur() }}
           className="h-control-sm w-full min-w-0 rounded bg-transparent px-1.5 text-sm text-fg-primary outline-none ring-inset placeholder:text-fg-disabled hover:bg-surface-2 focus:bg-surface-0 focus:ring-1 focus:ring-info-fg"
         />
       </Td>
       <Td className="px-1.5">
-        <NumberField size="sm" value={cue.fadeIn} onChange={(v) => update({ fadeIn: v })} min={0} max={MAX_TIME} step={0.1} unit="s" aria-label={`Cue ${cue.number} fade in`} />
+        <NumberField size="sm" value={cue.fadeIn} onChange={(v) => update({ fadeIn: v })} min={0} max={MAX_TIME} step={0.1} unit={t('units.seconds')} aria-label={t('scenes.cues.fadeInAria', { number })} />
       </Td>
       <Td className="px-1.5">
-        <NumberField size="sm" value={cue.fadeOut} onChange={(v) => update({ fadeOut: v })} min={0} max={MAX_TIME} step={0.1} unit="s" aria-label={`Cue ${cue.number} fade out`} />
+        <NumberField size="sm" value={cue.fadeOut} onChange={(v) => update({ fadeOut: v })} min={0} max={MAX_TIME} step={0.1} unit={t('units.seconds')} aria-label={t('scenes.cues.fadeOutAria', { number })} />
       </Td>
       {columns.delay && (
         <Td className="px-1.5">
-          <NumberField size="sm" value={cue.delay} onChange={(v) => update({ delay: v })} min={0} max={MAX_TIME} step={0.1} unit="s" aria-label={`Cue ${cue.number} delay`} />
+          <NumberField size="sm" value={cue.delay} onChange={(v) => update({ delay: v })} min={0} max={MAX_TIME} step={0.1} unit={t('units.seconds')} aria-label={t('scenes.cues.delayAria', { number })} />
         </Td>
       )}
       <Td className="px-1.5">
@@ -167,10 +176,10 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
             size="sm"
             icon={LuHand}
             className="w-full justify-start text-fg-tertiary"
-            tooltip="Manual: waits for GO. Click for auto-follow."
+            tooltip={t('scenes.cues.manualTooltip')}
             onClick={(e) => { e.stopPropagation(); update({ followTime: 0 }) }}
           >
-            Manual
+            <span className="truncate">{t('scenes.cues.manual')}</span>
           </Button>
         ) : (
           <span className="flex items-center gap-0.5">
@@ -182,11 +191,11 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
               min={0}
               max={MAX_TIME}
               step={0.1}
-              unit="s"
+              unit={t('units.seconds')}
               label={undefined}
-              aria-label={`Cue ${cue.number} auto-follow time`}
+              aria-label={t('scenes.cues.followAria', { number })}
             />
-            <IconButton icon={LuX} size="xs" label="Back to manual GO" onClick={(e) => { e.stopPropagation(); update({ followTime: null }) }} />
+            <IconButton icon={LuX} size="xs" label={t('scenes.cues.backToManual')} onClick={(e) => { e.stopPropagation(); update({ followTime: null }) }} />
           </span>
         )}
       </Td>
@@ -195,52 +204,41 @@ const CueRow = memo(function CueRow({ cuelistId, cue, index, count, current, nex
       <Td className="px-0 text-center" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu
           placement="bottom-end"
-          items={() => cueMenu(cuelistId, cue, index, count)}
-          trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={`Cue ${cue.number} actions`} size="sm" />}
+          items={() => cueMenu(cuelistId, cue, index, count, onSelect)}
+          trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={t('scenes.cues.actionsAria', { number })} size="sm" />}
         />
       </Td>
     </Tr>
   )
 })
 
-/** 1 → "1", 2.5 → "2.5", 1.25 → "1.25" */
-export function formatCueNumber(n: number): string {
-  return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000)
-}
-
-function cueMenu(cuelistId: string, cue: Cue, index: number, count: number): MenuEntry[] {
+/** Row "…" menu — built when it opens (current language) */
+function cueMenu(cuelistId: string, cue: Cue, index: number, count: number, onSelect: (id: string) => void): MenuEntry[] {
   const pb = usePlaybackStore.getState
+  const number = formatCueNumber(cue.number)
   const fromProgrammer = (mode: 'merge' | 'replace') => {
     const cap = capture(true)
     if (cap.channelCount === 0) {
-      toast.warning('Nothing to record', { description: 'Set levels in Fixtures first.' })
+      toast.warning(t('scenes.record.nothing'), { description: t('scenes.record.nothingHint') })
       return
     }
     recordUpdateCue(cuelistId, cue.id, cap, mode)
-    toast.success(`Cue ${formatCueNumber(cue.number)} ${mode === 'merge' ? 'updated' : 'replaced'}`, { description: `${cap.fixtureCount} fixtures · ${cap.channelCount} channels` })
+    toast.success(t(mode === 'merge' ? 'scenes.toast.cueUpdated' : 'scenes.toast.cueReplaced', { number }), { description: captureSummary(cap) })
   }
   return [
-    { type: 'label', label: `Cue ${formatCueNumber(cue.number)}${cue.name ? ` · ${cue.name}` : ''}` },
-    ...(isRemoteMode() ? [] : [{ label: 'GO to this cue', icon: LuPlay, onSelect: () => pb().goToCue(cuelistId, index) } satisfies MenuEntry]),
+    { type: 'label', label: cue.name ? t('scenes.cues.menuTitleNamed', { number, name: cue.name }) : t('scenes.cueN', { number }) },
+    ...(isRemoteMode() ? [] : [{ label: t('scenes.cues.goTo'), icon: LuPlay, onSelect: () => pb().goToCue(cuelistId, index) } satisfies MenuEntry]),
     { type: 'separator' },
-    { label: 'Update from programmer', description: 'Merge: add / override channels', icon: LuRefreshCw, onSelect: () => fromProgrammer('merge') },
-    { label: 'Replace with programmer', description: 'The cue keeps only the new values', icon: LuReplace, onSelect: () => fromProgrammer('replace') },
+    { label: t('scenes.update.fromProgrammer'), description: t('scenes.update.mergeDescription'), icon: LuRefreshCw, onSelect: () => fromProgrammer('merge') },
+    { label: t('scenes.update.replaceWithProgrammer'), description: t('scenes.update.replaceCueDescription'), icon: LuReplace, onSelect: () => fromProgrammer('replace') },
     { type: 'separator' },
-    { label: 'Auto-follow', icon: LuTimer, checked: cue.followTime !== null, onSelect: () => pb().updateCue(cuelistId, cue.id, { followTime: cue.followTime === null ? 0 : null }) },
-    { label: 'Move up', icon: LuArrowUp, disabled: index === 0, onSelect: () => pb().moveCue(cuelistId, index, index - 1) },
-    { label: 'Move down', icon: LuArrowDown, disabled: index >= count - 1, onSelect: () => pb().moveCue(cuelistId, index, index + 1) },
+    { label: t('scenes.cues.autoFollow'), icon: LuTimer, checked: cue.followTime !== null, onSelect: () => pb().updateCue(cuelistId, cue.id, { followTime: cue.followTime === null ? 0 : null }) },
+    { label: t('scenes.table.moveUp'), icon: LuArrowUp, disabled: index === 0, onSelect: () => pb().moveCue(cuelistId, index, index - 1) },
+    { label: t('scenes.table.moveDown'), icon: LuArrowDown, disabled: index >= count - 1, onSelect: () => pb().moveCue(cuelistId, index, index + 1) },
     { type: 'separator' },
-    { label: 'Delete cue…', icon: LuTrash2, danger: true, onSelect: () => void deleteCue(cuelistId, cue) }
+    { label: t('common.renameEllipsis'), icon: LuPencil, shortcut: 'F2', onSelect: () => { onSelect(cue.id); focusNameField(`cue:${cue.id}`) } },
+    { label: t('scenes.cues.duplicate'), icon: LuCopy, shortcut: 'Mod+D', onSelect: () => { const id = duplicateCue(cuelistId, cue); if (id) onSelect(id) } },
+    { label: t('scenes.cues.deleteEllipsis'), icon: LuTrash2, danger: true, shortcut: 'Backspace', onSelect: () => void deleteCue(cuelistId, cue) }
   ]
 }
 
-export async function deleteCue(cuelistId: string, cue: Cue): Promise<boolean> {
-  const ok = await confirm({
-    title: `Delete cue ${formatCueNumber(cue.number)}${cue.name ? ` “${cue.name}”` : ''}?`,
-    message: `Its ${cue.values.length} channel values are removed. Cues after it may change on stage (tracking).`,
-    confirmLabel: 'Delete cue',
-    tone: 'danger'
-  })
-  if (ok) usePlaybackStore.getState().removeCue(cuelistId, cue.id)
-  return ok
-}

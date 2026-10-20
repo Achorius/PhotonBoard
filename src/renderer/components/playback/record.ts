@@ -25,6 +25,7 @@ import { cueKey } from '@renderer/lib/fixture-index'
 import { isRemoteMode, sendRemoteCommand } from '@renderer/lib/runtime'
 import { summaryCounts, useConsoleProgrammer } from '@renderer/lib/console-programmer'
 import { runAsConsoleContent } from '@renderer/lib/content-sync'
+import { t } from '@renderer/i18n'
 
 export interface Capture {
   values: CueChannelValue[]
@@ -42,6 +43,14 @@ export interface Capture {
 
 export function countFixtures(values: CueChannelValue[]): number {
   return new Set(values.map((v) => v.fixtureId)).size
+}
+
+/** "4 fixtures · 28 channels" (toast descriptions) */
+export function captureSummary(cap: Pick<Capture, 'fixtureCount' | 'channelCount'>): string {
+  return t('scenes.toast.captureSummary', {
+    fixtures: t('common.fixtureCount', { count: cap.fixtureCount }),
+    channels: t('common.channelCount', { count: cap.channelCount })
+  })
 }
 
 /** Live output (non-zero channels) of the fixtures, from the published pre-master mix */
@@ -101,18 +110,19 @@ export function mergeValues(base: CueChannelValue[], overlay: CueChannelValue[])
   return Array.from(map.values())
 }
 
+/** Default names are show data: written in the operator's language when created */
 function nextSceneName(): string {
   const names = new Set(usePlaybackStore.getState().cuelists.map((c) => c.name))
   let n = usePlaybackStore.getState().cuelists.length + 1
-  while (names.has(`Scene ${n}`)) n++
-  return `Scene ${n}`
+  while (names.has(t('scenes.defaults.sceneName', { n }))) n++
+  return t('scenes.defaults.sceneName', { n })
 }
 
 function nextChaseName(): string {
   const names = new Set(usePlaybackStore.getState().chases.map((c) => c.name))
   let n = usePlaybackStore.getState().chases.length + 1
-  while (names.has(`Chase ${n}`)) n++
-  return `Chase ${n}`
+  while (names.has(t('scenes.defaults.chaseName', { n }))) n++
+  return t('scenes.defaults.chaseName', { n })
 }
 
 /** Empty scene (no cue yet); selected */
@@ -143,7 +153,7 @@ interface RecordIds {
 function newSceneLocal(cap: Capture, opts: { name?: string; includeEffects: boolean }, ids: Required<Pick<RecordIds, 'id' | 'itemId'>>, select: boolean): void {
   const pb = usePlaybackStore.getState()
   pb.addCuelist(opts.name?.trim() || nextSceneName(), ids.id)
-  pb.addCue(ids.id, 'Cue 1', cap.values, undefined, undefined, ids.itemId)
+  pb.addCue(ids.id, t('scenes.defaults.cueName', { n: 1 }), cap.values, undefined, undefined, ids.itemId)
   if (opts.includeEffects && cap.effects.length > 0) pb.updateCuelist(ids.id, { effectSnapshots: cap.effects })
   if (select) pb.selectCuelist(ids.id)
 }
@@ -169,7 +179,7 @@ export function recordAddCue(cuelistId: string, cap: Capture, name?: string, ids
   const cl = pb.cuelists.find((c) => c.id === cuelistId)
   if (!cl) return null
   const itemId = ids.itemId ?? uuidv4()
-  const cueName = name?.trim() || `Cue ${cl.cues.length + 1}`
+  const cueName = name?.trim() || t('scenes.defaults.cueName', { n: cl.cues.length + 1 })
   if (isRemoteMode()) {
     runAsConsoleContent(['cuelists'], () => usePlaybackStore.getState().addCue(cuelistId, cueName, cap.values, undefined, undefined, itemId))
     sendRecord(cap, { action: 'add-cue', targetId: cuelistId, itemId, name: cueName })
@@ -286,7 +296,6 @@ export function clearProgrammerAfterRecord(): void {
 
 /** "4 fixtures · 28 ch" */
 export function describeValues(values: CueChannelValue[]): string {
-  if (values.length === 0) return 'Empty'
-  const f = countFixtures(values)
-  return `${f} fixture${f === 1 ? '' : 's'} · ${values.length} ch`
+  if (values.length === 0) return t('scenes.record.emptyValues')
+  return t('scenes.record.describeValues', { fixtures: t('common.fixtureCount', { count: countFixtures(values) }), count: values.length })
 }
