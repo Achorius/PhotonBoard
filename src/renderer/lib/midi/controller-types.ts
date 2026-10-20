@@ -55,6 +55,22 @@ export interface ControllerProfile {
   /** Message asking the device for its fader positions (when it supports it) */
   requestFaderPositions?: number[]
   defaultLayouts: ControllerLayoutId[]
+
+  // ---- WP4 additions (optional, backward compatible) ----
+  /** Manufacturer shown in the Devices panel ("Akai", "Novation"…) */
+  vendor?: string
+  /** No hardware blink: the feedback engine blinks / pulses LEDs itself (≈2 Hz) */
+  softBlink?: boolean
+  /** Parse a SysEx reply to `requestFaderPositions` → [control, raw 0-127] (null = not that reply) */
+  parseFaderPositions?(data: ArrayLike<number>): [ControlId, number][] | null
+  /** The same profile with machine options applied (e.g. exact RGB through SysEx) */
+  withOptions?(opts: ControllerProfileOptions): ControllerProfile
+  /** Supports `rgbLeds` (exact colours through SysEx) */
+  rgbCapable?: boolean
+}
+
+export interface ControllerProfileOptions {
+  rgbLeds?: boolean
 }
 
 export type ControllerAction =
@@ -66,7 +82,14 @@ export type ControllerAction =
   | { type: 'page'; page: number | '+' | '-' }
   | { type: 'go-selected' | 'back-selected' | 'release-all' | 'clear' }
   | { type: 'blackout' | 'blinder' | 'strobe' | 'tap' }
+  /**
+   * Run / select / apply a pool object. `id` is an object id, or a number
+   * reference resolved when pressed: '#3' (macro / group number 3),
+   * 'color#2' (preset family + number, e.g. 'position#1').
+   */
   | { type: 'macro' | 'group' | 'preset'; id: string }
+  /** Make an executor the GO / Back target (Shift + pad) — WP4 addition */
+  | { type: 'select-executor'; page: 'current' | 'next' | number; col: number; row: number }
 
 export interface ControllerBinding {
   control: ControlId
@@ -83,4 +106,6 @@ export interface ControllerSettings {
   /** pickup = soft takeover (default) · jump = the fader value applies at once */
   takeover: 'pickup' | 'jump'
   enabled: boolean
+  /** Exact RGB colours through SysEx (profiles with `rgbCapable`; default: palette) */
+  rgbLeds?: boolean
 }

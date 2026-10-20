@@ -1,11 +1,14 @@
-// MIDI ports with connection state and an activity LED per input.
+// MIDI ports with connection state and an activity LED per input, and the
+// recognised controllers (profiles) above them.
 
 import { memo, useEffect, useState } from 'react'
-import { LuArrowDownToLine, LuArrowUpFromLine, LuPiano, LuRefreshCw } from 'react-icons/lu'
+import { LuArrowDownToLine, LuArrowUpFromLine, LuLayoutGrid, LuPiano, LuRefreshCw } from 'react-icons/lu'
 import { EmptyState, IconButton, PanelHeader, StatusDot, cn } from '@renderer/components/ui'
 import { useT } from '@renderer/i18n'
 import { useMidiStore } from '@renderer/stores/midi-store'
+import { useControllerStore } from '@renderer/stores/controller-store'
 import type { MidiDevice } from '@shared/types'
+import { ControllersSection } from './ControllersSection'
 
 export function DevicesPanel() {
   const t = useT()
@@ -14,6 +17,7 @@ export function DevicesPanel() {
   const inputs = devices.filter((d) => d.type === 'input')
   const outputs = devices.filter((d) => d.type === 'output')
   const connected = inputs.filter((d) => d.connected).length
+  const hasControllers = useControllerStore((s) => s.detected.length > 0)
 
   return (
     <section aria-label={t('midi.devices.region')} className="flex min-h-0 shrink-0 flex-col border-b border-line">
@@ -23,7 +27,7 @@ export function DevicesPanel() {
         count={devices.length > 0 ? t('midi.devices.count', { inputs: connected, outputs: outputs.filter((d) => d.connected).length }) : undefined}
         actions={<IconButton icon={LuRefreshCw} label={t('midi.devices.rescan')} size="sm" onClick={() => { void useMidiStore.getState().initMidi() }} />}
       />
-      <div className="max-h-[280px] overflow-y-auto py-1 [[data-density=touch]_&]:max-h-[340px]">
+      <div className={cn('overflow-y-auto py-1', hasControllers ? 'max-h-[440px] [[data-density=touch]_&]:max-h-[520px]' : 'max-h-[280px] [[data-density=touch]_&]:max-h-[340px]')}>
         {devices.length === 0 ? (
           <EmptyState
             size="sm"
@@ -33,6 +37,7 @@ export function DevicesPanel() {
           />
         ) : (
           <>
+            <ControllersSection label={<GroupLabel icon={LuLayoutGrid} label={t('pro.midi.controllers.title')} />} />
             <GroupLabel icon={LuArrowDownToLine} label={t('midi.devices.inputs')} />
             {inputs.length === 0 ? <p className="px-3 pb-2 text-xs text-fg-tertiary">{t('midi.devices.noInputs')}</p> : inputs.map((d) => <DeviceRow key={d.id} device={d} />)}
             <GroupLabel icon={LuArrowUpFromLine} label={t('midi.devices.outputs')} />

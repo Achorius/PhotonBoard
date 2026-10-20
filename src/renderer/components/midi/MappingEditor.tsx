@@ -15,6 +15,11 @@ import {
   targetDescription, targetLabel, useNameIndex, type Behavior
 } from './midi-model'
 import { deleteMapping } from './midi-actions'
+import { useControllerStore } from '@renderer/stores/controller-store'
+import { mappingFeedbackMode } from '@renderer/lib/midi/mapping-feedback'
+import { overriddenProfileName } from './controller-model'
+
+type FeedbackChoice = 'off' | 'note' | 'cc'
 
 export function MappingEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const t = useT()
@@ -22,6 +27,8 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
   const devices = useMidiStore((s) => s.devices)
   const index = useNameIndex()
   const [relearn, setRelearn] = useState(false)
+  // Re-render when controllers come and go (profile override hint)
+  useControllerStore((s) => s.detected)
 
   // Re-learn the source from the next incoming message
   useEffect(() => {
@@ -52,6 +59,8 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
   if (mapping.source.deviceName && !inputNames.includes(mapping.source.deviceName)) inputNames.push(mapping.source.deviceName)
   const behavior = (mapping.options.behavior || 'direct') as Behavior
   const remove = () => { void deleteMapping(id).then((ok) => { if (ok) onClose() }) }
+  const feedback: FeedbackChoice = mappingFeedbackMode(mapping) ?? 'off'
+  const overridden = overriddenProfileName(mapping)
 
   return (
     <aside aria-label={t('midi.editor.region')} className="flex h-full min-h-0 flex-col bg-surface-1">
@@ -100,6 +109,7 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
           <Field label={mapping.source.type === 'note' ? t('midi.editor.note') : mapping.source.type === 'program' ? t('midi.editor.program') : t('midi.editor.controller')}>
             <NumberField aria-label={t('midi.editor.number')} value={mapping.source.number} min={0} max={127} step={1} onChange={(number) => setSource({ number })} />
           </Field>
+          {overridden && <p className="text-xs text-midi-fg">{t('pro.midi.feedback.overridesProfile', { name: overridden })}</p>}
         </Section>
 
         <Section title={t('midi.editor.target')}>
@@ -166,6 +176,15 @@ export function MappingEditor({ id, onClose }: { id: string; onClose: () => void
               <Switch checked={mapping.options.inverted} onChange={(inverted) => setOptions({ inverted })} label={t('midi.editor.inverted')} description={t('midi.editor.invertedHint')} />
             </>
           )}
+          <Field label={t('pro.midi.feedback.label')} hint={t('pro.midi.feedback.hint')}>
+            <SegmentedControl<FeedbackChoice>
+              fullWidth
+              aria-label={t('pro.midi.feedback.label')}
+              value={feedback}
+              onChange={(v) => setOptions({ feedback: v === 'off' ? undefined : v } as Partial<MidiMapping['options']>)}
+              items={[{ value: 'off', label: t('pro.midi.feedback.off') }, { value: 'note', label: t('pro.midi.feedback.note') }, { value: 'cc', label: t('pro.midi.feedback.cc') }]}
+            />
+          </Field>
         </Section>
 
         <Section title={t('midi.editor.dangerZone')}>

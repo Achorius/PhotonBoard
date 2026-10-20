@@ -2,7 +2,7 @@
 
 import type { Translation } from '../../types'
 
-type Core = Omit<Translation['pro'], 'cli'>
+type Core = Omit<Translation['pro'], 'cli' | 'midi'>
 
 export const core: Core = {
   sections: {
