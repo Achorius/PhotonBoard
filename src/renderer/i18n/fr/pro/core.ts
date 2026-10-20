@@ -2,7 +2,7 @@
 
 import type { Translation } from '../../types'
 
-type Core = Omit<Translation['pro'], 'cli'>
+type Core = Pick<Translation['pro'], 'sections' | 'executor' | 'defaults' | 'proMode' | 'proModeHint'>
 
 export const core: Core = {
   sections: {

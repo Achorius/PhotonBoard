@@ -7,8 +7,10 @@
 
 import { core } from './pro/core'
 import { cli } from './pro/cli'
+import { programmer } from './pro/programmer'
 
 export const pro = {
   ...core,
-  cli
+  cli,
+  programmer
 }
