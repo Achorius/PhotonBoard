@@ -240,7 +240,8 @@ describe('command line contract (stubs)', () => {
 
   it('parse never throws and reports what can come next', () => {
     expect(parse('').expected.length).toBeGreaterThan(0)
-    expect(parse('Fixture 1 At 50').error).toBeDefined()
+    expect(parse('Fixture 1 At 50').error).toBeUndefined()
+    expect(parse('Fixture 1 At').error).toBeDefined()
   })
 
   it('executeLine without a context says the command line is not available', () => {
