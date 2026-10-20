@@ -5,23 +5,27 @@
 //   TimelineCanvas ruler, markers, sections, tracks and clips
 //   Inspector      properties of the selected item
 // Files: timeline-model (pure ops), timeline-view-store (UI state + engine clock),
-// timeline-actions (edits with confirmation).
+// timeline-actions (edits, and the selection actions: Delete / Mod+D / F2).
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react'
 import { LuClapperboard } from 'react-icons/lu'
 import { ResizeHandle, cn, useResizable } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
+import { useSelectionActions } from '@renderer/lib/selection-actions'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { Inspector } from './Inspector'
 import { LibraryPanel } from './LibraryPanel'
 import { TimelineCanvas } from './TimelineCanvas'
 import { TransportBar } from './TransportBar'
 import { getCanvasApi, useTimelineView } from './timeline-view-store'
-import { formatShortTime } from './timeline-model'
+import { formatShortTime, trackName } from './timeline-model'
+import { timelineSelectionActions } from './timeline-actions'
 
 export function LiveView() {
   const libraryOpen = useTimelineView((s) => s.libraryOpen)
-  const hasSelection = useTimelineView((s) => s.selection !== null)
+  const selection = useTimelineView((s) => s.selection)
+  const hasSelection = selection !== null
   const library = useResizable({ initial: 272, min: 248, max: 420, storageKey: 'timeline.library' })
   const inspector = useResizable({ initial: 300, min: 264, max: 460, storageKey: 'timeline.inspector', direction: -1 })
   // Narrow screens (tablet): the inspector floats over the timeline instead of squeezing it
@@ -35,8 +39,12 @@ export function LiveView() {
     return () => ro.disconnect()
   }, [])
 
+  // Delete / Backspace, Mod+D, F2 and the Edit menu act on the selected clip, marker, section or track
+  const rootRef = useRef<HTMLDivElement>(null)
+  useSelectionActions(timelineSelectionActions(selection), { scope: rootRef })
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       <TransportBar />
       <div ref={bodyRef} className="relative flex min-h-0 flex-1">
         {libraryOpen && (
@@ -69,6 +77,7 @@ export function LiveView() {
 
 /** Follows the pointer while a scene is dragged from the library */
 function DragGhost() {
+  const t = useT()
   const drag = useTimelineView((s) => s.libraryDrag)
   const name = usePlaybackStore((s) => (drag ? s.cuelists.find((c) => c.id === drag.cuelistId)?.name : undefined))
   const trackNames = usePlaybackStore((s) => s.timelineTrackNames)
@@ -80,9 +89,11 @@ function DragGhost() {
       style={{ left: drag.x + 14, top: drag.y + 10 }}
     >
       <LuClapperboard size={14} aria-hidden className="text-fg-tertiary" />
-      <span className="font-medium">{name ?? 'Scene'}</span>
+      <span className="font-medium">{name ?? t('common.scene')}</span>
       <span className={cn('text-xs', target ? 'text-go-fg' : 'text-fg-tertiary')}>
-        {target ? `${trackNames[target.track] || `Track ${target.track + 1}`} at ${formatShortTime(target.time)}` : 'Drop on a track'}
+        {target
+          ? t('timeline.ghost.dropAt', { track: trackName(trackNames, target.track), time: formatShortTime(target.time) })
+          : t('timeline.ghost.dropHint')}
       </span>
     </div>
   )

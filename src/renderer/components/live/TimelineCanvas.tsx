@@ -5,7 +5,9 @@
 // without re-rendering React).
 //   wheel: scroll · Ctrl/Cmd+wheel or pinch: zoom around the pointer
 //   keyboard (when focused): Space play/pause · Home rewind ·
-//   Delete remove · ←/→ nudge · M marker · Esc deselect
+//   ←/→ nudge · ↑/↓ change track · M marker · Esc deselect.
+//   Delete / Backspace, Mod+D and F2 are the global selection actions
+//   (registered by LiveView, see timeline-actions) — not handled here.
 // ============================================================
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -15,6 +17,7 @@ import {
   LuClapperboard, LuCopy, LuFlag, LuMapPin, LuPlus, LuScissors, LuTrash2
 } from 'react-icons/lu'
 import { Button, EmptyState, cn, palette, useContextMenu, useDensity, withAlpha, type MenuEntry } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { getActiveClipIds } from '@renderer/lib/timeline-engine'
@@ -24,15 +27,16 @@ import { TimelineClip } from './TimelineClip'
 import { MarkerLane, Ruler, ZoneLane } from './TimelineLanes'
 import { TrackHeader } from './TrackHeader'
 import {
-  GEOMETRY, MIN_CLIP_DURATION, addSceneClip, addTrack, clampZoom, clipEnd, duplicateClip, rulerTicks,
+  GEOMETRY, MIN_CLIP_DURATION, addSceneClip, addTrack, clampZoom, clipEnd, rulerTicks,
   formatShortTime, snapStep, snapWithEdges, splitClip, trackName
 } from './timeline-model'
-import { addMarkerAt, deleteClip, deleteMarker, deleteZone, seek } from './timeline-actions'
+import { addMarkerAt, deleteClip, duplicateClipAndSelect, seek } from './timeline-actions'
 import {
   getCanvasApi, getClockTime, registerCanvasApi, subscribeTimelineTime, useTimelinePlaying, useTimelineView, zoomChosen
 } from './timeline-view-store'
 
 export function TimelineCanvas() {
+  const t = useT()
   const density = useDensity()
   const g = GEOMETRY[density]
   const { zoom, snap: snapMode, bpm, timeDisplay, selection, followPlayhead, length } = useTimelineView(useShallow((s) => ({
@@ -243,38 +247,39 @@ export function TimelineCanvas() {
     const clip = pb.timelineClips.find((c) => c.id === id)
     if (!clip) return
     useTimelineView.getState().select({ kind: 'clip', id })
-    const t = getClockTime()
-    const canSplit = t > clip.startTime + MIN_CLIP_DURATION && t < clipEnd(clip) - MIN_CLIP_DURATION
+    const now = getClockTime()
+    const canSplit = now > clip.startTime + MIN_CLIP_DURATION && now < clipEnd(clip) - MIN_CLIP_DURATION
     ctxMenu.open(e, [
-      { label: 'Edit scene', icon: LuClapperboard, onSelect: () => useUiStore.getState().navigateToCuelist(clip.cuelistId) },
-      { label: 'Go to clip start', icon: LuFlag, onSelect: () => seek(clip.startTime) },
-      { label: 'Duplicate', icon: LuCopy, shortcut: 'Mod+D', onSelect: () => { const nid = duplicateClip(id); if (nid) useTimelineView.getState().select({ kind: 'clip', id: nid }) } },
-      { label: 'Split at playhead', icon: LuScissors, disabled: !canSplit, onSelect: () => { splitClip(id, t) } },
+      { label: t('timeline.clip.editScene'), icon: LuClapperboard, onSelect: () => useUiStore.getState().navigateToCuelist(clip.cuelistId) },
+      { label: t('timeline.clip.goToStart'), icon: LuFlag, onSelect: () => seek(clip.startTime) },
+      { label: t('common.duplicate'), icon: LuCopy, shortcut: 'Mod+D', onSelect: () => duplicateClipAndSelect(id) },
+      { label: t('timeline.clip.splitAtPlayhead'), icon: LuScissors, disabled: !canSplit, onSelect: () => { splitClip(id, now) } },
       { type: 'separator' },
-      { label: 'Remove from timeline', icon: LuTrash2, danger: true, shortcut: 'Delete', onSelect: () => { void deleteClip(id) } }
+      { label: t('timeline.clip.removeFromTimeline'), icon: LuTrash2, danger: true, shortcut: 'Delete', onSelect: () => { void deleteClip(id) } }
     ])
-  }, [ctxMenu])
+  }, [ctxMenu, t])
 
   const trackAreaMenu = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-clip]')) return
-    const t = snap(timeAt(e.clientX))
+    const at = snap(timeAt(e.clientX))
     const track = trackAt(e.clientY)
     const scenes = usePlaybackStore.getState().cuelists
     const items: MenuEntry[] = [
-      { type: 'label', label: `${trackName(usePlaybackStore.getState().timelineTrackNames, track)} · ${formatShortTime(t)}` },
+      { type: 'label', label: `${trackName(usePlaybackStore.getState().timelineTrackNames, track)} · ${formatShortTime(at)}` },
       {
-        label: 'Add scene here',
+        label: t('timeline.menu.addSceneHere'),
         icon: LuPlus,
         disabled: scenes.length === 0,
-        submenu: scenes.map((cl) => ({ label: cl.name, onSelect: () => { const id = addSceneClip(cl.id, track, t); useTimelineView.getState().select({ kind: 'clip', id }) } }))
+        submenu: scenes.map((cl) => ({ label: cl.name, onSelect: () => { const id = addSceneClip(cl.id, track, at); useTimelineView.getState().select({ kind: 'clip', id }) } }))
       },
-      { label: 'Add marker here', icon: LuFlag, onSelect: () => addMarkerAt(t) },
-      { label: 'Move playhead here', icon: LuMapPin, onSelect: () => seek(t) }
+      { label: t('timeline.menu.addMarkerHere'), icon: LuFlag, onSelect: () => addMarkerAt(at) },
+      { label: t('timeline.menu.movePlayheadHere'), icon: LuMapPin, onSelect: () => seek(at) }
     ]
     ctxMenu.open(e, items)
-  }, [ctxMenu, snap, timeAt, trackAt])
+  }, [ctxMenu, snap, timeAt, trackAt, t])
 
-  // ---- Keyboard (focused canvas only; consumed keys never reach the global shortcuts) ----
+  // ---- Keyboard (focused canvas only; consumed keys never reach the global shortcuts).
+  // Delete / Backspace / Mod+D / F2 are not consumed: the global selection actions handle them. ----
   const onKeyDown = (e: React.KeyboardEvent) => {
     if ((e.target as HTMLElement).closest('input, textarea, select')) return
     const sel = useTimelineView.getState().selection
@@ -286,23 +291,9 @@ export function TimelineCanvas() {
     if (e.key === 'Escape' && sel) { consume(); useTimelineView.getState().select(null); return }
     if ((e.key === 'm' || e.key === 'M') && !mod) { consume(); if (!e.repeat) addMarkerAt(snap(getClockTime())); return }
     if (!sel) return
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      consume()
-      if (e.repeat) return
-      if (sel.kind === 'clip') void deleteClip(sel.id)
-      else if (sel.kind === 'marker') void deleteMarker(sel.id)
-      else if (sel.kind === 'zone') void deleteZone(sel.id)
-      return
-    }
     if (sel.kind === 'clip') {
       const clip = pb.timelineClips.find((c) => c.id === sel.id)
       if (!clip) return
-      if (mod && (e.key === 'd' || e.key === 'D')) {
-        consume()
-        const nid = duplicateClip(clip.id)
-        if (nid) useTimelineView.getState().select({ kind: 'clip', id: nid })
-        return
-      }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         consume()
         const step = snapStep(useTimelineView.getState().snap, useTimelineView.getState().bpm) || 0.1
@@ -339,14 +330,14 @@ export function TimelineCanvas() {
         ref={scrollRef}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        aria-label="Timeline"
+        aria-label={t('common.timeline')}
         className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-surface-0 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info-fg/50"
       >
         <div className="relative" style={{ width: g.header + laneWidth, minHeight: '100%' }}>
           {/* Ruler */}
           <div className="sticky top-0 z-40 flex" style={{ height: g.ruler }}>
             <div className={cn(cornerCls, 'z-50 border-b')} style={{ width: g.header }}>
-              {timeDisplay === 'bars' ? `Bars · ${Math.round(bpm)} BPM` : 'Time'}
+              {timeDisplay === 'bars' ? t('timeline.canvas.barsCorner', { bpm: Math.round(bpm) }) : t('timeline.canvas.timeCorner')}
             </div>
             <div className="relative">
               <Ruler ticks={ticks} width={laneWidth} length={length} />
@@ -359,7 +350,7 @@ export function TimelineCanvas() {
 
           {/* Markers */}
           <div className="sticky z-30 flex" style={{ top: g.ruler, height: g.markerLane }}>
-            <div className={cn(cornerCls, 'border-b border-b-line-subtle')} style={{ width: g.header }}>Markers</div>
+            <div className={cn(cornerCls, 'border-b border-b-line-subtle')} style={{ width: g.header }}>{t('timeline.canvas.markers')}</div>
             <div className="relative">
               <MarkerLane markers={markers} width={laneWidth} selectedId={selMarker} />
               <div ref={playheadRef(1)} className="pointer-events-none absolute left-0 top-0 h-full w-px bg-accent" aria-hidden />
@@ -368,7 +359,7 @@ export function TimelineCanvas() {
 
           {/* Sections */}
           <div className="sticky z-30 flex" style={{ top: g.ruler + g.markerLane, height: g.zoneLane }}>
-            <div className={cn(cornerCls, 'border-b')} style={{ width: g.header }}>Sections</div>
+            <div className={cn(cornerCls, 'border-b')} style={{ width: g.header }}>{t('timeline.canvas.sections')}</div>
             <div className="relative">
               <ZoneLane zones={zones} width={laneWidth} selectedId={selZone} />
               <div ref={playheadRef(2)} className="pointer-events-none absolute left-0 top-0 h-full w-px bg-accent" aria-hidden />
@@ -391,7 +382,7 @@ export function TimelineCanvas() {
                 />
               ))}
               <div className="flex items-center px-2 py-1.5">
-                <Button size="sm" variant="ghost" icon={LuPlus} onClick={() => addTrack()} fullWidth className="justify-start">Add track</Button>
+                <Button size="sm" variant="ghost" icon={LuPlus} onClick={() => addTrack()} fullWidth className="justify-start">{t('timeline.track.add')}</Button>
               </div>
             </div>
 
@@ -441,7 +432,7 @@ export function TimelineCanvas() {
                     key={c.id}
                     id={c.id}
                     cuelistId={c.cuelistId}
-                    name={c.name || scene?.name || 'Scene'}
+                    name={c.name || scene?.name || t('common.scene')}
                     color={c.color || palette.accent}
                     trackIndex={Math.min(c.trackIndex, trackCount - 1)}
                     startTime={c.startTime}
@@ -471,6 +462,7 @@ export function TimelineCanvas() {
 }
 
 function TimelineEmpty({ hasScenes }: { hasScenes: boolean }) {
+  const t = useT()
   return (
     <div className="pointer-events-none sticky left-0 top-0 flex h-full items-center justify-center" style={{ width: 'min(100%, 640px)' }}>
       <div className="pointer-events-auto rounded-lg bg-surface-1/90 shadow-popover ring-1 ring-line" onClick={(e) => e.stopPropagation()}>
@@ -478,16 +470,16 @@ function TimelineEmpty({ hasScenes }: { hasScenes: boolean }) {
           <EmptyState
             size="sm"
             icon={LuClapperboard}
-            title="The timeline is empty"
-            description="Drag a scene from the library onto a track, or select a scene and press + to drop it at the playhead."
+            title={t('timeline.canvas.emptyTitle')}
+            description={t('timeline.canvas.emptyDescription')}
           />
         ) : (
           <EmptyState
             size="sm"
             icon={LuClapperboard}
-            title="No scenes to place yet"
-            description="Timeline clips play scenes. Record a scene first, then arrange it here."
-            action={<Button variant="primary" icon={LuClapperboard} onClick={() => useUiStore.getState().setActiveTab('playback')}>Open Scenes</Button>}
+            title={t('timeline.canvas.noScenesTitle')}
+            description={t('timeline.canvas.noScenesDescription')}
+            action={<Button variant="primary" icon={LuClapperboard} onClick={() => useUiStore.getState().setActiveTab('playback')}>{t('timeline.openScenes')}</Button>}
           />
         )}
       </div>

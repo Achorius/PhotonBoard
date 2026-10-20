@@ -8,6 +8,7 @@ import { memo, useRef, useState } from 'react'
 import type React from 'react'
 import { LuSparkles } from 'react-icons/lu'
 import { cn, formatSeconds, palette, tint, usePointerDrag, withAlpha } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { usePlaybackStore } from '@renderer/stores/playback-store'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { useCanvas } from './canvas-context'
@@ -35,6 +36,7 @@ export interface TimelineClipProps {
 }
 
 export const TimelineClip = memo(function TimelineClip(p: TimelineClipProps) {
+  const t = useT()
   const { zoom, g, timeAt, trackAt, snap } = useCanvas()
   const [drag, setDrag] = useState<Mode | null>(null)
   const gesture = useRef<{
@@ -130,7 +132,7 @@ export const TimelineClip = memo(function TimelineClip(p: TimelineClipProps) {
   })
 
   const showHandles = p.selected || drag !== null
-  const label = p.missing ? 'Missing scene' : p.name
+  const label = p.missing ? t('timeline.clip.missingScene') : p.name
   const compactText = width < 56
 
   return (
@@ -138,7 +140,7 @@ export const TimelineClip = memo(function TimelineClip(p: TimelineClipProps) {
       data-clip={p.id}
       role="button"
       tabIndex={-1}
-      aria-label={`${label}, ${formatSeconds(p.startTime)} to ${formatSeconds(p.startTime + p.duration)}`}
+      aria-label={t('timeline.clip.aria', { name: label, start: formatSeconds(p.startTime), end: formatSeconds(p.startTime + p.duration) })}
       aria-pressed={p.selected}
       {...handlers}
       onDoubleClick={() => { if (!p.missing) useUiStore.getState().navigateToCuelist(p.cuelistId) }}
@@ -181,12 +183,12 @@ export const TimelineClip = memo(function TimelineClip(p: TimelineClipProps) {
         <div className="pointer-events-none relative flex h-full min-w-0 flex-col justify-center gap-0.5 pl-2.5 pr-2">
           <div className={cn('flex min-w-0 items-center gap-1 text-xs font-semibold', p.missing ? 'text-danger-fg' : 'text-fg-primary')}>
             <span className="truncate">{label}</span>
-            {p.fxCount > 0 && <LuSparkles size={11} aria-label={`${p.fxCount} effects`} className="shrink-0 text-fg-secondary" />}
+            {p.fxCount > 0 && <LuSparkles size={11} aria-label={t('timeline.clip.effectCount', { count: p.fxCount })} className="shrink-0 text-fg-secondary" />}
           </div>
           {height >= 40 && (
             <div className="truncate font-mono text-2xs tabular text-fg-secondary">
               {drag ? formatSeconds(p.startTime) : formatSeconds(p.duration)}
-              {!drag && p.cueCount > 1 && <span className="font-sans text-fg-tertiary"> · {p.cueCount} cues</span>}
+              {!drag && p.cueCount > 1 && <span className="font-sans text-fg-tertiary"> · {t('common.cueCount', { count: p.cueCount })}</span>}
             </div>
           )}
         </div>
