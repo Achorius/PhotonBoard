@@ -9,6 +9,7 @@ import type { Effect, EffectChannel, WaveformKeyframe, WaveformType } from '@sha
 import { computeFanPositions, getWaveformValue, hashSeed } from '@renderer/lib/effect-engine'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { SWATCH_COLORS, palette, withAlpha } from '@renderer/components/ui'
+import { useT } from '@renderer/i18n'
 import { effectChannels } from './effect-templates'
 import { usePhase } from './phase-ticker'
 
@@ -155,6 +156,7 @@ function useCanvasDraw(draw: (canvas: HTMLCanvasElement) => void) {
  * one curve per attribute, with a playhead at the current phase.
  */
 export const WaveformScope = memo(function WaveformScope({ effect, className }: { effect: Effect; className?: string }) {
+  const t = useT()
   const cyclesRef = useRef<number | null>(null)
   const channels = useMemo(() => effectChannels(effect), [effect])
 
@@ -242,7 +244,7 @@ export const WaveformScope = memo(function WaveformScope({ effect, className }: 
   })
   useEffect(redraw, [effect, channels, redraw])
 
-  return <canvas ref={ref} className={className} aria-label="Effect output preview" role="img" />
+  return <canvas ref={ref} className={className} aria-label={t('effects.editor.scopeLabel')} role="img" />
 })
 
 // ------------------------------------------------------------
@@ -256,6 +258,7 @@ const MAX_FAN_FIXTURES = 64
  * fixture's phase offset — what "spread" does at a glance.
  */
 export const FanPreview = memo(function FanPreview({ effect, className }: { effect: Effect; className?: string }) {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const cyclesRef = useRef<number | null>(null)
   const ids = useMemo(() => effect.fixtureIds.slice(0, MAX_FAN_FIXTURES), [effect.fixtureIds])
@@ -326,7 +329,7 @@ export const FanPreview = memo(function FanPreview({ effect, className }: { effe
   })
   useEffect(redraw, [effect, positions, ch, ids, redraw])
 
-  return <canvas ref={ref} className={className} aria-label="Phase spread across fixtures" role="img" />
+  return <canvas ref={ref} className={className} aria-label={t('effects.editor.fanLabel')} role="img" />
 })
 
 // ------------------------------------------------------------
