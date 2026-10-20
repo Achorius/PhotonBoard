@@ -1,41 +1,37 @@
 // ============================================================
-// Scene grid for the stage surfaces (Electron Stage window, remote
+// Executor grid for the stage surfaces (Electron Stage window, remote
 // phone / tablet). Same 8 × 4 layout, column colours and button
-// modes as the executor bar, sized for fingers.
+// functions as the executor bar, sized for fingers. Any cell kind:
+// scenes, chases, effects, macros, groups, speed masters.
 //
 // Prop-driven (no store access): the Stage window feeds it from the
-// state snapshot, the remote views from the mirrored stores.
+// console's surface data, the remote views from the mirrored stores;
+// presses go to ONE callback (`onPress(cell, phase)`), which both
+// route to lib/pro/executor-actions on the console.
 //
 // Grid modes:
-//   play     TOG  tap (on release) = GO / STOP
-//            TRIG plays while held · FLASH full while held
-//            long-press a TOG scene (touch) or drag it (mouse) to move it
-//   levels   every scene becomes a fader (scene master level)
-//   arrange  nothing fires: drag any scene onto another cell to swap
+//   play     tap (on release) = the cell's function (GO / STOP…)
+//            TRIG / FLASH / SWAP act while held (released on lift,
+//            cancel, unmount and when the grid leaves play mode)
+//            long-press a tap cell (touch) or drag it (mouse) to move it
+//            swipe sideways (touch) = previous / next executor page
+//   levels   scenes and chases become faders (master level)
+//   arrange  nothing fires: drag any cell onto another to swap
 // ============================================================
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
-import { LuGripVertical, LuMoveDiagonal } from 'react-icons/lu'
-import type { ExecutorSceneMode } from '@shared/types'
+import { LuCrosshair, LuGripVertical, LuMoveDiagonal } from 'react-icons/lu'
+import type { ExecutorButtonFn, ExecutorTargetKind } from '@shared/types'
 import { Badge, Fader, SWATCH_COLORS, usePointerDrag, cn, formatCuePosition, formatPercent, palette, tint, withAlpha } from '@renderer/components/ui'
 import { t, useT } from '@renderer/i18n'
+import type { ResolvedCell } from './pages/surface-data'
+import { isHoldFn } from './executor-surface'
+import { KIND_ICON, cellName, fnBadge, fnBadgeTone } from './cell-visuals'
+import { useSwipePaging } from './PageSelector'
 
-export type SceneMode = ExecutorSceneMode
 export type StageGridMode = 'play' | 'levels' | 'arrange'
 export type Cell = { col: number; row: number }
-
-export interface StageScene {
-  id: string
-  name: string
-  isPlaying: boolean
-  faderLevel: number
-  currentCueIndex: number
-  cueCount: number
-  flash?: boolean
-  /** Name of the current cue (while playing) */
-  cueName?: string
-}
 
 export interface ColumnInfo {
   title: string
@@ -45,18 +41,18 @@ export interface ColumnInfo {
 export const STAGE_COLUMNS = 8
 export const STAGE_ROWS = 4
 
-const modeLabel = (mode: SceneMode) => t(`shell.executors.modeShort.${mode}`)
 const LONG_PRESS_MS = 450
 const DRAG_THRESHOLD = 8
 const FALLBACK_COLOR: string = SWATCH_COLORS[11]
 
-export function normalizeMode(m: unknown): SceneMode {
-  return m === 'trigger' || m === 'flash' ? m : 'toggle'
+/** Cells that act while held (scenes, chases, effects with TRIG / FLASH / SWAP) */
+function holdCell(kind: ExecutorTargetKind, fn: ExecutorButtonFn): boolean {
+  return kind !== 'macro' && kind !== 'group' && kind !== 'speed' && isHoldFn(fn)
 }
 
 interface Callbacks {
-  fire: (scene: StageScene, mode: SceneMode, phase: 'down' | 'up') => void
-  level: (id: string, level: number) => void
+  press: (cell: Cell, phase: 'down' | 'up') => void
+  level: (cell: Cell, level: number) => void
   dragStart: (from: Cell, x: number, y: number) => void
   dragMove: (x: number, y: number) => void
   dragEnd: (drop: boolean) => void
@@ -72,40 +68,44 @@ interface DragState {
 }
 
 export interface SceneGridProps {
-  /** [col][row] → scene id */
-  grid: (string | null)[][]
-  columns: ColumnInfo[]
-  /** [col][row] → button mode */
-  modes: (string | null | undefined)[][]
-  scenes: ReadonlyMap<string, StageScene>
+  /** [col][row] → resolved cell (null = empty) */
+  cells: readonly (readonly (ResolvedCell | null)[] | undefined)[]
+  columns: readonly ColumnInfo[]
   mode: StageGridMode
-  /** Visible column indexes (paging on phones); default all 8 */
+  /** Visible column indexes (column pairs on phones); default all 8 */
   visibleColumns?: number[]
   /** lg: Stage window / Pi; md: tablet; sm: phone */
   size?: 'sm' | 'md' | 'lg'
-  onFire: (scene: StageScene, mode: SceneMode, phase: 'down' | 'up') => void
-  onLevel: (id: string, level: number) => void
+  /** The executor GO / Back act on, when it is on this page */
+  selected?: Cell | null
+  onPress: (cell: Cell, phase: 'down' | 'up') => void
+  onLevel: (cell: ResolvedCell, level: number) => void
   onSwap: (from: Cell, to: Cell) => void
+  /** Swipe sideways (touch, play mode) */
+  onSwipe?: (step: -1 | 1) => void
   className?: string
 }
 
 const ALL_COLUMNS = Array.from({ length: STAGE_COLUMNS }, (_, i) => i)
 
 export function SceneGrid({
-  grid, columns, modes, scenes, mode, visibleColumns = ALL_COLUMNS, size = 'md', onFire, onLevel, onSwap, className
+  cells, columns, mode, visibleColumns = ALL_COLUMNS, size = 'md', selected, onPress, onLevel, onSwap, onSwipe, className
 }: SceneGridProps) {
   const [drag, setDrag] = useState<DragState | null>(null)
-  const latest = useRef({ grid, columns, scenes, drag, onFire, onLevel, onSwap })
-  latest.current = { grid, columns, scenes, drag, onFire, onLevel, onSwap }
+  const latest = useRef({ cells, columns, drag, onPress, onLevel, onSwap })
+  latest.current = { cells, columns, drag, onPress, onLevel, onSwap }
+  const swipe = useSwipePaging((s) => onSwipe?.(s), !!onSwipe && mode === 'play')
 
   const callbacks = useMemo<Callbacks>(() => ({
-    fire: (scene, m, phase) => latest.current.onFire(scene, m, phase),
-    level: (id, level) => latest.current.onLevel(id, level),
+    press: (cell, phase) => latest.current.onPress(cell, phase),
+    level: (cell, level) => {
+      const c = latest.current.cells[cell.col]?.[cell.row]
+      if (c) latest.current.onLevel(c, level)
+    },
     dragStart: (from, x, y) => {
-      const id = latest.current.grid[from.col]?.[from.row]
-      const scene = id ? latest.current.scenes.get(id) : undefined
-      if (!scene) return
-      setDrag({ from, name: scene.name, color: latest.current.columns[from.col]?.color ?? FALLBACK_COLOR, x, y, over: null })
+      const c = latest.current.cells[from.col]?.[from.row]
+      if (!c) return
+      setDrag({ from, name: cellName(c), color: c.color || latest.current.columns[from.col]?.color || FALLBACK_COLOR, x, y, over: null })
     },
     dragMove: (x, y) => {
       const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-stage-cell]')
@@ -121,31 +121,28 @@ export function SceneGrid({
 
   return (
     <div
-      className={cn('grid min-h-0 min-w-0 flex-1', size === 'lg' ? 'gap-2' : 'gap-1.5', mode === 'arrange' && 'rounded-lg bg-info/[0.05]', className)}
+      {...swipe}
+      className={cn('grid min-h-0 min-w-0 flex-1 touch-pan-y', size === 'lg' ? 'gap-2' : 'gap-1.5', mode === 'arrange' && 'rounded-lg bg-info/[0.05]', className)}
       style={{
         gridTemplateColumns: `repeat(${visibleColumns.length}, minmax(0, 1fr))`,
         gridTemplateRows: `auto repeat(${STAGE_ROWS}, minmax(0, 1fr))`,
         gridAutoFlow: 'column'
       }}
     >
-      {visibleColumns.map((col) => {
-        const color = columns[col]?.color || FALLBACK_COLOR
-        return (
-          <ColumnCells
-            key={col}
-            col={col}
-            title={columns[col]?.title ?? ''}
-            color={color}
-            ids={grid[col]}
-            modes={modes[col]}
-            scenes={scenes}
-            gridMode={mode}
-            size={size}
-            drag={drag}
-            callbacks={callbacks}
-          />
-        )
-      })}
+      {visibleColumns.map((col) => (
+        <ColumnCells
+          key={col}
+          col={col}
+          title={columns[col]?.title ?? ''}
+          color={columns[col]?.color || FALLBACK_COLOR}
+          cells={cells[col]}
+          gridMode={mode}
+          size={size}
+          selectedRow={selected && selected.col === col ? selected.row : -1}
+          drag={drag}
+          callbacks={callbacks}
+        />
+      ))}
       {drag && (
         <div
           aria-hidden
@@ -165,15 +162,14 @@ function parseCell(key: string): Cell | null {
   return Number.isInteger(col) && Number.isInteger(row) ? { col, row } : null
 }
 
-const ColumnCells = memo(function ColumnCells({ col, title, color, ids, modes, scenes, gridMode, size, drag, callbacks }: {
+const ColumnCells = memo(function ColumnCells({ col, title, color, cells, gridMode, size, selectedRow, drag, callbacks }: {
   col: number
   title: string
   color: string
-  ids: (string | null)[] | undefined
-  modes: (string | null | undefined)[] | undefined
-  scenes: ReadonlyMap<string, StageScene>
+  cells: readonly (ResolvedCell | null)[] | undefined
   gridMode: StageGridMode
   size: 'sm' | 'md' | 'lg'
+  selectedRow: number
   drag: DragState | null
   callbacks: Callbacks
 }) {
@@ -193,11 +189,10 @@ const ColumnCells = memo(function ColumnCells({ col, title, color, ids, modes, s
         </span>
       </div>
       {Array.from({ length: STAGE_ROWS }, (_, row) => {
-        const id = ids?.[row] ?? null
-        const scene = id ? scenes.get(id) : undefined
+        const c = cells?.[row] ?? null
         const isSource = drag?.from.col === col && drag.from.row === row
         const isTarget = !!drag && drag.over?.col === col && drag.over.row === row && !isSource
-        if (!scene) {
+        if (!c) {
           return (
             <div
               key={row}
@@ -211,20 +206,23 @@ const ColumnCells = memo(function ColumnCells({ col, title, color, ids, modes, s
           )
         }
         return (
-          <SceneTile
+          <ExecTile
             key={row}
             col={col}
             row={row}
-            id={scene.id}
-            name={scene.name}
-            isPlaying={scene.isPlaying}
-            faderLevel={scene.faderLevel}
-            currentCueIndex={scene.currentCueIndex}
-            cueCount={scene.cueCount}
-            cueName={scene.cueName}
-            flash={!!scene.flash}
-            color={color}
-            sceneMode={normalizeMode(modes?.[row])}
+            kind={c.kind}
+            fn={c.fn}
+            name={cellName(c)}
+            missing={!!c.missing}
+            active={c.active}
+            flash={c.flash}
+            level={c.level ?? -1}
+            posIndex={c.position?.index ?? -2}
+            posCount={c.position?.count ?? 0}
+            cueName={c.cueName}
+            number={c.number}
+            color={c.color || color}
+            selected={selectedRow === row}
             gridMode={gridMode}
             size={size}
             dragSource={isSource}
@@ -250,16 +248,21 @@ type Gesture =
 interface TileProps {
   col: number
   row: number
-  id: string
+  kind: ExecutorTargetKind
+  fn: ExecutorButtonFn
   name: string
-  isPlaying: boolean
-  faderLevel: number
-  currentCueIndex: number
-  cueCount: number
-  cueName?: string
+  missing: boolean
+  active: boolean
   flash: boolean
+  /** 0-255, -1 = no level (macros…) */
+  level: number
+  /** -2 = no position (macros…), -1 = stopped */
+  posIndex: number
+  posCount: number
+  cueName?: string
+  number?: number
   color: string
-  sceneMode: SceneMode
+  selected: boolean
   gridMode: StageGridMode
   size: 'sm' | 'md' | 'lg'
   dragSource: boolean
@@ -267,64 +270,69 @@ interface TileProps {
   callbacks: Callbacks
 }
 
-const SceneTile = memo(function SceneTile(props: TileProps) {
-  const { col, row, id, name, isPlaying, faderLevel, currentCueIndex, cueCount, cueName, flash, color, sceneMode, gridMode, size, dragSource, dropTarget, callbacks } = props
+const ExecTile = memo(function ExecTile(props: TileProps) {
+  const {
+    col, row, kind, fn, name, missing, active, flash, level, posIndex, posCount, cueName, number, color, selected, gridMode, size,
+    dragSource, dropTarget, callbacks
+  } = props
   useT() // labels follow the UI language
   const gesture = useRef<Gesture | null>(null)
   const [lifted, setLifted] = useState(false)
-  const latest = useRef(props)
-  latest.current = props
   const arranging = gridMode === 'arrange'
+  const hold = holdCell(kind, fn)
+  const cell = useMemo(() => ({ col, row }), [col, row])
 
-  const scene = (): StageScene => {
-    const p = latest.current
-    return { id: p.id, name: p.name, isPlaying: p.isPlaying, faderLevel: p.faderLevel, currentCueIndex: p.currentCueIndex, cueCount: p.cueCount, cueName: p.cueName, flash: p.flash }
-  }
   const clearTimer = () => {
     const g = gesture.current
     if (g?.kind === 'pending' && g.timer) clearTimeout(g.timer)
   }
+  const tap = () => {
+    callbacks.press(cell, 'down')
+    callbacks.press(cell, 'up')
+  }
 
-  // A held TRIG / FLASH never stays on: release on unmount and when the grid leaves play mode
+  // A held cell never stays on: release on unmount and when the grid leaves play mode
   useEffect(() => () => {
     clearTimer()
-    if (gesture.current?.kind === 'holding') callbacks.fire(scene(), latest.current.sceneMode, 'up')
+    if (gesture.current?.kind === 'holding') callbacks.press(cell, 'up')
     gesture.current = null
-  }, [callbacks])
+  }, [callbacks, cell])
   useEffect(() => {
     if (gridMode !== 'play' && gesture.current?.kind === 'holding') {
       gesture.current = null
-      callbacks.fire(scene(), latest.current.sceneMode, 'up')
+      callbacks.press(cell, 'up')
     }
-  }, [gridMode, callbacks])
+  }, [gridMode, callbacks, cell])
 
   if (gridMode === 'levels') {
+    const hasLevel = level >= 0 && (kind === 'cuelist' || kind === 'chase')
     return (
       <div
         data-stage-cell={`${col}:${row}`}
         className={cn(
           'relative flex min-h-0 min-w-0 flex-col items-center gap-1 overflow-hidden rounded-md border px-1.5 pb-1.5 pt-1.5',
-          isPlaying ? '' : 'border-line-subtle bg-surface-2'
+          active ? '' : 'border-line-subtle bg-surface-2',
+          !hasLevel && 'opacity-50'
         )}
-        style={isPlaying ? { backgroundColor: tint(color, 0.18, palette.surface2), borderColor: withAlpha(color, 0.7) } : undefined}
+        style={active ? { backgroundColor: tint(color, 0.18, palette.surface2), borderColor: withAlpha(color, 0.7) } : undefined}
       >
-        <span className={cn('w-full truncate text-center font-semibold', size === 'lg' ? 'text-sm' : 'text-xs', isPlaying ? 'text-fg-primary' : 'text-fg-secondary')}>
+        <span className={cn('w-full truncate text-center font-semibold', size === 'lg' ? 'text-sm' : 'text-xs', active ? 'text-fg-primary' : 'text-fg-secondary')}>
           {name}
         </span>
-        {size === 'sm' ? (
-          <LevelBar value={faderLevel} color={color} label={t('stage.sceneLevel', { name })} onChange={(v) => callbacks.level(id, v)} />
+        {!hasLevel ? null : size === 'sm' ? (
+          <LevelBar value={level} color={color} label={t('stage.sceneLevel', { name })} onChange={(v) => callbacks.level(cell, v)} />
         ) : (
-        <div className="flex min-h-0 w-full flex-1 justify-center">
-          <Fader
-            value={faderLevel}
-            onChange={(v) => callbacks.level(id, v)}
-            defaultValue={255}
-            color={color}
-            ticks
-            aria-label={t('stage.sceneLevel', { name })}
-            className="w-full max-w-[96px]"
-          />
-        </div>
+          <div className="flex min-h-0 w-full flex-1 justify-center">
+            <Fader
+              value={level}
+              onChange={(v) => callbacks.level(cell, v)}
+              defaultValue={255}
+              color={color}
+              ticks
+              aria-label={t('stage.sceneLevel', { name })}
+              className="w-full max-w-[96px]"
+            />
+          </div>
         )}
       </div>
     )
@@ -333,9 +341,9 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (gesture.current || (e.pointerType === 'mouse' && e.button !== 0)) return
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
-    if (!arranging && sceneMode !== 'toggle') {
+    if (!arranging && hold) {
       gesture.current = { kind: 'holding', id: e.pointerId }
-      callbacks.fire(scene(), sceneMode, 'down')
+      callbacks.press(cell, 'down')
       return
     }
     const touch = e.pointerType !== 'mouse'
@@ -358,7 +366,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
     if (g.kind === 'dragging') { callbacks.dragMove(e.clientX, e.clientY); return }
     if (Math.hypot(e.clientX - g.x, e.clientY - g.y) < DRAG_THRESHOLD) return
     if (g.kind === 'pending' && g.touch && !arranging) {
-      // The finger slid before the long-press: neither a tap nor a drag
+      // The finger slid before the long-press: neither a tap nor a drag (maybe a page swipe)
       clearTimer()
       gesture.current = null
       return
@@ -366,7 +374,7 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
     clearTimer()
     gesture.current = { kind: 'dragging', id: g.id }
     setLifted(false)
-    callbacks.dragStart({ col, row }, e.clientX, e.clientY)
+    callbacks.dragStart(cell, e.clientX, e.clientY)
     callbacks.dragMove(e.clientX, e.clientY)
   }
 
@@ -376,25 +384,28 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
     clearTimer()
     gesture.current = null
     setLifted(false)
-    if (g.kind === 'holding') callbacks.fire(scene(), sceneMode, 'up')
+    if (g.kind === 'holding') callbacks.press(cell, 'up')
     else if (g.kind === 'dragging') callbacks.dragEnd(!canceled)
-    else if (!canceled && g.kind === 'pending' && !arranging) callbacks.fire(scene(), sceneMode, 'down') // toggle: fires on release
+    else if (!canceled && g.kind === 'pending' && !arranging) tap() // fires on release
   }
 
-  const active = isPlaying
-  const pct = Math.round((faderLevel / 255) * 100)
   const big = size === 'lg'
   const small = size === 'sm'
+  const pct = level >= 0 ? Math.round((level / 255) * 100) : 100
+  const badge = fnBadge(fn, kind)
+  const Icon = kind === 'cuelist' ? null : KIND_ICON[kind]
+  const modeText = badge ?? 'TOG'
 
   return (
     <div
       data-stage-cell={`${col}:${row}`}
+      data-hold={hold && !arranging ? '1' : undefined}
       role="button"
       tabIndex={0}
       aria-pressed={active}
-      aria-label={active
-        ? t('stage.cellPlaying', { name, mode: modeLabel(sceneMode), cue: currentCueIndex + 1, count: cueCount })
-        : t('stage.cellStopped', { name, mode: modeLabel(sceneMode) })}
+      aria-label={active && posIndex >= 0
+        ? t('stage.cellPlaying', { name, mode: modeText, cue: posIndex + 1, count: posCount })
+        : t('stage.cellStopped', { name, mode: modeText })}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => end(e, false)}
@@ -406,29 +417,33 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
           e.preventDefault()
           e.stopPropagation()
           if (gesture.current) return
-          if (sceneMode !== 'toggle') gesture.current = { kind: 'holding', id: 'key' }
-          callbacks.fire(scene(), sceneMode, 'down')
+          if (hold) {
+            gesture.current = { kind: 'holding', id: 'key' }
+            callbacks.press(cell, 'down')
+          } else tap()
         }
       }}
       onKeyUp={(e) => {
         if ((e.key === ' ' || e.key === 'Enter') && gesture.current?.kind === 'holding' && gesture.current.id === 'key') {
           gesture.current = null
-          callbacks.fire(scene(), sceneMode, 'up')
+          callbacks.press(cell, 'up')
         }
       }}
       onBlur={() => {
         if (gesture.current?.kind === 'holding' && gesture.current.id === 'key') {
           gesture.current = null
-          callbacks.fire(scene(), sceneMode, 'up')
+          callbacks.press(cell, 'up')
         }
       }}
       className={cn(
         'relative flex min-h-0 min-w-0 cursor-pointer touch-none select-none flex-col overflow-hidden rounded-md border transition-[background-color,box-shadow,transform,opacity] duration-fast',
-        big ? 'gap-1 py-2.5 pl-4 pr-3' : small ? 'gap-0.5 py-2 pl-3 pr-2' : 'gap-0.5 py-2 pl-3 pr-2',
+        big ? 'gap-1 py-2.5 pl-4 pr-3' : 'gap-0.5 py-2 pl-3 pr-2',
         !active && 'border-line-subtle bg-surface-2 active:bg-surface-3',
+        missing && 'opacity-60',
         dragSource && 'opacity-35',
         lifted && 'z-10 scale-[1.04] shadow-popover',
         dropTarget && 'outline outline-2 -outline-offset-2 outline-info-fg',
+        selected && !dropTarget && 'outline outline-2 -outline-offset-2 outline-info-fg/80',
         arranging && 'cursor-grab'
       )}
       style={active ? {
@@ -439,11 +454,12 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
     >
       <span aria-hidden className={cn('absolute inset-y-0 left-0', big ? 'w-1.5' : 'w-1')} style={{ backgroundColor: color, opacity: active ? 1 : 0.6 }} />
       <div className="flex min-w-0 items-start gap-1.5">
+        {Icon && <Icon size={big ? 16 : 13} aria-hidden className={cn('mt-0.5 shrink-0', active ? 'text-fg-primary' : 'text-fg-tertiary')} />}
         <span
           className={cn(
             'line-clamp-2 min-w-0 flex-1 break-words font-semibold leading-tight',
-            big ? 'text-lg' : small ? 'text-sm' : 'text-sm',
-            active ? 'text-fg-primary' : 'text-fg-primary/90'
+            big ? 'text-lg' : 'text-sm',
+            missing ? 'italic text-fg-tertiary' : active ? 'text-fg-primary' : 'text-fg-primary/90'
           )}
         >
           {name}
@@ -457,16 +473,21 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
       )}
       <span className="flex-1" />
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className={cn('font-mono tabular', big ? 'text-sm' : 'text-xs', active ? 'text-fg-primary' : 'text-fg-tertiary')}>
-          {formatCuePosition(active ? currentCueIndex : -1, cueCount)}
-        </span>
+        {posIndex >= -1 ? (
+          <span className={cn('font-mono tabular', big ? 'text-sm' : 'text-xs', active ? 'text-fg-primary' : 'text-fg-tertiary')}>
+            {formatCuePosition(posIndex, posCount)}
+          </span>
+        ) : number !== undefined && (
+          <span className={cn('font-mono tabular text-fg-tertiary', big ? 'text-sm' : 'text-xs')}>{number}</span>
+        )}
         <span className="flex-1" />
-        {sceneMode !== 'toggle' && (
-          <Badge size="xs" tone={sceneMode === 'flash' ? 'warning' : 'info'} variant={active ? 'solid' : 'subtle'}>{modeLabel(sceneMode)}</Badge>
+        {selected && <span title={t('pro.stage.goTargetMark')} className="flex shrink-0 text-info-fg"><LuCrosshair size={12} aria-hidden /></span>}
+        {badge && (
+          <Badge size="xs" tone={fnBadgeTone(fn)} variant={active ? 'solid' : 'subtle'}>{badge}</Badge>
         )}
       </div>
-      {/* Scene master level (only when not at full) */}
-      {pct < 100 && (
+      {/* Master level (only when not at full) */}
+      {level >= 0 && pct < 100 && (kind === 'cuelist' || kind === 'chase') && (
         <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-surface-0/70">
           <span className="block h-full" style={{ width: `${pct}%`, backgroundColor: withAlpha(color, 0.85) }} />
         </span>
@@ -476,10 +497,10 @@ const SceneTile = memo(function SceneTile(props: TileProps) {
 })
 
 /**
- * Horizontal scene level for phone tiles (vertical travel is too short there):
+ * Horizontal level for phone tiles (vertical travel is too short there):
  * relative drag across the whole tile width, double-tap = full.
  */
-function LevelBar({ value, color, label, onChange }: { value: number; color: string; label: string; onChange: (v: number) => void }) {
+export function LevelBar({ value, color, label, onChange, ghost }: { value: number; color: string; label: string; onChange: (v: number) => void; ghost?: number | null }) {
   useT()
   const ref = useRef<HTMLDivElement>(null)
   const start = useRef(0)
@@ -519,6 +540,9 @@ function LevelBar({ value, color, label, onChange }: { value: number; color: str
         className="relative h-11 w-full cursor-ew-resize touch-none overflow-hidden rounded-md bg-surface-0 ring-1 ring-inset ring-line"
       >
         <div className="absolute inset-y-0 left-0" style={{ width: `${pct}%`, backgroundColor: withAlpha(color, 0.55) }} />
+        {ghost != null && (
+          <div aria-hidden className="absolute inset-y-1 w-0.5 -translate-x-1/2 border-l-2 border-dashed border-fg-secondary/70" style={{ left: `${Math.round((ghost / 255) * 100)}%` }} />
+        )}
         <div className="absolute inset-y-1.5 w-1 -translate-x-1/2 rounded-full bg-fg-primary" style={{ left: `max(6px, min(calc(100% - 6px), ${pct}%))` }} />
       </div>
     </div>

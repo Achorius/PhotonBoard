@@ -12,6 +12,7 @@ import { cliUi } from './pro/cli-ui'
 import { scenes } from './pro/scenes'
 import { pools } from './pro/pools'
 import { midi } from './pro/midi'
+import { stage } from './pro/stage'
 
 export const pro: Translation['pro'] = {
   ...core,
@@ -21,5 +22,6 @@ export const pro: Translation['pro'] = {
   cliUi,
   scenes,
   pools,
-  midi
+  midi,
+  stage
 }
