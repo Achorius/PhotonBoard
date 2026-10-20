@@ -638,6 +638,23 @@ function guessCategories(name: string, channels: Record<string, FixtureChannel>)
   return ['Other']
 }
 
+// ── Parser: PhotonBoard native JSON ──────────────────────────────────
+
+export function parseNativeJSON(data: any): FixtureDefinition {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !data.channels || typeof data.channels !== 'object') {
+    throw new Error('Not a PhotonBoard fixture definition (missing channels)')
+  }
+  const fixture = data as FixtureDefinition
+  if (!fixture.id) fixture.id = `imported/${slugify(fixture.name || 'fixture')}`
+  if (!fixture.manufacturer) fixture.manufacturer = 'Imported'
+  if (!fixture.categories) fixture.categories = ['Other']
+  if (!fixture.modes) {
+    fixture.modes = [{ name: 'Default', channels: Object.keys(fixture.channels), channelCount: Object.keys(fixture.channels).length }]
+  }
+  fixture.source = fixture.source || 'user'
+  return fixture
+}
+
 // ── Main import function ─────────────────────────────────────────────
 
 export function parseFixtureFile(filePath: string): FixtureDefinition {
@@ -665,17 +682,8 @@ export function parseFixtureFile(filePath: string): FixtureDefinition {
       const mfr = data.manufacturer?.name || fileName.split(/[/\\]/).slice(-2, -1)[0] || 'Unknown'
       return parseOFL(data, mfr)
     }
-    case 'native': {
-      const data = JSON.parse(content) as FixtureDefinition
-      if (!data.id) data.id = `imported/${slugify(data.name || 'fixture')}`
-      if (!data.manufacturer) data.manufacturer = 'Imported'
-      if (!data.categories) data.categories = ['Other']
-      if (!data.modes) {
-        data.modes = [{ name: 'Default', channels: Object.keys(data.channels), channelCount: Object.keys(data.channels).length }]
-      }
-      data.source = data.source || 'user'
-      return data
-    }
+    case 'native':
+      return parseNativeJSON(JSON.parse(content))
     case 'qlcplus':
       return parseQLCPlus(content)
     case 'avolites':
@@ -688,11 +696,11 @@ export function parseFixtureFile(filePath: string): FixtureDefinition {
       // Last resort: try JSON
       try {
         const data = JSON.parse(content)
-        if (data.name && data.channels) {
-          return parseFixtureFile(filePath) // recursive with native detection
-        }
-        if (data.availableChannels) {
-          return parseOFL(data)
+        // Sniff the content directly — never re-enter parseFixtureFile here: the
+        // extension would still be unknown and we would recurse forever.
+        if (data && typeof data === 'object') {
+          if (data.availableChannels) return parseOFL(data)
+          if (data.name && data.channels) return parseNativeJSON(data)
         }
       } catch { /* not JSON */ }
 

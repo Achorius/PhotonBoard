@@ -1,67 +1,143 @@
-import React, { useCallback, useRef } from 'react'
+// ============================================================
+// XYPad — two-axis pad (pan / tilt). Pointer events with capture,
+// pointercancel / lost capture handled (usePointerDrag).
+//  - press: jump to the point, then follow
+//  - `fine` (or Shift / a second finger): relative drag at 1/10 speed
+//  - arrows nudge 1% (Shift 10%), Home centres
+// Values are 0…max (255 by default, 65535 for 16-bit pan/tilt).
+// ============================================================
 
-interface XYPadProps {
-  x: number // 0-255 (Pan)
-  y: number // 0-255 (Tilt)
+import { memo, useRef } from 'react'
+import { cn, usePointerDrag } from '../ui'
+import { useSquareFit } from '@renderer/hooks/useSquareFit'
+
+export interface XYPadProps {
+  /** Horizontal value 0…max (pan) */
+  x: number
+  /** Vertical value 0…max (tilt, up = max) */
+  y: number
   onChange: (x: number, y: number) => void
+  /** Square size in px (ignored with `fill`) */
   size?: number
+  /** Stretch to the parent's size (stays square) */
+  fill?: boolean
   label?: string
+  /** Value range (default 255) */
+  max?: number
+  /** Relative, slowed-down drag */
+  fine?: boolean
+  /** Other positions to show (e.g. the other selected fixtures), same scale */
+  markers?: { x: number; y: number }[]
+  /** Text under the pad (default: "Pan:x Tilt:y") — false hides it */
+  readout?: boolean | string
+  onChangeStart?: () => void
+  onChangeEnd?: () => void
+  className?: string
 }
 
-export function XYPad({ x, y, onChange, size = 160, label }: XYPadProps) {
+const FINE = 0.1
+
+export const XYPad = memo(function XYPad({
+  x, y, onChange, size = 160, fill, label, max = 255, fine, markers, readout = true, onChangeStart, onChangeEnd, className
+}: XYPadProps) {
   const padRef = useRef<HTMLDivElement>(null)
-  const isDragging = useRef(false)
+  const live = useRef({ x, y })
+  const [fitRef, fitSize] = useSquareFit<HTMLDivElement>(!!fill)
+  const px = fill ? fitSize ?? 0 : size
 
-  const updatePosition = useCallback((e: React.PointerEvent) => {
-    const pad = padRef.current
-    if (!pad) return
-    const rect = pad.getBoundingClientRect()
-    const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    const py = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height))
-    onChange(Math.round(px * 255), Math.round(py * 255))
-  }, [onChange])
+  const clamp = (v: number) => Math.max(0, Math.min(max, Math.round(v)))
+  const emit = (nx: number, ny: number) => {
+    live.current = { x: Math.max(0, Math.min(max, nx)), y: Math.max(0, Math.min(max, ny)) }
+    const cx = clamp(live.current.x)
+    const cy = clamp(live.current.y)
+    if (cx !== x || cy !== y) onChange(cx, cy)
+  }
+  const fromPoint = (px: number, py: number) => {
+    const r = padRef.current!.getBoundingClientRect()
+    emit(((px - r.left) / r.width) * max, (1 - (py - r.top) / r.height) * max)
+  }
 
-  const pxPercent = (x / 255) * 100
-  const pyPercent = (1 - y / 255) * 100
+  const drag = usePointerDrag({
+    onStart: (s) => {
+      onChangeStart?.()
+      live.current = { x, y }
+      if (!fine && !s.fine) fromPoint(s.x, s.y)
+    },
+    onMove: (s) => {
+      if (fine || s.fine) {
+        const r = padRef.current!.getBoundingClientRect()
+        emit(live.current.x + (s.mx / r.width) * max * FINE, live.current.y - (s.my / r.height) * max * FINE)
+      } else fromPoint(s.x, s.y)
+    },
+    onEnd: () => onChangeEnd?.()
+  })
+
+  const pct = (v: number) => `${(Math.max(0, Math.min(max, v)) / max) * 100}%`
+  const pctY = (v: number) => `${(1 - Math.max(0, Math.min(max, v)) / max) * 100}%`
+  const toPct = (v: number) => `${Math.round((v / max) * 1000) / 10}`
+  const readoutText = typeof readout === 'string' ? readout : readout ? (max > 255 ? `Pan:${toPct(x)}% Tilt:${toPct(y)}%` : `Pan:${x} Tilt:${y}`) : null
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      {label && <span className="text-[10px] text-gray-500">{label}</span>}
-      <div
-        ref={padRef}
-        className="relative bg-surface-2 border border-surface-4 rounded cursor-crosshair"
-        style={{ width: size, height: size }}
-        onPointerDown={(e) => {
-          isDragging.current = true
-          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-          updatePosition(e)
-        }}
-        onPointerMove={(e) => { if (isDragging.current) updatePosition(e) }}
-        onPointerUp={() => { isDragging.current = false }}
-      >
-        {/* Grid lines */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-400" />
-          <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-400" />
+    <div className={cn('flex flex-col items-center gap-1.5', fill && 'h-full w-full min-h-0 min-w-0', className)}>
+      {label && <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">{label}</span>}
+      <div ref={fitRef} className={cn(fill && 'flex min-h-0 w-full flex-1 items-center justify-center')}>
+        <div
+          ref={padRef}
+          role="group"
+          tabIndex={0}
+          aria-label={`${label ?? 'XY pad'}: ${toPct(x)}%, ${toPct(y)}%`}
+          onKeyDown={(e) => {
+            const step = (e.shiftKey ? 0.1 : 0.01) * max
+            let nx = x
+            let ny = y
+            if (e.key === 'ArrowLeft') nx -= step
+            else if (e.key === 'ArrowRight') nx += step
+            else if (e.key === 'ArrowUp') ny += step
+            else if (e.key === 'ArrowDown') ny -= step
+            else if (e.key === 'Home') { nx = max / 2; ny = max / 2 }
+            else return
+            e.preventDefault()
+            e.stopPropagation()
+            onChange(clamp(nx), clamp(ny))
+          }}
+          {...drag}
+          className={cn(
+            'relative shrink-0 cursor-crosshair touch-none overflow-hidden rounded-lg bg-surface-0 ring-1 ring-inset ring-line-strong',
+            fine && 'ring-accent/60',
+            fill && !fitSize && 'invisible'
+          )}
+          style={{ width: px, height: px }}
+        >
+          {/* Grid: quarters + centre */}
+          {[25, 75].map((p) => (
+            <span key={`v${p}`} aria-hidden className="absolute inset-y-0 w-px bg-line-subtle" style={{ left: `${p}%` }} />
+          ))}
+          {[25, 75].map((p) => (
+            <span key={`h${p}`} aria-hidden className="absolute inset-x-0 h-px bg-line-subtle" style={{ top: `${p}%` }} />
+          ))}
+          <span aria-hidden className="absolute inset-y-0 left-1/2 w-px bg-line-strong" />
+          <span aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-line-strong" />
+          {/* Crosshair */}
+          <span aria-hidden className="absolute inset-y-0 w-px bg-accent/40" style={{ left: pct(x) }} />
+          <span aria-hidden className="absolute inset-x-0 h-px bg-accent/40" style={{ top: pctY(y) }} />
+          {/* Other positions */}
+          {markers?.map((m, i) => (
+            <span
+              key={i}
+              aria-hidden
+              className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fg-secondary/70 ring-1 ring-surface-0"
+              style={{ left: pct(m.x), top: pctY(m.y) }}
+            />
+          ))}
+          {/* Handle */}
+          <span
+            aria-hidden
+            className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent shadow-[0_0_0_3px_rgb(var(--pb-accent)/0.25)] ring-2 ring-surface-0 [[data-density=touch]_&]:h-5 [[data-density=touch]_&]:w-5"
+            style={{ left: pct(x), top: pctY(y) }}
+          />
         </div>
-        {/* Crosshair */}
-        <div
-          className="absolute w-px bg-accent/40"
-          style={{ left: `${pxPercent}%`, top: 0, bottom: 0 }}
-        />
-        <div
-          className="absolute h-px bg-accent/40"
-          style={{ top: `${pyPercent}%`, left: 0, right: 0 }}
-        />
-        {/* Dot */}
-        <div
-          className="absolute w-3 h-3 rounded-full bg-accent border-2 border-white/50 -translate-x-1/2 -translate-y-1/2"
-          style={{ left: `${pxPercent}%`, top: `${pyPercent}%` }}
-        />
       </div>
-      <div className="text-[10px] font-mono text-gray-400">
-        Pan:{x} Tilt:{y}
-      </div>
+      {readoutText && <div className="font-mono text-2xs tabular text-fg-tertiary">{readoutText}</div>}
     </div>
   )
-}
+})

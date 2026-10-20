@@ -1,6 +1,7 @@
-import { DMX_CHANNELS_PER_UNIVERSE, DMX_MAX, DMX_MIN } from '../shared/types'
+import { DMX_CHANNELS_PER_UNIVERSE, DMX_MAX, DMX_MIN, MAX_UNIVERSES } from '../shared/types'
 
-type FrameCallback = (universes: Uint8Array[]) => void
+/** `changed` is true when a channel was written since the previous tick */
+type FrameCallback = (universes: Uint8Array[], changed: boolean) => void
 
 export class DmxEngine {
   private universes: Uint8Array[]
@@ -9,8 +10,9 @@ export class DmxEngine {
   private frameCallback: FrameCallback | null = null
   private refreshRate = 25 // ms (~40Hz)
   private dirty = false
+  private lastCallbackErrorAt = 0
 
-  constructor(universeCount: number = 3) {
+  constructor(universeCount: number = MAX_UNIVERSES) {
     this.universeCount = universeCount
     this.universes = []
     for (let i = 0; i < universeCount; i++) {
@@ -24,10 +26,22 @@ export class DmxEngine {
 
   start(): void {
     if (this.timer) return
+    // The callback runs on EVERY tick, not only when something changed: USB
+    // Open DMX adapters must stream continuously or fixtures lose signal.
+    // Outputs that only need changes (Art-Net, ENTTEC Pro) filter themselves.
     this.timer = setInterval(() => {
-      if (this.frameCallback && this.dirty) {
-        this.frameCallback(this.universes)
-        this.dirty = false
+      if (!this.frameCallback) return
+      const changed = this.dirty
+      this.dirty = false
+      try {
+        this.frameCallback(this.universes, changed)
+      } catch (e) {
+        // Never let one bad frame stop the output loop; log at most every 5 s
+        const now = Date.now()
+        if (now - this.lastCallbackErrorAt > 5000) {
+          this.lastCallbackErrorAt = now
+          console.error('[DMX] Output frame failed:', (e as Error).stack || e)
+        }
       }
     }, this.refreshRate)
   }
@@ -40,8 +54,9 @@ export class DmxEngine {
   }
 
   setChannel(universe: number, channel: number, value: number): void {
-    if (universe < 0 || universe >= this.universeCount) return
-    if (channel < 0 || channel >= DMX_CHANNELS_PER_UNIVERSE) return
+    if (!Number.isInteger(universe) || universe < 0 || universe >= this.universeCount) return
+    if (!Number.isInteger(channel) || channel < 0 || channel >= DMX_CHANNELS_PER_UNIVERSE) return
+    if (typeof value !== 'number' || Number.isNaN(value)) return
     this.universes[universe][channel] = Math.max(DMX_MIN, Math.min(DMX_MAX, Math.round(value)))
     this.dirty = true
   }

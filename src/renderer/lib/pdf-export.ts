@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import type { PatchEntry, FixtureDefinition, RoomConfig, Group } from '@shared/types'
 import { getFixtureShape } from '@shared/types'
+import { fixturePosition } from '@renderer/components/visualizer/scene/layout-math'
 
 const MARGIN = 20
 const TITLE_HEIGHT = 30
@@ -53,11 +54,12 @@ export function exportStagePDF(
   doc.setLineWidth(0.5)
   doc.rect(offsetX, offsetY, roomW * scale, roomD * scale)
 
-  // Stage edge (center horizontal line)
+  // Stage edge (roomConfig.stageEdgeZ, +Z = upstage = top of the page)
   doc.setDrawColor(200, 100, 0)
   doc.setLineWidth(0.3)
   doc.setLineDashPattern([3, 2], 0)
-  const stageY = offsetY + roomD * scale / 2
+  const stageEdgeZ = Math.max(-roomD / 2, Math.min(roomD / 2, roomConfig.stageEdgeZ ?? 0))
+  const stageY = offsetY + (roomD / 2 - stageEdgeZ) * scale
   doc.line(offsetX, stageY, offsetX + roomW * scale, stageY)
   doc.setLineDashPattern([], 0)
 
@@ -83,15 +85,12 @@ export function exportStagePDF(
   }
 
   // --- Fixtures ---
-  const autoPositions = computeAutoPositions(patch, roomConfig)
-
   for (let i = 0; i < patch.length; i++) {
     const entry = patch[i]
     const def = fixtures.find(f => f.id === entry.fixtureDefId)
     const shape = getFixtureShape(def?.categories || [])
-    const pos = entry.position3D
-    const wx = pos?.x ?? autoPositions[i].x
-    const wz = pos?.z ?? autoPositions[i].z
+    // Same placement rule as the 3D view and the stage layout
+    const { x: wx, z: wz } = fixturePosition(entry, i, patch.length, roomConfig)
 
     // Convert world coords to PDF coords (flip Z: +Z upstage = top of page)
     const px = offsetX + (roomW / 2 + wx) * scale
@@ -254,23 +253,6 @@ export function exportStagePDF(
 
   // Save
   doc.save(`${showName || 'LightingPlot'}_${new Date().toISOString().slice(0, 10)}.pdf`)
-}
-
-function computeAutoPositions(
-  patch: PatchEntry[],
-  room: RoomConfig
-): { x: number; z: number }[] {
-  const cols = Math.max(1, Math.ceil(Math.sqrt(patch.length * 1.5)))
-  const rows = Math.max(1, Math.ceil(patch.length / cols))
-  return patch.map((_, i) => {
-    const col = i % cols
-    const row = Math.floor(i / cols)
-    const colCount = Math.min(cols, patch.length)
-    return {
-      x: colCount > 1 ? (col / (colCount - 1) - 0.5) * room.width * 0.8 : 0,
-      z: rows > 1 ? (row / (rows - 1) - 0.5) * room.depth * 0.6 : 0
-    }
-  })
 }
 
 /**

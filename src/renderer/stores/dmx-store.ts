@@ -1,248 +1,129 @@
+// ============================================================
+// PhotonBoard — DMX Store
+// Holds the master section FLAGS (grand master, blackout, blinder,
+// strobe) and a throttled (~25 Hz) copy of the pre-master mix for
+// the UI. It never writes DMX: the mixer's output stage applies the
+// masters to intensity channels only and sends the frame.
+//
+// In remote mode every action is forwarded to the Pi (with an
+// optimistic local update for the UI).
+// ============================================================
+
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
+import { markLocalChange, sendRemoteCommand, sendRemoteCommandThrottled, isRemoteMode, toDmx } from '@renderer/lib/runtime'
 
 interface DmxState {
   universeCount: number
+  /**
+   * Pre-master mix per universe (what playbacks + programmer produce, before
+   * GM / blackout / blinder / strobe). Published by the mixer at ~25 Hz;
+   * use getOutputBuffer() from dmx-mixer for the post-master frame.
+   */
   values: number[][]
   grandMaster: number
   blackout: boolean
   blinder: boolean
   strobe: boolean
   strobeRate: number // Hz (1-25)
-  _strobePhase: boolean // internal: current on/off phase for strobe
+  /** Strobe phase as last published (prefer getStrobePhase() from dmx-mixer) */
+  _strobePhase: boolean
 
-  setChannel: (universe: number, channel: number, value: number) => void
-  setChannels: (universe: number, channels: Record<number, number>) => void
   setGrandMaster: (value: number) => void
   toggleBlackout: () => void
+  setBlackout: (on: boolean) => void
   toggleBlinder: (on?: boolean) => void
   toggleStrobe: (on?: boolean) => void
   setStrobeRate: (rate: number) => void
+  /** Masters back to defaults (GM full, no blackout/blinder/strobe) and programmer cleared */
   resetAll: () => void
-  getEffectiveValue: (universe: number, channel: number) => number
 }
 
-// Strobe interval handle (module-level to survive re-renders)
-let strobeInterval: ReturnType<typeof setInterval> | null = null
-
-function startStrobeLoop() {
-  stopStrobeLoop()
-  const rate = useDmxStore.getState().strobeRate
-  const intervalMs = Math.round(1000 / (rate * 2))
-
-  strobeInterval = setInterval(() => {
-    const state = useDmxStore.getState()
-    if (!state.strobe) { stopStrobeLoop(); return }
-
-    const newPhase = !state._strobePhase
-    useDmxStore.setState({ _strobePhase: newPhase })
-
-    // Send strobe output: active channels flash on/off
-    for (let u = 0; u < state.universeCount; u++) {
-      const channels: Record<number, number> = {}
-      const gm = state.grandMaster / 255
-      for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-        if (state.values[u][ch] > 0) {
-          channels[ch] = newPhase ? Math.round(state.values[u][ch] * gm) : 0
-        }
-      }
-      if (Object.keys(channels).length > 0) {
-        window.photonboard.dmx.setChannels(u, channels)
-      }
-    }
-  }, intervalMs)
+function emptyUniverses(count: number): number[][] {
+  return Array.from({ length: count }, () => new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0))
 }
 
-function stopStrobeLoop() {
-  if (strobeInterval) {
-    clearInterval(strobeInterval)
-    strobeInterval = null
-  }
+// Programmer clearing lives in the mixer; injected to avoid an import cycle.
+let clearProgrammerFn: (() => void) | null = null
+export function setDmxStoreProgrammerReset(fn: () => void): void {
+  clearProgrammerFn = fn
 }
 
-export const useDmxStore = create<DmxState>((set, get) => ({
+export const useDmxStore = create<DmxState>()(subscribeWithSelector((set, get) => ({
   universeCount: 3,
-  values: [
-    new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0),
-    new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0),
-    new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0)
-  ],
+  values: emptyUniverses(3),
   grandMaster: 255,
   blackout: false,
   blinder: false,
   strobe: false,
   strobeRate: 10,
-  _strobePhase: false,
-
-  setChannel: (universe, channel, value) => {
-    const clamped = Math.max(0, Math.min(255, Math.round(value)))
-    set((state) => {
-      const newValues = [...state.values]
-      newValues[universe] = [...newValues[universe]]
-      newValues[universe][channel] = clamped
-      return { values: newValues }
-    })
-    const state = get()
-    // Blinder overrides everything: always send 255
-    if (state.blinder) {
-      window.photonboard.dmx.setChannel(universe, channel, 255)
-      return
-    }
-    // Strobe: don't send — the strobe loop handles hardware output
-    if (state.strobe) return
-    // Blackout: don't send
-    if (state.blackout) return
-    // Normal output
-    const effective = Math.round(clamped * (state.grandMaster / 255))
-    window.photonboard.dmx.setChannel(universe, channel, effective)
-  },
-
-  setChannels: (universe, channels) => {
-    set((state) => {
-      const newValues = [...state.values]
-      newValues[universe] = [...newValues[universe]]
-      for (const [ch, val] of Object.entries(channels)) {
-        newValues[universe][parseInt(ch)] = Math.max(0, Math.min(255, Math.round(val)))
-      }
-      return { values: newValues }
-    })
-    const state = get()
-    // Blinder overrides: send 255 for all
-    if (state.blinder) {
-      const effective: Record<number, number> = {}
-      for (const ch of Object.keys(channels)) {
-        effective[parseInt(ch)] = 255
-      }
-      window.photonboard.dmx.setChannels(universe, effective)
-      return
-    }
-    // Strobe: don't send — the strobe loop handles it
-    if (state.strobe) return
-    // Blackout: don't send
-    if (state.blackout) return
-    // Normal output
-    const gm = state.grandMaster / 255
-    const effective: Record<number, number> = {}
-    for (const [ch, val] of Object.entries(channels)) {
-      effective[parseInt(ch)] = Math.round(val * gm)
-    }
-    window.photonboard.dmx.setChannels(universe, effective)
-  },
+  _strobePhase: true,
 
   setGrandMaster: (value) => {
-    set({ grandMaster: Math.max(0, Math.min(255, value)) })
-    const state = get()
-    if (state.blackout || state.blinder || state.strobe) return
-    const gm = value / 255
-    for (let u = 0; u < state.universeCount; u++) {
-      const channels: Record<number, number> = {}
-      for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-        if (state.values[u][ch] > 0) {
-          channels[ch] = Math.round(state.values[u][ch] * gm)
-        }
-      }
-      window.photonboard.dmx.setChannels(u, channels)
-    }
+    const gm = toDmx(value)
+    if (gm !== get().grandMaster) set({ grandMaster: gm })
+    markLocalChange('grandMaster')
+    sendRemoteCommandThrottled('grandMaster', 'set-grand-master', gm)
   },
 
-  toggleBlackout: () => {
-    const newBlackout = !get().blackout
-    set({ blackout: newBlackout })
-    if (newBlackout) {
-      window.photonboard.dmx.blackout()
-    } else {
-      const state = get()
-      if (state.blinder || state.strobe) return // let those modes handle output
-      const gm = state.grandMaster / 255
-      for (let u = 0; u < state.universeCount; u++) {
-        const channels: Record<number, number> = {}
-        for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-          channels[ch] = Math.round(state.values[u][ch] * gm)
-        }
-        window.photonboard.dmx.setChannels(u, channels)
-      }
-    }
+  toggleBlackout: () => get().setBlackout(!get().blackout),
+
+  setBlackout: (on) => {
+    const blackout = !!on
+    if (blackout !== get().blackout) set({ blackout })
+    markLocalChange('blackout')
+    sendRemoteCommand('set-blackout', blackout)
   },
 
-  toggleBlinder: (on?: boolean) => {
-    const newBlinder = on !== undefined ? on : !get().blinder
-    set({ blinder: newBlinder })
-    if (newBlinder) {
-      // Immediately send 255 on all channels
-      const state = get()
-      for (let u = 0; u < state.universeCount; u++) {
-        const channels: Record<number, number> = {}
-        for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-          channels[ch] = 255
-        }
-        window.photonboard.dmx.setChannels(u, channels)
-      }
-    } else {
-      // Restore: let the normal pipeline take over on next setChannel call
-      // Force an immediate restore of current values
-      const state = get()
-      if (state.blackout) {
-        window.photonboard.dmx.blackout()
-      } else if (!state.strobe) {
-        const gm = state.grandMaster / 255
-        for (let u = 0; u < state.universeCount; u++) {
-          const channels: Record<number, number> = {}
-          for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-            channels[ch] = Math.round(state.values[u][ch] * gm)
-          }
-          window.photonboard.dmx.setChannels(u, channels)
-        }
-      }
-    }
+  toggleBlinder: (on) => {
+    const blinder = on !== undefined ? !!on : !get().blinder
+    if (blinder !== get().blinder) set({ blinder })
+    markLocalChange('blinder')
+    sendRemoteCommand('toggle-blinder', blinder)
   },
 
-  toggleStrobe: (on?: boolean) => {
-    const newStrobe = on !== undefined ? on : !get().strobe
-    set({ strobe: newStrobe, _strobePhase: false })
-    if (newStrobe) {
-      startStrobeLoop()
-    } else {
-      stopStrobeLoop()
-      // Restore normal output
-      const state = get()
-      if (state.blackout) {
-        window.photonboard.dmx.blackout()
-      } else if (!state.blinder) {
-        const gm = state.grandMaster / 255
-        for (let u = 0; u < state.universeCount; u++) {
-          const channels: Record<number, number> = {}
-          for (let ch = 0; ch < DMX_CHANNELS_PER_UNIVERSE; ch++) {
-            channels[ch] = Math.round(state.values[u][ch] * gm)
-          }
-          window.photonboard.dmx.setChannels(u, channels)
-        }
-      }
-    }
+  toggleStrobe: (on) => {
+    const strobe = on !== undefined ? !!on : !get().strobe
+    if (strobe !== get().strobe) set({ strobe })
+    markLocalChange('strobe')
+    sendRemoteCommand('toggle-strobe', strobe)
   },
 
-  setStrobeRate: (rate: number) => {
-    set({ strobeRate: Math.max(1, Math.min(25, rate)) })
-    // Restart strobe loop with new rate if active
-    if (get().strobe) {
-      startStrobeLoop()
-    }
+  setStrobeRate: (rate) => {
+    const r = Number.isFinite(rate) ? Math.max(1, Math.min(25, rate)) : 10
+    if (r !== get().strobeRate) set({ strobeRate: r })
+    markLocalChange('strobeRate')
+    sendRemoteCommandThrottled('strobeRate', 'set-strobe-rate', r)
   },
 
   resetAll: () => {
-    stopStrobeLoop()
-    const state = get()
-    const freshValues = []
-    for (let u = 0; u < state.universeCount; u++) {
-      freshValues.push(new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0))
+    set({ blackout: false, grandMaster: 255, blinder: false, strobe: false })
+    if (isRemoteMode()) {
+      sendRemoteCommand('reset-all')
+      return
     }
-    set({ values: freshValues, blackout: false, grandMaster: 255, blinder: false, strobe: false, _strobePhase: false })
-    window.photonboard.dmx.blackout()
-  },
-
-  getEffectiveValue: (universe, channel) => {
-    const state = get()
-    if (state.blackout) return 0
-    if (state.blinder) return 255
-    return Math.round(state.values[universe][channel] * (state.grandMaster / 255))
+    clearProgrammerFn?.()
   }
-}))
+})))
+
+// ---- Selector hooks (subscribe to just what a component shows) ----
+
+/** Master section flags, re-rendering only when one of them changes. */
+export function useDmxMasters() {
+  return useDmxStore(useShallow((s) => ({
+    grandMaster: s.grandMaster,
+    blackout: s.blackout,
+    blinder: s.blinder,
+    strobe: s.strobe,
+    strobeRate: s.strobeRate
+  })))
+}
+
+/** Pre-master mix of one universe (re-renders at most at the publish rate, ~25 Hz). */
+export function useDmxUniverse(universe: number): number[] {
+  return useDmxStore((s) => s.values[universe] ?? EMPTY_UNIVERSE)
+}
+
+const EMPTY_UNIVERSE: number[] = new Array(DMX_CHANNELS_PER_UNIVERSE).fill(0)

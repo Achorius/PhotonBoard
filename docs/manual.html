@@ -459,17 +459,17 @@
 </div>
 
 <h2>2.3 Onglets de travail</h2>
-<p>Les 10 onglets sont accessibles par la barre d'onglets sous la Toolbar, ou par les raccourcis clavier <kbd>1</kbd> a <kbd>9</kbd> et <kbd>0</kbd>.</p>
+<p>Les 10 vues sont accessibles par la barre de navigation verticale a gauche (groupees : Setup, Program, Playback, Visualise, System), ou par les raccourcis clavier <kbd>1</kbd> a <kbd>9</kbd> et <kbd>0</kbd>. Appuyez sur <kbd>?</kbd> pour afficher tous les raccourcis.</p>
 
 <table>
-  <tr><th>#</th><th>Onglet</th><th>Raccourci</th><th>Fonction</th></tr>
-  <tr><td>1</td><td><strong>3D View</strong></td><td><kbd>1</kbd></td><td>Visualiseur 3D temps reel avec faisceaux</td></tr>
-  <tr><td>2</td><td><strong>Stage Layout</strong></td><td><kbd>2</kbd></td><td>Plan 2D de la scene (vue dessus + vue cote)</td></tr>
-  <tr><td>3</td><td><strong>Timeline</strong></td><td><kbd>3</kbd></td><td>Timeline DAW multi-piste avec clips, marqueurs et zones</td></tr>
-  <tr><td>4</td><td><strong>Effects</strong></td><td><kbd>4</kbd></td><td>Moteur d'effets parametriques (sinus, cercle, rainbow...)</td></tr>
-  <tr><td>5</td><td><strong>Scenes</strong></td><td><kbd>5</kbd></td><td>Creation/lecture de scenes avec enregistrement live</td></tr>
-  <tr><td>6</td><td><strong>Fixtures</strong></td><td><kbd>6</kbd></td><td>Controle detaille des fixtures (faders, color picker, XY pad)</td></tr>
-  <tr><td>7</td><td><strong>Patch</strong></td><td><kbd>7</kbd></td><td>Configuration DMX : ajout, import, adresses, groupes</td></tr>
+  <tr><th>#</th><th>Vue</th><th>Raccourci</th><th>Fonction</th></tr>
+  <tr><td>1</td><td><strong>Patch</strong></td><td><kbd>1</kbd></td><td>Configuration DMX : ajout, import, adresses, groupes</td></tr>
+  <tr><td>2</td><td><strong>Fixtures</strong></td><td><kbd>2</kbd></td><td>Controle detaille des fixtures (faders, color picker, XY pad)</td></tr>
+  <tr><td>3</td><td><strong>Effects</strong></td><td><kbd>3</kbd></td><td>Moteur d'effets parametriques (sinus, cercle, rainbow...)</td></tr>
+  <tr><td>4</td><td><strong>Scenes</strong></td><td><kbd>4</kbd></td><td>Creation/lecture de scenes avec enregistrement live</td></tr>
+  <tr><td>5</td><td><strong>Timeline</strong></td><td><kbd>5</kbd></td><td>Timeline DAW multi-piste avec clips, marqueurs et zones</td></tr>
+  <tr><td>6</td><td><strong>3D</strong></td><td><kbd>6</kbd></td><td>Visualiseur 3D temps reel avec faisceaux</td></tr>
+  <tr><td>7</td><td><strong>Layout</strong></td><td><kbd>7</kbd></td><td>Plan 2D de la scene (vue dessus + vue cote)</td></tr>
   <tr><td>8</td><td><strong>MIDI</strong></td><td><kbd>8</kbd></td><td>Peripheriques MIDI, mappings et moniteur</td></tr>
   <tr><td>9</td><td><strong>Follow</strong></td><td><kbd>9</kbd></td><td>Poursuite par manette (gamepad) pour lyres</td></tr>
   <tr><td>10</td><td><strong>Settings</strong></td><td><kbd>0</kbd></td><td>Configuration show, ArtNet, USB DMX</td></tr>
@@ -987,16 +987,16 @@
 <h2>13.1 Navigation</h2>
 <table>
   <tr><th>Raccourci</th><th>Action</th></tr>
-  <tr><td><kbd>1</kbd></td><td>Onglet 3D View</td></tr>
-  <tr><td><kbd>2</kbd></td><td>Onglet Stage Layout</td></tr>
-  <tr><td><kbd>3</kbd></td><td>Onglet Timeline</td></tr>
-  <tr><td><kbd>4</kbd></td><td>Onglet Effects</td></tr>
-  <tr><td><kbd>5</kbd></td><td>Onglet Scenes</td></tr>
-  <tr><td><kbd>6</kbd></td><td>Onglet Fixtures</td></tr>
-  <tr><td><kbd>7</kbd></td><td>Onglet Patch</td></tr>
-  <tr><td><kbd>8</kbd></td><td>Onglet MIDI</td></tr>
-  <tr><td><kbd>9</kbd></td><td>Onglet Follow</td></tr>
-  <tr><td><kbd>0</kbd></td><td>Onglet Settings</td></tr>
+  <tr><td><kbd>1</kbd></td><td>Vue Patch</td></tr>
+  <tr><td><kbd>2</kbd></td><td>Vue Fixtures</td></tr>
+  <tr><td><kbd>3</kbd></td><td>Vue Effects</td></tr>
+  <tr><td><kbd>4</kbd></td><td>Vue Scenes</td></tr>
+  <tr><td><kbd>5</kbd></td><td>Vue Timeline</td></tr>
+  <tr><td><kbd>6</kbd></td><td>Vue 3D</td></tr>
+  <tr><td><kbd>7</kbd></td><td>Vue Layout</td></tr>
+  <tr><td><kbd>8</kbd></td><td>Vue MIDI</td></tr>
+  <tr><td><kbd>9</kbd></td><td>Vue Follow</td></tr>
+  <tr><td><kbd>0</kbd></td><td>Vue Settings</td></tr>
 </table>
 
 <h2>13.2 Actions globales</h2>
@@ -1004,7 +1004,9 @@
   <tr><th>Raccourci</th><th>Action</th></tr>
   <tr><td><kbd>Esc</kbd></td><td>Blackout (couper toute sortie DMX)</td></tr>
   <tr><td><kbd>Backspace</kbd></td><td>Clear Programmer (effacer les valeurs manuelles)</td></tr>
-  <tr><td><kbd>Space</kbd></td><td>GO sur la premiere scene (onglet Scenes uniquement)</td></tr>
+  <tr><td><kbd>Space</kbd></td><td>GO sur la premiere scene (vue Scenes uniquement)</td></tr>
+  <tr><td><kbd>/</kbd></td><td>Aller a la ligne de commande</td></tr>
+  <tr><td><kbd>?</kbd></td><td>Afficher les raccourcis clavier</td></tr>
 </table>
 
 <h2>13.3 Fichiers (menu)</h2>

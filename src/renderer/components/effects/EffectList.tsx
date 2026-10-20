@@ -1,0 +1,266 @@
+// ============================================================
+// Effects view — the show's effects: start/stop, live phase ring,
+// solo, edit. Phase rings animate from the shared ticker (no React
+// render per frame). Long-press / right-click a row for more.
+// ============================================================
+
+import { memo, useMemo, useState } from 'react'
+import type React from 'react'
+import {
+  LuCopy, LuEllipsis, LuHeadphones, LuPlay, LuRotateCcw, LuSave, LuSlidersHorizontal, LuSparkles, LuSquare, LuTrash2
+} from 'react-icons/lu'
+import type { CueChannelValue, Effect } from '@shared/types'
+import {
+  Badge, Button, DropdownMenu, EmptyState, IconButton, SegmentedControl, ToggleButton, cn, confirm, effectCategoryIcon,
+  contextMenuHandlers, formatBpm, toast, useContextMenu, type MenuEntry, type MenuPoint
+} from '@renderer/components/ui'
+import { useEffectsStore } from '@renderer/stores/effects-store'
+import { usePatchStore } from '@renderer/stores/patch-store'
+import { useDmxStore } from '@renderer/stores/dmx-store'
+import { usePlaybackStore } from '@renderer/stores/playback-store'
+import { CATEGORY_COLOR, effectCategoryOf, waveformLabel } from './effect-templates'
+import { PhaseRing } from './effect-graphics'
+import { runEffect, useEffectsUiStore } from './effects-ui-store'
+
+type Filter = 'all' | 'running'
+
+/** "All fixtures", a group name, up to 3 names, or "N fixtures" */
+export function useTargetLabel(): (ids: string[]) => string {
+  const patch = usePatchStore((s) => s.patch)
+  const groups = usePatchStore((s) => s.groups)
+  return useMemo(() => {
+    const names = new Map(patch.map((p) => [p.id, p.name]))
+    return (ids: string[]) => {
+      if (ids.length === 0) return 'No targets'
+      const set = new Set(ids)
+      if (patch.length > 0 && ids.length === patch.length && patch.every((p) => set.has(p.id))) return 'All fixtures'
+      const g = groups.find((gr) => gr.fixtureIds.length === ids.length && gr.fixtureIds.every((id) => set.has(id)))
+      if (g) return g.name
+      if (ids.length <= 3) return ids.map((id) => names.get(id) ?? 'Missing fixture').join(', ')
+      return `${ids.length} fixtures`
+    }
+  }, [patch, groups])
+}
+
+export async function deleteEffect(effect: Effect): Promise<void> {
+  const ok = await confirm({ title: `Delete “${effect.name}”?`, message: 'The effect is removed from the show. This cannot be undone.', confirmLabel: 'Delete effect', tone: 'danger' })
+  if (!ok) return
+  useEffectsStore.getState().removeEffect(effect.id)
+  const ui = useEffectsUiStore.getState()
+  if (ui.editingId === effect.id) ui.setEditing(null)
+}
+
+export function duplicateEffect(effect: Effect): void {
+  const { id: _id, ...rest } = effect
+  const id = useEffectsStore.getState().createEffect({ ...rest, name: `${effect.name} copy`, isRunning: false, fixtureIds: [...effect.fixtureIds] })
+  useEffectsUiStore.getState().setEditing(id)
+}
+
+/** Snapshot the running effects + current output of their fixtures as a new scene */
+function saveRunningAsScene(): void {
+  const running = useEffectsStore.getState().effects.filter((e) => e.isRunning)
+  if (running.length === 0) return
+  const patchStore = usePatchStore.getState()
+  const values = useDmxStore.getState().values
+  const playback = usePlaybackStore.getState()
+  const fixtureIds = new Set(running.flatMap((e) => e.fixtureIds))
+  const cueValues: CueChannelValue[] = []
+  for (const fixtureId of fixtureIds) {
+    const entry = patchStore.patch.find((p) => p.id === fixtureId)
+    if (!entry) continue
+    for (const ch of patchStore.getFixtureChannels(entry)) {
+      const val = values[entry.universe]?.[ch.absoluteChannel] ?? 0
+      if (val > 0) cueValues.push({ fixtureId, channelName: ch.name, value: val })
+    }
+  }
+  const names = running.map((e) => e.name)
+  const sceneName = names.length <= 2 ? names.join(' + ') : `${names[0]} +${names.length - 1} effects`
+  const cuelistId = playback.addCuelist(sceneName)
+  playback.addCue(cuelistId, 'Cue 1', cueValues)
+  const effectSnapshots = running.map((fx) => ({ ...fx }))
+  usePlaybackStore.setState((state) => ({
+    cuelists: state.cuelists.map((cl) => (cl.id === cuelistId ? { ...cl, effectSnapshots } : cl))
+  }))
+  toast.success(`Scene “${sceneName}” created`, { description: `${running.length} effect${running.length === 1 ? '' : 's'} captured` })
+}
+
+export function EffectList({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  const effects = useEffectsStore((s) => s.effects)
+  const editingId = useEffectsUiStore((s) => s.editingId)
+  const soloId = useEffectsUiStore((s) => s.solo?.id ?? null)
+  const [filter, setFilter] = useState<Filter>('all')
+  const targetLabel = useTargetLabel()
+  const ctx = useContextMenu()
+
+  const runningCount = effects.reduce((n, e) => n + (e.isRunning ? 1 : 0), 0)
+  const shown = filter === 'running' ? effects.filter((e) => e.isRunning) : effects
+
+  const stopAll = async () => {
+    const ok = await confirm({
+      title: 'Stop all effects?',
+      message: `${runningCount} running effect${runningCount === 1 ? '' : 's'} will stop immediately.`,
+      confirmLabel: 'Stop all effects',
+      tone: 'danger'
+    })
+    if (!ok) return
+    useEffectsStore.getState().stopAllEffects()
+    useEffectsUiStore.setState({ solo: null })
+  }
+
+  const removeAll = async () => {
+    const ok = await confirm({
+      title: `Delete all ${effects.length} effects?`,
+      message: 'Every effect is removed from the show. This cannot be undone.',
+      confirmLabel: 'Delete all effects',
+      tone: 'danger'
+    })
+    if (!ok) return
+    const store = useEffectsStore.getState()
+    for (const e of [...store.effects]) store.removeEffect(e.id)
+    useEffectsUiStore.setState({ editingId: null, solo: null })
+  }
+
+  const moreItems = (): MenuEntry[] => [
+    { label: 'Save running as scene', icon: LuSave, disabled: runningCount === 0, onSelect: saveRunningAsScene, description: 'Captures the running effects and their fixtures' },
+    { type: 'separator' },
+    { label: 'Delete all effects…', icon: LuTrash2, danger: true, disabled: effects.length === 0, onSelect: () => { void removeAll() } }
+  ]
+
+  const rowMenu = (e: Effect): MenuEntry[] => [
+    { label: 'Edit', icon: LuSlidersHorizontal, onSelect: () => useEffectsUiStore.getState().setEditing(e.id) },
+    { label: 'Restart phase', icon: LuRotateCcw, disabled: !e.isRunning, onSelect: () => useEffectsStore.getState().setEffectRunning(e.id, true) },
+    { label: 'Duplicate', icon: LuCopy, onSelect: () => duplicateEffect(e) },
+    { type: 'separator' },
+    { label: 'Delete…', icon: LuTrash2, danger: true, onSelect: () => { void deleteEffect(e) } }
+  ]
+
+  return (
+    <section aria-label="Effects" className={cn('flex min-h-0 flex-col bg-surface-1', className)} style={style}>
+      <header className="flex h-control-lg shrink-0 items-center gap-2 border-b border-line-subtle pl-3 pr-1.5">
+        <h2 className="text-sm font-semibold text-fg-primary">Effects</h2>
+        <span className="text-xs tabular text-fg-tertiary">{effects.length}</span>
+        {runningCount > 0 && <Badge tone="go" className="hidden xl:inline-flex">{runningCount} RUNNING</Badge>}
+        <div className="flex-1" />
+        <SegmentedControl
+          size="xs"
+          aria-label="Show effects"
+          value={filter}
+          onChange={setFilter}
+          items={[{ value: 'all', label: 'All' }, { value: 'running', label: 'Running' }]}
+        />
+        <Button size="sm" variant="danger-outline" icon={LuSquare} disabled={runningCount === 0} data-fx-stop-all onClick={() => { void stopAll() }}>
+          Stop all
+        </Button>
+        <DropdownMenu
+          placement="bottom-end"
+          items={moreItems}
+          trigger={(p) => <IconButton {...p} size="sm" icon={LuEllipsis} label="More effect actions" />}
+        />
+      </header>
+
+      <div role="listbox" aria-label="Effects" className="min-h-0 flex-1 overflow-y-auto py-1">
+        {effects.length === 0 ? (
+          <EmptyState size="sm" icon={LuSparkles} title="No effects yet" description="Select targets, then tap an effect in the library above to create and start it." />
+        ) : shown.length === 0 ? (
+          <EmptyState
+            size="sm"
+            icon={LuSquare}
+            title="Nothing running"
+            description="Start an effect with its play button, or show all effects."
+            action={<Button size="sm" variant="ghost" onClick={() => setFilter('all')}>Show all</Button>}
+          />
+        ) : (
+          shown.map((e) => (
+            <EffectRow
+              key={e.id}
+              effect={e}
+              targets={targetLabel(e.fixtureIds)}
+              editing={e.id === editingId}
+              soloed={e.id === soloId}
+              onMenu={(ev) => ctx.open(ev, rowMenu(e))}
+            />
+          ))
+        )}
+      </div>
+      {ctx.menu}
+    </section>
+  )
+}
+
+const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, onMenu }: {
+  effect: Effect
+  targets: string
+  editing: boolean
+  soloed: boolean
+  onMenu: (e: MenuPoint) => void
+}) {
+  const category = effectCategoryOf(effect)
+  const color = CATEGORY_COLOR[category]
+  const Icon = effectCategoryIcon(category)
+  const running = effect.isRunning
+  const edit = () => useEffectsUiStore.getState().setEditing(effect.id)
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+
+  return (
+    <div
+      role="option"
+      aria-selected={editing}
+      tabIndex={0}
+      data-fx-row={effect.name}
+      onClick={edit}
+      {...contextMenuHandlers(onMenu)}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Enter') { e.preventDefault(); edit() }
+        else if (e.key === ' ' && !e.repeat) { e.preventDefault(); runEffect(effect.id, !running) }
+      }}
+      className={cn(
+        'relative mx-1.5 flex min-h-row cursor-pointer items-center gap-2 rounded px-1.5 py-1 outline-offset-[-2px] transition-colors duration-fast',
+        editing ? 'bg-info/15 hover:bg-info/20' : 'hover:bg-surface-2'
+      )}
+    >
+      {(editing || running) && <span aria-hidden className={cn('absolute inset-y-1 left-0 w-0.5 rounded-full', running ? 'bg-go-fg' : 'bg-info-fg')} />}
+      <span onClick={stop} className="flex">
+        <IconButton
+          size="sm"
+          variant="secondary"
+          tone="go"
+          active={running}
+          icon={running ? LuSquare : LuPlay}
+          label={running ? `Stop ${effect.name}` : `Start ${effect.name}`}
+          data-fx-play
+          onClick={() => runEffect(effect.id, !running)}
+        />
+      </span>
+      <PhaseRing id={effect.id} running={running} color={color} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Icon size={12} aria-hidden className="shrink-0" style={{ color }} />
+          <span className={cn('truncate text-sm', running ? 'font-medium text-fg-primary' : 'text-fg-secondary')}>{effect.name}</span>
+          {effect.oneShot && <Badge size="xs">ONE-SHOT</Badge>}
+        </span>
+        <span className="truncate text-xs text-fg-tertiary">
+          <span className={effect.fixtureIds.length === 0 ? 'text-warning-fg' : undefined}>{targets}</span>
+          <span className="tabular"> · {effect.fixtureIds.length} fx · {waveformLabel(effect.waveform)} · {formatBpm(effect.speed * 60)}</span>
+        </span>
+      </span>
+      <span onClick={stop} className="flex items-center gap-1">
+        <ToggleButton
+          size="sm"
+          variant="ghost"
+          tone="accent"
+          icon={LuHeadphones}
+          pressed={soloed}
+          onPressedChange={() => useEffectsUiStore.getState().toggleSolo(effect.id)}
+          tooltip={soloed ? 'Un-solo: restart the effects solo stopped' : 'Solo: stop every other effect'}
+          aria-label={`Solo ${effect.name}`}
+          labelClassName="hidden xl:inline"
+        >
+          Solo
+        </ToggleButton>
+        <IconButton size="sm" icon={LuSlidersHorizontal} label={`Edit ${effect.name}`} data-fx-edit onClick={edit} active={editing} tone="info" />
+        <IconButton size="sm" icon={LuEllipsis} label="More" onClick={(e) => onMenu(e)} className="[[data-density=compact]_&]:hidden" />
+      </span>
+    </div>
+  )
+})

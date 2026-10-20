@@ -1,0 +1,4407 @@
+{
+  "version": "2",
+  "name": "Club Night Demo",
+  "createdAt": "2026-10-01T20:00:00.000Z",
+  "modifiedAt": "2026-10-01T20:00:00.000Z",
+  "patch": [
+    {
+      "id": "fx-001",
+      "fixtureDefId": "generic/moving-head-spot",
+      "modeName": "13ch",
+      "universe": 0,
+      "address": 1,
+      "name": "Spot 1",
+      "groupIds": [
+        "grp-005"
+      ],
+      "position3D": {
+        "x": -4.5,
+        "y": 5.9,
+        "z": 0
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 240,
+        "y": 300,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-002",
+      "fixtureDefId": "generic/moving-head-spot",
+      "modeName": "13ch",
+      "universe": 0,
+      "address": 14,
+      "name": "Spot 2",
+      "groupIds": [
+        "grp-005"
+      ],
+      "position3D": {
+        "x": -1.5,
+        "y": 5.9,
+        "z": 0
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 480,
+        "y": 300,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-003",
+      "fixtureDefId": "generic/moving-head-spot",
+      "modeName": "13ch",
+      "universe": 0,
+      "address": 27,
+      "name": "Spot 3",
+      "groupIds": [
+        "grp-005"
+      ],
+      "position3D": {
+        "x": 1.5,
+        "y": 5.9,
+        "z": 0
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 720,
+        "y": 300,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-004",
+      "fixtureDefId": "generic/moving-head-spot",
+      "modeName": "13ch",
+      "universe": 0,
+      "address": 40,
+      "name": "Spot 4",
+      "groupIds": [
+        "grp-005"
+      ],
+      "position3D": {
+        "x": 4.5,
+        "y": 5.9,
+        "z": 0
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 960,
+        "y": 300,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-006",
+      "fixtureDefId": "generic/moving-head-wash",
+      "modeName": "11ch",
+      "universe": 0,
+      "address": 61,
+      "name": "Wash 1",
+      "groupIds": [
+        "grp-010"
+      ],
+      "position3D": {
+        "x": -5.5,
+        "y": 5.9,
+        "z": 3
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 160,
+        "y": 450,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-007",
+      "fixtureDefId": "generic/moving-head-wash",
+      "modeName": "11ch",
+      "universe": 0,
+      "address": 72,
+      "name": "Wash 2",
+      "groupIds": [
+        "grp-010"
+      ],
+      "position3D": {
+        "x": -1.8333333333333335,
+        "y": 5.9,
+        "z": 3
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 453.3333333333333,
+        "y": 450,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-008",
+      "fixtureDefId": "generic/moving-head-wash",
+      "modeName": "11ch",
+      "universe": 0,
+      "address": 83,
+      "name": "Wash 3",
+      "groupIds": [
+        "grp-010"
+      ],
+      "position3D": {
+        "x": 1.833333333333333,
+        "y": 5.9,
+        "z": 3
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 746.6666666666666,
+        "y": 450,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-009",
+      "fixtureDefId": "generic/moving-head-wash",
+      "modeName": "11ch",
+      "universe": 0,
+      "address": 94,
+      "name": "Wash 4",
+      "groupIds": [
+        "grp-010"
+      ],
+      "position3D": {
+        "x": 5.5,
+        "y": 5.9,
+        "z": 3
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 1040,
+        "y": 450,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-011",
+      "fixtureDefId": "eurolite/led-par-64-rgba",
+      "modeName": "8ch",
+      "universe": 0,
+      "address": 121,
+      "name": "Par 1",
+      "groupIds": [
+        "grp-017"
+      ],
+      "position3D": {
+        "x": -6,
+        "y": 5.9,
+        "z": -3
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 30,
+      "stagePosition": {
+        "x": 120,
+        "y": 150,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-012",
+      "fixtureDefId": "eurolite/led-par-64-rgba",
+      "modeName": "8ch",
+      "universe": 0,
+      "address": 129,
+      "name": "Par 2",
+      "groupIds": [
+        "grp-017"
+      ],
+      "position3D": {
+        "x": -3.6,
+        "y": 5.9,
+        "z": -3
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 30,
+      "stagePosition": {
+        "x": 312,
+        "y": 150,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-013",
+      "fixtureDefId": "eurolite/led-par-64-rgba",
+      "modeName": "8ch",
+      "universe": 0,
+      "address": 137,
+      "name": "Par 3",
+      "groupIds": [
+        "grp-017"
+      ],
+      "position3D": {
+        "x": -1.2000000000000002,
+        "y": 5.9,
+        "z": -3
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 30,
+      "stagePosition": {
+        "x": 504,
+        "y": 150,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-014",
+      "fixtureDefId": "eurolite/led-par-64-rgba",
+      "modeName": "8ch",
+      "universe": 0,
+      "address": 145,
+      "name": "Par 4",
+      "groupIds": [
+        "grp-017"
+      ],
+      "position3D": {
+        "x": 1.2000000000000002,
+        "y": 5.9,
+        "z": -3
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 30,
+      "stagePosition": {
+        "x": 696,
+        "y": 150,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-015",
+      "fixtureDefId": "eurolite/led-par-64-rgba",
+      "modeName": "8ch",
+      "universe": 0,
+      "address": 153,
+      "name": "Par 5",
+      "groupIds": [
+        "grp-017"
+      ],
+      "position3D": {
+        "x": 3.5999999999999996,
+        "y": 5.9,
+        "z": -3
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 30,
+      "stagePosition": {
+        "x": 888,
+        "y": 150,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-016",
+      "fixtureDefId": "eurolite/led-par-64-rgba",
+      "modeName": "8ch",
+      "universe": 0,
+      "address": 161,
+      "name": "Par 6",
+      "groupIds": [
+        "grp-017"
+      ],
+      "position3D": {
+        "x": 6,
+        "y": 5.9,
+        "z": -3
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 30,
+      "stagePosition": {
+        "x": 1080,
+        "y": 150,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-018",
+      "fixtureDefId": "etc/source-four-par",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 181,
+      "name": "Front 1",
+      "groupIds": [
+        "grp-022"
+      ],
+      "position3D": {
+        "x": -4,
+        "y": 5.9,
+        "z": -4.5
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 40,
+      "stagePosition": {
+        "x": 280,
+        "y": 75,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-019",
+      "fixtureDefId": "etc/source-four-par",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 182,
+      "name": "Front 2",
+      "groupIds": [
+        "grp-022"
+      ],
+      "position3D": {
+        "x": -1.3333333333333335,
+        "y": 5.9,
+        "z": -4.5
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 40,
+      "stagePosition": {
+        "x": 493.3333333333333,
+        "y": 75,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-020",
+      "fixtureDefId": "etc/source-four-par",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 183,
+      "name": "Front 3",
+      "groupIds": [
+        "grp-022"
+      ],
+      "position3D": {
+        "x": 1.333333333333333,
+        "y": 5.9,
+        "z": -4.5
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 40,
+      "stagePosition": {
+        "x": 706.6666666666666,
+        "y": 75,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-021",
+      "fixtureDefId": "etc/source-four-par",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 184,
+      "name": "Front 4",
+      "groupIds": [
+        "grp-022"
+      ],
+      "position3D": {
+        "x": 4,
+        "y": 5.9,
+        "z": -4.5
+      },
+      "mountingLocation": "ceiling",
+      "mountingAngle": 40,
+      "stagePosition": {
+        "x": 920,
+        "y": 75,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-023",
+      "fixtureDefId": "generic/led-bar-rgb-8",
+      "modeName": "26ch",
+      "universe": 1,
+      "address": 1,
+      "name": "Bar 1",
+      "groupIds": [
+        "grp-025"
+      ],
+      "position3D": {
+        "x": -5,
+        "y": 0.1,
+        "z": 4
+      },
+      "mountingLocation": "floor",
+      "stagePosition": {
+        "x": 200,
+        "y": 500,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-024",
+      "fixtureDefId": "generic/led-bar-rgb-8",
+      "modeName": "26ch",
+      "universe": 1,
+      "address": 27,
+      "name": "Bar 2",
+      "groupIds": [
+        "grp-025"
+      ],
+      "position3D": {
+        "x": 5,
+        "y": 0.1,
+        "z": 4
+      },
+      "mountingLocation": "floor",
+      "stagePosition": {
+        "x": 1000,
+        "y": 500,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-026",
+      "fixtureDefId": "generic/strobe",
+      "modeName": "2ch",
+      "universe": 1,
+      "address": 61,
+      "name": "Strobe 1",
+      "groupIds": [
+        "grp-028"
+      ],
+      "position3D": {
+        "x": -3,
+        "y": 5.9,
+        "z": 3
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 360,
+        "y": 450,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-027",
+      "fixtureDefId": "generic/strobe",
+      "modeName": "2ch",
+      "universe": 1,
+      "address": 63,
+      "name": "Strobe 2",
+      "groupIds": [
+        "grp-028"
+      ],
+      "position3D": {
+        "x": 3,
+        "y": 5.9,
+        "z": 3
+      },
+      "mountingLocation": "ceiling",
+      "stagePosition": {
+        "x": 840,
+        "y": 450,
+        "rotation": 0
+      }
+    },
+    {
+      "id": "fx-029",
+      "fixtureDefId": "generic/hazer",
+      "modeName": "2ch",
+      "universe": 1,
+      "address": 101,
+      "name": "Hazer",
+      "groupIds": [
+        "grp-030"
+      ],
+      "position3D": {
+        "x": 6,
+        "y": 0.1,
+        "z": 4.5
+      },
+      "mountingLocation": "floor",
+      "stagePosition": {
+        "x": 1080,
+        "y": 525,
+        "rotation": 0
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "grp-005",
+      "name": "Spots",
+      "color": "#3b82f6",
+      "fixtureIds": [
+        "fx-001",
+        "fx-002",
+        "fx-003",
+        "fx-004"
+      ]
+    },
+    {
+      "id": "grp-010",
+      "name": "Washes",
+      "color": "#a855f7",
+      "fixtureIds": [
+        "fx-006",
+        "fx-007",
+        "fx-008",
+        "fx-009"
+      ]
+    },
+    {
+      "id": "grp-017",
+      "name": "Pars",
+      "color": "#ff7a1a",
+      "fixtureIds": [
+        "fx-011",
+        "fx-012",
+        "fx-013",
+        "fx-014",
+        "fx-015",
+        "fx-016"
+      ]
+    },
+    {
+      "id": "grp-022",
+      "name": "Front",
+      "color": "#eab308",
+      "fixtureIds": [
+        "fx-018",
+        "fx-019",
+        "fx-020",
+        "fx-021"
+      ]
+    },
+    {
+      "id": "grp-025",
+      "name": "Bars",
+      "color": "#14b8a6",
+      "fixtureIds": [
+        "fx-023",
+        "fx-024"
+      ]
+    },
+    {
+      "id": "grp-028",
+      "name": "Strobes",
+      "color": "#ec4899",
+      "fixtureIds": [
+        "fx-026",
+        "fx-027"
+      ]
+    },
+    {
+      "id": "grp-030",
+      "name": "Atmosphere",
+      "color": "#94a3b8",
+      "fixtureIds": [
+        "fx-029"
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "preset-101",
+      "name": "Pars Red",
+      "type": "color",
+      "values": {
+        "fx-011": {
+          "Red": 255,
+          "Green": 0,
+          "Blue": 0,
+          "Amber": 0
+        },
+        "fx-012": {
+          "Red": 255,
+          "Green": 0,
+          "Blue": 0,
+          "Amber": 0
+        },
+        "fx-013": {
+          "Red": 255,
+          "Green": 0,
+          "Blue": 0,
+          "Amber": 0
+        },
+        "fx-014": {
+          "Red": 255,
+          "Green": 0,
+          "Blue": 0,
+          "Amber": 0
+        },
+        "fx-015": {
+          "Red": 255,
+          "Green": 0,
+          "Blue": 0,
+          "Amber": 0
+        },
+        "fx-016": {
+          "Red": 255,
+          "Green": 0,
+          "Blue": 0,
+          "Amber": 0
+        }
+      }
+    },
+    {
+      "id": "preset-102",
+      "name": "Spots Center",
+      "type": "position",
+      "values": {
+        "fx-001": {
+          "Pan": 128,
+          "Tilt": 128
+        },
+        "fx-002": {
+          "Pan": 128,
+          "Tilt": 128
+        },
+        "fx-003": {
+          "Pan": 128,
+          "Tilt": 128
+        },
+        "fx-004": {
+          "Pan": 128,
+          "Tilt": 128
+        }
+      }
+    }
+  ],
+  "cuelists": [
+    {
+      "id": "scene-036",
+      "name": "Warm Wash",
+      "cues": [
+        {
+          "id": "cue-035",
+          "name": "Amber",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Green",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Green",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Green",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Green",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Green",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Green",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 150
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-038",
+      "name": "Cool Blue",
+      "cues": [
+        {
+          "id": "cue-037",
+          "name": "Blue",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 220
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 220
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 220
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 220
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 220
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 220
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Green",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Pan",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Tilt",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Green",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Pan",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Tilt",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Green",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Pan",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Tilt",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Green",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Pan",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Tilt",
+              "value": 100
+            }
+          ],
+          "fadeIn": 4,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-040",
+      "name": "Front Light",
+      "cues": [
+        {
+          "id": "cue-039",
+          "name": "Full front",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ],
+          "fadeIn": 1.5,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-043",
+      "name": "Spot Beams",
+      "cues": [
+        {
+          "id": "cue-041",
+          "name": "Fan out",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Gobo",
+              "value": 10
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Pan",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Tilt",
+              "value": 70
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Gobo",
+              "value": 10
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Pan",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Tilt",
+              "value": 70
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Gobo",
+              "value": 10
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Pan",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Tilt",
+              "value": 70
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Gobo",
+              "value": 10
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Pan",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Tilt",
+              "value": 70
+            }
+          ],
+          "fadeIn": 2.5,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-042",
+          "name": "Cross",
+          "number": 2,
+          "values": [
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Gobo",
+              "value": 26
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Pan",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Tilt",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Prism",
+              "value": 140
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Gobo",
+              "value": 26
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Pan",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Tilt",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Prism",
+              "value": 140
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Gobo",
+              "value": 26
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Pan",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Tilt",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Prism",
+              "value": 140
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Gobo",
+              "value": 26
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Pan",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Tilt",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Prism",
+              "value": 140
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false,
+      "effectSnapshots": [
+        {
+          "id": "fx-eff-032",
+          "name": "Spot Circle",
+          "waveform": "sine",
+          "speed": 0.25,
+          "depth": 70,
+          "offset": 0,
+          "channelType": "Pan",
+          "fixtureIds": [
+            "fx-001",
+            "fx-002",
+            "fx-003",
+            "fx-004"
+          ],
+          "fan": 90,
+          "isRunning": false,
+          "channels": [
+            {
+              "channelType": "Pan",
+              "phaseOffset": 0,
+              "depth": 70
+            },
+            {
+              "channelType": "Tilt",
+              "phaseOffset": 90,
+              "depth": 50
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-047",
+      "name": "Intro",
+      "cues": [
+        {
+          "id": "cue-044",
+          "name": "Haze & dark",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-029",
+              "channelName": "Haze Output",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-029",
+              "channelName": "Fan Speed",
+              "value": 160
+            }
+          ],
+          "fadeIn": 1,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-045",
+          "name": "Back light",
+          "number": 2,
+          "values": [
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Blue",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Tilt",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Blue",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Tilt",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Blue",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Tilt",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Blue",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Tilt",
+              "value": 60
+            }
+          ],
+          "fadeIn": 6,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": 8
+        },
+        {
+          "id": "cue-046",
+          "name": "Reveal",
+          "number": 3,
+          "values": [
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Blue",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Blue",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Blue",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Blue",
+              "value": 160
+            },
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 200
+            }
+          ],
+          "fadeIn": 5,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-050",
+      "name": "Verse",
+      "cues": [
+        {
+          "id": "cue-048",
+          "name": "Verse A",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Green",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Blue",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Green",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Blue",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Green",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Blue",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Green",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Blue",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Green",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Blue",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Green",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Blue",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 170
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 170
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 170
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 170
+            }
+          ],
+          "fadeIn": 2,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-049",
+          "name": "Verse B",
+          "number": 2,
+          "values": [
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 170
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 170
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 170
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 170
+            }
+          ],
+          "fadeIn": 2,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-052",
+      "name": "Chorus Punch",
+      "cues": [
+        {
+          "id": "cue-051",
+          "name": "All white",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ],
+          "fadeIn": 0,
+          "fadeOut": 0.3,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 80,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-054",
+      "name": "Bars Rainbow",
+      "cues": [
+        {
+          "id": "cue-053",
+          "name": "Rainbow",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Master Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 1",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 1",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 1",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 2",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 2",
+              "value": 191
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 2",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 3",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 3",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 3",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 4",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 4",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 4",
+              "value": 64
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 5",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 5",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 5",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 6",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 6",
+              "value": 64
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 6",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 7",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 7",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 7",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Red 8",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Green 8",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-023",
+              "channelName": "Blue 8",
+              "value": 191
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Master Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 1",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 1",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 1",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 2",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 2",
+              "value": 191
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 2",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 3",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 3",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 3",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 4",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 4",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 4",
+              "value": 64
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 5",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 5",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 5",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 6",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 6",
+              "value": 64
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 6",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 7",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 7",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 7",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Red 8",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Green 8",
+              "value": 0
+            },
+            {
+              "fixtureId": "fx-024",
+              "channelName": "Blue 8",
+              "value": 191
+            }
+          ],
+          "fadeIn": 1,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-056",
+      "name": "Strobe Hits",
+      "cues": [
+        {
+          "id": "cue-055",
+          "name": "Hit",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-026",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-026",
+              "channelName": "Strobe",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-027",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-027",
+              "channelName": "Strobe",
+              "value": 200
+            }
+          ],
+          "fadeIn": 0,
+          "fadeOut": 0,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 90,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-058",
+      "name": "Haze",
+      "cues": [
+        {
+          "id": "cue-057",
+          "name": "Haze 40%",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-029",
+              "channelName": "Haze Output",
+              "value": 100
+            },
+            {
+              "fixtureId": "fx-029",
+              "channelName": "Fan Speed",
+              "value": 140
+            }
+          ],
+          "fadeIn": 5,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-063",
+      "name": "Ballad",
+      "cues": [
+        {
+          "id": "cue-059",
+          "name": "Single spot",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Zoom",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Pan",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Tilt",
+              "value": 110
+            }
+          ],
+          "fadeIn": 4,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-060",
+          "name": "Add wash",
+          "number": 2,
+          "values": [
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Zoom",
+              "value": 30
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Pan",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Tilt",
+              "value": 110
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Red",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Red",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Red",
+              "value": 60
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Red",
+              "value": 60
+            }
+          ],
+          "fadeIn": 6,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-061",
+          "name": "Warm up",
+          "number": 3,
+          "values": [
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Green",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Green",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Green",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Green",
+              "value": 80
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 200
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 120
+            }
+          ],
+          "fadeIn": 8,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-062",
+          "name": "Fade",
+          "number": 4,
+          "values": [
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Blue",
+              "value": 255
+            }
+          ],
+          "fadeIn": 10,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    },
+    {
+      "id": "scene-066",
+      "name": "Finale",
+      "cues": [
+        {
+          "id": "cue-064",
+          "name": "Everything",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-006",
+              "channelName": "Green",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-007",
+              "channelName": "Green",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-008",
+              "channelName": "Green",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-009",
+              "channelName": "Green",
+              "value": 120
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-001",
+              "channelName": "Gobo",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-002",
+              "channelName": "Gobo",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-003",
+              "channelName": "Gobo",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Shutter",
+              "value": 22
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Zoom",
+              "value": 90
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Focus",
+              "value": 128
+            },
+            {
+              "fixtureId": "fx-004",
+              "channelName": "Gobo",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Amber",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ],
+          "fadeIn": 1,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "cue-065",
+          "name": "Bow",
+          "number": 2,
+          "values": [
+            {
+              "fixtureId": "fx-018",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-019",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-020",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-021",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false
+    }
+  ],
+  "chases": [
+    {
+      "id": "chase-067",
+      "name": "Par Chase",
+      "currentStepIndex": 0,
+      "isPlaying": false,
+      "isLooping": true,
+      "bpm": 128,
+      "fadePercent": 30,
+      "direction": "bounce",
+      "faderLevel": 255,
+      "priority": 40,
+      "steps": [
+        {
+          "id": "step-068",
+          "values": [
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-011",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        },
+        {
+          "id": "step-069",
+          "values": [
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-012",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        },
+        {
+          "id": "step-070",
+          "values": [
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-013",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        },
+        {
+          "id": "step-071",
+          "values": [
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-014",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        },
+        {
+          "id": "step-072",
+          "values": [
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-015",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        },
+        {
+          "id": "step-073",
+          "values": [
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Green",
+              "value": 40
+            },
+            {
+              "fixtureId": "fx-016",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chase-074",
+      "name": "Strobe Alternate",
+      "currentStepIndex": 0,
+      "isPlaying": false,
+      "isLooping": true,
+      "bpm": 240,
+      "fadePercent": 0,
+      "direction": "forward",
+      "faderLevel": 255,
+      "steps": [
+        {
+          "id": "step-075",
+          "values": [
+            {
+              "fixtureId": "fx-026",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        },
+        {
+          "id": "step-076",
+          "values": [
+            {
+              "fixtureId": "fx-027",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "id": "fx-eff-031",
+      "name": "Par Dimmer Wave",
+      "waveform": "sine",
+      "speed": 0.5,
+      "depth": 200,
+      "offset": 0,
+      "channelType": "Dimmer",
+      "fixtureIds": [
+        "fx-011",
+        "fx-012",
+        "fx-013",
+        "fx-014",
+        "fx-015",
+        "fx-016"
+      ],
+      "fan": 360,
+      "isRunning": false
+    },
+    {
+      "id": "fx-eff-032",
+      "name": "Spot Circle",
+      "waveform": "sine",
+      "speed": 0.25,
+      "depth": 70,
+      "offset": 0,
+      "channelType": "Pan",
+      "fixtureIds": [
+        "fx-001",
+        "fx-002",
+        "fx-003",
+        "fx-004"
+      ],
+      "fan": 90,
+      "isRunning": false,
+      "channels": [
+        {
+          "channelType": "Pan",
+          "phaseOffset": 0,
+          "depth": 70
+        },
+        {
+          "channelType": "Tilt",
+          "phaseOffset": 90,
+          "depth": 50
+        }
+      ]
+    },
+    {
+      "id": "fx-eff-033",
+      "name": "Wash Tilt Nod",
+      "waveform": "triangle",
+      "speed": 0.4,
+      "depth": 60,
+      "offset": 0,
+      "channelType": "Tilt",
+      "fixtureIds": [
+        "fx-006",
+        "fx-007",
+        "fx-008",
+        "fx-009"
+      ],
+      "fan": 180,
+      "isRunning": false
+    },
+    {
+      "id": "fx-eff-034",
+      "name": "Strobe Random",
+      "waveform": "random",
+      "speed": 4,
+      "depth": 255,
+      "offset": 0,
+      "channelType": "Dimmer",
+      "fixtureIds": [
+        "fx-026",
+        "fx-027"
+      ],
+      "fan": 180,
+      "isRunning": false,
+      "oneShot": false
+    }
+  ],
+  "midiMappings": [
+    {
+      "id": "midi-093",
+      "name": "Grand Master",
+      "source": {
+        "type": "cc",
+        "channel": 1,
+        "number": 7
+      },
+      "target": {
+        "type": "master"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "direct"
+      }
+    },
+    {
+      "id": "midi-094",
+      "name": "Warm Wash GO",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 36
+      },
+      "target": {
+        "type": "cuelist_go",
+        "id": "scene-036"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "toggle"
+      }
+    },
+    {
+      "id": "midi-095",
+      "name": "Cool Blue GO",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 37
+      },
+      "target": {
+        "type": "cuelist_go",
+        "id": "scene-038"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "toggle"
+      }
+    },
+    {
+      "id": "midi-096",
+      "name": "Chorus Punch",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 38
+      },
+      "target": {
+        "type": "cuelist_go",
+        "id": "scene-052"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "flash"
+      }
+    },
+    {
+      "id": "midi-097",
+      "name": "Strobe Hits",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 39
+      },
+      "target": {
+        "type": "cuelist_go",
+        "id": "scene-056"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "trigger"
+      }
+    },
+    {
+      "id": "midi-098",
+      "name": "Blackout",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 40
+      },
+      "target": {
+        "type": "blackout"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "toggle"
+      }
+    },
+    {
+      "id": "midi-099",
+      "name": "Blinder",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 41
+      },
+      "target": {
+        "type": "blinder"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "trigger"
+      }
+    },
+    {
+      "id": "midi-100",
+      "name": "Par Chase",
+      "source": {
+        "type": "note",
+        "channel": 1,
+        "number": 42
+      },
+      "target": {
+        "type": "chase_toggle",
+        "id": "chase-067"
+      },
+      "options": {
+        "min": 0,
+        "max": 255,
+        "inverted": false,
+        "encoding": "absolute",
+        "behavior": "toggle"
+      }
+    }
+  ],
+  "stageLayout": {
+    "width": 1200,
+    "height": 600,
+    "fixtures": [
+      {
+        "patchId": "fx-001",
+        "x": 240,
+        "y": 300,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-002",
+        "x": 480,
+        "y": 300,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-003",
+        "x": 720,
+        "y": 300,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-004",
+        "x": 960,
+        "y": 300,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-006",
+        "x": 160,
+        "y": 450,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-007",
+        "x": 453.3333333333333,
+        "y": 450,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-008",
+        "x": 746.6666666666666,
+        "y": 450,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-009",
+        "x": 1040,
+        "y": 450,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-011",
+        "x": 120,
+        "y": 150,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-012",
+        "x": 312,
+        "y": 150,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-013",
+        "x": 504,
+        "y": 150,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-014",
+        "x": 696,
+        "y": 150,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-015",
+        "x": 888,
+        "y": 150,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-016",
+        "x": 1080,
+        "y": 150,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-018",
+        "x": 280,
+        "y": 75,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-019",
+        "x": 493.3333333333333,
+        "y": 75,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-020",
+        "x": 706.6666666666666,
+        "y": 75,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-021",
+        "x": 920,
+        "y": 75,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-023",
+        "x": 200,
+        "y": 500,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-024",
+        "x": 1000,
+        "y": 500,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-026",
+        "x": 360,
+        "y": 450,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-027",
+        "x": 840,
+        "y": 450,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "fx-029",
+        "x": 1080,
+        "y": 525,
+        "rotation": 0,
+        "scale": 1
+      }
+    ]
+  },
+  "roomConfig": {
+    "width": 16,
+    "depth": 12,
+    "height": 6,
+    "stageEdgeZ": -2,
+    "trussBars": [
+      {
+        "id": "truss-front",
+        "name": "FOH",
+        "z": -4.5,
+        "y": 5.95,
+        "width": 12
+      },
+      {
+        "id": "truss-1",
+        "name": "Truss 1",
+        "z": -3,
+        "y": 5.95,
+        "width": 14
+      },
+      {
+        "id": "truss-2",
+        "name": "Truss 2",
+        "z": 0,
+        "y": 5.95,
+        "width": 14
+      },
+      {
+        "id": "truss-3",
+        "name": "Truss 3",
+        "z": 3,
+        "y": 5.95,
+        "width": 14
+      }
+    ]
+  },
+  "timeline": {
+    "trackCount": 3,
+    "trackNames": [
+      "Washes",
+      "Movers",
+      "Specials"
+    ],
+    "clips": [
+      {
+        "id": "clip-077",
+        "cuelistId": "scene-047",
+        "trackIndex": 0,
+        "startTime": 0,
+        "duration": 24,
+        "color": "#22c55e"
+      },
+      {
+        "id": "clip-078",
+        "cuelistId": "scene-050",
+        "trackIndex": 0,
+        "startTime": 24,
+        "duration": 32,
+        "color": "#22c55e"
+      },
+      {
+        "id": "clip-079",
+        "cuelistId": "scene-036",
+        "trackIndex": 0,
+        "startTime": 56,
+        "duration": 30,
+        "color": "#ff7a1a"
+      },
+      {
+        "id": "clip-080",
+        "cuelistId": "scene-066",
+        "trackIndex": 0,
+        "startTime": 86,
+        "duration": 20,
+        "color": "#22c55e"
+      },
+      {
+        "id": "clip-081",
+        "cuelistId": "scene-043",
+        "trackIndex": 1,
+        "startTime": 16,
+        "duration": 40,
+        "color": "#3b82f6"
+      },
+      {
+        "id": "clip-082",
+        "cuelistId": "scene-063",
+        "trackIndex": 1,
+        "startTime": 60,
+        "duration": 40,
+        "color": "#3b82f6"
+      },
+      {
+        "id": "clip-083",
+        "cuelistId": "scene-058",
+        "trackIndex": 2,
+        "startTime": 0,
+        "duration": 60,
+        "color": "#94a3b8"
+      },
+      {
+        "id": "clip-084",
+        "cuelistId": "scene-052",
+        "trackIndex": 2,
+        "startTime": 40,
+        "duration": 4,
+        "color": "#ec4899"
+      },
+      {
+        "id": "clip-085",
+        "cuelistId": "scene-056",
+        "trackIndex": 2,
+        "startTime": 52,
+        "duration": 2,
+        "color": "#ec4899"
+      }
+    ],
+    "markers": [
+      {
+        "id": "mk-086",
+        "time": 0,
+        "name": "Intro",
+        "color": "#22c55e"
+      },
+      {
+        "id": "mk-087",
+        "time": 24,
+        "name": "Verse",
+        "color": "#3b82f6"
+      },
+      {
+        "id": "mk-088",
+        "time": 40,
+        "name": "Chorus",
+        "color": "#ec4899"
+      },
+      {
+        "id": "mk-089",
+        "time": 86,
+        "name": "Finale",
+        "color": "#ff7a1a"
+      }
+    ],
+    "zones": [
+      {
+        "id": "zone-090",
+        "name": "Opening",
+        "startTime": 0,
+        "endTime": 24,
+        "color": "#22c55e",
+        "order": 0
+      },
+      {
+        "id": "zone-091",
+        "name": "Song 1",
+        "startTime": 24,
+        "endTime": 86,
+        "color": "#3b82f6",
+        "order": 1
+      },
+      {
+        "id": "zone-092",
+        "name": "Ending",
+        "startTime": 86,
+        "endTime": 106,
+        "color": "#ff7a1a",
+        "order": 2
+      }
+    ]
+  },
+  "executor": {
+    "grid": [
+      [
+        "scene-036",
+        "scene-038",
+        null,
+        null
+      ],
+      [
+        "scene-040",
+        null,
+        null,
+        null
+      ],
+      [
+        "scene-043",
+        "scene-063",
+        null,
+        null
+      ],
+      [
+        "scene-047",
+        "scene-050",
+        "scene-052",
+        "scene-066"
+      ],
+      [
+        "scene-056",
+        null,
+        null,
+        null
+      ],
+      [
+        "scene-054",
+        null,
+        null,
+        null
+      ],
+      [
+        "scene-058",
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null
+      ]
+    ],
+    "columns": [
+      {
+        "title": "Washes",
+        "color": "#ff7a1a"
+      },
+      {
+        "title": "Front",
+        "color": "#eab308"
+      },
+      {
+        "title": "Movers",
+        "color": "#3b82f6"
+      },
+      {
+        "title": "Song",
+        "color": "#22c55e"
+      },
+      {
+        "title": "FX",
+        "color": "#ec4899"
+      },
+      {
+        "title": "Bars",
+        "color": "#14b8a6"
+      },
+      {
+        "title": "Atmos",
+        "color": "#94a3b8"
+      },
+      {
+        "title": "",
+        "color": "#6366f1"
+      }
+    ],
+    "modes": [
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "flash",
+        "toggle"
+      ],
+      [
+        "trigger",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ]
+    ]
+  }
+}

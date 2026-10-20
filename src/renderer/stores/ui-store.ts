@@ -1,10 +1,15 @@
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import { getDeviceProfile } from '@renderer/lib/device-detect'
+import { isElectronRuntime } from '@renderer/lib/runtime'
+import { dismissToast, showToast } from './toast-store'
 
 // ---- Device type detection ----
 
-const _ua = navigator.userAgent.toLowerCase()
-const _isElectron = !!(window as any).__ELECTRON__ || !!(window as any).photonboard?.stage?.open
+const _ua = typeof navigator !== 'undefined' ? navigator.userAgent.toLowerCase() : ''
+// The Electron renderer always has "Electron/x.y" in its user agent; the remote
+// bridge (which also defines window.photonboard) never does — import order safe.
+const _isElectron = isElectronRuntime()
 
 /** True on phones (small screen, no room for full app) */
 export function isPhone(): boolean {
@@ -43,6 +48,46 @@ function getDefaultTab(): ViewTab {
 
 export type ViewTab = 'faders' | 'patch' | 'fixtures' | 'playback' | 'effects' | 'midi' | 'stage' | 'visualizer' | 'stage-layout' | 'follow' | 'settings' | 'live'
 
+/** Control sizing: 'compact' for mouse/trackpad, 'touch' for fingers (>= 44px targets) */
+export type Density = 'compact' | 'touch'
+export type DensityPreference = 'auto' | Density
+export type StatusType = 'info' | 'success' | 'warning' | 'error'
+
+// ---- Per-viewer UI preferences (localStorage can be unavailable: never required) ----
+
+const PREF_PREFIX = 'photonboard.ui.'
+
+function readPref<T extends string | boolean>(key: string, fallback: T, allowed?: readonly T[]): T {
+  try {
+    const raw = window.localStorage.getItem(PREF_PREFIX + key)
+    if (raw === null) return fallback
+    const value = (typeof fallback === 'boolean' ? raw === 'true' : raw) as T
+    return allowed && !allowed.includes(value) ? fallback : value
+  } catch {
+    return fallback
+  }
+}
+
+function writePref(key: string, value: string | boolean): void {
+  try { window.localStorage.setItem(PREF_PREFIX + key, String(value)) } catch { /* ignore */ }
+}
+
+/** Auto density: touch on coarse-pointer devices and on the Pi (kiosk touchscreen). */
+export function detectAutoDensity(): Density {
+  try {
+    if (window.matchMedia('(pointer: coarse)').matches) return 'touch'
+  } catch { /* very old browser */ }
+  const arch = `${navigator.platform} ${navigator.userAgent}`.toLowerCase()
+  if (_isElectron && /aarch64|arm64|armv\d/.test(arch) && arch.includes('linux')) return 'touch'
+  return 'compact'
+}
+
+function resolveDensity(pref: DensityPreference): Density {
+  return pref === 'auto' ? detectAutoDensity() : pref
+}
+
+const initialDensityPreference = readPref<DensityPreference>('density', 'auto', ['auto', 'compact', 'touch'])
+
 interface UiState {
   activeTab: ViewTab
   showName: string
@@ -50,15 +95,19 @@ interface UiState {
   selectedUniverse: number
   // Stage mode (browser only): show full-screen stage view
   stageMode: boolean
-  // Bottom panel
-  bottomPanelTab: 'cuelists' | 'chases' | 'presets'
-  bottomPanelOpen: boolean
-  // Modals
-  activeModal: string | null
-  modalData: any
-  // Status toast
+  /** Density chosen in Settings ('auto' follows the device) */
+  densityPreference: DensityPreference
+  /** Density in effect (also set as data-density on <html>) */
+  density: Density
+  /** Left fixture sidebar visible */
+  sidebarOpen: boolean
+  /** Bottom executor bar visible */
+  executorBarOpen: boolean
+  /** Keyboard shortcut cheat sheet open */
+  shortcutsOpen: boolean
+  // Last status message (also shown as a toast)
   statusMessage: string | null
-  statusType: 'info' | 'success' | 'error'
+  statusType: StatusType
   // Navigation data (e.g. open Scenes tab with a specific cuelist selected)
   pendingCuelistId: string | null
 
@@ -69,24 +118,35 @@ interface UiState {
   setDirty: (dirty: boolean) => void
   setSelectedUniverse: (u: number) => void
   setStageMode: (on: boolean) => void
-  setBottomPanelTab: (tab: 'cuelists' | 'chases' | 'presets') => void
-  toggleBottomPanel: () => void
-  openModal: (modal: string, data?: any) => void
-  closeModal: () => void
-  showStatus: (message: string, type?: 'info' | 'success' | 'error', duration?: number) => void
+  setDensityPreference: (pref: DensityPreference) => void
+  /** Re-evaluate 'auto' density (pointer type changed) */
+  refreshDensity: () => void
+  toggleSidebar: (open?: boolean) => void
+  toggleExecutorBar: (open?: boolean) => void
+  setShortcutsOpen: (open: boolean) => void
+  /** Show a status message as a toast; duration 0 = until replaced. A newer message is never cleared by an older timer. */
+  showStatus: (message: string, type?: StatusType, duration?: number) => void
+  clearStatus: () => void
 }
 
-export const useUiStore = create<UiState>((set) => ({
+let statusToken = 0
+let statusTimer: ReturnType<typeof setTimeout> | null = null
+/** Status messages share one toast slot: each replaces the previous one */
+const STATUS_TOAST_ID = 'status'
+
+export const useUiStore = create<UiState>((set, get) => ({
   activeTab: getDefaultTab(),
   // Phone/tablet: start in stage mode. Desktop browser: start in app mode.
   stageMode: !_isElectron && (isPhone() || isTablet()),
   showName: 'New Show',
   isDirty: false,
   selectedUniverse: 0,
-  bottomPanelTab: 'cuelists',
-  bottomPanelOpen: true,
-  activeModal: null,
-  modalData: null,
+  densityPreference: initialDensityPreference,
+  density: resolveDensity(initialDensityPreference),
+  // Narrow screens (tablets) start with the fixture list hidden
+  sidebarOpen: readPref('sidebarOpen', window.innerWidth >= 1280),
+  executorBarOpen: readPref('executorBarOpen', true),
+  shortcutsOpen: false,
   statusMessage: null,
   statusType: 'info',
   pendingCuelistId: null,
@@ -97,14 +157,65 @@ export const useUiStore = create<UiState>((set) => ({
   setShowName: (name) => set({ showName: name }),
   setDirty: (dirty) => set({ isDirty: dirty }),
   setSelectedUniverse: (u) => set({ selectedUniverse: u }),
-  setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
-  toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
-  openModal: (modal, data = null) => set({ activeModal: modal, modalData: data }),
-  closeModal: () => set({ activeModal: null, modalData: null }),
+  setDensityPreference: (pref) => {
+    writePref('density', pref)
+    set({ densityPreference: pref, density: resolveDensity(pref) })
+  },
+  refreshDensity: () => {
+    const density = resolveDensity(get().densityPreference)
+    if (density !== get().density) set({ density })
+  },
+  toggleSidebar: (open) => {
+    const sidebarOpen = open ?? !get().sidebarOpen
+    writePref('sidebarOpen', sidebarOpen)
+    set({ sidebarOpen })
+  },
+  toggleExecutorBar: (open) => {
+    const executorBarOpen = open ?? !get().executorBarOpen
+    writePref('executorBarOpen', executorBarOpen)
+    set({ executorBarOpen })
+  },
+  setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
   showStatus: (message, type = 'info', duration = 3000) => {
-    set({ statusMessage: message, statusType: type })
-    if (duration > 0) {
-      setTimeout(() => set({ statusMessage: null }), duration)
+    const token = ++statusToken
+    if (statusTimer) {
+      clearTimeout(statusTimer)
+      statusTimer = null
     }
+    set({ statusMessage: message, statusType: type })
+    showToast(type, message, { id: STATUS_TOAST_ID, duration })
+    if (duration > 0) {
+      statusTimer = setTimeout(() => {
+        statusTimer = null
+        if (token === statusToken) set({ statusMessage: null })
+      }, duration)
+    }
+  },
+
+  clearStatus: () => {
+    statusToken++
+    if (statusTimer) {
+      clearTimeout(statusTimer)
+      statusTimer = null
+    }
+    set({ statusMessage: null })
+    dismissToast(STATUS_TOAST_ID)
   }
 }))
+
+// ---- Selector hooks ----
+
+/** Status toast (message + type). */
+export function useStatus() {
+  return useUiStore(useShallow((s) => ({ message: s.statusMessage, type: s.statusType })))
+}
+
+/** Density in effect ('compact' | 'touch') — for JS sizing; CSS uses the --pb-* variables. */
+export function useDensity(): Density {
+  return useUiStore((s) => s.density)
+}
+
+/** Show name + unsaved-changes flag. */
+export function useShowTitle() {
+  return useUiStore(useShallow((s) => ({ showName: s.showName, isDirty: s.isDirty })))
+}

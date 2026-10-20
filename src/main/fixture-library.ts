@@ -1730,6 +1730,6 @@ export const BUILTIN_FIXTURES: FixtureDefinition[] = [
       { name: '4ch', channels: ['Red', 'Green', 'Blue', 'White'], channelCount: 4 },
       { name: '8ch', channels: ['Dimmer', 'Red', 'Green', 'Blue', 'White', 'Strobe', 'Program', 'Speed'], channelCount: 8 }
     ],
-    physical: { lens: { degreesMinMax: [24, 24] }, power: 54, dimensions: { width: 400, height: 60, depth: 60 }, weight: 0.6 }
+    physical: { lens: { degreesMinMax: [24, 24] }, power: 54, dimensions: [400, 60, 60], weight: 0.6 }
   },
 ]

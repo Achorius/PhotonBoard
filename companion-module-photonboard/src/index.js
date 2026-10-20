@@ -1,9 +1,19 @@
 import { InstanceBase, InstanceStatus, runEntrypoint } from '@companion-module/base'
 import WebSocket from 'ws'
+import { COMMANDS, isCommand } from './commands.js'
+
+/** Close code PhotonBoard uses for a missing/wrong access PIN */
+const CLOSE_AUTH_FAILED = 4401
+const RECONNECT_MS = 5000
+/** After a PIN refusal, retry slowly (PhotonBoard locks out repeated wrong PINs) */
+const RECONNECT_AFTER_AUTH_FAIL_MS = 30000
 
 class PhotonBoardInstance extends InstanceBase {
   ws = null
   reconnectTimer = null
+  /** Signatures used to rebuild variables/presets only when scenes change */
+  sceneVarCount = -1
+  presetSignature = null
   state = {
     grandMaster: 255,
     blackout: false,
@@ -21,6 +31,7 @@ class PhotonBoardInstance extends InstanceBase {
     this.setupActions()
     this.setupFeedbacks()
     this.setupVariables()
+    this.setupPresets() // control presets are available before the first state arrives
     this.connect()
   }
 
@@ -58,6 +69,13 @@ class PhotonBoardInstance extends InstanceBase {
         default: 9090,
         min: 1,
         max: 65535
+      },
+      {
+        type: 'textinput',
+        id: 'pin',
+        label: 'Access PIN (only if remote access PIN is enabled in PhotonBoard)',
+        width: 6,
+        default: ''
       }
     ]
   }
@@ -67,46 +85,71 @@ class PhotonBoardInstance extends InstanceBase {
   connect() {
     const host = this.config?.host || '127.0.0.1'
     const port = this.config?.port || 9090
+    const pin = (this.config?.pin || '').trim()
 
     this.updateStatus(InstanceStatus.Connecting)
     this.log('info', `Connecting to PhotonBoard at ${host}:${port}`)
 
+    let ws
     try {
-      this.ws = new WebSocket(`ws://${host}:${port}`)
-
-      this.ws.on('open', () => {
-        this.updateStatus(InstanceStatus.Ok)
-        this.log('info', 'Connected to PhotonBoard')
-      })
-
-      this.ws.on('message', (raw) => {
-        try {
-          const msg = JSON.parse(raw.toString())
-          if (msg.type === 'state') {
-            this.handleState(msg.data)
-          } else if (msg.type === 'commands') {
-            this.log('debug', `Available commands: ${msg.list.join(', ')}`)
-          }
-        } catch (e) {
-          this.log('warn', `Invalid message: ${e.message}`)
-        }
-      })
-
-      this.ws.on('close', () => {
-        this.updateStatus(InstanceStatus.Disconnected)
-        this.log('info', 'Disconnected from PhotonBoard')
-        this.scheduleReconnect()
-      })
-
-      this.ws.on('error', (err) => {
-        this.log('error', `WebSocket error: ${err.message}`)
-        this.updateStatus(InstanceStatus.ConnectionFailure)
-      })
+      ws = new WebSocket(`ws://${host}:${port}`)
     } catch (e) {
       this.log('error', `Connection failed: ${e.message}`)
       this.updateStatus(InstanceStatus.ConnectionFailure)
-      this.scheduleReconnect()
+      this.scheduleReconnect(RECONNECT_MS)
+      return
     }
+    this.ws = ws
+
+    ws.on('open', () => {
+      // Authenticate first when a PIN is configured (ignored by PhotonBoard when no PIN is set)
+      if (pin) ws.send(JSON.stringify({ type: 'auth', pin }))
+    })
+
+    ws.on('message', (raw) => {
+      let msg
+      try {
+        msg = JSON.parse(raw.toString())
+      } catch (e) {
+        this.log('warn', `Invalid message: ${e.message}`)
+        return
+      }
+      if (msg.type === 'auth-ok') {
+        this.updateStatus(InstanceStatus.Ok)
+        this.log('info', 'Connected to PhotonBoard')
+      } else if (msg.type === 'auth-required') {
+        if (!pin) {
+          this.updateStatus(InstanceStatus.BadConfig, 'PhotonBoard requires an access PIN')
+          this.log('error', 'PhotonBoard requires an access PIN — enter it in the module configuration')
+        }
+      } else if (msg.type === 'state') {
+        this.handleState(msg.data)
+      } else if (msg.type === 'commands') {
+        // Older PhotonBoard builds send no auth-ok: being told the commands means we are in
+        this.updateStatus(InstanceStatus.Ok)
+        const missing = COMMANDS.filter((c) => !msg.list?.includes(c))
+        if (missing.length) this.log('debug', `PhotonBoard does not support: ${missing.join(', ')}`)
+      }
+    })
+
+    ws.on('close', (code) => {
+      if (this.ws !== ws) return
+      this.ws = null
+      if (code === CLOSE_AUTH_FAILED) {
+        this.updateStatus(InstanceStatus.BadConfig, 'Wrong or missing access PIN')
+        this.log('error', 'PhotonBoard refused the access PIN')
+        this.scheduleReconnect(RECONNECT_AFTER_AUTH_FAIL_MS)
+        return
+      }
+      this.updateStatus(InstanceStatus.Disconnected)
+      this.log('info', 'Disconnected from PhotonBoard')
+      this.scheduleReconnect(RECONNECT_MS)
+    })
+
+    ws.on('error', (err) => {
+      this.log('error', `WebSocket error: ${err.message}`)
+      this.updateStatus(InstanceStatus.ConnectionFailure)
+    })
   }
 
   disconnect() {
@@ -114,22 +157,34 @@ class PhotonBoardInstance extends InstanceBase {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    if (this.ws) {
-      this.ws.removeAllListeners()
-      this.ws.close()
-      this.ws = null
+    const ws = this.ws
+    this.ws = null
+    if (ws) {
+      ws.removeAllListeners()
+      // Closing a socket that is still connecting emits 'error': without a
+      // listener that would crash the module process.
+      ws.on('error', () => {})
+      try {
+        ws.terminate()
+      } catch (e) {
+        // already closed
+      }
     }
   }
 
-  scheduleReconnect() {
+  scheduleReconnect(delay = RECONNECT_MS) {
     if (this.reconnectTimer) return
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.connect()
-    }, 5000)
+    }, delay)
   }
 
   sendCommand(type, payload) {
+    if (!isCommand(type)) {
+      this.log('warn', `Unknown PhotonBoard command: ${type}`)
+      return
+    }
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: 'command',
@@ -141,35 +196,43 @@ class PhotonBoardInstance extends InstanceBase {
   // ---- State Handling ----
 
   handleState(data) {
-    const prevCuelistCount = this.state.cuelists.length
-    this.state = data
+    if (!data || typeof data !== 'object') return
+    const cuelists = Array.isArray(data.cuelists) ? data.cuelists : []
+    this.state = { ...data, cuelists }
+
+    // Scene variables must be declared before they are set
+    if (cuelists.length !== this.sceneVarCount) {
+      this.sceneVarCount = cuelists.length
+      this.setupVariables()
+    }
 
     // Update variables
-    this.setVariableValues({
-      grand_master: Math.round((data.grandMaster / 255) * 100),
+    const vars = {
+      grand_master: Math.round(((data.grandMaster ?? 255) / 255) * 100),
       blackout: data.blackout ? 'ON' : 'OFF',
       show_name: data.showName || 'PhotonBoard',
       fixture_count: data.fixtureCount || 0,
-      scene_count: data.cuelists?.length || 0
-    })
-
-    // Update per-scene variables
-    if (data.cuelists) {
-      const sceneVars = {}
-      for (let i = 0; i < data.cuelists.length; i++) {
-        const cl = data.cuelists[i]
-        sceneVars[`scene_${i + 1}_name`] = cl.name
-        sceneVars[`scene_${i + 1}_active`] = cl.isPlaying ? 'ON' : 'OFF'
-        sceneVars[`scene_${i + 1}_fader`] = Math.round((cl.faderLevel / 255) * 100)
-      }
-      this.setVariableValues(sceneVars)
+      scene_count: cuelists.length
     }
+
+    // Per-scene variables
+    for (let i = 0; i < cuelists.length; i++) {
+      const cl = cuelists[i]
+      const n = i + 1
+      vars[`scene_${n}_name`] = cl.name
+      vars[`scene_${n}_active`] = cl.isPlaying ? 'ON' : 'OFF'
+      vars[`scene_${n}_fader`] = Math.round(((cl.faderLevel ?? 255) / 255) * 100)
+      vars[`scene_${n}_cue`] = cl.currentCueName || (cl.cueCount ? `${(cl.currentCueIndex ?? 0) + 1}/${cl.cueCount}` : '')
+    }
+    this.setVariableValues(vars)
 
     // Re-check all feedbacks
     this.checkFeedbacks()
 
-    // Rebuild presets if scene count changed
-    if (data.cuelists?.length !== prevCuelistCount) {
+    // Rebuild presets when scenes are added, removed, reordered or renamed
+    const signature = cuelists.map((cl) => `${cl.id}\u0000${cl.name}`).join('\u0001')
+    if (signature !== this.presetSignature) {
+      this.presetSignature = signature
       this.setupPresets()
     }
   }
@@ -315,6 +378,81 @@ class PhotonBoardInstance extends InstanceBase {
         callback: () => {
           this.sendCommand('toggle-timeline')
         }
+      },
+
+      go_back_scene: {
+        name: 'Go Back Scene',
+        description: 'Step a scene (cuelist) back to its previous cue',
+        options: [
+          {
+            id: 'scene_index',
+            type: 'number',
+            label: 'Scene Number',
+            default: 1,
+            min: 1,
+            max: 999
+          }
+        ],
+        callback: (action) => {
+          const cuelist = this.state.cuelists[action.options.scene_index - 1]
+          if (cuelist) this.sendCommand('go-back-cuelist', cuelist.id)
+        }
+      },
+
+      release_all: {
+        name: 'Release All',
+        description: 'Stop every scene and chase',
+        options: [],
+        callback: () => {
+          this.sendCommand('release-all')
+        }
+      },
+
+      set_blackout: {
+        name: 'Set Blackout',
+        description: 'Force blackout on or off',
+        options: [
+          {
+            id: 'state',
+            type: 'dropdown',
+            label: 'Blackout',
+            default: 'on',
+            choices: [
+              { id: 'on', label: 'On' },
+              { id: 'off', label: 'Off' }
+            ]
+          }
+        ],
+        callback: (action) => {
+          this.sendCommand('set-blackout', action.options.state === 'on')
+        }
+      },
+
+      toggle_blinder: {
+        name: 'Toggle Blinder',
+        description: 'Toggle the blinder (all intensities full)',
+        options: [],
+        callback: () => {
+          this.sendCommand('toggle-blinder')
+        }
+      },
+
+      toggle_strobe: {
+        name: 'Toggle Strobe',
+        description: 'Toggle the global strobe',
+        options: [],
+        callback: () => {
+          this.sendCommand('toggle-strobe')
+        }
+      },
+
+      tap_tempo: {
+        name: 'Tap Tempo',
+        description: 'Tap the tempo of the playing chases',
+        options: [],
+        callback: () => {
+          this.sendCommand('tap-tempo')
+        }
       }
     })
   }
@@ -358,7 +496,35 @@ class PhotonBoardInstance extends InstanceBase {
         },
         options: [],
         callback: () => {
-          return this.state.blackout
+          return !!this.state.blackout
+        }
+      },
+
+      blinder_active: {
+        type: 'boolean',
+        name: 'Blinder Active',
+        description: 'Changes button style while the blinder is on',
+        defaultStyle: {
+          bgcolor: 0xffffff,
+          color: 0x000000
+        },
+        options: [],
+        callback: () => {
+          return !!this.state.blinder
+        }
+      },
+
+      strobe_active: {
+        type: 'boolean',
+        name: 'Strobe Active',
+        description: 'Changes button style while the strobe is on',
+        defaultStyle: {
+          bgcolor: 0xcccc00,
+          color: 0x000000
+        },
+        options: [],
+        callback: () => {
+          return !!this.state.strobe
         }
       },
 
@@ -372,7 +538,7 @@ class PhotonBoardInstance extends InstanceBase {
         },
         options: [],
         callback: () => {
-          return this.state.timelinePlaying
+          return !!this.state.timelinePlaying
         }
       }
     })
@@ -381,13 +547,23 @@ class PhotonBoardInstance extends InstanceBase {
   // ---- Variables ----
 
   setupVariables() {
-    this.setVariableDefinitions([
+    const defs = [
       { variableId: 'grand_master', name: 'Grand Master (%)' },
       { variableId: 'blackout', name: 'Blackout State' },
       { variableId: 'show_name', name: 'Show Name' },
       { variableId: 'fixture_count', name: 'Fixture Count' },
       { variableId: 'scene_count', name: 'Scene Count' }
-    ])
+    ]
+    const count = Math.max(0, this.sceneVarCount)
+    for (let n = 1; n <= count; n++) {
+      defs.push(
+        { variableId: `scene_${n}_name`, name: `Scene ${n} Name` },
+        { variableId: `scene_${n}_active`, name: `Scene ${n} Active (ON/OFF)` },
+        { variableId: `scene_${n}_fader`, name: `Scene ${n} Fader (%)` },
+        { variableId: `scene_${n}_cue`, name: `Scene ${n} Current Cue` }
+      )
+    }
+    this.setVariableDefinitions(defs)
   }
 
   // ---- Presets ----

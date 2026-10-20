@@ -1,6 +1,7 @@
-node_modules/
+node_modules
 out/
 dist/
 .DS_Store
 *.log
 scripts/*.img.gz
+screenshots/

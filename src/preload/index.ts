@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcRendererEvent } from 'electron'
 import { IPC } from '../shared/types'
-import type { ArtNetConfig, DmxOutputConfig, ShowFile } from '../shared/types'
+import type { PhotonBoardAPI, RemoteConnectionState } from '../shared/photonboard-api'
+
+export type { PhotonBoardAPI } from '../shared/photonboard-api'
 
 // Single callback registry — guarantees ONE handler per menu channel
 const menuHandlers: Record<string, () => void> = {}
@@ -13,115 +16,155 @@ for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load']) {
   })
 }
 
-const api = {
+/** Subscribe to a main → renderer channel; returns the unsubscribe function */
+function subscribe<A extends unknown[]>(channel: string, callback: (...args: A) => void): () => void {
+  const listener = (_event: IpcRendererEvent, ...args: unknown[]) => callback(...(args as A))
+  ipcRenderer.on(channel, listener)
+  return () => { ipcRenderer.removeListener(channel, listener) }
+}
+
+const notRemote = (): never => {
+  throw new Error('Only available in the remote web UI')
+}
+
+const api: PhotonBoardAPI = {
   // --- DMX ---
   dmx: {
-    setChannel: (universe: number, channel: number, value: number) =>
+    setChannel: (universe, channel, value) =>
       ipcRenderer.send(IPC.DMX_SET_CHANNEL, universe, channel, value),
-    setChannels: (universe: number, channels: Record<number, number>) =>
+    setChannels: (universe, channels) =>
       ipcRenderer.send(IPC.DMX_SET_CHANNELS, universe, channels),
-    getValues: (universe: number): Promise<number[]> =>
+    getValues: (universe) =>
       ipcRenderer.invoke(IPC.DMX_GET_VALUES, universe),
     blackout: () =>
       ipcRenderer.send(IPC.DMX_BLACKOUT)
   },
 
-  // --- ArtNet ---
+  // --- ArtNet (legacy: replaces only the Art-Net part of the machine config) ---
   artnet: {
-    configure: (configs: ArtNetConfig[]): Promise<boolean> =>
+    configure: (configs) =>
       ipcRenderer.invoke(IPC.ARTNET_CONFIGURE, configs),
-    getStatus: (): Promise<{ connected: boolean; senders: { universe: number; host: string }[] }> =>
+    getStatus: () =>
       ipcRenderer.invoke(IPC.ARTNET_GET_STATUS)
   },
 
-  // --- DMX Outputs (multi-output system) ---
+  // --- DMX Outputs (machine config, owned by main) ---
   dmxOutputs: {
-    configure: (configs: DmxOutputConfig[]): Promise<boolean> =>
-      ipcRenderer.invoke(IPC.DMX_OUTPUTS_CONFIGURE, configs),
-    getStatus: (): Promise<any> =>
+    getConfig: () =>
+      ipcRenderer.invoke(IPC.DMX_OUTPUTS_GET_CONFIG),
+    configure: (config) =>
+      ipcRenderer.invoke(IPC.DMX_OUTPUTS_CONFIGURE, config),
+    getStatus: () =>
       ipcRenderer.invoke(IPC.DMX_OUTPUTS_GET_STATUS),
-    scanUsb: (): Promise<any[]> =>
+    scanUsb: () =>
       ipcRenderer.invoke(IPC.DMX_OUTPUTS_SCAN_USB)
   },
 
   // --- Show ---
+  // Shows cross IPC as JSON text (structured clone has dropped fields of large shows before)
   show: {
-    new: (): Promise<ShowFile> =>
+    new: () =>
       ipcRenderer.invoke(IPC.SHOW_NEW),
-    save: (show: ShowFile): Promise<{ success: boolean; path?: string; error?: string }> =>
-      ipcRenderer.invoke(IPC.SHOW_SAVE, JSON.stringify(show)),
-    load: (): Promise<{ success: boolean; show?: ShowFile; error?: string } | null> =>
+    save: (show, opts) =>
+      ipcRenderer.invoke(IPC.SHOW_SAVE, JSON.stringify(show), opts ?? {}),
+    saveAs: (show, opts) =>
+      ipcRenderer.invoke(IPC.SHOW_SAVE_AS, JSON.stringify(show), opts ?? {}),
+    load: () =>
       ipcRenderer.invoke(IPC.SHOW_LOAD),
-    saveAs: (show: ShowFile): Promise<{ success: boolean; path?: string; error?: string } | null> =>
-      ipcRenderer.invoke(IPC.SHOW_SAVE_AS, JSON.stringify(show)),
-    getRecent: (): Promise<string[]> =>
+    list: () =>
+      ipcRenderer.invoke(IPC.SHOW_LIST),
+    loadByName: (name) =>
+      ipcRenderer.invoke(IPC.SHOW_LOAD_BY_NAME, name),
+    getRecent: () =>
       ipcRenderer.invoke(IPC.SHOW_GET_RECENT),
-    loadLast: (): Promise<{ success: boolean; show?: any; path?: string }> =>
+    loadLast: () =>
       ipcRenderer.invoke(IPC.SHOW_LOAD_LAST),
-    getPath: (): Promise<string | null> =>
+    getPath: () =>
       ipcRenderer.invoke(IPC.SHOW_GET_PATH),
-    reveal: (): Promise<boolean> =>
+    reveal: () =>
       ipcRenderer.invoke(IPC.SHOW_REVEAL),
-    upload: async (_content: string, _filename: string): Promise<{ success: boolean; error?: string }> => {
+    upload: async () => {
       // In Electron desktop mode, use File > Open instead
       return { success: false, error: 'Use File > Open in desktop mode' }
-    }
+    },
+    // The console IS the current show
+    getCurrent: async () => ({ success: false, error: 'Only available in the remote web UI' })
   },
 
   // --- Fixtures ---
   fixtures: {
-    scan: (): Promise<any[]> =>
+    scan: () =>
       ipcRenderer.invoke(IPC.FIXTURES_SCAN),
-    getAll: async (): Promise<any[]> => {
+    getAll: async () => {
       const json = await ipcRenderer.invoke(IPC.FIXTURES_GET_ALL)
       return JSON.parse(json)
     },
-    import: (): Promise<any[] | null> =>
+    import: () =>
       ipcRenderer.invoke(IPC.FIXTURES_IMPORT),
-    oflSearch: (query: string): Promise<any[]> =>
+    oflSearch: (query) =>
       ipcRenderer.invoke(IPC.FIXTURES_OFL_SEARCH, query),
-    oflDownload: (manufacturerKey: string, fixtureKey: string): Promise<any> =>
+    oflDownload: (manufacturerKey, fixtureKey) =>
       ipcRenderer.invoke(IPC.FIXTURES_OFL_DOWNLOAD, manufacturerKey, fixtureKey),
-    save: (fixture: any): Promise<any> =>
+    save: (fixture) =>
       ipcRenderer.invoke(IPC.FIXTURES_SAVE, JSON.stringify(fixture)),
-    delete: (fixtureId: string): Promise<any> =>
+    delete: (fixtureId) =>
       ipcRenderer.invoke(IPC.FIXTURES_DELETE, fixtureId)
   },
 
   // --- Menu event listeners (replaces handler, guarantees single callback) ---
-  onMenuEvent: (channel: string, callback: () => void) => {
+  onMenuEvent: (channel, callback) => {
     menuHandlers[channel] = callback
-    return () => { delete menuHandlers[channel] }
+    return () => {
+      // Only remove if a newer handler has not replaced this one
+      if (menuHandlers[channel] === callback) delete menuHandlers[channel]
+    }
   },
 
   // --- App ---
   app: {
-    getVersion: (): Promise<string> =>
-      ipcRenderer.invoke(IPC.APP_GET_VERSION)
+    getVersion: () =>
+      ipcRenderer.invoke(IPC.APP_GET_VERSION),
+    quit: () =>
+      ipcRenderer.send(IPC.APP_QUIT)
   },
 
   // --- Stage Window ---
   stage: {
     open: () => ipcRenderer.send(IPC.STAGE_OPEN),
     close: () => ipcRenderer.send(IPC.STAGE_CLOSE),
-    sendState: (state: any) => ipcRenderer.send(IPC.STAGE_SYNC, state),
-    onCommand: (callback: (command: any) => void) => {
-      ipcRenderer.on(IPC.STAGE_COMMAND, (_event, command) => callback(command))
-    },
-    onRequestState: (callback: () => void) => {
-      ipcRenderer.on('stage:request-state', () => callback())
-    }
+    sendState: (state) => ipcRenderer.send(IPC.STAGE_SYNC, state),
+    onCommand: (callback) => subscribe(IPC.STAGE_COMMAND, callback),
+    onRequestState: (callback) => subscribe(IPC.STAGE_REQUEST_STATE, () => callback())
   },
 
-  // --- API (WebSocket server for Companion / external controllers) ---
+  // --- API (WebSocket servers for Companion / web remote) ---
   api: {
-    sendState: (state: any) => ipcRenderer.send('api:state', state),
-    onRequestState: (callback: () => void) => {
-      ipcRenderer.on('api:request-state', () => callback())
-    }
+    sendState: (state) => ipcRenderer.send(IPC.API_STATE, state),
+    onRequestState: (callback) => subscribe(IPC.API_REQUEST_STATE, () => callback())
+  },
+
+  // --- Remote access ---
+  // In Electron this IS the console: settings are editable here (and only here);
+  // the browser-only methods are inert.
+  remote: {
+    isRemote: false,
+    getSettings: () =>
+      ipcRenderer.invoke(IPC.REMOTE_GET_SETTINGS),
+    setSettings: (settings) =>
+      ipcRenderer.invoke(IPC.REMOTE_SET_SETTINGS, settings),
+    getStatus: () =>
+      ipcRenderer.invoke(IPC.REMOTE_GET_STATUS),
+    sendCommand: () => { /* only meaningful in the remote web UI */ },
+    onState: () => () => {},
+    authenticate: async () => notRemote(),
+    onConnectionChange: (callback: (state: RemoteConnectionState) => void) => {
+      callback('open')
+      return () => {}
+    },
+    getConnectionState: () => 'open',
+    // Large shows cross IPC as JSON text (see show.save)
+    replyToMain: (requestId, data) => ipcRenderer.send(IPC.CONSOLE_REPLY, requestId, JSON.stringify(data ?? null))
   }
 }
 
 contextBridge.exposeInMainWorld('photonboard', api)
-
-export type PhotonBoardAPI = typeof api

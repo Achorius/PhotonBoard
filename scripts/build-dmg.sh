@@ -1,90 +1,143 @@
-#!/bin/bash
-# Build PhotonBoard DMGs with ad-hoc signing + LISEZMOI.txt
-set -e
+#!/usr/bin/env bash
+# ============================================================
+# PhotonBoard — macOS DMG builder (ad-hoc signing + LISEZMOI.txt)
+#
+# Usage: scripts/build-dmg.sh [--arch arm64|x64|both] [--skip-build] [-h]
+#
+#   1. electron-vite build (npm run build) -> fresh out/ bundles
+#   2. electron-builder --mac --dir         -> dist/mac*/PhotonBoard.app
+#      (stale .app bundles and DMGs are deleted first, so a failed build can
+#      never be packaged from old files)
+#   3. ad-hoc codesign each .app (avoids the "damaged app" error on other Macs)
+#   4. hdiutil -> dist/PhotonBoard-<version>-<arch>.dmg (app + /Applications
+#      link + LISEZMOI.txt)
+#
+# Any failing step stops the script with a non-zero exit code.
+# ============================================================
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-DIST_DIR="$PROJECT_DIR/dist"
-README_SRC="$PROJECT_DIR/resources/LISEZMOI.txt"
-VERSION=$(node -p "require('$PROJECT_DIR/package.json').version")
+set -euo pipefail
 
-echo "=== PhotonBoard DMG Builder v${VERSION} ==="
-echo ""
+PROG=${0##*/}
+TAG=DMG
 
-# Step 1: Build the app with electron-builder (creates .app bundles only)
-echo "[1/4] Building app bundles..."
-cd "$PROJECT_DIR"
-npx electron-builder --mac --dir --arm64 --x64 2>&1 | grep -E "^  •|✓|error" || true
-
-# Step 2: Ad-hoc code sign both apps (fixes "damaged" error on other Macs)
-echo ""
-echo "[2/4] Ad-hoc signing apps..."
-
-sign_app() {
-  local APP_PATH="$1"
-  local LABEL="$2"
-  if [ -d "$APP_PATH" ]; then
-    # Remove any existing quarantine attributes
-    xattr -cr "$APP_PATH" 2>/dev/null || true
-    # Sign all frameworks and helpers first, then the app itself
-    codesign --force --deep --sign - "$APP_PATH" 2>&1
-    echo "  ✓ Signed $LABEL"
+_say() { # _say FD COLOUR MESSAGE...
+  local fd=$1 colour=$2
+  shift 2
+  if [[ -t $fd ]]; then
+    printf '\033[%sm[%s]\033[0m %s\n' "$colour" "$TAG" "$*" >&"$fd"
   else
-    echo "  ✗ $LABEL not found"
+    printf '[%s] %s\n' "$TAG" "$*" >&"$fd"
   fi
 }
+info()  { _say 1 '0;32' "$@"; }
+warn()  { _say 2 '1;33' "WARNING: $*"; }
+error() { _say 2 '0;31' "ERROR: $*"; }
+die()   { error "$@"; exit 1; }
 
-sign_app "$DIST_DIR/mac-arm64/PhotonBoard.app" "arm64"
-sign_app "$DIST_DIR/mac/PhotonBoard.app" "x64"
+usage() {
+  cat <<EOF
+Usage: $PROG [--arch arm64|x64|both] [--skip-build] [-h]
 
-# Step 3: Create arm64 DMG
-echo ""
-echo "[3/4] Creating arm64 DMG..."
-ARM64_APP="$DIST_DIR/mac-arm64/PhotonBoard.app"
-ARM64_DMG="$DIST_DIR/PhotonBoard-${VERSION}-arm64.dmg"
+  --arch ARCH    Architecture(s) to build (default: both)
+  --skip-build   Do not run 'npm run build' (use the current out/ bundles)
+  -h, --help     Show this help
 
-if [ -d "$ARM64_APP" ]; then
-  rm -f "$ARM64_DMG"
-  TMPDIR_ARM=$(mktemp -d)
-  cp -R "$ARM64_APP" "$TMPDIR_ARM/"
-  ln -s /Applications "$TMPDIR_ARM/Applications"
-  cp "$README_SRC" "$TMPDIR_ARM/LISEZMOI.txt"
+Run from anywhere on macOS; output goes to <repo>/dist/.
+EOF
+}
 
-  hdiutil create -volname "PhotonBoard" \
-    -srcfolder "$TMPDIR_ARM" \
-    -ov -format UDZO \
-    "$ARM64_DMG"
+ARCHES=(arm64 x64)
+SKIP_BUILD=0
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --arch)
+      [[ $# -ge 2 ]] || die "--arch needs a value"
+      case $2 in
+        arm64|x64) ARCHES=("$2") ;;
+        both)      ARCHES=(arm64 x64) ;;
+        *)         die "Unknown --arch '$2' (arm64, x64 or both)" ;;
+      esac
+      shift 2 ;;
+    --skip-build) SKIP_BUILD=1; shift ;;
+    -h|--help)    usage; exit 0 ;;
+    *)            error "Unknown option: $1"; usage >&2; exit 1 ;;
+  esac
+done
 
-  rm -rf "$TMPDIR_ARM"
-  echo "  ✓ $(basename "$ARM64_DMG") ($(du -h "$ARM64_DMG" | cut -f1))"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+PROJECT_DIR=$(dirname "$SCRIPT_DIR")
+DIST_DIR="$PROJECT_DIR/dist"
+README_SRC="$PROJECT_DIR/resources/LISEZMOI.txt"
+
+# ---------------------------------------------------------------- checks
+[[ $(uname -s) == Darwin ]] || die "DMGs can only be built on macOS (hdiutil/codesign)."
+for cmd in node npm npx codesign hdiutil xattr; do
+  command -v "$cmd" >/dev/null 2>&1 || die "'$cmd' not found (install Node.js / Xcode command line tools)."
+done
+[[ -f $README_SRC ]] || die "Missing $README_SRC"
+[[ -d $PROJECT_DIR/node_modules ]] || die "node_modules missing: run 'npm ci' in $PROJECT_DIR first."
+VERSION=$(node -p 'require(process.argv[1]).version' "$PROJECT_DIR/package.json")
+[[ -n $VERSION ]] || die "Could not read the version from package.json"
+
+STAGING=""
+cleanup() { [[ -z $STAGING ]] || rm -rf "$STAGING"; }
+trap cleanup EXIT
+
+app_dir() { # app_dir ARCH -> electron-builder's --dir output for that arch
+  case $1 in
+    arm64) printf '%s\n' "$DIST_DIR/mac-arm64/PhotonBoard.app" ;;
+    x64)   printf '%s\n' "$DIST_DIR/mac/PhotonBoard.app" ;;
+  esac
+}
+
+info "PhotonBoard DMG builder v$VERSION (${ARCHES[*]})"
+cd "$PROJECT_DIR"
+
+# ---------------------------------------------------------------- 1. bundles
+if (( SKIP_BUILD )); then
+  warn "--skip-build: packaging the existing out/ bundles."
 else
-  echo "  ✗ arm64 app not found, skipping"
+  info "[1/4] Building bundles (electron-vite)..."
+  npm run build
 fi
+[[ -f $PROJECT_DIR/out/main/index.js ]] || die "out/main/index.js missing: the electron-vite build did not produce the bundles."
 
-# Step 4: Create x64 DMG
-echo ""
-echo "[4/4] Creating x64 DMG..."
-X64_APP="$DIST_DIR/mac/PhotonBoard.app"
-X64_DMG="$DIST_DIR/PhotonBoard-${VERSION}-x64.dmg"
+# ---------------------------------------------------------------- 2. .app
+info "[2/4] Building app bundles (electron-builder)..."
+for arch in "${ARCHES[@]}"; do
+  rm -rf "$(dirname "$(app_dir "$arch")")"
+  rm -f "$DIST_DIR/PhotonBoard-${VERSION}-${arch}.dmg"
+done
+builder_args=(--mac --dir)
+for arch in "${ARCHES[@]}"; do builder_args+=("--$arch"); done
+# No automatic identity lookup: we sign ad hoc ourselves below.
+CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder "${builder_args[@]}"
 
-if [ -d "$X64_APP" ]; then
-  rm -f "$X64_DMG"
-  TMPDIR_X64=$(mktemp -d)
-  cp -R "$X64_APP" "$TMPDIR_X64/"
-  ln -s /Applications "$TMPDIR_X64/Applications"
-  cp "$README_SRC" "$TMPDIR_X64/LISEZMOI.txt"
+# ---------------------------------------------------------------- 3. sign
+info "[3/4] Ad-hoc signing..."
+for arch in "${ARCHES[@]}"; do
+  app=$(app_dir "$arch")
+  [[ -d $app ]] || die "$app was not produced by electron-builder."
+  xattr -cr "$app"
+  codesign --force --deep --sign - "$app"
+  codesign --verify --deep --strict "$app" || die "Signature verification failed for $app"
+  info "  signed $arch"
+done
 
-  hdiutil create -volname "PhotonBoard" \
-    -srcfolder "$TMPDIR_X64" \
-    -ov -format UDZO \
-    "$X64_DMG"
+# ---------------------------------------------------------------- 4. DMG
+info "[4/4] Creating DMGs..."
+for arch in "${ARCHES[@]}"; do
+  app=$(app_dir "$arch")
+  dmg="$DIST_DIR/PhotonBoard-${VERSION}-${arch}.dmg"
+  STAGING=$(mktemp -d "${TMPDIR:-/tmp}/pb-dmg.XXXXXX")
+  cp -R "$app" "$STAGING/"
+  ln -s /Applications "$STAGING/Applications"
+  cp "$README_SRC" "$STAGING/LISEZMOI.txt"
+  hdiutil create -volname "PhotonBoard" -srcfolder "$STAGING" -ov -format UDZO "$dmg"
+  rm -rf "$STAGING"
+  STAGING=""
+  info "  $(basename "$dmg") ($(du -h "$dmg" | cut -f1))"
+done
 
-  rm -rf "$TMPDIR_X64"
-  echo "  ✓ $(basename "$X64_DMG") ($(du -h "$X64_DMG" | cut -f1))"
-else
-  echo "  ✗ x64 app not found, skipping"
-fi
-
-echo ""
-echo "=== Done! DMGs in dist/ ==="
-ls -lh "$DIST_DIR"/*.dmg 2>/dev/null || echo "No DMGs found"
+info "Done. DMGs in $DIST_DIR:"
+ls -lh "$DIST_DIR"/PhotonBoard-"$VERSION"-*.dmg

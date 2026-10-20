@@ -1,380 +1,360 @@
+// ============================================================
+// Three.js objects for one patched fixture.
+//
+// Geometries come from a shared cache (one copy per shape for the whole
+// rig); each fixture owns only its materials, so removing a fixture
+// disposes its materials and leaves the cache alone.
+//
+// Local frame: the group origin is the hanging point; at rest the beam
+// leaves `emitter` along its local -Y (straight down for a ceiling mount).
+// ============================================================
+
 import * as THREE from 'three'
-import type { FixtureShape } from '@shared/types'
+import { palette, withAlpha } from '@renderer/components/ui/tokens'
+import { getGlowTexture, getOpenBeamTexture } from '@renderer/lib/gobo-textures'
+import { createBeamMaterial, createPoolMaterial } from './shaders'
+import type { FixtureSpec } from './layout-math'
+import { disposeObject } from './dispose'
 
-const BODY_COLOR = 0x6a6a8a  // brighter for visibility (was 0x3a3a55)
-const SELECTED_COLOR = 0xe85d04
-const LENS_COLOR = 0x222244
+/** Geometry cache shared by every fixture of one engine */
+export class GeometryCache {
+  private map = new Map<string, THREE.BufferGeometry>()
 
-/** All Three.js objects belonging to one patched fixture */
-export interface FixtureObjects {
-  /** Root group — position this in the scene */
-  group: THREE.Group
-  /** The fixture housing mesh (recoloured on selection) */
-  bodyMesh: THREE.Mesh
-  /** For moving heads: the yoke sub-group that rotates on pan */
-  yokeGroup: THREE.Group | null
-  /** For moving heads: the head sub-group that rotates on tilt */
-  headGroup: THREE.Group | null
-  /** Beam cone mesh — additive transparent cone */
-  coneMesh: THREE.Mesh
-  /** Haze disc inside beam for atmospheric effect */
-  hazeMesh: THREE.Mesh | null
-  /** Actual Three.js SpotLight for illuminating surfaces */
-  spotLight: THREE.SpotLight
-  spotTarget: THREE.Object3D
-  /** Lens flare disc at the aperture */
-  lensMesh: THREE.Mesh
-  shape: FixtureShape
-  /** For multi-cell fixtures: per-cell lens meshes for individual color */
-  cellLenses?: THREE.Mesh[]
-  /** For multi-cell fixtures: per-cell cone meshes */
-  cellCones?: THREE.Mesh[]
-}
-
-const bodyMaterial = () =>
-  new THREE.MeshBasicMaterial({ color: BODY_COLOR })
-
-/**
- * Volumetric beam shader — gradient falloff along beam + Fresnel edge softness.
- * Replaces the flat-opacity MeshBasicMaterial for realistic QLC+-style beams.
- */
-const BEAM_VERTEX = /* glsl */ `
-varying vec2 vUv;
-varying vec3 vNormal;
-varying vec3 vViewDir;
-
-void main() {
-  vUv = uv;
-  vNormal = normalize(normalMatrix * normal);
-  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-  vViewDir = normalize(-mvPos.xyz);
-  gl_Position = projectionMatrix * mvPos;
-}
-`
-
-const BEAM_FRAGMENT = /* glsl */ `
-uniform vec3 uColor;
-uniform float uOpacity;
-uniform float uGoboIndex;
-uniform float uGoboRotation;
-varying vec2 vUv;
-varying vec3 vNormal;
-varying vec3 vViewDir;
-
-// Procedural gobo pattern on cone surface.
-// The cone surface is the SHELL of the beam — every fragment is at the beam edge.
-// 'angle' is the angular position around the beam (0–2π from vUv.x).
-// For patterns that need radial info, we fake an interior view by treating
-// the cone surface as a 2D projection of the gobo disc.
-// Returns 0.0 (blocked) to 1.0 (open).
-float goboPattern(float idx, float angle, float t) {
-  // Convert to 2D cartesian on unit disc for patterns that need it
-  // Use vUv.x as angle, and a fixed radius of ~0.7 to represent beam edge view
-  float px = cos(angle);
-  float py = sin(angle);
-
-  // Gobo 1: Radial stripes (6 segments) — classic slot pattern
-  if (idx < 1.5) {
-    float seg = sin(6.0 * angle);
-    return smoothstep(-0.1, 0.2, seg);
-  }
-  // Gobo 2: Three-segment (tri pattern)
-  if (idx < 2.5) {
-    float seg = sin(3.0 * angle);
-    return smoothstep(-0.05, 0.3, seg);
-  }
-  // Gobo 3: 4-point star — four bright lobes
-  if (idx < 3.5) {
-    float star = cos(4.0 * angle);
-    return smoothstep(-0.1, 0.3, star);
-  }
-  // Gobo 4: Spiral (3 arms winding along beam)
-  if (idx < 4.5) {
-    float spiral = sin(3.0 * angle - t * 12.0);
-    return smoothstep(-0.15, 0.25, spiral);
-  }
-  // Gobo 5: 8 radial lines (narrow bright spokes)
-  if (idx < 5.5) {
-    float seg = cos(8.0 * angle);
-    return smoothstep(0.2, 0.5, seg);
-  }
-  // Gobo 6: Alternating bands (angular checkerboard effect)
-  if (idx < 6.5) {
-    float ang = sin(5.0 * angle);
-    float axial = sin(t * 15.0);
-    float checker = ang * axial;
-    return smoothstep(-0.1, 0.2, checker);
-  }
-  // Gobo 7: Broken segments with gaps
-  if (idx < 7.5) {
-    float seg = sin(4.0 * angle);
-    float gap = smoothstep(0.8, 0.9, abs(cos(2.0 * angle)));
-    return smoothstep(-0.1, 0.3, seg) * (1.0 - gap);
-  }
-  return 1.0;
-}
-
-void main() {
-  // vUv.y = 1.0 at fixture lens (cone tip), 0.0 at far end (cone base)
-  float t = 1.0 - vUv.y; // 0 = fixture, 1 = far end
-
-  // Exponential decay along beam length — bright near source, fades out
-  float axialFade = exp(-t * 3.0);
-
-  // Soft cutoff before the very end to avoid hard circular edge
-  float endFade = smoothstep(1.0, 0.75, t);
-
-  // Fresnel edge softness — makes beam edges translucent, center brighter
-  float fresnel = abs(dot(normalize(vNormal), normalize(vViewDir)));
-  float edgeSoft = pow(fresnel, 0.6);
-
-  // Gobo pattern — procedural generation on cone surface
-  float goboAlpha = 1.0;
-  if (uGoboIndex > 0.5) {
-    float angle = vUv.x * 6.28318 + uGoboRotation;
-    float pattern = goboPattern(uGoboIndex, angle, t);
-    // Strong contrast: blocked areas go very dark, open areas stay full
-    goboAlpha = mix(0.02, 1.0, pattern);
-    // Near the lens tip, blend to uniform (pattern too small to resolve)
-    goboAlpha = mix(1.0, goboAlpha, smoothstep(0.0, 0.08, t));
-    // Softer Fresnel when gobo active so pattern shows better at grazing angles
-    edgeSoft = pow(fresnel, 0.35);
-  }
-
-  float alpha = uOpacity * axialFade * endFade * edgeSoft * goboAlpha;
-
-  gl_FragColor = vec4(uColor, alpha);
-}
-`
-
-const coneMaterial = () =>
-  new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: new THREE.Color(1, 1, 1) },
-      uOpacity: { value: 0.0 },
-      uGoboIndex: { value: 0.0 },
-      uGoboRotation: { value: 0.0 }
-    },
-    vertexShader: BEAM_VERTEX,
-    fragmentShader: BEAM_FRAGMENT,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide
-  })
-
-const lensMaterial = () =>
-  new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0.5, 0.5, 0.65),
-    transparent: true,
-    opacity: 0.5,   // standby glow visible immediately (was 0.0)
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  })
-
-const hazeMaterial = () =>
-  new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.0,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  })
-
-/**
- * Create all Three.js objects for one fixture.
- * The root group should be positioned and oriented by the caller.
- * By default, the fixture points downward (beam along -Y).
- */
-export function createFixtureObjects(shape: FixtureShape, beamAngle = 25, fixtureY?: number, roomDiagonal?: number, cellCount = 1): FixtureObjects {
-  const group = new THREE.Group()
-  const beamAngleRad = THREE.MathUtils.degToRad(Math.min(beamAngle, 60))
-  // Cone height = room diagonal so beams can reach any corner even when tilted
-  const coneHeight = Math.max(6, roomDiagonal ?? 30)
-  const coneRadius = Math.tan(beamAngleRad / 2) * coneHeight
-
-  let bodyMesh: THREE.Mesh
-  let yokeGroup: THREE.Group | null = null
-  let headGroup: THREE.Group | null = null
-  let coneMesh: THREE.Mesh
-  let hazeMesh: THREE.Mesh | null = null
-  let lensMesh: THREE.Mesh
-  let cellLenses: THREE.Mesh[] | undefined
-  let cellCones: THREE.Mesh[] | undefined
-
-  if (shape === 'moving-head') {
-    // --- Moving Head ---
-    // Yoke (pan pivot)
-    yokeGroup = new THREE.Group()
-    group.add(yokeGroup)
-
-    // Head (tilt pivot, child of yoke)
-    headGroup = new THREE.Group()
-    yokeGroup.add(headGroup)
-
-    // Body (housing that stays at top)
-    const baseGeo = new THREE.BoxGeometry(0.28, 0.14, 0.22)
-    bodyMesh = new THREE.Mesh(baseGeo, bodyMaterial())
-    bodyMesh.position.y = 0.07
-    group.add(bodyMesh)
-
-    // Yoke arms
-    const armGeo = new THREE.BoxGeometry(0.04, 0.28, 0.04)
-    const armMat = bodyMaterial()
-    const armL = new THREE.Mesh(armGeo, armMat)
-    armL.position.set(-0.16, -0.14, 0)
-    group.add(armL)
-    const armR = armL.clone()
-    armR.position.x = 0.16
-    group.add(armR)
-
-    // Head drum
-    const headDrumGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.18, 12)
-    const headDrum = new THREE.Mesh(headDrumGeo, bodyMaterial())
-    headDrum.rotation.x = Math.PI / 2
-    headGroup.add(headDrum)
-
-    // Lens
-    const lensGeo = new THREE.CircleGeometry(0.10, 16)
-    lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
-    lensMesh.position.z = -0.09 // front of head drum
-    lensMesh.rotation.y = Math.PI
-    headGroup.add(lensMesh)
-
-    // Beam cone (child of head, pointing toward -Z in local space)
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 48, 1, true)
-    coneGeo.translate(0, -coneHeight / 2, 0)
-    coneGeo.rotateX(-Math.PI / 2)
-    coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
-    coneMesh.position.z = -0.09
-    coneMesh.renderOrder = 100
-    headGroup.add(coneMesh)
-
-    // Haze discs along beam for volumetric feel
-    const hazeGeo = new THREE.PlaneGeometry(coneRadius * 1.2, coneRadius * 1.2)
-    hazeMesh = new THREE.Mesh(hazeGeo, hazeMaterial())
-    hazeMesh.position.z = -coneHeight * 0.4
-    hazeMesh.rotation.y = Math.PI
-    hazeMesh.renderOrder = 101
-    headGroup.add(hazeMesh)
-  } else if (shape === 'strip') {
-    // --- LED Strip / Batten ---
-    const stripWidth = 1.0
-    const stripGeo = new THREE.BoxGeometry(stripWidth, 0.06, 0.08)
-    bodyMesh = new THREE.Mesh(stripGeo, bodyMaterial())
-    group.add(bodyMesh)
-
-    // Wide beam cone (overall glow)
-    const coneGeo = new THREE.ConeGeometry(0.8, coneHeight, 48, 1, true)
-    coneGeo.translate(0, -coneHeight / 2, 0)
-    coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
-    coneMesh.position.y = -0.04
-    coneMesh.renderOrder = 100
-    group.add(coneMesh)
-
-    // Per-cell lens segments and mini cones
-    const effectiveCells = Math.max(1, cellCount)
-    if (effectiveCells > 1) {
-      cellLenses = []
-      cellCones = []
-      const cellWidth = (stripWidth * 0.9) / effectiveCells
-      const startX = -((effectiveCells - 1) * cellWidth) / 2
-
-      for (let c = 0; c < effectiveCells; c++) {
-        const cx = startX + c * cellWidth
-
-        // Cell lens
-        const cellLensGeo = new THREE.PlaneGeometry(cellWidth * 0.85, 0.035)
-        const cellLensMesh = new THREE.Mesh(cellLensGeo, lensMaterial())
-        cellLensMesh.position.set(cx, -0.04, 0)
-        cellLensMesh.rotation.x = -Math.PI / 2
-        group.add(cellLensMesh)
-        cellLenses.push(cellLensMesh)
-
-        // Cell cone
-        const cellConeRadius = cellWidth * 0.6
-        const cellConeGeo = new THREE.ConeGeometry(cellConeRadius, coneHeight * 0.6, 8, 1, true)
-        cellConeGeo.translate(0, -coneHeight * 0.3, 0)
-        const cellConeMesh = new THREE.Mesh(cellConeGeo, coneMaterial())
-        cellConeMesh.position.set(cx, -0.04, 0)
-        cellConeMesh.renderOrder = 100
-        group.add(cellConeMesh)
-        cellCones.push(cellConeMesh)
-      }
+  get<T extends THREE.BufferGeometry>(key: string, make: () => T): T {
+    let g = this.map.get(key) as T | undefined
+    if (!g) {
+      g = make()
+      g.userData.shared = true
+      this.map.set(key, g)
     }
-
-    const lensGeo = new THREE.PlaneGeometry(0.9, 0.04)
-    lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
-    lensMesh.position.y = -0.04
-    lensMesh.rotation.x = -Math.PI / 2
-    group.add(lensMesh)
-  } else {
-    // --- PAR / Wash (default) ---
-    const parBodyGeo = new THREE.CylinderGeometry(0.1, 0.13, 0.22, 10)
-    bodyMesh = new THREE.Mesh(parBodyGeo, bodyMaterial())
-    group.add(bodyMesh)
-
-    // Cone
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 48, 1, true)
-    coneGeo.translate(0, -coneHeight / 2, 0)
-    coneMesh = new THREE.Mesh(coneGeo, coneMaterial())
-    coneMesh.position.y = -0.11
-    coneMesh.renderOrder = 100
-    group.add(coneMesh)
-
-    // Haze disc
-    const hazeGeo = new THREE.PlaneGeometry(coneRadius * 1.0, coneRadius * 1.0)
-    hazeMesh = new THREE.Mesh(hazeGeo, hazeMaterial())
-    hazeMesh.position.y = -coneHeight * 0.35
-    hazeMesh.rotation.x = -Math.PI / 2
-    hazeMesh.renderOrder = 101
-    group.add(hazeMesh)
-
-    const lensGeo = new THREE.CircleGeometry(0.14, 16)
-    lensMesh = new THREE.Mesh(lensGeo, lensMaterial())
-    lensMesh.position.y = -0.12
-    lensMesh.rotation.x = Math.PI / 2
-    lensMesh.rotation.z = Math.PI
-    group.add(lensMesh)
+    return g
   }
 
-  // SpotLight — for moving heads, attach to headGroup so it follows pan/tilt
-  const spotLight = new THREE.SpotLight(0xffffff, 0, 14, beamAngleRad * 1.1, 0.25, 1.5)
-  spotLight.castShadow = false
-  spotLight.userData.baseAngle = beamAngleRad * 1.1  // preserve for per-frame reset
-  const spotTarget = new THREE.Object3D()
-  if (headGroup) {
-    // Moving head: spotlight follows the head's orientation
-    spotTarget.position.set(0, 0, 6)  // Target along +Z (beam direction in head space after rotateX)
-    headGroup.add(spotLight)
-    headGroup.add(spotTarget)
-  } else {
-    // Static fixture: spotlight points straight down from fixture body
-    spotTarget.position.set(0, -6, 0)
-    group.add(spotLight)
-    group.add(spotTarget)
+  dispose(): void {
+    for (const g of this.map.values()) g.dispose()
+    this.map.clear()
   }
-  spotLight.target = spotTarget
+}
+
+export interface FixtureObjects {
+  spec: FixtureSpec
+  /** Root, placed at the fixture position and oriented by its mount */
+  group: THREE.Group
+  /** Moving heads: pan (local Y) and tilt (local X) pivots */
+  yoke: THREE.Object3D | null
+  head: THREE.Object3D | null
+  /** Beam origin, beam along local -Y */
+  emitter: THREE.Object3D
+  bodyMaterial: THREE.MeshLambertMaterial
+  lensMaterial: THREE.MeshBasicMaterial
+  /** One beam per cell (or one) — children of the emitter */
+  beams: THREE.Mesh[]
+  beamMaterials: THREE.ShaderMaterial[]
+  /** Per-cell lens materials (multi-cell fixtures) */
+  cellLensMaterials: THREE.MeshBasicMaterial[]
+  /** X offset of each beam on the emitter (strips) */
+  beamOffsets: number[]
+  /** Light pool where the beam lands — world space */
+  pool: THREE.Mesh
+  poolMaterial: THREE.ShaderMaterial
+  /** Lens glare — child of the emitter */
+  flare: THREE.Sprite | null
+  /** World-space markers: selection ring + drop line + number label */
+  marker: THREE.Group
+  ring: THREE.Mesh
+  dropLine: THREE.Line
+  label: THREE.Sprite
+  labelCanvas: HTMLCanvasElement
+  labelTexture: THREE.CanvasTexture
+  labelKey: string
+  /** Invisible, generous pick volume (fingers) */
+  hit: THREE.Mesh
+  /** Outputs of the last update, read by the light pool */
+  out: { intensity: number; color: THREE.Color; origin: THREE.Vector3; dir: THREE.Vector3; angle: number; length: number }
+}
+
+const BODY_COLOR = new THREE.Color(palette.fgDisabled)
+const LENS_IDLE = new THREE.Color(palette.surface2)
+
+function box(cache: GeometryCache, w: number, h: number, d: number) {
+  return cache.get(`box:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, h, d))
+}
+
+function cylinder(cache: GeometryCache, rt: number, rb: number, h: number, seg: number) {
+  return cache.get(`cyl:${rt}:${rb}:${h}:${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg))
+}
+
+/** Lens disc facing local -Y */
+function lensDisc(cache: GeometryCache, r: number) {
+  return cache.get(`lens:${r}`, () => new THREE.CircleGeometry(r, 24).rotateX(Math.PI / 2))
+}
+
+/** Lens rectangle facing local -Y */
+function lensRect(cache: GeometryCache, w: number, d: number) {
+  return cache.get(`lensrect:${w}:${d}`, () => new THREE.PlaneGeometry(w, d).rotateX(Math.PI / 2))
+}
+
+/** Unit open cone: apex at the origin, base radius 1 at y = -1 */
+export function unitCone(cache: GeometryCache, segments: number) {
+  return cache.get(`cone:${segments}`, () => new THREE.ConeGeometry(1, 1, segments, 1, true).translate(0, -0.5, 0))
+}
+
+export function createFixtureObjects(spec: FixtureSpec, cache: GeometryCache, coneSegments: number): FixtureObjects {
+  const group = new THREE.Group()
+  const bodyMaterial = new THREE.MeshLambertMaterial({ color: BODY_COLOR, emissive: new THREE.Color(0, 0, 0) })
+  const lensMaterial = new THREE.MeshBasicMaterial({ color: LENS_IDLE.clone() })
+  const addBody = (parent: THREE.Object3D, geo: THREE.BufferGeometry, x: number, y: number, z = 0) => {
+    const m = new THREE.Mesh(geo, bodyMaterial)
+    m.position.set(x, y, z)
+    m.castShadow = true
+    parent.add(m)
+    return m
+  }
+
+  let yoke: THREE.Object3D | null = null
+  let head: THREE.Object3D | null = null
+  const emitter = new THREE.Object3D()
+  const cellLensMaterials: THREE.MeshBasicMaterial[] = []
+  let beamOffsets: number[] = [0]
+  let hitSize: [number, number, number] = [0.5, 0.5, 0.5]
+  let hitY = -0.2
+
+  switch (spec.kind) {
+    case 'moving-head': {
+      addBody(group, box(cache, 0.34, 0.12, 0.27), 0, -0.06)
+      yoke = new THREE.Object3D()
+      yoke.position.y = -0.12
+      group.add(yoke)
+      addBody(yoke, box(cache, 0.4, 0.04, 0.09), 0, -0.02)
+      addBody(yoke, box(cache, 0.035, 0.3, 0.08), -0.185, -0.17)
+      addBody(yoke, box(cache, 0.035, 0.3, 0.08), 0.185, -0.17)
+      head = new THREE.Object3D()
+      head.position.y = -0.27
+      yoke.add(head)
+      if (spec.wash) {
+        addBody(head, cylinder(cache, 0.1, 0.15, 0.24, 20), 0, 0)
+        const lens = new THREE.Mesh(lensDisc(cache, 0.13), lensMaterial)
+        lens.position.y = -0.121
+        head.add(lens)
+        emitter.position.y = -0.122
+      } else {
+        addBody(head, cylinder(cache, 0.09, 0.12, 0.34, 20), 0, 0.02)
+        const lens = new THREE.Mesh(lensDisc(cache, 0.095), lensMaterial)
+        lens.position.y = -0.151
+        head.add(lens)
+        emitter.position.y = -0.152
+      }
+      head.add(emitter)
+      hitSize = [0.5, 0.6, 0.45]
+      hitY = -0.25
+      break
+    }
+    case 'strip': {
+      const L = spec.length
+      addBody(group, box(cache, L, 0.07, 0.1), 0, -0.035)
+      emitter.position.y = -0.0715
+      group.add(emitter)
+      const n = spec.cellCount > 1 ? spec.cellCount : Math.max(2, Math.round(L * 4))
+      const pitch = (L * 0.94) / n
+      beamOffsets = Array.from({ length: n }, (_, i) => -((n - 1) * pitch) / 2 + i * pitch)
+      for (const x of beamOffsets) {
+        const mat = new THREE.MeshBasicMaterial({ color: LENS_IDLE.clone() })
+        cellLensMaterials.push(mat)
+        const cell = new THREE.Mesh(lensRect(cache, +(pitch * 0.82).toFixed(3), 0.06), mat)
+        cell.position.set(x, -0.0705, 0)
+        group.add(cell)
+      }
+      hitSize = [L + 0.1, 0.3, 0.35]
+      hitY = -0.05
+      break
+    }
+    case 'strobe':
+    case 'blinder': {
+      const w = spec.kind === 'blinder' ? 0.5 : 0.42
+      const d = spec.kind === 'blinder' ? 0.26 : 0.16
+      addBody(group, box(cache, w, 0.16, d), 0, -0.08)
+      const lens = new THREE.Mesh(lensRect(cache, w * 0.86, d * 0.7), lensMaterial)
+      lens.position.y = -0.161
+      group.add(lens)
+      emitter.position.y = -0.162
+      group.add(emitter)
+      hitSize = [w + 0.1, 0.35, 0.4]
+      hitY = -0.08
+      break
+    }
+    case 'hazer': {
+      addBody(group, box(cache, 0.45, 0.28, 0.3), 0, -0.14)
+      addBody(group, cylinder(cache, 0.05, 0.05, 0.08, 12), 0.12, -0.32)
+      emitter.position.y = -0.3
+      group.add(emitter)
+      hitSize = [0.55, 0.45, 0.45]
+      hitY = -0.15
+      break
+    }
+    default: {
+      // PAR can on a yoke-less hanging clamp
+      addBody(group, box(cache, 0.04, 0.08, 0.04), 0, -0.04)
+      addBody(group, cylinder(cache, 0.12, 0.14, 0.26, 18), 0, -0.21)
+      const lens = new THREE.Mesh(lensDisc(cache, 0.125), lensMaterial)
+      lens.position.y = -0.341
+      group.add(lens)
+      emitter.position.y = -0.342
+      group.add(emitter)
+      hitSize = [0.45, 0.5, 0.45]
+      hitY = -0.2
+    }
+  }
+
+  // ---- Beams ----
+  const beams: THREE.Mesh[] = []
+  const beamMaterials: THREE.ShaderMaterial[] = []
+  if (spec.emits) {
+    const cone = unitCone(cache, coneSegments)
+    for (const x of beamOffsets) {
+      const mat = createBeamMaterial()
+      const beam = new THREE.Mesh(cone, mat)
+      beam.position.x = x
+      beam.renderOrder = 100
+      beam.visible = false
+      beam.frustumCulled = false // scaled every frame; bounds of the unit cone are meaningless
+      emitter.add(beam)
+      beams.push(beam)
+      beamMaterials.push(mat)
+    }
+  }
+
+  // ---- Light pool (world space, managed by the engine) ----
+  const poolMaterial = createPoolMaterial(getOpenBeamTexture())
+  const pool = new THREE.Mesh(cache.get('pool', () => new THREE.PlaneGeometry(1, 1)), poolMaterial)
+  pool.visible = false
+  pool.renderOrder = 50
+  pool.matrixAutoUpdate = true
+
+  // ---- Lens glare ----
+  let flare: THREE.Sprite | null = null
+  if (spec.emits) {
+    flare = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: getGlowTexture(),
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }))
+    flare.position.y = -0.02
+    flare.renderOrder = 120
+    flare.visible = false
+    emitter.add(flare)
+  }
+
+  // ---- Pick volume ----
+  const hitMat = new THREE.MeshBasicMaterial()
+  hitMat.visible = false
+  const hit = new THREE.Mesh(box(cache, ...hitSize), hitMat)
+  hit.position.y = hitY
+  group.add(hit)
+
+  // ---- Markers: selection ring on the floor, drop line, number label ----
+  const marker = new THREE.Group()
+  const ring = new THREE.Mesh(
+    cache.get('ring', () => new THREE.RingGeometry(0.26, 0.34, 40).rotateX(-Math.PI / 2)),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(palette.infoFg), transparent: true, opacity: 0.9, depthWrite: false })
+  )
+  ring.visible = false
+  ring.renderOrder = 60
+  marker.add(ring)
+  const dropLine = new THREE.Line(
+    cache.get('drop', () => new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0)])),
+    new THREE.LineBasicMaterial({ color: new THREE.Color(palette.infoFg), transparent: true, opacity: 0.55, depthWrite: false })
+  )
+  dropLine.visible = false
+  marker.add(dropLine)
+
+  const labelCanvas = document.createElement('canvas')
+  labelCanvas.width = 128
+  labelCanvas.height = 64
+  const labelTexture = new THREE.CanvasTexture(labelCanvas)
+  labelTexture.colorSpace = THREE.SRGBColorSpace
+  labelTexture.minFilter = THREE.LinearFilter
+  labelTexture.generateMipmaps = false
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: labelTexture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    sizeAttenuation: false
+  }))
+  label.center.set(0.5, 0)
+  label.scale.set(0.064, 0.032, 1)
+  label.renderOrder = 200
+  marker.add(label)
 
   return {
+    spec,
     group,
-    bodyMesh,
-    yokeGroup,
-    headGroup,
-    coneMesh,
-    hazeMesh,
-    spotLight,
-    spotTarget,
-    lensMesh,
-    shape,
-    cellLenses,
-    cellCones
+    yoke,
+    head,
+    emitter,
+    bodyMaterial,
+    lensMaterial,
+    beams,
+    beamMaterials,
+    cellLensMaterials,
+    beamOffsets,
+    pool,
+    poolMaterial,
+    flare,
+    marker,
+    ring,
+    dropLine,
+    label,
+    labelCanvas,
+    labelTexture,
+    labelKey: '',
+    hit,
+    out: { intensity: 0, color: new THREE.Color(), origin: new THREE.Vector3(), dir: new THREE.Vector3(0, -1, 0), angle: 0.4, length: 5 }
   }
+}
+
+/** Redraw the number label (only when number / selection changed) */
+export function drawFixtureLabel(objects: FixtureObjects, text: string, selected: boolean): void {
+  const key = `${text}|${selected ? 1 : 0}`
+  if (objects.labelKey === key) return
+  objects.labelKey = key
+  const ctx = objects.labelCanvas.getContext('2d')
+  if (!ctx) return
+  const W = objects.labelCanvas.width, H = objects.labelCanvas.height
+  ctx.clearRect(0, 0, W, H)
+  ctx.font = '600 34px "JetBrains Mono Variable", ui-monospace, monospace'
+  const tw = Math.min(W - 8, ctx.measureText(text).width + 26)
+  const x = (W - tw) / 2
+  ctx.fillStyle = selected ? palette.info : withAlpha(palette.surface1, 0.85)
+  ctx.strokeStyle = selected ? palette.infoFg : palette.lineStrong
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.roundRect(x, 8, tw, H - 16, 10)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = palette.fgPrimary
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, W / 2, H / 2 + 1)
+  objects.labelTexture.needsUpdate = true
 }
 
 export function setFixtureSelected(objects: FixtureObjects, selected: boolean): void {
-  const color = selected ? SELECTED_COLOR : BODY_COLOR
-  ;(objects.bodyMesh.material as THREE.MeshBasicMaterial).color.setHex(color)
+  objects.bodyMaterial.emissive.set(selected ? palette.info : palette.surface0)
+  objects.bodyMaterial.emissiveIntensity = selected ? 0.55 : 0
+  objects.ring.visible = selected
+  objects.dropLine.visible = selected
+}
+
+/** Free the fixture's own GPU resources (shared geometry / textures survive) */
+export function disposeFixtureObjects(objects: FixtureObjects): void {
+  objects.group.removeFromParent()
+  objects.pool.removeFromParent()
+  objects.marker.removeFromParent()
+  disposeObject(objects.group)
+  disposeObject(objects.pool)
+  disposeObject(objects.marker)
 }

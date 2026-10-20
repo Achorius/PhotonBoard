@@ -1,267 +1,284 @@
-import React, { useEffect, useState } from 'react'
+// ============================================================
+// Follow spot: several moving heads converge on one target that the
+// operator drives with the stage pad (finger / mouse) or a gamepad.
+//   left   fixtures in the follow group (pan/tilt ranges, positions)
+//   centre stage pad (top view) + height fader
+//   right  output, movement and gamepad settings
+// ============================================================
+
+import { memo, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import {
+  LuCrosshair, LuGamepad2, LuHouse, LuMapPin, LuTriangleAlert, LuCable
+} from 'react-icons/lu'
+import {
+  Badge, Button, Checkbox, EmptyState, Fader, Field, NumberField, PanelHeader, Section, Slider,
+  StatusDot, cn, fixtureCategoryIcon, formatAddress, formatDegrees, formatPercent
+} from '@renderer/components/ui'
 import { useFollowStore } from '@renderer/stores/follow-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
-import { XBOX_BUTTONS } from '@renderer/lib/gamepad-manager'
+import { useUiStore } from '@renderer/stores/ui-store'
+import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { FollowPad, type PadFixture } from './FollowPad'
+import { GamepadSection } from './GamepadSection'
 
-const BUTTON_NAMES: Record<number, string> = {
-  [XBOX_BUTTONS.A]: 'A',
-  [XBOX_BUTTONS.B]: 'B',
-  [XBOX_BUTTONS.X]: 'X',
-  [XBOX_BUTTONS.Y]: 'Y',
-  [XBOX_BUTTONS.LB]: 'LB',
-  [XBOX_BUTTONS.RB]: 'RB',
-  [XBOX_BUTTONS.LT]: 'LT',
-  [XBOX_BUTTONS.RT]: 'RT',
-  [XBOX_BUTTONS.BACK]: 'Back',
-  [XBOX_BUTTONS.START]: 'Start',
-  [XBOX_BUTTONS.L3]: 'L3',
-  [XBOX_BUTTONS.R3]: 'R3'
+const DEFAULT_PAN = 540
+const DEFAULT_TILT = 270
+
+interface FollowFixture {
+  id: string
+  name: string
+  address: string
+  pan: number
+  tilt: number
+  rangesFromDef: boolean
+  position: { x: number; z: number } | null
+  categories: string[]
+}
+
+function useMovingHeads(): FollowFixture[] {
+  const patch = usePatchStore((s) => s.patch)
+  const fixtures = usePatchStore((s) => s.fixtures)
+  return useMemo(() => {
+    const defs = new Map(fixtures.map((f) => [f.id, f]))
+    return patch.flatMap((p) => {
+      const def = defs.get(p.fixtureDefId)
+      if (!def?.categories.includes('Moving Head')) return []
+      const pan = Number(def.physical?.panRange)
+      const tilt = Number(def.physical?.tiltRange)
+      const fromDef = Number.isFinite(pan) && pan > 0 && Number.isFinite(tilt) && tilt > 0
+      return [{
+        id: p.id,
+        name: p.name,
+        address: formatAddress(p.universe, p.address),
+        pan: Number.isFinite(pan) && pan > 0 ? pan : DEFAULT_PAN,
+        tilt: Number.isFinite(tilt) && tilt > 0 ? tilt : DEFAULT_TILT,
+        rangesFromDef: fromDef,
+        position: p.position3D ? { x: p.position3D.x, z: p.position3D.z } : null,
+        categories: def.categories
+      }]
+    })
+  }, [patch, fixtures])
 }
 
 export function FollowPanel() {
-  const {
-    fixtureIds, activateButton, sensitivity, targetHeight, followDimmer,
-    active, targetX, targetY, targetZ,
-    gamepadConnected, gamepadName,
-    invertX, invertZ, invertY,
-    setConfig, addFixture, removeFixture, toggleActive
-  } = useFollowStore()
+  const heads = useMovingHeads()
+  const { fixtureIds, active, gamepadConnected } = useFollowStore(useShallow((s) => ({ fixtureIds: s.fixtureIds, active: s.active, gamepadConnected: s.gamepadConnected })))
+  const assigned = useMemo(() => new Set(fixtureIds), [fixtureIds])
+  const usable = heads.filter((h) => assigned.has(h.id) && h.position).length
 
-  const { patch, fixtures } = usePatchStore()
-  const [learningButton, setLearningButton] = useState(false)
+  const padFixtures: PadFixture[] = useMemo(
+    () => heads.filter((h) => h.position).map((h) => ({ id: h.id, name: h.name, x: h.position!.x, z: h.position!.z, assigned: assigned.has(h.id) })),
+    [heads, assigned]
+  )
 
-  // Button learn mode
-  useEffect(() => {
-    if (!learningButton) return
-    const interval = setInterval(() => {
-      const gp = navigator.getGamepads()[0]
-      if (!gp) return
-      for (let i = 0; i < gp.buttons.length; i++) {
-        if (gp.buttons[i].pressed) {
-          setConfig({ activateButton: i })
-          setLearningButton(false)
-          break
-        }
-      }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [learningButton])
-
-  // Filter to moving-head fixtures only
-  const movingHeads = patch.filter(entry => {
-    const def = fixtures.find(f => f.id === entry.fixtureDefId)
-    return def?.categories.includes('Moving Head')
-  })
+  // Leaving the view never leaves a follow running unnoticed: the top bar shows it (FollowIndicator)
+  const toggle = () => {
+    const st = useFollowStore.getState()
+    if (st.active) st.deactivate()
+    else st.activate({ keepTarget: true })
+  }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="panel-header flex items-center gap-3">
-        <span className="font-semibold text-sm">Follow Subject</span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-          active ? 'bg-green-600/30 text-green-400' : 'bg-surface-3 text-gray-500'
-        }`}>
-          {active ? 'TRACKING' : 'STANDBY'}
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex min-h-control-lg shrink-0 flex-wrap items-center gap-3 border-b border-line bg-surface-1 px-3 py-1.5">
+        <LuCrosshair size={16} aria-hidden className="text-fg-tertiary" />
+        <h1 className="text-sm font-semibold">Follow spot</h1>
+        <Badge tone={active ? 'go' : 'neutral'} variant={active ? 'solid' : 'subtle'}>{active ? 'TRACKING' : 'STANDBY'}</Badge>
+        <span className="text-xs text-fg-tertiary">{fixtureIds.length} fixture{fixtureIds.length === 1 ? '' : 's'} in the group</span>
+        <div className="flex-1" />
+        <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
+          <LuGamepad2 size={14} aria-hidden className="text-fg-tertiary" />
+          <StatusDot tone={gamepadConnected ? 'go' : 'neutral'} />
+          {gamepadConnected ? 'Gamepad ready' : 'No gamepad'}
         </span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs">
-        {/* ── Gamepad Status ── */}
-        <section>
-          <h3 className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider">Gamepad</h3>
-          <div className={`p-2 rounded border ${
-            gamepadConnected
-              ? 'border-green-800/50 bg-green-950/20'
-              : 'border-red-900/50 bg-red-950/10'
-          }`}>
-            {gamepadConnected ? (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                <span className="text-green-400 truncate">{gamepadName}</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                <span className="text-red-400">No controller connected</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* ── Fixture Selection ── */}
-        <section>
-          <h3 className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider">
-            Follow Fixtures ({fixtureIds.length})
-          </h3>
-          <div className="space-y-1 max-h-40 overflow-y-auto">
-            {movingHeads.length === 0 && (
-              <p className="text-gray-600 italic">No moving head fixtures patched</p>
-            )}
-            {movingHeads.map(entry => {
-              const isSelected = fixtureIds.includes(entry.id)
-              const hasPosition = !!entry.position3D
-              return (
-                <button
-                  key={entry.id}
-                  onClick={() => isSelected ? removeFixture(entry.id) : addFixture(entry.id)}
-                  className={`w-full text-left px-2 py-1.5 rounded flex items-center gap-2 transition-colors ${
-                    isSelected
-                      ? 'bg-accent/20 text-accent border border-accent/30'
-                      : 'bg-surface-2 text-gray-400 hover:bg-surface-3 border border-transparent'
-                  }`}
-                  title={hasPosition ? undefined : 'Position 3D non definie — placer dans Stage Layout'}
-                >
-                  <span className={`w-3 h-3 rounded border-2 flex items-center justify-center ${
-                    isSelected ? 'border-accent bg-accent' : 'border-gray-600'
-                  }`}>
-                    {isSelected && <span className="text-white text-[8px]">&#10003;</span>}
-                  </span>
-                  <span className="flex-1 truncate">{entry.name}</span>
-                  <span className="text-gray-600">U{entry.universe + 1}.{entry.address}</span>
-                  {!hasPosition && <span className="text-yellow-600 text-[9px]">no pos</span>}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        {/* ── Controls ── */}
-        <section>
-          <h3 className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider">Controls</h3>
-          <div className="space-y-2">
-            {/* Activate button */}
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Trigger button</span>
-              <button
-                onClick={() => setLearningButton(!learningButton)}
-                className={`px-2 py-1 rounded text-[10px] font-mono ${
-                  learningButton
-                    ? 'bg-purple-600/30 text-purple-400 animate-pulse'
-                    : 'bg-surface-3 text-gray-300 hover:bg-surface-4'
-                }`}
-              >
-                {learningButton ? 'Press a button...' : (BUTTON_NAMES[activateButton] ?? `Btn ${activateButton}`)}
-              </button>
-            </div>
-
-            {/* Sensitivity */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-400">Speed</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={0.5}
-                  max={12}
-                  step={0.5}
-                  value={sensitivity}
-                  onChange={e => setConfig({ sensitivity: parseFloat(e.target.value) })}
-                  className="w-24 accent-accent"
-                />
-                <span className="text-gray-500 w-10 text-right">{sensitivity} m/s</span>
-              </div>
-            </div>
-
-            {/* Target height */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-400">Target height</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={0}
-                  max={4}
-                  step={0.1}
-                  value={targetHeight}
-                  onChange={e => setConfig({ targetHeight: parseFloat(e.target.value) })}
-                  className="w-24 accent-accent"
-                />
-                <span className="text-gray-500 w-10 text-right">{targetHeight.toFixed(1)}m</span>
-              </div>
-            </div>
-
-            {/* Follow dimmer */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-gray-400">Dimmer</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min={0}
-                  max={255}
-                  step={1}
-                  value={followDimmer}
-                  onChange={e => setConfig({ followDimmer: parseInt(e.target.value) })}
-                  className="w-24 accent-accent"
-                />
-                <span className="text-gray-500 w-10 text-right">{Math.round(followDimmer / 2.55)}%</span>
-              </div>
-            </div>
-
-            {/* Axis invert */}
-            <div className="flex items-center gap-3 pt-1">
-              <label className="flex items-center gap-1 text-gray-400 cursor-pointer">
-                <input type="checkbox" checked={invertX} onChange={e => setConfig({ invertX: e.target.checked })} className="accent-accent" />
-                Invert X
-              </label>
-              <label className="flex items-center gap-1 text-gray-400 cursor-pointer">
-                <input type="checkbox" checked={invertZ} onChange={e => setConfig({ invertZ: e.target.checked })} className="accent-accent" />
-                Invert Z
-              </label>
-              <label className="flex items-center gap-1 text-gray-400 cursor-pointer">
-                <input type="checkbox" checked={invertY} onChange={e => setConfig({ invertY: e.target.checked })} className="accent-accent" />
-                Invert Y
-              </label>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Target Info (when active) ── */}
-        {active && (
-          <section>
-            <h3 className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider">Target Position</h3>
-            <div className="grid grid-cols-3 gap-2 font-mono text-center">
-              <div className="bg-surface-2 rounded p-1.5">
-                <div className="text-[9px] text-gray-500">X</div>
-                <div className="text-accent">{targetX.toFixed(2)}m</div>
-              </div>
-              <div className="bg-surface-2 rounded p-1.5">
-                <div className="text-[9px] text-gray-500">Y</div>
-                <div className="text-accent">{targetY.toFixed(2)}m</div>
-              </div>
-              <div className="bg-surface-2 rounded p-1.5">
-                <div className="text-[9px] text-gray-500">Z</div>
-                <div className="text-accent">{targetZ.toFixed(2)}m</div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ── Usage ── */}
-        <section className="border-t border-surface-3 pt-3">
-          <h3 className="text-[10px] uppercase text-gray-500 mb-1.5 tracking-wider">Usage</h3>
-          <ul className="space-y-1 text-[10px] text-gray-500 leading-relaxed">
-            <li>1. Select moving head fixtures above</li>
-            <li>2. Place them in Stage Layout (positions required)</li>
-            <li>3. Hold <b className="text-gray-300">{BUTTON_NAMES[activateButton] ?? `Button ${activateButton}`}</b> on the gamepad to activate</li>
-            <li>4. <b className="text-gray-300">Left stick</b> = move target left/right &amp; up/down</li>
-            <li>5. <b className="text-gray-300">Right stick Y</b> = adjust depth (closer/further)</li>
-            <li>6. Release trigger to deactivate</li>
-          </ul>
-        </section>
-
-        {/* Manual test button */}
-        <button
-          onClick={toggleActive}
-          disabled={fixtureIds.length === 0}
-          className={`w-full py-2 rounded font-medium transition-colors ${
-            active
-              ? 'bg-red-600 hover:bg-red-500 text-white'
-              : fixtureIds.length === 0
-                ? 'bg-surface-3 text-gray-600 cursor-not-allowed'
-                : 'bg-accent hover:bg-accent/80 text-white'
-          }`}
+        <Button
+          data-follow-activate
+          size="lg"
+          tone="go"
+          variant={active ? 'secondary' : 'success'}
+          active={active}
+          icon={LuCrosshair}
+          disabled={!active && usable === 0}
+          tooltip={usable === 0 ? 'Add fixtures that have a stage position' : active ? 'Release the fixtures' : 'Aim the group at the target'}
+          onClick={toggle}
+          className="min-w-[156px]"
         >
-          {active ? 'Stop Follow' : 'Test Follow (manual)'}
-        </button>
+          {active ? 'Stop follow' : 'Start follow'}
+        </Button>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        <FixturesColumn heads={heads} assigned={assigned} />
+        <PadColumn fixtures={padFixtures} hasFixtures={heads.length > 0} />
+        <SettingsColumn />
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------- Fixtures
+
+function FixturesColumn({ heads, assigned }: { heads: FollowFixture[]; assigned: Set<string> }) {
+  const st = useFollowStore.getState
+  return (
+    <aside aria-label="Follow fixtures" className="flex w-[256px] shrink-0 flex-col border-r border-line bg-surface-1 xl:w-[300px] xl:[[data-density=touch]_&]:w-[340px]">
+      <PanelHeader
+        title="Fixtures"
+        count={heads.length > 0 ? `${heads.filter((h) => assigned.has(h.id)).length} of ${heads.length}` : undefined}
+        actions={heads.length > 0 && (
+          <>
+            <Button size="xs" variant="ghost" onClick={() => heads.forEach((h) => st().addFixture(h.id))}>All</Button>
+            <Button size="xs" variant="ghost" onClick={() => heads.forEach((h) => st().removeFixture(h.id))}>None</Button>
+          </>
+        )}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {heads.length === 0 ? (
+          <EmptyState
+            size="sm"
+            icon={LuCable}
+            title="No moving heads patched"
+            description="Follow aims moving heads at a target. Patch some first."
+            action={<Button size="sm" variant="primary" onClick={() => useUiStore.getState().setActiveTab('patch')}>Open Patch</Button>}
+          />
+        ) : heads.map((h) => <FixtureRow key={h.id} fixture={h} checked={assigned.has(h.id)} />)}
+      </div>
+      <p className="shrink-0 border-t border-line-subtle px-3 py-2 text-xs text-fg-tertiary">
+        Aiming uses each fixture&apos;s stage position and its pan / tilt range.
+      </p>
+    </aside>
+  )
+}
+
+const FixtureRow = memo(function FixtureRow({ fixture: f, checked }: { fixture: FollowFixture; checked: boolean }) {
+  const Icon = fixtureCategoryIcon(f.categories)
+  const toggle = () => {
+    const st = useFollowStore.getState()
+    if (checked) st.removeFixture(f.id)
+    else st.addFixture(f.id)
+  }
+  return (
+    <div
+      data-follow-fixture={f.id}
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={toggle}
+      onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle() } }}
+      className={cn('relative flex min-h-row cursor-pointer items-center gap-2.5 px-3 py-1.5', checked ? 'bg-info/10 hover:bg-info/15' : 'hover:bg-surface-2')}
+    >
+      <span onClick={(e) => e.stopPropagation()} className="flex">
+        <Checkbox checked={checked} onChange={toggle} aria-label={`Follow with ${f.name}`} />
+      </span>
+      <Icon size={16} aria-hidden className="shrink-0 text-fg-tertiary" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm text-fg-primary">{f.name}</span>
+          <span className="shrink-0 font-mono text-2xs tabular text-fg-tertiary">{f.address}</span>
+        </span>
+        <span className="truncate text-xs text-fg-tertiary" title={f.rangesFromDef ? 'From the fixture profile' : 'Profile has no range: default used'}>
+          Pan {formatDegrees(f.pan)} · Tilt {formatDegrees(f.tilt)}{f.rangesFromDef ? '' : ' (default)'}
+        </span>
+      </div>
+      {!f.position && (
+        <Badge size="xs" tone="warning" icon={LuTriangleAlert} title="Place it in Stage layout so follow can aim it">NO POSITION</Badge>
+      )}
+    </div>
+  )
+})
+
+// ---------------------------------------------------------------- Pad
+
+function PadColumn({ fixtures, hasFixtures }: { fixtures: PadFixture[]; hasFixtures: boolean }) {
+  const roomHeight = useVisualizerStore((s) => s.roomConfig.height)
+  const targetY = useFollowStore((s) => s.targetY)
+  const home = useFollowStore((s) => s.targetHeight)
+  const missingPositions = hasFixtures && fixtures.length === 0
+  return (
+    <section aria-label="Stage pad" className="flex min-w-0 flex-1 flex-col">
+      <PanelHeader
+        icon={LuMapPin}
+        title="Target"
+        subtitle="Stage seen from above — drag to aim · Shift / second finger = fine"
+        actions={
+          <Button size="sm" variant="secondary" icon={LuHouse} tooltip={`Centre stage at ${home.toFixed(1)} m`}
+            onClick={() => useFollowStore.getState().setTarget(0, home, 0)}>Centre</Button>
+        }
+      />
+      <div className="flex min-h-0 flex-1 gap-4 p-4">
+        {missingPositions ? (
+          <EmptyState
+            icon={LuMapPin}
+            title="Moving heads have no stage position"
+            description="Place them in Stage layout: follow needs to know where each one hangs."
+            action={<Button variant="primary" onClick={() => useUiStore.getState().setActiveTab('stage-layout')}>Open Stage layout</Button>}
+          />
+        ) : (
+          <>
+            <FollowPad fixtures={fixtures} />
+            <div className="flex shrink-0 flex-col items-center gap-2 pb-6 pt-5">
+              <Fader
+                aria-label="Target height"
+                value={targetY}
+                min={0}
+                max={Math.max(1, roomHeight)}
+                step={0.05}
+                defaultValue={home}
+                readout={(v) => v.toFixed(2)}
+                onChange={(v) => { const st = useFollowStore.getState(); st.setTarget(st.targetX, v, st.targetZ) }}
+                className="min-h-0 flex-1"
+              />
+              <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-fg-tertiary">Height m</span>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------- Settings
+
+function SettingsColumn() {
+  const cfg = useFollowStore(useShallow((s) => ({
+    followDimmer: s.followDimmer, sensitivity: s.sensitivity, targetHeight: s.targetHeight
+  })))
+  const setConfig = useFollowStore.getState().setConfig
+  /** Re-apply the output when follow is running (dimmer changes) */
+  const reapply = () => {
+    const st = useFollowStore.getState()
+    if (st.active) st.setTarget(st.targetX, st.targetY, st.targetZ)
+  }
+  return (
+    <aside aria-label="Follow settings" className="flex w-[272px] shrink-0 flex-col border-l border-line bg-surface-1 xl:w-[320px] xl:[[data-density=touch]_&]:w-[360px]">
+      <PanelHeader title="Settings" />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <Section title="Output">
+          <Field label="Dimmer">
+            <Slider aria-label="Follow dimmer" value={cfg.followDimmer} min={0} max={255} defaultValue={255}
+              showValue={(v) => formatPercent(v)} onChange={(v) => { setConfig({ followDimmer: Math.round(v) }); reapply() }} />
+          </Field>
+        </Section>
+        <Section title="Movement">
+          <Field label="Speed" hint="Gamepad: metres per second at full stick">
+            <Slider aria-label="Gamepad speed" value={cfg.sensitivity} min={0.5} max={12} step={0.5} defaultValue={8}
+              showValue={(v) => v.toFixed(1)} onChange={(v) => setConfig({ sensitivity: v })} />
+          </Field>
+          <Field label="Home height" hint="Height used by Centre (1.5 m ≈ chest)">
+            <NumberField aria-label="Home height" value={cfg.targetHeight} min={0} max={10} step={0.1} unit="m" onChange={(v) => setConfig({ targetHeight: v })} />
+          </Field>
+        </Section>
+        <GamepadSection />
+        <Section title="How it works" collapsible defaultOpen={false}>
+          <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-fg-secondary">
+            <li>Tick the moving heads that should follow, and place them in Stage layout.</li>
+            <li>Start follow (or hold the gamepad trigger), then drag on the pad.</li>
+            <li>Left stick: left / right and height. Right stick: depth.</li>
+            <li>Stopping gives the fixtures back to what they were doing.</li>
+          </ul>
+        </Section>
+      </div>
+    </aside>
   )
 }
