@@ -133,6 +133,14 @@ jobs:
           check "Wi-Fi file on boot partition"  test -f "$R/boot/firmware/photonboard-wifi.txt"
           check "Companion module"              test -f "$R/opt/companion-module-dev/companion-module-photonboard/package.json"
           check "touch mapping helper"          test -x "$R/usr/local/bin/photonboard-map-touch"
+          # Offline fixture library (OFL + QLC+), shipped inside the .deb since it was added:
+          # reported, not fatal, so images of older releases can still be rebuilt
+          FL="$R/opt/PhotonBoard/resources/fixture-library"
+          if sudo test -s "$FL/index.json.gz" && sudo test -s "$FL/manifest.json"; then
+            echo "OK    offline fixture library ($(sudo python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); print(m["fixtureCount"], "fixtures:", ", ".join(s["id"] + "@" + s["revision"][:12] for s in m["sources"]))' "$FL/manifest.json"), $(sudo du -sh "$FL" | cut -f1))"
+          else
+            echo "WARN  offline fixture library missing (release built before it was added?)"
+          fi
           echo "--- image summary"
           sudo cat "$R/etc/rpi-issue" 2>/dev/null | head -n1 || true
           grep PRETTY_NAME "$R/etc/os-release" || true

@@ -110,6 +110,12 @@ export interface FixtureCapability {
   colorTemperature?: string
   wheel?: string
   comment?: string
+  /** All colours of this range (split colour-wheel slots, double colour macros); `color` is the first */
+  colors?: string[]
+  /** Wheel slot number (1-based) this range selects, when it maps to a slot of `wheel` */
+  wheelSlot?: number
+  /** Gobo / slot picture reference from the source library (e.g. OFL "gobos/aerial", QLC+ "Others/open.svg") */
+  image?: string
 }
 
 export interface FixtureChannel {
@@ -123,6 +129,8 @@ export interface FixtureChannel {
   dmxBreak?: number
   physicalFrom?: number
   physicalTo?: number
+  /** Fine (LSB) channel: name of its coarse channel */
+  fineOf?: string
 }
 
 export interface FixtureMode {
@@ -151,10 +159,15 @@ export interface FixturePhysical {
 }
 
 export interface FixtureWheelSlot {
-  type: 'Color' | 'Gobo' | 'Prism' | 'Animation' | 'Open'
+  type: 'Color' | 'Gobo' | 'Prism' | 'Animation' | 'Open' | 'Closed' | 'Iris' | 'Frost'
   name: string
   color?: string
   imageFile?: string
+  /** All colours of the slot (dichroic split filters); `color` is the first */
+  colors?: string[]
+  colorTemperature?: string
+  /** Prism slots */
+  facets?: number
 }
 
 export interface FixtureWheel {
@@ -179,9 +192,81 @@ export interface FixtureDefinition {
   modes: FixtureMode[]
   physical?: FixturePhysical
   wheels?: FixtureWheel[]
-  source?: 'builtin' | 'ofl' | 'user' | 'gdtf'
+  source?: 'builtin' | 'ofl' | 'user' | 'gdtf' | 'qlcplus'
   sourceUrl?: string
   lastModified?: string
+  shortName?: string
+  /** Provenance of a definition that came from the offline fixture catalog */
+  catalog?: FixtureCatalogProvenance
+}
+
+// --- Offline fixture catalog (resources/fixture-library) ---
+
+export type FixtureCatalogSource = 'ofl' | 'qlcplus'
+
+export interface FixtureCatalogProvenance {
+  source: FixtureCatalogSource
+  /** Path of the original file in the source repository */
+  path: string
+  /** Commit SHA of the source repository the definition was converted from */
+  revision: string
+  license: string
+  authors?: string[]
+}
+
+/** One fixture of the offline catalog (search result / browse row; no channels) */
+export interface FixtureCatalogEntry {
+  /** Catalog id, also the FixtureDefinition id once installed: 'ofl/<maker>/<model>' or 'qlc/<maker>/<model>' */
+  id: string
+  name: string
+  manufacturer: string
+  shortName?: string
+  categories: string[]
+  modes: { name: string; channelCount: number }[]
+  source: FixtureCatalogSource
+}
+
+export interface FixtureCatalogQuery {
+  /** Free text: maker, model, short name (accent-insensitive, prefix + small typo tolerance) */
+  text?: string
+  /** Manufacturer name (case/accent-insensitive exact match) */
+  manufacturer?: string
+  /** Category (e.g. 'Moving Head'), exact */
+  category?: string
+  /** Only fixtures with a mode of exactly this many channels */
+  channelCount?: number
+  source?: FixtureCatalogSource
+  /** Default 50, max 500 */
+  limit?: number
+  offset?: number
+}
+
+export interface FixtureCatalogSearchResult {
+  total: number
+  entries: FixtureCatalogEntry[]
+}
+
+export interface FixtureCatalogSourceInfo {
+  id: FixtureCatalogSource
+  name: string
+  url: string
+  revision: string
+  /** ISO date of the source commit */
+  date: string
+  license: string
+  fixtureCount: number
+}
+
+export interface FixtureCatalogInfo {
+  /** False when the bundle is missing or unreadable (see `error`) */
+  available: boolean
+  error?: string
+  fixtureCount: number
+  sources: FixtureCatalogSourceInfo[]
+  /** Every manufacturer with its fixture count, sorted by name */
+  manufacturers: { name: string; count: number }[]
+  /** Every category with its fixture count, sorted by name */
+  categories: { name: string; count: number }[]
 }
 
 // --- 3D Visualizer ---
@@ -645,6 +730,10 @@ export const IPC = {
   FIXTURES_OFL_DOWNLOAD: 'fixtures:ofl-download',
   FIXTURES_SAVE: 'fixtures:save',
   FIXTURES_DELETE: 'fixtures:delete',
+  FIXTURES_CATALOG_INFO: 'fixtures:catalog-info',
+  FIXTURES_CATALOG_SEARCH: 'fixtures:catalog-search',
+  FIXTURES_CATALOG_GET: 'fixtures:catalog-get',
+  FIXTURES_CATALOG_INSTALL: 'fixtures:catalog-install',
 
   // Show helpers
   SHOW_GET_PATH: 'show:get-path',
@@ -656,6 +745,7 @@ export const IPC = {
   // App
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit',
+  APP_SET_LANGUAGE: 'app:set-language',
 
   // Stage Window
   STAGE_OPEN: 'stage:open',

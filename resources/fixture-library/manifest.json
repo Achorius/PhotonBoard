@@ -1,0 +1,103 @@
+{
+  "format": 1,
+  "generatedBy": "scripts/build-fixture-library.mjs",
+  "fixtureCount": 2266,
+  "manufacturerCount": 207,
+  "sources": [
+    {
+      "id": "ofl",
+      "name": "Open Fixture Library",
+      "repository": "https://github.com/OpenLightingProject/open-fixture-library",
+      "url": "https://open-fixture-library.org",
+      "revision": "2d74941813e7ac74d2a67c1c0b595097293dff2b",
+      "date": "2026-10-20T13:02:05+00:00",
+      "license": "MIT",
+      "licenseFile": "LICENSES/open-fixture-library-LICENSE.txt",
+      "files": 651,
+      "converted": 638,
+      "fixtureCount": 638
+    },
+    {
+      "id": "qlcplus",
+      "name": "QLC+ fixture definitions",
+      "repository": "https://github.com/mcallegari/qlcplus",
+      "url": "https://www.qlcplus.org",
+      "revision": "95c323cd00042c291abc2868b13f8a8a34ea8999",
+      "date": "2026-10-19T19:38:27+02:00",
+      "license": "Apache-2.0",
+      "licenseFile": "LICENSES/qlcplus-COPYING.txt",
+      "files": 1781,
+      "converted": 1628,
+      "fixtureCount": 1628
+    }
+  ],
+  "dedupePolicy": "QLC+ fixtures whose normalised manufacturer + model match an Open Fixture Library fixture are dropped in favour of the OFL definition (richer structured data: 16-bit resolutions, wheel slots with colours, matrices, physical data; OFL keys, which also resolve ids of the online OFL download). The dropped QLC+ id is kept as an alias of the OFL id.",
+  "duplicates": 153,
+  "skipped": [
+    {
+      "source": "ofl",
+      "path": "fixtures/cameo/ts60.json",
+      "reason": "redirect to cameo/ts-60-rgbw"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/kino-flo/celeb-led-250-dmx.json",
+      "reason": "redirect to kino-flo/celeb-250-led-dmx"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/kino-flo/celeb-led-450-dmx.json",
+      "reason": "redirect to kino-flo/celeb-450-led-dmx"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lixada/mini-beam-rgbw.json",
+      "reason": "redirect to stage-right/mini-beam-rgbw"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lixada/mini-moving-head-rgbw.json",
+      "reason": "redirect to stage-right/stage-wash-7x10w-led-moving-head"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lupo/actionpanel-dual-color.json",
+      "reason": "redirect to lupo/actionpanelpro-dual-color"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lupo/actionpanel-full-color.json",
+      "reason": "redirect to lupo/actionpanelpro-full-color"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lupo/superpanel-dual-color-60.json",
+      "reason": "redirect to lupo/superpanelpro-60-dual-color-hard"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lupo/ultrapanel-dual-color-60.json",
+      "reason": "redirect to lupo/ultrapanelpro-60-dual-color-hard"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/lupo/ultrapanel-full-color-60.json",
+      "reason": "redirect to lupo/ultrapanelpro-60-full-color-hard"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/minuit-une/m-carre.json",
+      "reason": "redirect to minuit-une/ivl-carre"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/stairville/mh-x30.json",
+      "reason": "redirect to stairville/mh-x30-led-spot"
+    },
+    {
+      "source": "ofl",
+      "path": "fixtures/uking/mini-gobo-moving-head-light.json",
+      "reason": "redirect to lixada/mini-gobo-moving-head-light"
+    }
+  ]
+}

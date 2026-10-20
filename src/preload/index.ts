@@ -9,7 +9,7 @@ export type { PhotonBoardAPI } from '../shared/photonboard-api'
 const menuHandlers: Record<string, () => void> = {}
 
 // Register IPC listeners ONCE in preload, route to current handler
-for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load']) {
+for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load', 'menu:undo', 'menu:redo']) {
   ipcRenderer.on(channel, () => {
     const handler = menuHandlers[channel]
     if (handler) handler()
@@ -108,7 +108,18 @@ const api: PhotonBoardAPI = {
     save: (fixture) =>
       ipcRenderer.invoke(IPC.FIXTURES_SAVE, JSON.stringify(fixture)),
     delete: (fixtureId) =>
-      ipcRenderer.invoke(IPC.FIXTURES_DELETE, fixtureId)
+      ipcRenderer.invoke(IPC.FIXTURES_DELETE, fixtureId),
+    catalogInfo: () =>
+      ipcRenderer.invoke(IPC.FIXTURES_CATALOG_INFO),
+    catalogSearch: (query) =>
+      ipcRenderer.invoke(IPC.FIXTURES_CATALOG_SEARCH, query),
+    // Definitions travel as JSON text (like getAll): structured clone has dropped multi-cell fixtures
+    catalogGet: async (id) => {
+      const json = await ipcRenderer.invoke(IPC.FIXTURES_CATALOG_GET, id)
+      return json ? JSON.parse(json) : null
+    },
+    catalogInstall: async (id) =>
+      JSON.parse(await ipcRenderer.invoke(IPC.FIXTURES_CATALOG_INSTALL, id))
   },
 
   // --- Menu event listeners (replaces handler, guarantees single callback) ---
@@ -125,7 +136,9 @@ const api: PhotonBoardAPI = {
     getVersion: () =>
       ipcRenderer.invoke(IPC.APP_GET_VERSION),
     quit: () =>
-      ipcRenderer.send(IPC.APP_QUIT)
+      ipcRenderer.send(IPC.APP_QUIT),
+    setLanguage: (locale) =>
+      ipcRenderer.send(IPC.APP_SET_LANGUAGE, locale)
   },
 
   // --- Stage Window ---

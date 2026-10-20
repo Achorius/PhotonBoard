@@ -19,6 +19,8 @@
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "fixtures:build": "node scripts/build-fixture-library.mjs",
+    "fixtures:update": "node scripts/build-fixture-library.mjs --update",
     "screenshots": "electron-vite build && xvfb-run -a -s \"-screen 0 1920x1080x24\" node scripts/dev/screenshot.mjs screenshots"
   },
   "dependencies": {
@@ -66,6 +68,12 @@
     "files": [
       "out/**/*",
       "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/fixture-library",
+        "to": "fixture-library"
+      }
     ],
     "mac": {
       "category": "public.app-category.entertainment",
