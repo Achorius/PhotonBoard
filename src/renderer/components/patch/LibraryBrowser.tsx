@@ -121,6 +121,7 @@ export function LibraryBrowser({ selectedId, onSelect, onActivate, emptyAction, 
         <SegmentedControl
           size="xs"
           fullWidth
+          compact
           aria-label={t('patch.library.sourceAria')}
           value={source}
           onChange={setSource}

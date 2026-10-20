@@ -163,7 +163,7 @@ export const patch = {
   library: {
     source: { user: 'User', builtin: 'Built-in', ofl: 'OFL', gdtf: 'GDTF', qlcplus: 'QLC+' },
     sourceAria: 'Source',
-    catalogFilter: 'OFL · QLC+',
+    catalogFilter: 'OFL/QLC+',
     searchPlaceholder: 'Search name, maker, category',
     searchAria: 'Search the fixture library',
     manufacturer: 'Manufacturer',

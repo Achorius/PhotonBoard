@@ -161,7 +161,7 @@ export const patch: Translation['patch'] = {
   library: {
     source: { user: 'Utilisateur', builtin: 'Intégré', ofl: 'OFL', gdtf: 'GDTF', qlcplus: 'QLC+' },
     sourceAria: 'Source',
-    catalogFilter: 'OFL · QLC+',
+    catalogFilter: 'OFL/QLC+',
     searchPlaceholder: 'Nom, fabricant, catégorie',
     searchAria: 'Rechercher dans la bibliothèque de projecteurs',
     manufacturer: 'Fabricant',
