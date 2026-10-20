@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { v4 as uuidv4 } from 'uuid'
 import type { Cue, Cuelist, Chase, ChaseStep, CueChannelValue, Preset, PresetType, TimelineClip, TimelineMarker, TimelineZone } from '@shared/types'
+import { nextObjectNumber } from '@shared/show-format'
 import { isRemoteMode, markLocalChange, sendRemoteCommand, sendRemoteCommandThrottled, toDmx } from '@renderer/lib/runtime'
 
 /** Default cue times (seconds) for new cues and for cues missing them in old shows */
@@ -21,8 +22,10 @@ export function forgetFlashStarted(id: string): void {
   flashStarted.delete(id)
 }
 
-type CuelistSettings = Partial<Pick<Cuelist, 'name' | 'isLooping' | 'priority' | 'faderLevel' | 'effectSnapshots'>>
-type ChaseSettings = Partial<Pick<Chase, 'name' | 'isLooping' | 'bpm' | 'fadePercent' | 'direction' | 'faderLevel' | 'priority'>>
+type CuelistSettings = Partial<Pick<Cuelist,
+  'name' | 'isLooping' | 'priority' | 'faderLevel' | 'effectSnapshots' |
+  'number' | 'tracking' | 'mib' | 'rate' | 'priorityMode' | 'speedMasterId'>>
+type ChaseSettings = Partial<Pick<Chase, 'name' | 'isLooping' | 'bpm' | 'fadePercent' | 'direction' | 'faderLevel' | 'priority' | 'number' | 'speedMasterId'>>
 
 interface PlaybackState {
   cuelists: Cuelist[]
@@ -62,8 +65,9 @@ interface PlaybackState {
   setChaseFader: (id: string, level: number) => void
   setChaseStep: (id: string, stepIndex: number) => void
 
-  // Preset actions
-  addPreset: (name: string, type: PresetType, values: Record<string, Record<string, number>>) => void
+  // Preset actions (full CRUD with numbering / scopes: usePoolStore)
+  /** New selective preset, numbered in its family; returns its id */
+  addPreset: (name: string, type: PresetType, values: Record<string, Record<string, number>>) => string
   removePreset: (id: string) => void
 
   // Timeline
@@ -163,7 +167,8 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
         isLooping: false,
         priority: 50,
         faderLevel: 255,
-        flash: false
+        flash: false,
+        number: nextObjectNumber(state.cuelists.map((c) => c.number))
       }]
     }))
     return id
@@ -347,7 +352,8 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
         bpm: 120,
         fadePercent: 0,
         direction: 'forward' as const,
-        faderLevel: 255
+        faderLevel: 255,
+        number: nextObjectNumber(state.chases.map((c) => c.number))
       }]
     }))
     return id
@@ -421,9 +427,13 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
 
   // --- Presets ---
   addPreset: (name, type, values) => {
+    const id = uuidv4()
     set((state) => ({
-      presets: [...state.presets, { id: uuidv4(), name, type, values }]
+      presets: [...state.presets, {
+        id, name, type, values, number: nextObjectNumber(state.presets.filter((p) => p.type === type).map((p) => p.number))
+      }]
     }))
+    return id
   },
 
   removePreset: (id) => {
@@ -598,6 +608,7 @@ export const usePlaybackStore = create<PlaybackState>()(subscribeWithSelector((s
       goGeneration: 0,
       effectSnapshots: source.effectSnapshots?.map((e) => ({ ...e, fixtureIds: [...e.fixtureIds] }))
     }
+    copy.number = nextObjectNumber(get().cuelists.map((c) => c.number))
     set((state) => {
       const at = state.cuelists.findIndex((c) => c.id === id)
       const cuelists = [...state.cuelists]

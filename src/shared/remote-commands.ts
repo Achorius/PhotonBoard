@@ -37,7 +37,10 @@ export const REMOTE_COMMANDS = [
   'set-programmer-channels',     // payload: { [universe]: { [channel 0-511]: value 0-255 } }
   'release-programmer-channels', // payload: { [universe]: channel[] }
   'swap-cells',          // payload: { from:{col,row}, to:{col,row} }
-  'set-executor-layout'  // payload: { grid, columns, modes }
+  'set-executor-layout', // payload: { grid, columns, modes } (current executor page)
+  'run-macro',           // payload: macro id | { id } | { number } (macro number)
+  'set-executor-page',   // payload: page index (0-based) | { page } | { delta: +1 / -1 }
+  'executor'             // payload: ExecutorCommandPayload { page, col, row, phase }
 ] as const
 
 export type RemoteCommandType = (typeof REMOTE_COMMANDS)[number]
@@ -61,7 +64,9 @@ export const WEB_REMOTE_COMMANDS = [
   // without stopping anything. payload: ApplyShowContentPayload
   'apply-show-content',
   // Record with the CONSOLE's programmer / output. payload: RecordCommandPayload
-  'record'
+  'record',
+  // A command line typed on the remote, run by the console. payload: CliCommandPayload
+  'cli'
 ] as const
 
 export type WebRemoteCommandType = (typeof WEB_REMOTE_COMMANDS)[number]
@@ -71,13 +76,34 @@ export function isWebRemoteCommandType(type: unknown): type is RemoteCommandType
   return isRemoteCommandType(type) || (typeof type === 'string' && (WEB_REMOTE_COMMANDS as readonly string[]).includes(type))
 }
 
+/**
+ * 'executor' command: press / release an executor cell. `page` is the
+ * 0-based page index ('current' = the console's current page); col 0-7,
+ * row 0-3 (row 0 = top).
+ */
+export interface ExecutorCommandPayload {
+  page: number | 'current'
+  col: number
+  row: number
+  phase: 'down' | 'up'
+}
+
+/** 'cli' command: one command line typed on a web remote */
+export interface CliCommandPayload {
+  text: string
+  /** Remote page id (content-sync origin) */
+  origin?: string
+  /** Increases with every line sent by that page */
+  seq?: number
+}
+
 /** One changed section. List sections: a diff by id; the others: the whole value. */
 export interface SectionChange {
   upsert?: unknown[]
   remove?: string[]
   /** Item ids in their new order (items the remote does not know keep their place at the end) */
   order?: string[]
-  /** Whole-value sections (executor, timeline, roomConfig) */
+  /** Whole-value sections (executor, timeline, roomConfig, parked) */
   value?: unknown
 }
 

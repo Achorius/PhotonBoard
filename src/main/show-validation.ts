@@ -14,7 +14,10 @@ export const MAX_SHOW_FILE_SIZE = 16 * 1024 * 1024
 /** Top-level keys a PhotonBoard show always had; at least one must be present */
 const SHOW_KEYS = ['version', 'patch', 'cuelists', 'groups', 'name', 'createdAt'] as const
 /** Keys that must be arrays when present */
-const ARRAY_KEYS = ['patch', 'groups', 'presets', 'cuelists', 'chases', 'effects', 'midiMappings', 'artnetConfig'] as const
+const ARRAY_KEYS = [
+  'patch', 'groups', 'presets', 'cuelists', 'chases', 'effects', 'midiMappings', 'artnetConfig',
+  'macros', 'speedMasters', 'stagePages', 'parked'
+] as const
 
 export type ShowParseResult =
   | { ok: true; show: ShowFile }

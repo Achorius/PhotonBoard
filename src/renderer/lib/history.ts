@@ -3,8 +3,9 @@
 //
 // What is recorded: every change to the content sections of the show
 // (patch, groups, presets, scenes & cues, chases, effect definitions,
-// MIDI mappings, executor layout, timeline, stage layout — the
-// section model of shared/show-format.ts). Runtime state (a scene
+// MIDI mappings, executor pages, timeline, stage layout, macros, speed
+// masters, stage pages, parked channels — the section model of
+// shared/show-format.ts). Runtime state (a scene
 // playing, a fader level, a running effect, the programmer) is NOT
 // content and is never undone.
 //
@@ -36,6 +37,7 @@ import { useEffectsStore } from '@renderer/stores/effects-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { usePoolStore } from '@renderer/stores/pool-store'
 import { showToast } from '@renderer/stores/toast-store'
 import { t } from '@renderer/i18n'
 import { formatShortcut } from '@renderer/components/ui/Kbd'
@@ -87,8 +89,22 @@ let installed: (() => void) | null = null
 
 /** Sections in the order that names a step best (the side effects come last) */
 const LABEL_PRIORITY: ContentSection[] = [
-  'cuelists', 'chases', 'effects', 'patch', 'presets', 'groups', 'midiMappings', 'timeline', 'roomConfig', 'executor'
+  'cuelists', 'chases', 'effects', 'patch', 'presets', 'groups', 'macros', 'speedMasters', 'stagePages', 'parked',
+  'midiMappings', 'timeline', 'roomConfig', 'executor'
 ]
+
+/** v3 sections are named in the pro area (pro.sections.*) */
+function sectionLabel(section: ContentSection): string {
+  switch (section) {
+    case 'macros':
+    case 'speedMasters':
+    case 'stagePages':
+    case 'parked':
+      return t(`pro.sections.${section}`)
+    default:
+      return t(`edit.sections.${section}`)
+  }
+}
 
 function sectionsOf(step: Step): ContentSection[] {
   return CONTENT_SECTIONS.filter(s => s in step.before)
@@ -98,7 +114,7 @@ function labelOf(step: Step): string {
   if (step.label) return step.label
   const sections = sectionsOf(step)
   const main = LABEL_PRIORITY.find(s => sections.includes(s))
-  return main ? t(`edit.sections.${main}`) : t('edit.severalSections')
+  return main ? sectionLabel(main) : t('edit.severalSections')
 }
 
 function info(step: Step): HistoryStepInfo {
@@ -319,8 +335,13 @@ export function installHistory(): () => void {
     }),
     useEffectsStore.subscribe((s, p) => { if (s.effects !== p.effects) onContentChange(['effects']) }),
     useMidiStore.subscribe((s, p) => { if (s.mappings !== p.mappings) onContentChange(['midiMappings']) }),
-    useExecutorStore.subscribe((s, p) => { if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes) onContentChange(['executor']) }),
+    useExecutorStore.subscribe((s, p) => { if (s.pages !== p.pages) onContentChange(['executor']) }),
     useVisualizerStore.subscribe((s, p) => { if (s.roomConfig !== p.roomConfig) onContentChange(['roomConfig']) }),
+    usePoolStore.subscribe((s, p) => {
+      if (s.macros !== p.macros || s.speedMasters !== p.speedMasters || s.stagePages !== p.stagePages || s.parked !== p.parked) {
+        onContentChange(['macros', 'speedMasters', 'stagePages', 'parked'])
+      }
+    }),
     onTimelineSettingsChange(() => onContentChange(['timeline'])),
     onShowApplied(() => clearHistory()),
     onHistoryRelease(() => { if (pending) schedule() })

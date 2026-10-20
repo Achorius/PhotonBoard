@@ -31,6 +31,8 @@ import { ClientHolds } from './client-holds'
 import { t } from '@renderer/i18n'
 import { getBridge } from './runtime'
 import { performRecord } from '@renderer/components/playback/record'
+import { defaultButtonFn, executorCellAt, executorPress } from './pro/executor-actions'
+import { runCommandLine, runMacro } from './cli'
 
 export interface Command {
   type: string
@@ -42,14 +44,9 @@ export interface Command {
 /** What each web remote client is holding down (released when it disconnects) */
 const holds = new ClientHolds()
 
-/** Executor mode of a scene's cell (TRIG = held while pressed) */
+/** Executor mode of a scene's cell, current page first (TRIG = held while pressed) */
 function executorMode(cuelistId: string): string | undefined {
-  const { grid, modes } = useExecutorStore.getState()
-  for (let col = 0; col < grid.length; col++) {
-    const row = grid[col].indexOf(cuelistId)
-    if (row >= 0) return modes[col]?.[row]
-  }
-  return undefined
+  return useExecutorStore.getState().findCell('cuelist', cuelistId)?.cell.mode
 }
 
 /** A remote client went away: nothing it was holding may stay on */
@@ -160,6 +157,45 @@ function releaseProgrammerFromPayload(payload: unknown): void {
     clean[universe] = channels.filter((c): c is number => Number.isInteger(c))
   }
   releaseProgrammerChannels(clean)
+}
+
+/** Longest command line accepted from a remote */
+const MAX_CLI_LENGTH = 1000
+
+/**
+ * 'executor' { page, col, row, phase }: press / release a cell. Held scene
+ * cells (TRIG / FLASH) are remembered per client and released when it
+ * disconnects, like 'go-cuelist' / 'flash-cuelist'.
+ */
+function pressExecutorFromPayload(p: unknown, clientId: string | undefined): void {
+  if (!isObj(p) || !Number.isInteger(p.col) || !Number.isInteger(p.row)) return
+  const phase = p.phase === 'up' ? 'up' : p.phase === 'down' ? 'down' : null
+  if (!phase) return
+  const ex = useExecutorStore.getState()
+  const page = p.page === 'current' || p.page === undefined ? ex.currentPage : Number.isInteger(p.page) ? (p.page as number) : -1
+  if (page < 0 || page >= ex.pages.length) return
+  const ref = { page, col: p.col as number, row: p.row as number }
+  const cell = executorCellAt(ref)
+  if (!cell) return
+  if (clientId && cell.kind === 'cuelist') {
+    const fn = cell.button ?? defaultButtonFn(cell.mode)
+    if (fn === 'temp') holds.trigger(clientId, cell.id, phase === 'down')
+    else if (fn === 'flash' || fn === 'swap') holds.flash(clientId, cell.id, phase === 'down')
+  }
+  executorPress(ref, phase, { clientId })
+}
+
+function setExecutorPageFromPayload(p: unknown): void {
+  const ex = useExecutorStore.getState()
+  if (Number.isInteger(p)) ex.setPage(p as number)
+  else if (isObj(p) && Number.isInteger(p.page)) ex.setPage(p.page as number)
+  else if (isObj(p) && (p.delta === 1 || p.delta === -1)) ex.setPage(ex.currentPage + (p.delta as number))
+}
+
+function runMacroFromPayload(p: unknown): void {
+  if (isId(p)) runMacro(p)
+  else if (isObj(p) && isId(p.id)) runMacro(p.id)
+  else if (isObj(p) && Number.isInteger(p.number)) runMacro(p.number as number)
 }
 
 /** Execute one command. Unknown or malformed commands are ignored. */
@@ -317,6 +353,23 @@ export function handleCommand(cmd: Command): void {
           columns: Array.isArray(p.columns) ? p.columns : undefined,
           modes: Array.isArray(p.modes) ? p.modes : undefined
         })
+      }
+      break
+    case 'set-executor-page':
+      setExecutorPageFromPayload(p)
+      break
+    case 'executor':
+      pressExecutorFromPayload(p, cmd.clientId)
+      break
+
+    // ---- Pro: macros, command line ----
+    case 'run-macro':
+      runMacroFromPayload(p)
+      break
+    case 'cli':
+      if (isObj(p) && typeof p.text === 'string' && p.text.length <= MAX_CLI_LENGTH) {
+        const origin = typeof p.origin === 'string' && p.origin.length <= 64 ? p.origin : cmd.clientId
+        runCommandLine(p.text, origin)
       }
       break
 

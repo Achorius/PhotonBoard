@@ -11,7 +11,7 @@
 //     keeping the runtime state of the items that stay.
 // ============================================================
 
-import type { Chase, Cuelist, Effect, Group, PatchEntry } from '@shared/types'
+import type { Chase, Cuelist, Effect, Group, PatchEntry, SpeedMaster } from '@shared/types'
 import type { ContentItems, ContentSection, ContentValues, ListSection, TimelineContent } from '@shared/show-format'
 import { isListSection } from '@shared/show-format'
 import type { SectionChange } from '@shared/remote-commands'
@@ -26,15 +26,24 @@ type Item = { id: string }
 export function sameCuelistContent(a: Cuelist, b: Cuelist): boolean {
   return a === b || (
     a.id === b.id && a.name === b.name && a.cues === b.cues && a.isLooping === b.isLooping &&
-    a.priority === b.priority && a.effectSnapshots === b.effectSnapshots
+    a.priority === b.priority && a.effectSnapshots === b.effectSnapshots &&
+    // v3 settings
+    a.number === b.number && a.tracking === b.tracking && a.mib === b.mib && a.rate === b.rate &&
+    a.priorityMode === b.priorityMode && a.speedMasterId === b.speedMasterId
   )
 }
 
 export function sameChaseContent(a: Chase, b: Chase): boolean {
   return a === b || (
     a.id === b.id && a.name === b.name && a.steps === b.steps && a.isLooping === b.isLooping &&
-    a.fadePercent === b.fadePercent && a.direction === b.direction && a.priority === b.priority
+    a.fadePercent === b.fadePercent && a.direction === b.direction && a.priority === b.priority &&
+    a.number === b.number && a.speedMasterId === b.speedMasterId
   )
+}
+
+/** The BPM is a live control (tap, fader), like a chase's: not content */
+export function sameSpeedMasterContent(a: SpeedMaster, b: SpeedMaster): boolean {
+  return a === b || (a.id === b.id && a.name === b.name && a.number === b.number)
 }
 
 /** Every field but isRunning, compared by reference */
@@ -55,7 +64,10 @@ export const ITEM_EQUALS: { [K in ListSection]: (a: ContentItems[K], b: ContentI
   cuelists: sameCuelistContent,
   chases: sameChaseContent,
   effects: sameEffectContent,
-  midiMappings: same
+  midiMappings: same,
+  macros: same,
+  speedMasters: sameSpeedMasterContent,
+  stagePages: same
 }
 
 export function sameTimelineContent(a: TimelineContent, b: TimelineContent): boolean {
@@ -65,8 +77,11 @@ export function sameTimelineContent(a: TimelineContent, b: TimelineContent): boo
   )
 }
 
+/** v3 layouts: the pages are the content (grid / columns / modes only mirror page 1) */
 export function sameExecutorContent(a: ContentValues['executor'], b: ContentValues['executor']): boolean {
-  return a === b || (a.grid === b.grid && a.columns === b.columns && a.modes === b.modes)
+  if (a === b) return true
+  if (a.pages || b.pages) return a.pages === b.pages
+  return a.grid === b.grid && a.columns === b.columns && a.modes === b.modes
 }
 
 function sameList<T>(a: T[], b: T[], eq: (x: T, y: T) => boolean): boolean {
@@ -171,6 +186,9 @@ export function keepRuntime<S extends ListSection>(section: S, incoming: Content
   }
   if (section === 'effects') {
     return { ...(incoming as Effect), isRunning: (existing as Effect).isRunning } as ContentItems[S]
+  }
+  if (section === 'speedMasters') {
+    return { ...(incoming as SpeedMaster), bpm: (existing as SpeedMaster).bpm } as ContentItems[S]
   }
   return incoming
 }

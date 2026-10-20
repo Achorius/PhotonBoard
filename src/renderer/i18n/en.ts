@@ -25,6 +25,7 @@ import { visualizer } from './en/visualizer'
 import { layout } from './en/layout'
 import { midi } from './en/midi'
 import { follow } from './en/follow'
+import { pro } from './en/pro'
 
 export const en = {
   common,
@@ -46,5 +47,6 @@ export const en = {
   visualizer,
   layout,
   midi,
-  follow
+  follow,
+  pro
 }

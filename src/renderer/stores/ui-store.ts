@@ -112,6 +112,12 @@ interface UiState {
   executorBarOpen: boolean
   /** Keyboard shortcut cheat sheet open */
   shortcutsOpen: boolean
+  /**
+   * Pro programming view (pools, numbers, selection tools, advanced cue
+   * columns…). Per machine (localStorage photonboard.ui.pro), default off.
+   * UI only: never changes how a show plays.
+   */
+  proMode: boolean
   // Last status message (also shown as a toast)
   statusMessage: string | null
   statusType: StatusType
@@ -133,6 +139,8 @@ interface UiState {
   toggleSidebar: (open?: boolean) => void
   toggleExecutorBar: (open?: boolean) => void
   setShortcutsOpen: (open: boolean) => void
+  /** Turn the Pro programming view on / off (toggles when omitted); remembered on this machine */
+  setProMode: (on?: boolean) => void
   /** Show a status message as a toast; duration 0 = until replaced. A newer message is never cleared by an older timer. */
   showStatus: (message: string, type?: StatusType, duration?: number) => void
   clearStatus: () => void
@@ -157,6 +165,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarOpen: readPref('sidebarOpen', window.innerWidth >= 1280),
   executorBarOpen: readPref('executorBarOpen', true),
   shortcutsOpen: false,
+  proMode: readPref('pro', false),
   statusMessage: null,
   statusType: 'info',
   pendingCuelistId: null,
@@ -191,6 +200,11 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ executorBarOpen })
   },
   setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+  setProMode: (on) => {
+    const proMode = on ?? !get().proMode
+    writePref('pro', proMode)
+    if (proMode !== get().proMode) set({ proMode })
+  },
   showStatus: (message, type = 'info', duration = 3000) => {
     const token = ++statusToken
     if (statusTimer) {

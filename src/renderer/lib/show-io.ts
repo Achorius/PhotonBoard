@@ -27,7 +27,9 @@ import { useExecutorStore } from '@renderer/stores/executor-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { useFollowStore } from '@renderer/stores/follow-store'
 import { useUiStore } from '@renderer/stores/ui-store'
+import { usePoolStore } from '@renderer/stores/pool-store'
 import { resetMixer } from './dmx-mixer'
+import { refreshCueValuesFromPresets } from './pro/preset-resolve'
 import { resetPlayback } from './playback-controller'
 import {
   getTimelineState, onTimelineSettingsChange, resetTimeline, setTimelineLooping, setTimelineTotalDuration
@@ -82,11 +84,19 @@ function stripEffectRuntime(e: Effect): Effect {
   return { ...e, isRunning: false }
 }
 
-/** Snapshot of the current show (no runtime state, no DMX output config). */
+/**
+ * Snapshot of the current show (no runtime state, no DMX output config).
+ * v3 data is saved with its v2 mirror: cue / chase values that reference a
+ * preset carry the value the preset gives NOW, and the executor grid is
+ * page 1 — PhotonBoard 1.0 plays the file as it looks.
+ */
 export function collectShowData(): ShowFile {
-  const { patch, groups } = usePatchStore.getState()
+  const { patch, groups, fixtures } = usePatchStore.getState()
   const pb = usePlaybackStore.getState()
+  const pool = usePoolStore.getState()
   const now = new Date().toISOString()
+  const cuelists = refreshCueValuesFromPresets(pb.cuelists, pb.presets, patch, fixtures)
+  const chases = refreshCueValuesFromPresets(pb.chases, pb.presets, patch, fixtures)
   return {
     version: String(SHOW_FORMAT_VERSION),
     name: useUiStore.getState().showName,
@@ -95,8 +105,8 @@ export function collectShowData(): ShowFile {
     patch: patch.map(p => ({ ...p, groupIds: [...p.groupIds] })),
     groups: groups.map(g => ({ ...g, fixtureIds: [...g.fixtureIds] })),
     presets: pb.presets.map(p => ({ ...p })),
-    cuelists: pb.cuelists.map(stripCuelistRuntime),
-    chases: pb.chases.map(stripChaseRuntime),
+    cuelists: cuelists.map(stripCuelistRuntime),
+    chases: chases.map(stripChaseRuntime),
     effects: useEffectsStore.getState().effects.map(stripEffectRuntime),
     midiMappings: useMidiStore.getState().mappings.map(m => ({ ...m })),
     stageLayout: { width: 1200, height: 600, fixtures: [] },
@@ -117,7 +127,12 @@ export function collectShowData(): ShowFile {
         offset: getTimecodeOffset()
       }
     },
-    executor: useExecutorStore.getState().getLayout()
+    executor: useExecutorStore.getState().getLayout(),
+    macros: pool.macros.map(m => ({ ...m, lines: m.lines.map(l => ({ ...l })) })),
+    speedMasters: pool.speedMasters.map(m => ({ ...m })),
+    stagePages: pool.stagePages.map(p => ({ ...p, widgets: p.widgets.map(w => ({ ...w })) })),
+    parked: pool.parked.map(v => ({ ...v })),
+    groupMasters: { ...pool.groupMasters }
   }
 }
 
@@ -183,9 +198,17 @@ export function applyShowData(raw: unknown, opts: { name?: string } = {}): { sho
     useVisualizerStore.getState().setRoomConfig(show.roomConfig!)
     useVisualizerStore.getState().selectFixture(null)
 
+    usePoolStore.getState().loadPools({
+      macros: show.macros,
+      speedMasters: show.speedMasters,
+      stagePages: show.stagePages,
+      parked: show.parked,
+      groupMasters: show.groupMasters
+    })
+
     const cuelistIds = show.cuelists.map(c => c.id)
     const executor = useExecutorStore.getState()
-    executor.loadLayout(show.executor, cuelistIds)
+    executor.loadLayout(show.executor, cuelistIds) // already checked against every object by normalizeShow
     executor.syncCuelists(cuelistIds) // place scenes that have no slot yet (v1 shows)
 
     const ui = useUiStore.getState()
@@ -456,12 +479,15 @@ function sameList<T>(a: T[], b: T[], same: (x: T, y: T) => boolean): boolean {
 
 const sameCuelist = (a: Cuelist, b: Cuelist) =>
   a.id === b.id && a.name === b.name && a.cues === b.cues && a.isLooping === b.isLooping &&
-  a.priority === b.priority && a.faderLevel === b.faderLevel && a.effectSnapshots === b.effectSnapshots
+  a.priority === b.priority && a.faderLevel === b.faderLevel && a.effectSnapshots === b.effectSnapshots &&
+  a.number === b.number && a.tracking === b.tracking && a.mib === b.mib && a.rate === b.rate &&
+  a.priorityMode === b.priorityMode && a.speedMasterId === b.speedMasterId
 
 const sameChase = (a: Chase, b: Chase) =>
   a.id === b.id && a.name === b.name && a.steps === b.steps && a.isLooping === b.isLooping &&
   a.bpm === b.bpm && a.fadePercent === b.fadePercent && a.direction === b.direction &&
-  a.faderLevel === b.faderLevel && a.priority === b.priority
+  a.faderLevel === b.faderLevel && a.priority === b.priority &&
+  a.number === b.number && a.speedMasterId === b.speedMasterId
 
 const sameEffect = (a: Effect, b: Effect) =>
   JSON.stringify(stripEffectRuntime(a)) === JSON.stringify(stripEffectRuntime(b))
@@ -502,7 +528,11 @@ export function installDirtyTracking(): () => void {
       if (s.roomConfig !== p.roomConfig) markDirty()
     }),
     useExecutorStore.subscribe((s, p) => {
-      if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes) markDirty()
+      if (s.pages !== p.pages) markDirty()
+    }),
+    usePoolStore.subscribe((s, p) => {
+      if (s.macros !== p.macros || s.speedMasters !== p.speedMasters || s.stagePages !== p.stagePages ||
+          s.parked !== p.parked || s.groupMasters !== p.groupMasters) markDirty()
     }),
     onTimelineSettingsChange(markDirty),
     onTimecodeSettingsChange(markDirty)

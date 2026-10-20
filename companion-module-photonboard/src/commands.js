@@ -37,7 +37,10 @@ export const COMMANDS = [
   'set-programmer-channels',      // payload: { [universe]: { [channel 0-511]: value 0-255 } }
   'release-programmer-channels',  // payload: { [universe]: channel[] }
   'swap-cells',                   // payload: { from:{col,row}, to:{col,row} }
-  'set-executor-layout'           // payload: { grid, columns, modes }
+  'set-executor-layout',          // payload: { grid, columns, modes } (current executor page)
+  'run-macro',                    // payload: macro id | { id } | { number } (macro number)
+  'set-executor-page',            // payload: page index (0-based) | { page } | { delta: +1 / -1 }
+  'executor'                      // payload: { page, col, row, phase: 'down' | 'up' } (page 0-based or 'current')
 ]
 
 export function isCommand(type) {

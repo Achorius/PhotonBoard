@@ -25,7 +25,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Chase, Cuelist, Effect } from '@shared/types'
 import {
   CONTENT_SECTIONS, isContentSection, isListSection, normalizeSectionItems, normalizeSectionValue,
-  type ContentItems, type ContentSection, type ListSection, type TimelineContent
+  type ContentItems, type ContentSection, type ContentValues, type ExecutorRefIds, type ListSection, type TimelineContent
 } from '@shared/show-format'
 import type {
   ApplyShowContentPayload, ContentRevision, ContentState, CurrentShowContent, SectionChange
@@ -34,8 +34,9 @@ import { usePatchStore } from '@renderer/stores/patch-store'
 import { usePlaybackStore, forgetFlashStarted } from '@renderer/stores/playback-store'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
-import { useExecutorStore } from '@renderer/stores/executor-store'
+import { getExecutorContent, useExecutorStore } from '@renderer/stores/executor-store'
 import { useVisualizerStore } from '@renderer/stores/visualizer-store'
+import { usePoolStore } from '@renderer/stores/pool-store'
 import {
   applyListChange, diffSection, reconcilePatchGroups, replaceList, replaceValue, sameSection, type SectionData
 } from './content-merge'
@@ -67,10 +68,11 @@ export function readSection<S extends ContentSection>(section: S): SectionData[S
     case 'chases': return pb.chases as SectionData[S]
     case 'effects': return useEffectsStore.getState().effects as SectionData[S]
     case 'midiMappings': return useMidiStore.getState().mappings as SectionData[S]
-    case 'executor': {
-      const { grid, columns, modes } = useExecutorStore.getState()
-      return { grid, columns, modes } as SectionData[S]
-    }
+    case 'executor': return getExecutorContent(useExecutorStore.getState().pages) as SectionData[S]
+    case 'macros': return usePoolStore.getState().macros as SectionData[S]
+    case 'speedMasters': return usePoolStore.getState().speedMasters as SectionData[S]
+    case 'stagePages': return usePoolStore.getState().stagePages as SectionData[S]
+    case 'parked': return usePoolStore.getState().parked as SectionData[S]
     case 'timeline': {
       const { totalDuration, isLooping } = getTimelineState()
       const timeline: TimelineContent = {
@@ -150,10 +152,22 @@ function commitSection<S extends ContentSection>(section: S, next: SectionData[S
       useMidiStore.getState().setMappings(next as SectionData['midiMappings'])
       break
     case 'executor': {
-      const { grid, columns, modes } = next as SectionData['executor']
-      useExecutorStore.getState().applyRemote({ grid, columns, modes })
+      const { grid, columns, modes, pages } = next as SectionData['executor']
+      useExecutorStore.getState().applyRemote(pages ? { pages } : { grid, columns, modes })
       break
     }
+    case 'macros':
+      usePoolStore.setState({ macros: next as SectionData['macros'] })
+      break
+    case 'speedMasters':
+      usePoolStore.setState({ speedMasters: next as SectionData['speedMasters'] })
+      break
+    case 'stagePages':
+      usePoolStore.setState({ stagePages: next as SectionData['stagePages'] })
+      break
+    case 'parked':
+      usePoolStore.setState({ parked: next as SectionData['parked'] })
+      break
     case 'timeline': {
       const t = next as TimelineContent
       const p = prev as TimelineContent
@@ -178,6 +192,21 @@ function cuelistIdSet(): Set<string> {
   return new Set(usePlaybackStore.getState().cuelists.map(c => c.id))
 }
 
+/** Objects executor cells may point at (cells of deleted objects are emptied) */
+function executorRefs(): ExecutorRefIds {
+  const pb = usePlaybackStore.getState()
+  const pool = usePoolStore.getState()
+  return {
+    chase: new Set(pb.chases.map(c => c.id)),
+    effect: new Set(useEffectsStore.getState().effects.map(e => e.id)),
+    macro: new Set(pool.macros.map(m => m.id)),
+    group: new Set(usePatchStore.getState().groups.map(g => g.id)),
+    speed: new Set(pool.speedMasters.map(m => m.id))
+  }
+}
+
+type ValueSection = keyof ContentValues
+
 /** Patch ↔ groups references stay consistent after either changed */
 function reconcileGroups(): void {
   const { patch, groups } = usePatchStore.getState()
@@ -195,7 +224,7 @@ function mergeChange(section: ContentSection, change: SectionChange): unknown {
     return applyListChange(section as ListSection, current as ContentItems[ListSection][], upsert as ContentItems[ListSection][], remove, order)
   }
   if (change.value === undefined) return current
-  return replaceValue(current, normalizeSectionValue(section as 'executor' | 'timeline' | 'roomConfig', change.value, cuelistIdSet()))
+  return replaceValue(current, normalizeSectionValue(section as ValueSection, change.value, cuelistIdSet(), executorRefs()))
 }
 
 /** Next value of a section from the console's full copy (remote side). */
@@ -204,7 +233,7 @@ function mergeFull(section: ContentSection, data: unknown): unknown {
   if (isListSection(section)) {
     return replaceList(section as ListSection, current as ContentItems[ListSection][], normalizeSectionItems(section, data) as ContentItems[ListSection][])
   }
-  return replaceValue(current, normalizeSectionValue(section as 'executor' | 'timeline' | 'roomConfig', data, cuelistIdSet()))
+  return replaceValue(current, normalizeSectionValue(section as ValueSection, data, cuelistIdSet(), executorRefs()))
 }
 
 /**
@@ -294,8 +323,13 @@ function watchContent(onChange: (sections: ContentSection[]) => void): () => voi
     }),
     useEffectsStore.subscribe((s, p) => { if (s.effects !== p.effects) check(['effects']) }),
     useMidiStore.subscribe((s, p) => { if (s.mappings !== p.mappings) check(['midiMappings']) }),
-    useExecutorStore.subscribe((s, p) => { if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes) check(['executor']) }),
+    useExecutorStore.subscribe((s, p) => { if (s.pages !== p.pages) check(['executor']) }),
     useVisualizerStore.subscribe((s, p) => { if (s.roomConfig !== p.roomConfig) check(['roomConfig']) }),
+    usePoolStore.subscribe((s, p) => {
+      if (s.macros !== p.macros || s.speedMasters !== p.speedMasters || s.stagePages !== p.stagePages || s.parked !== p.parked) {
+        check(['macros', 'speedMasters', 'stagePages', 'parked'])
+      }
+    }),
     onTimelineSettingsChange(() => check(['timeline']))
   ]
   return () => { for (const u of unsubs) u() }
@@ -375,7 +409,11 @@ export function collectCurrentContent(origin?: string, sections?: string[]): Cur
     midiMappings: show.midiMappings,
     executor: show.executor,
     timeline: { ...timeline, length: getTimelineState().totalDuration, loop: getTimelineState().isLooping },
-    roomConfig: show.roomConfig
+    roomConfig: show.roomConfig,
+    macros: show.macros ?? [],
+    speedMasters: show.speedMasters ?? [],
+    stagePages: show.stagePages ?? [],
+    parked: show.parked ?? []
   }
   const wanted = Array.isArray(sections) && sections.length > 0 ? CONTENT_SECTIONS.filter(s => sections.includes(s)) : CONTENT_SECTIONS
   const out: Record<string, unknown> = { name: show.name, createdAt: show.createdAt, version: show.version }
@@ -639,8 +677,11 @@ export function installRemoteContentSync(): () => void {
     }),
     useEffectsStore.subscribe((s, p) => { if (s.effects !== p.effects) onEdit() }),
     useMidiStore.subscribe((s, p) => { if (s.mappings !== p.mappings) onEdit() }),
-    useExecutorStore.subscribe((s, p) => { if (s.grid !== p.grid || s.columns !== p.columns || s.modes !== p.modes) onEdit() }),
+    useExecutorStore.subscribe((s, p) => { if (s.pages !== p.pages) onEdit() }),
     useVisualizerStore.subscribe((s, p) => { if (s.roomConfig !== p.roomConfig) onEdit() }),
+    usePoolStore.subscribe((s, p) => {
+      if (s.macros !== p.macros || s.speedMasters !== p.speedMasters || s.stagePages !== p.stagePages || s.parked !== p.parked) onEdit()
+    }),
     onTimelineSettingsChange(onEdit),
     // A show opened / uploaded from this remote: the console adopts the same file
     onShowApplied(() => {

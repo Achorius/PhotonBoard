@@ -25,6 +25,7 @@ import { visualizer } from './fr/visualizer'
 import { layout } from './fr/layout'
 import { midi } from './fr/midi'
 import { follow } from './fr/follow'
+import { pro } from './fr/pro'
 
 export const fr: Translation = {
   common,
@@ -46,5 +47,6 @@ export const fr: Translation = {
   visualizer,
   layout,
   midi,
-  follow
+  follow,
+  pro
 }
