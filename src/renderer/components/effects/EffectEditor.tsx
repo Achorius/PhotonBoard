@@ -4,7 +4,7 @@
 // of a running effect, so dragging never restarts it).
 // ============================================================
 
-import { memo, useCallback, useRef } from 'react'
+import { memo, useCallback, useMemo, useRef } from 'react'
 import type React from 'react'
 import {
   LuArrowLeft, LuArrowRight, LuBox, LuCopy, LuEllipsis, LuListOrdered, LuMousePointerClick, LuPlay, LuPlus, LuRepeat,
@@ -13,19 +13,21 @@ import {
 import type { Effect, EffectChannel, SpatialAxis, WaveformType } from '@shared/types'
 import {
   Button, DropdownMenu, EmptyState, Encoder, IconButton, NumberField, SegmentedControl, Select, Slider, TextInput, cn,
-  effectCategoryIcon, formatDegrees, percentOf, useDensity, withAlpha
+  effectCategoryIcon, formatBpm, formatDegrees, formatHz, formatPercent, useDensity, withAlpha
 } from '@renderer/components/ui'
+import { formatNumber, t as translate, useT } from '@renderer/i18n'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { computeTapTempo } from '@renderer/lib/midi-manager'
 import { clockNow } from '@renderer/lib/runtime'
 import { CurveEditor } from './CurveEditor'
 import {
-  ATTRIBUTES, CATEGORY_COLOR, DEFAULT_KEYFRAMES, WAVEFORMS, attributeLabel, effectCategoryOf, effectChannels, sizeUpdates
+  ATTRIBUTES, CATEGORY_COLOR, DEFAULT_KEYFRAMES, WAVEFORMS, attributeLabel, effectCategoryOf, effectChannels, sizeUpdates, waveformLabel
 } from './effect-templates'
+import { deleteWithUndo } from '@renderer/lib/selection-actions'
 import { FanPreview, WaveGlyph, WaveformScope, attributeColor } from './effect-graphics'
 import { fadeTimesOf, runEffect, setFadeTimes, useEffectsUiStore } from './effects-ui-store'
-import { deleteEffect, duplicateEffect, useTargetLabel } from './EffectList'
+import { deleteEffect, duplicateEffect, useEffectSelectionActions, useTargetLabel } from './EffectList'
 
 const MIN_HZ = 0.01
 const MAX_HZ = 20
@@ -34,18 +36,21 @@ const hzToSlider = (hz: number) => Math.round((Math.log(Math.min(MAX_HZ, Math.ma
 const sliderToHz = (v: number) => Number((MIN_HZ * Math.exp((v / 1000) * LOG_RANGE)).toPrecision(3))
 
 export function EffectEditor() {
+  const t = useT()
+  const asideRef = useRef<HTMLElement>(null)
   const editingId = useEffectsUiStore((s) => s.editingId)
   const effect = useEffectsStore((s) => (editingId ? s.effects.find((e) => e.id === editingId) : undefined))
+  useEffectSelectionActions(asideRef)
 
   return (
-    <aside aria-label="Effect parameters" className="flex w-[368px] shrink-0 flex-col border-l border-line bg-surface-1 [[data-density=touch]_&]:w-[452px]">
+    <aside ref={asideRef} aria-label={t('effects.editor.region')} className="flex w-[368px] shrink-0 flex-col border-l border-line bg-surface-1 [[data-density=touch]_&]:w-[452px]">
       {effect ? (
         <EditorBody key={effect.id} effect={effect} />
       ) : (
         <EmptyState
           icon={LuSlidersHorizontal}
-          title="No effect selected"
-          description="Tap an effect in the list to edit its waveform, speed, size and spread — or start a new one from the library."
+          title={t('effects.editor.emptyTitle')}
+          description={t('effects.editor.emptyText')}
         />
       )}
     </aside>
@@ -53,6 +58,7 @@ export function EffectEditor() {
 }
 
 function EditorBody({ effect }: { effect: Effect }) {
+  const t = useT()
   const id = effect.id
   const update = useCallback((u: Partial<Effect>) => useEffectsStore.getState().updateEffect(id, u), [id])
   const category = effectCategoryOf(effect)
@@ -70,21 +76,29 @@ function EditorBody({ effect }: { effect: Effect }) {
           <TextInput
             value={effect.name}
             onChange={(e) => update({ name: e.target.value })}
-            aria-label="Effect name"
+            aria-label={t('effects.editor.name')}
+            data-fx-name
             className="min-w-0 flex-1"
             inputClassName="font-semibold"
+          />
+          <IconButton
+            icon={LuTrash2}
+            label={t('effects.editor.deleteEffect')}
+            data-fx-delete
+            className="hover:text-danger-fg"
+            onClick={() => { void deleteEffect(effect) }}
           />
           <DropdownMenu
             placement="bottom-end"
             items={() => [
-              { label: 'Restart phase', icon: LuRotateCcw, disabled: !running, onSelect: () => useEffectsStore.getState().setEffectRunning(id, true) },
-              { label: 'Duplicate', icon: LuCopy, onSelect: () => duplicateEffect(effect) },
+              { label: t('effects.list.restartPhase'), icon: LuRotateCcw, disabled: !running, onSelect: () => useEffectsStore.getState().setEffectRunning(id, true) },
+              { label: t('common.duplicate'), icon: LuCopy, onSelect: () => duplicateEffect(effect) },
               { type: 'separator' },
-              { label: 'Delete effect…', icon: LuTrash2, danger: true, onSelect: () => { void deleteEffect(effect) } }
+              { label: t('effects.editor.deleteEffectEllipsis'), icon: LuTrash2, danger: true, onSelect: () => { void deleteEffect(effect) } }
             ]}
-            trigger={(p) => <IconButton {...p} icon={LuEllipsis} label="Effect actions" />}
+            trigger={(p) => <IconButton {...p} icon={LuEllipsis} label={t('effects.editor.actions')} />}
           />
-          <IconButton icon={LuX} label="Close editor" onClick={() => useEffectsUiStore.getState().setEditing(null)} />
+          <IconButton icon={LuX} label={t('effects.editor.close')} onClick={() => useEffectsUiStore.getState().setEditing(null)} />
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -95,9 +109,9 @@ function EditorBody({ effect }: { effect: Effect }) {
             className="flex-1"
             onClick={() => runEffect(id, !running)}
           >
-            {running ? 'Stop' : 'Start'}
+            {running ? t('effects.editor.stop') : t('effects.editor.start')}
           </Button>
-          <IconButton variant="secondary" icon={LuRotateCcw} label="Restart phase (re-trigger)" disabled={!running} onClick={() => useEffectsStore.getState().setEffectRunning(id, true)} />
+          <IconButton variant="secondary" icon={LuRotateCcw} label={t('effects.editor.restart')} disabled={!running} onClick={() => useEffectsStore.getState().setEffectRunning(id, true)} />
         </div>
         <TargetsLine effect={effect} update={update} />
       </header>
@@ -143,35 +157,41 @@ function Row({ label, children, hint }: { label: React.ReactNode; children: Reac
 // ------------------------------------------------------------
 
 function TargetsLine({ effect, update }: SectionProps) {
+  const t = useT()
   const label = useTargetLabel()(effect.fixtureIds)
   const selectedIds = usePatchStore((s) => s.selectedFixtureIds)
   const same = selectedIds.length === effect.fixtureIds.length && selectedIds.every((x) => effect.fixtureIds.includes(x))
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded bg-surface-0 py-1 pl-2.5 pr-1 ring-1 ring-inset ring-line">
-      <LuTarget size={14} aria-hidden className="shrink-0 text-fg-tertiary" />
-      <span className="min-w-0 flex-1 truncate text-xs">
-        <span className={effect.fixtureIds.length === 0 ? 'text-warning-fg' : 'text-fg-primary'}>{label}</span>
-        <span className="tabular text-fg-tertiary"> · {effect.fixtureIds.length} fixture{effect.fixtureIds.length === 1 ? '' : 's'}</span>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-surface-0 py-1 pl-2.5 pr-1 ring-1 ring-inset ring-line">
+      {/* Longer labels (French) push the buttons to a second line rather than truncating the targets */}
+      <span className="flex min-w-[10rem] flex-1 items-center gap-2">
+        <LuTarget size={14} aria-hidden className="shrink-0 text-fg-tertiary" />
+        <span className="min-w-0 flex-1 truncate text-xs">
+          <span className={effect.fixtureIds.length === 0 ? 'text-warning-fg' : 'text-fg-primary'}>{label}</span>
+          <span className="tabular text-fg-tertiary"> · {t('common.fixtureCount', { count: effect.fixtureIds.length })}</span>
+        </span>
       </span>
-      <Button
-        size="xs"
-        variant="ghost"
-        icon={LuMousePointerClick}
-        tooltip="Select this effect's fixtures"
-        disabled={effect.fixtureIds.length === 0}
-        onClick={() => usePatchStore.getState().selectFixtures([...effect.fixtureIds])}
-      >
-        Select
-      </Button>
-      <Button
-        size="xs"
-        variant="ghost"
-        tooltip="Run this effect on the current selection instead"
-        disabled={selectedIds.length === 0 || same}
-        onClick={() => update({ fixtureIds: [...selectedIds] })}
-      >
-        Use selection{selectedIds.length > 0 && !same ? ` (${selectedIds.length})` : ''}
-      </Button>
+      <span className="ml-auto flex shrink-0 items-center gap-2">
+        <Button
+          size="xs"
+          variant="ghost"
+          icon={LuMousePointerClick}
+          tooltip={t('effects.editor.selectFixturesHint')}
+          disabled={effect.fixtureIds.length === 0}
+          onClick={() => usePatchStore.getState().selectFixtures([...effect.fixtureIds])}
+        >
+          {t('effects.editor.selectFixtures')}
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          tooltip={t('effects.editor.useSelectionHint')}
+          disabled={selectedIds.length === 0 || same}
+          onClick={() => update({ fixtureIds: [...selectedIds] })}
+        >
+          {selectedIds.length > 0 && !same ? t('effects.editor.useSelectionCount', { count: selectedIds.length }) : t('effects.editor.useSelection')}
+        </Button>
+      </span>
     </div>
   )
 }
@@ -181,32 +201,33 @@ function TargetsLine({ effect, update }: SectionProps) {
 // ------------------------------------------------------------
 
 const WaveformSection = memo(function WaveformSection({ effect, update, color }: SectionProps & { color: string }) {
+  const t = useT()
   const setWaveform = (w: WaveformType) => {
     const u: Partial<Effect> = { waveform: w }
     if (w === 'custom' && !effect.keyframes?.length) u.keyframes = DEFAULT_KEYFRAMES
     update(u)
   }
   return (
-    <Group title="Waveform">
-      <div role="radiogroup" aria-label="Waveform" className="grid grid-cols-5 gap-1 [[data-density=touch]_&]:grid-cols-3 [[data-density=touch]_&]:gap-1.5">
+    <Group title={t('effects.editor.waveform')}>
+      <div role="radiogroup" aria-label={t('effects.editor.waveform')} className="grid grid-cols-5 gap-1 [[data-density=touch]_&]:grid-cols-3 [[data-density=touch]_&]:gap-1.5">
         {WAVEFORMS.map((w) => {
-          const on = effect.waveform === w.id
+          const on = effect.waveform === w
           return (
             <button
-              key={w.id}
+              key={w}
               type="button"
               role="radio"
               aria-checked={on}
-              data-fx-waveform={w.id}
-              onClick={() => setWaveform(w.id)}
+              data-fx-waveform={w}
+              onClick={() => setWaveform(w)}
               className={cn(
                 'flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded border text-2xs font-medium transition-colors duration-fast',
                 '[[data-density=touch]_&]:h-14 [[data-density=touch]_&]:text-xs',
                 on ? 'border-accent/70 bg-accent/15 text-fg-primary' : 'border-line bg-surface-2 text-fg-secondary hover:bg-surface-3 hover:text-fg-primary'
               )}
             >
-              <WaveGlyph waveform={w.id} keyframes={w.id === 'custom' ? effect.keyframes : undefined} width={32} height={14} className={on ? 'text-accent-fg' : undefined} />
-              <span className="truncate">{w.label}</span>
+              <WaveGlyph waveform={w} keyframes={w === 'custom' ? effect.keyframes : undefined} width={32} height={14} className={on ? 'text-accent-fg' : undefined} />
+              <span className="max-w-full truncate px-0.5">{waveformLabel(w)}</span>
             </button>
           )
         })}
@@ -219,7 +240,7 @@ const WaveformSection = memo(function WaveformSection({ effect, update, color }:
             {attributeLabel(ch.channelType)}
           </span>
         ))}
-        <span className="ml-auto text-2xs text-fg-tertiary">Output of the first fixture, one cycle</span>
+        <span className="ml-auto text-2xs text-fg-tertiary">{t('effects.editor.scopeHint')}</span>
       </div>
       {effect.waveform === 'custom' && (
         <CurveEditor keyframes={effect.keyframes} onChange={(keyframes) => update({ keyframes })} color={color} />
@@ -233,6 +254,7 @@ const WaveformSection = memo(function WaveformSection({ effect, update, color }:
 // ------------------------------------------------------------
 
 const SpeedSection = memo(function SpeedSection({ effect, update }: SectionProps) {
+  const t = useT()
   const unit = useEffectsUiStore((s) => s.speedUnit)
   const taps = useRef<number[]>([])
   const hz = Number(effect.speed) || 0
@@ -250,34 +272,34 @@ const SpeedSection = memo(function SpeedSection({ effect, update }: SectionProps
 
   return (
     <Group
-      title="Speed"
+      title={t('effects.editor.speed')}
       actions={
         <SegmentedControl
           size="xs"
-          aria-label="Speed unit"
+          aria-label={t('effects.editor.speedUnit')}
           value={unit}
           onChange={(u) => useEffectsUiStore.getState().setSpeedUnit(u)}
-          items={[{ value: 'bpm', label: 'BPM' }, { value: 'hz', label: 'Hz' }]}
+          items={[{ value: 'bpm', label: t('units.bpm') }, { value: 'hz', label: t('units.hertz') }]}
         />
       }
     >
       <div className="flex items-center gap-2">
         {unit === 'bpm' ? (
-          <NumberField value={Math.round(hz * 600) / 10} onChange={(v) => setHz(v / 60)} min={0.6} max={1200} step={0.1} precision={1} unit="BPM" aria-label="Speed in BPM" className="w-[132px]" />
+          <NumberField value={Math.round(hz * 600) / 10} onChange={(v) => setHz(v / 60)} min={0.6} max={1200} step={0.1} precision={1} unit={t('units.bpm')} aria-label={t('effects.editor.speedBpm')} className="w-[132px]" />
         ) : (
-          <NumberField value={Math.round(hz * 100) / 100} onChange={setHz} min={MIN_HZ} max={MAX_HZ} step={0.01} unit="Hz" aria-label="Speed in Hz" className="w-[132px]" />
+          <NumberField value={Math.round(hz * 100) / 100} onChange={setHz} min={MIN_HZ} max={MAX_HZ} step={0.01} unit={t('units.hertz')} aria-label={t('effects.editor.speedHz')} className="w-[132px]" />
         )}
-        <Button variant="secondary" size="md" onClick={() => setHz(hz / 2)} tooltip="Half speed" aria-label="Half speed">Half</Button>
-        <Button variant="secondary" size="md" onClick={() => setHz(hz * 2)} tooltip="Double speed" aria-label="Double speed">Double</Button>
-        <Button variant="secondary" tone="accent" className="flex-1" onPress={tap} onRelease={() => {}} tooltip="Tap the beat (2+ taps)">
-          Tap
+        <Button variant="secondary" size="md" onClick={() => setHz(hz / 2)} tooltip={t('effects.editor.halfHint')} aria-label={t('effects.editor.halfHint')}>{t('effects.editor.half')}</Button>
+        <Button variant="secondary" size="md" onClick={() => setHz(hz * 2)} tooltip={t('effects.editor.doubleHint')} aria-label={t('effects.editor.doubleHint')}>{t('effects.editor.double')}</Button>
+        <Button variant="secondary" tone="accent" className="flex-1" onPress={tap} onRelease={() => {}} tooltip={t('effects.editor.tapHint')}>
+          {t('effects.editor.tap')}
         </Button>
       </div>
-      <Slider value={hzToSlider(hz)} min={0} max={1000} onChange={(v) => setHz(sliderToHz(v))} defaultValue={hzToSlider(1)} aria-label="Speed" />
+      <Slider value={hzToSlider(hz)} min={0} max={1000} onChange={(v) => setHz(sliderToHz(v))} defaultValue={hzToSlider(1)} aria-label={t('effects.editor.speed')} />
       <div className="-mt-1.5 flex justify-between font-mono text-2xs tabular text-fg-tertiary">
-        <span>{unit === 'bpm' ? '0.6' : '0.01 Hz'}</span>
-        <span>{unit === 'bpm' ? '60' : '1 Hz'}</span>
-        <span>{unit === 'bpm' ? '1200 BPM' : '20 Hz'}</span>
+        <span>{unit === 'bpm' ? formatNumber(0.6) : formatHz(0.01)}</span>
+        <span>{unit === 'bpm' ? formatNumber(60) : formatHz(1)}</span>
+        <span>{unit === 'bpm' ? formatBpm(1200) : formatHz(20)}</span>
       </div>
     </Group>
   )
@@ -288,10 +310,11 @@ const SpeedSection = memo(function SpeedSection({ effect, update }: SectionProps
 // ------------------------------------------------------------
 
 const SizeSection = memo(function SizeSection({ effect, update, color }: SectionProps & { color: string }) {
+  const t = useT()
   const centered = effectChannels(effect).some((c) => c.channelType === 'Pan' || c.channelType === 'Tilt')
   return (
-    <Group title="Size & offset">
-      <Row label="Size" hint={centered ? 'Pan / tilt swing around their centre (50%).' : undefined}>
+    <Group title={t('effects.editor.sizeOffset')}>
+      <Row label={t('effects.editor.size')} hint={centered ? t('effects.editor.sizeCentered') : undefined}>
         <Slider
           value={effect.depth}
           onChange={(v) => update(sizeUpdates(effect, v))}
@@ -299,12 +322,12 @@ const SizeSection = memo(function SizeSection({ effect, update, color }: Section
           max={255}
           defaultValue={255}
           color={color}
-          showValue={(v) => `${percentOf(v)}%`}
-          aria-label="Size"
+          showValue={(v) => formatPercent(v)}
+          aria-label={t('effects.editor.size')}
           className="flex-1"
         />
       </Row>
-      <Row label="Phase offset">
+      <Row label={t('effects.editor.phaseOffset')}>
         <Slider
           value={((Number(effect.offset) || 0) % 360 + 360) % 360}
           onChange={(v) => update({ offset: v })}
@@ -312,7 +335,7 @@ const SizeSection = memo(function SizeSection({ effect, update, color }: Section
           max={359}
           defaultValue={0}
           showValue={formatDegrees}
-          aria-label="Phase offset"
+          aria-label={t('effects.editor.phaseOffset')}
           className="flex-1"
         />
       </Row>
@@ -324,14 +347,11 @@ const SizeSection = memo(function SizeSection({ effect, update, color }: Section
 // Spread (fan)
 // ------------------------------------------------------------
 
-const AXES: { value: SpatialAxis; label: string }[] = [
-  { value: 'x', label: 'X L–R' },
-  { value: 'z', label: 'Z F–B' },
-  { value: 'y', label: 'Y Height' },
-  { value: 'radial', label: 'Radial' }
-]
+const AXES: SpatialAxis[] = ['x', 'z', 'y', 'radial']
 
 const SpreadSection = memo(function SpreadSection({ effect, update }: SectionProps) {
+  const t = useT()
+  const axisItems = useMemo(() => AXES.map((a) => ({ value: a, label: t(`effects.editor.axes.${a}`) })), [t])
   const touch = useDensity() === 'touch'
   const fan = Number(effect.fan) || 0
   const magnitude = Math.min(360, Math.abs(fan))
@@ -341,7 +361,7 @@ const SpreadSection = memo(function SpreadSection({ effect, update }: SectionPro
   const step = !spatial && n > 1 ? magnitude / n : null
 
   return (
-    <Group title="Spread">
+    <Group title={t('effects.editor.spread')}>
       <div className="flex items-start gap-3">
         <Encoder
           value={magnitude}
@@ -350,7 +370,7 @@ const SpreadSection = memo(function SpreadSection({ effect, update }: SectionPro
           max={360}
           step={1}
           defaultValue={0}
-          label="Spread"
+          label={t('effects.editor.spread')}
           format={formatDegrees}
           size={touch ? 60 : 48}
         />
@@ -358,23 +378,23 @@ const SpreadSection = memo(function SpreadSection({ effect, update }: SectionPro
           <SegmentedControl
             size="sm"
             fullWidth
-            aria-label="Direction"
+            aria-label={t('effects.editor.direction')}
             value={reverse ? 'rev' : 'fwd'}
             onChange={(d) => update({ fan: d === 'rev' ? -magnitude : magnitude })}
             items={[
-              { value: 'fwd', label: 'Forward', icon: LuArrowRight, disabled: magnitude === 0 },
-              { value: 'rev', label: 'Reverse', icon: LuArrowLeft, disabled: magnitude === 0 }
+              { value: 'fwd', label: t('effects.editor.forward'), icon: LuArrowRight, disabled: magnitude === 0 },
+              { value: 'rev', label: t('effects.editor.reverse'), icon: LuArrowLeft, disabled: magnitude === 0 }
             ]}
           />
           <SegmentedControl
             size="sm"
             fullWidth
-            aria-label="Distribution"
+            aria-label={t('effects.editor.distribution')}
             value={spatial ? 'spatial' : 'index'}
             onChange={(m) => update({ spatialMode: m })}
             items={[
-              { value: 'index', label: 'Fixture order', icon: LuListOrdered },
-              { value: 'spatial', label: '3D position', icon: LuBox }
+              { value: 'index', label: t('effects.editor.fixtureOrder'), icon: LuListOrdered },
+              { value: 'spatial', label: t('effects.editor.position3d'), icon: LuBox }
             ]}
           />
         </div>
@@ -383,21 +403,21 @@ const SpreadSection = memo(function SpreadSection({ effect, update }: SectionPro
         <SegmentedControl
           size="sm"
           fullWidth
-          aria-label="Spatial axis"
+          aria-label={t('effects.editor.spatialAxis')}
           value={effect.spatialAxis ?? 'x'}
           onChange={(a) => update({ spatialAxis: a })}
-          items={AXES}
+          items={axisItems}
         />
       )}
       <FanPreview effect={effect} className="h-16 w-full [[data-density=touch]_&]:h-20" />
       <p className="-mt-1 text-xs text-fg-tertiary">
         {n <= 1
-          ? 'Spread needs two or more fixtures.'
+          ? t('effects.editor.spreadNeedsTwo')
           : magnitude === 0
-            ? `All ${n} fixtures move in sync.`
+            ? t('effects.editor.spreadSync', { count: n })
             : spatial
-              ? `Phase follows each fixture's 3D position along ${AXES.find((a) => a.value === (effect.spatialAxis ?? 'x'))?.label ?? 'X'}.`
-              : `${formatDegrees(step ?? 0)} between neighbouring fixtures${reverse ? ', last fixture leads' : ''}.`}
+              ? t('effects.editor.spreadSpatial', { axis: t(`effects.editor.axesLong.${effect.spatialAxis ?? 'x'}`) })
+              : t(reverse ? 'effects.editor.spreadStepReverse' : 'effects.editor.spreadStep', { deg: formatDegrees(step ?? 0) })}
       </p>
     </Group>
   )
@@ -408,26 +428,27 @@ const SpreadSection = memo(function SpreadSection({ effect, update }: SectionPro
 // ------------------------------------------------------------
 
 const PlaybackSection = memo(function PlaybackSection({ effect, update }: SectionProps) {
+  const t = useT()
   const fade = fadeTimesOf(effect)
   const setFade = (f: Partial<{ fadeIn: number; fadeOut: number }>) => setFadeTimes(effect, f)
   return (
-    <Group title="Playback">
+    <Group title={t('effects.editor.playback')}>
       <SegmentedControl
         size="sm"
         fullWidth
-        aria-label="Playback mode"
+        aria-label={t('effects.editor.playbackMode')}
         value={effect.oneShot ? 'once' : 'loop'}
         onChange={(m) => update({ oneShot: m === 'once' })}
         items={[
-          { value: 'loop', label: 'Loop', icon: LuRepeat },
-          { value: 'once', label: 'One-shot', icon: LuRepeat1 }
+          { value: 'loop', label: t('effects.editor.loop'), icon: LuRepeat },
+          { value: 'once', label: t('effects.editor.oneShot'), icon: LuRepeat1 }
         ]}
       />
       <div className="grid grid-cols-2 gap-2">
-        <NumberField label="Fade in" value={fade.fadeIn} onChange={(v) => setFade({ fadeIn: v })} min={0} max={60} step={0.1} unit="s" />
-        <NumberField label="Fade out" value={fade.fadeOut} onChange={(v) => setFade({ fadeOut: v })} min={0} max={60} step={0.1} unit="s" />
+        <NumberField label={t('effects.editor.fadeIn')} value={fade.fadeIn} onChange={(v) => setFade({ fadeIn: v })} min={0} max={60} step={0.1} unit={t('units.seconds')} />
+        <NumberField label={t('effects.editor.fadeOut')} value={fade.fadeOut} onChange={(v) => setFade({ fadeOut: v })} min={0} max={60} step={0.1} unit={t('units.seconds')} />
       </div>
-      <p className="-mt-1 text-xs text-fg-tertiary">Fades ramp the size when starting / stopping from this view. Saved with the show.</p>
+      <p className="-mt-1 text-xs text-fg-tertiary">{t('effects.editor.fadesHint')}</p>
     </Group>
   )
 })
@@ -436,10 +457,14 @@ const PlaybackSection = memo(function PlaybackSection({ effect, update }: Sectio
 // Attributes (channels the effect drives)
 // ------------------------------------------------------------
 
-const ATTRIBUTE_OPTIONS = ATTRIBUTES.map((a) => ({ value: a as string, label: attributeLabel(a) }))
-const WAVE_OVERRIDE_OPTIONS = [{ value: '', label: 'Main waveform' }, ...WAVEFORMS.filter((w) => w.id !== 'custom').map((w) => ({ value: w.id as string, label: w.label })), { value: 'constant', label: 'Hold (constant)' }]
-
 const AttributesSection = memo(function AttributesSection({ effect, update }: SectionProps) {
+  const t = useT()
+  const attributeOptions = useMemo(() => ATTRIBUTES.map((a) => ({ value: a as string, label: attributeLabel(a) })), [t])
+  const waveOverrideOptions = useMemo(() => [
+    { value: '', label: t('effects.editor.mainWaveform') },
+    ...WAVEFORMS.filter((w) => w !== 'custom').map((w) => ({ value: w as string, label: waveformLabel(w) })),
+    { value: 'constant', label: t('effects.editor.holdConstant') }
+  ], [t])
   const compound = !!effect.channels && effect.channels.length > 0
   const channels = effectChannels(effect)
 
@@ -461,16 +486,22 @@ const AttributesSection = memo(function AttributesSection({ effect, update }: Se
   }
   const remove = (i: number) => {
     const next = channels.filter((_, j) => j !== i)
-    if (next.length === 1) {
-      // Back to a simple single-attribute effect
-      update({ channels: undefined, channelType: next[0].channelType, depth: next[0].depth })
-    } else setChannels(next)
+    void deleteWithUndo({
+      label: translate('effects.selection.attribute', { name: attributeLabel(channels[i].channelType), effect: effect.name }),
+      confirm: false,
+      run: () => {
+        if (next.length === 1) {
+          // Back to a simple single-attribute effect
+          update({ channels: undefined, channelType: next[0].channelType, depth: next[0].depth })
+        } else setChannels(next)
+      }
+    })
   }
 
   return (
     <Group
-      title="Attributes"
-      actions={<Button size="xs" variant="ghost" icon={LuPlus} onClick={add}>Add</Button>}
+      title={t('effects.editor.attributes')}
+      actions={<Button size="xs" variant="ghost" icon={LuPlus} onClick={add}>{t('effects.editor.addAttribute')}</Button>}
     >
       {channels.map((ch, i) => (
         <div key={i} className="flex flex-col gap-2 rounded border border-line bg-surface-2 p-2">
@@ -480,11 +511,11 @@ const AttributesSection = memo(function AttributesSection({ effect, update }: Se
               size="sm"
               value={ch.channelType}
               onChange={(v) => patchChannel(i, { channelType: v })}
-              options={ATTRIBUTE_OPTIONS.some((o) => o.value === ch.channelType) ? ATTRIBUTE_OPTIONS : [{ value: ch.channelType, label: ch.channelType }, ...ATTRIBUTE_OPTIONS]}
-              aria-label="Attribute"
+              options={attributeOptions.some((o) => o.value === ch.channelType) ? attributeOptions : [{ value: ch.channelType, label: ch.channelType }, ...attributeOptions]}
+              aria-label={t('effects.editor.attribute')}
               className="min-w-0 flex-1"
             />
-            {compound && <IconButton size="sm" icon={LuTrash2} label={`Remove ${attributeLabel(ch.channelType)}`} onClick={() => remove(i)} />}
+            {compound && <IconButton size="sm" icon={LuTrash2} label={t('effects.editor.removeAttribute', { name: attributeLabel(ch.channelType) })} onClick={() => remove(i)} />}
           </div>
           {compound && (
             <>
@@ -494,26 +525,26 @@ const AttributesSection = memo(function AttributesSection({ effect, update }: Se
                 min={0}
                 max={255}
                 color={attributeColor(ch.channelType)}
-                showValue={(v) => `${percentOf(v)}%`}
-                aria-label={`${attributeLabel(ch.channelType)} size`}
+                showValue={(v) => formatPercent(v)}
+                aria-label={t('effects.editor.attributeSize', { name: attributeLabel(ch.channelType) })}
               />
               <div className="grid grid-cols-[1fr_1fr] gap-2">
-                <NumberField size="sm" label="Phase" value={Number(ch.phaseOffset) || 0} onChange={(v) => patchChannel(i, { phaseOffset: v })} min={-360} max={360} step={1} unit="°" />
-                <NumberField size="sm" label="Rate" value={ch.frequencyMultiplier ?? 1} onChange={(v) => patchChannel(i, { frequencyMultiplier: v })} min={0.25} max={8} step={0.25} unit="x" />
+                <NumberField size="sm" label={t('effects.editor.phase')} value={Number(ch.phaseOffset) || 0} onChange={(v) => patchChannel(i, { phaseOffset: v })} min={-360} max={360} step={1} unit="°" />
+                <NumberField size="sm" label={t('effects.editor.rate')} value={ch.frequencyMultiplier ?? 1} onChange={(v) => patchChannel(i, { frequencyMultiplier: v })} min={0.25} max={8} step={0.25} unit="x" />
               </div>
               <Select
                 size="sm"
                 value={ch.waveform ?? ''}
                 onChange={(v) => patchChannel(i, { waveform: v === '' ? undefined : (v as WaveformType) })}
-                options={WAVE_OVERRIDE_OPTIONS}
-                aria-label={`${attributeLabel(ch.channelType)} waveform`}
+                options={waveOverrideOptions}
+                aria-label={t('effects.editor.attributeWaveform', { name: attributeLabel(ch.channelType) })}
               />
             </>
           )}
         </div>
       ))}
       <p className="text-xs text-fg-tertiary">
-        {compound ? 'Each attribute has its own size, phase and rate (e.g. tilt at 2× for a figure 8).' : 'Add a second attribute to build a compound effect (circle = pan + tilt at 90°).'}
+        {compound ? t('effects.editor.compoundHint') : t('effects.editor.simpleHint')}
       </p>
     </Group>
   )

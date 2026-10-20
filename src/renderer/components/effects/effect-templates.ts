@@ -12,15 +12,18 @@ import {
 } from 'react-icons/lu'
 import type { Effect, EffectChannel, FixtureDefinition, PatchEntry, SpatialAxis, SpatialMode, WaveformType } from '@shared/types'
 import { SWATCH_COLORS } from '@renderer/components/ui/tokens'
+import { t as translate, type TranslationKey } from '@renderer/i18n'
+import type { effects as effectsEn } from '@renderer/i18n/en/effects'
 
 export type EffectCategory = 'movement' | 'color' | 'intensity' | 'beam' | 'spatial'
 
+/** Stable template ids (display name / description: effects.templates.<id> in i18n) */
+export type TemplateId = keyof typeof effectsEn.templates
+
 export interface EffectTemplate {
-  id: string
-  label: string
+  id: TemplateId
   icon: IconType
   category: EffectCategory
-  description: string
   waveform: WaveformType
   /** BPM */
   defaultSpeed: number
@@ -37,13 +40,20 @@ export interface EffectTemplate {
   spatialAxis?: SpatialAxis
 }
 
-export const CATEGORIES: { id: EffectCategory; label: string }[] = [
-  { id: 'movement', label: 'Movement' },
-  { id: 'color', label: 'Colour' },
-  { id: 'intensity', label: 'Intensity' },
-  { id: 'beam', label: 'Beam' },
-  { id: 'spatial', label: 'Spatial 3D' }
-]
+export const CATEGORIES: EffectCategory[] = ['movement', 'color', 'intensity', 'beam', 'spatial']
+
+export function categoryLabel(c: EffectCategory): string {
+  return translate(`effects.categories.${c}`)
+}
+
+/** Template name in the current language (also the name of an effect created from it) */
+export function templateLabel(tpl: Pick<EffectTemplate, 'id'>): string {
+  return translate(`effects.templates.${tpl.id}.label`)
+}
+
+export function templateDescription(tpl: Pick<EffectTemplate, 'id'>): string {
+  return translate(`effects.templates.${tpl.id}.description`)
+}
 
 /** Category accent (from the shared swatch set) */
 export const CATEGORY_COLOR: Record<EffectCategory, string> = {
@@ -62,113 +72,113 @@ const RGB: EffectChannel[] = [
 
 export const EFFECT_TEMPLATES: EffectTemplate[] = [
   // Movement
-  { id: 'sweep-lr', label: 'Pan sweep', icon: LuMoveHorizontal, category: 'movement', description: 'Pan left to right',
+  { id: 'sweep-lr', icon: LuMoveHorizontal, category: 'movement',
     channels: ['Pan'], waveform: 'sine', defaultSpeed: 30, defaultSize: 80, defaultSpread: 0 },
-  { id: 'sweep-ud', label: 'Tilt sweep', icon: LuMoveVertical, category: 'movement', description: 'Tilt up and down',
+  { id: 'sweep-ud', icon: LuMoveVertical, category: 'movement',
     channels: ['Tilt'], waveform: 'sine', defaultSpeed: 20, defaultSize: 60, defaultSpread: 0 },
-  { id: 'circle', label: 'Circle', icon: LuCircle, category: 'movement', description: 'Pan + tilt circle (1:1)',
+  { id: 'circle', icon: LuCircle, category: 'movement',
     waveform: 'sine', defaultSpeed: 15, defaultSize: 50, defaultSpread: 0,
     compound: [{ channelType: 'Pan', phaseOffset: 0, depth: 128 }, { channelType: 'Tilt', phaseOffset: 90, depth: 128 }] },
-  { id: 'figure-8', label: 'Figure 8', icon: LuInfinity, category: 'movement', description: 'Lissajous 1:2 figure eight',
+  { id: 'figure-8', icon: LuInfinity, category: 'movement',
     waveform: 'sine', defaultSpeed: 12, defaultSize: 60, defaultSpread: 0,
     compound: [{ channelType: 'Pan', phaseOffset: 0, depth: 128, frequencyMultiplier: 1 }, { channelType: 'Tilt', phaseOffset: 0, depth: 100, frequencyMultiplier: 2 }] },
-  { id: 'ballyhoo', label: 'Ballyhoo', icon: LuWind, category: 'movement', description: 'Wide sweep: sine pan, triangle tilt',
+  { id: 'ballyhoo', icon: LuWind, category: 'movement',
     waveform: 'sine', defaultSpeed: 8, defaultSize: 90, defaultSpread: 0,
     compound: [{ channelType: 'Pan', phaseOffset: 0, depth: 200, waveform: 'sine' }, { channelType: 'Tilt', phaseOffset: 45, depth: 120, waveform: 'triangle' }] },
-  { id: 'wave', label: 'Tilt wave', icon: LuWaves, category: 'movement', description: 'Tilt wave across fixtures',
+  { id: 'wave', icon: LuWaves, category: 'movement',
     channels: ['Tilt'], waveform: 'sine', defaultSpeed: 20, defaultSize: 50, defaultSpread: 120 },
-  { id: 'fan-out', label: 'Fan out', icon: LuFan, category: 'movement', description: 'Beams spread apart and converge',
+  { id: 'fan-out', icon: LuFan, category: 'movement',
     channels: ['Pan'], waveform: 'sine', defaultSpeed: 15, defaultSize: 70, defaultSpread: 180 },
-  { id: 'nod', label: 'Nod', icon: LuArrowUpDown, category: 'movement', description: 'Quick bouncing nod',
+  { id: 'nod', icon: LuArrowUpDown, category: 'movement',
     channels: ['Tilt'], waveform: 'bounce', defaultSpeed: 40, defaultSize: 40, defaultSpread: 0 },
-  { id: 'step-position', label: 'Step positions', icon: LuGrid2X2, category: 'movement', description: 'Snap between 4 positions',
+  { id: 'step-position', icon: LuGrid2X2, category: 'movement',
     waveform: 'step', defaultSpeed: 30, defaultSize: 60, defaultSpread: 90,
     compound: [{ channelType: 'Pan', phaseOffset: 0, depth: 150, waveform: 'step' }, { channelType: 'Tilt', phaseOffset: 90, depth: 100, waveform: 'step' }] },
-  { id: 'random-move', label: 'Random move', icon: LuShuffle, category: 'movement', description: 'Random position changes',
+  { id: 'random-move', icon: LuShuffle, category: 'movement',
     waveform: 'random', defaultSpeed: 40, defaultSize: 50, defaultSpread: 0,
     compound: [{ channelType: 'Pan', phaseOffset: 0, depth: 128 }, { channelType: 'Tilt', phaseOffset: 0, depth: 128 }] },
 
   // Colour (RGB)
-  { id: 'rainbow', label: 'Rainbow', icon: LuRainbow, category: 'color', description: 'Cycle through RGB colours',
+  { id: 'rainbow', icon: LuRainbow, category: 'color',
     channels: ['Red', 'Green', 'Blue'], waveform: 'sine', defaultSpeed: 10, defaultSize: 100, defaultSpread: 120 },
-  { id: 'color-chase', label: 'Colour chase', icon: LuChevronsRight, category: 'color', description: 'Colours ripple across fixtures',
+  { id: 'color-chase', icon: LuChevronsRight, category: 'color',
     channels: ['Red', 'Green', 'Blue'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 60 },
-  { id: 'color-pulse', label: 'Colour pulse', icon: LuHeart, category: 'color', description: 'Pulsing RGB colour shifts',
+  { id: 'color-pulse', icon: LuHeart, category: 'color',
     channels: ['Red', 'Green', 'Blue'], waveform: 'triangle', defaultSpeed: 40, defaultSize: 100, defaultSpread: 0 },
-  { id: 'color-step', label: 'Colour step', icon: LuSquareActivity, category: 'color', description: 'Hard steps between saturated colours',
+  { id: 'color-step', icon: LuSquareActivity, category: 'color',
     channels: ['Red', 'Green', 'Blue'], waveform: 'step', defaultSpeed: 20, defaultSize: 100, defaultSpread: 120 },
-  { id: 'fire', label: 'Fire', icon: LuFlame, category: 'color', description: 'Random warm red / amber flicker',
+  { id: 'fire', icon: LuFlame, category: 'color',
     waveform: 'random', defaultSpeed: 80, defaultSize: 80, defaultSpread: 0,
     compound: [{ channelType: 'Red', phaseOffset: 0, depth: 255 }, { channelType: 'Green', phaseOffset: 0, depth: 80 }, { channelType: 'Blue', phaseOffset: 0, depth: 10 }] },
 
   // Colour (wheel)
-  { id: 'wheel-cycle', label: 'Wheel cycle', icon: LuPalette, category: 'color', description: 'Cycle through colour wheel slots',
+  { id: 'wheel-cycle', icon: LuPalette, category: 'color',
     channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 10, defaultSize: 50, defaultSpread: 0 },
-  { id: 'wheel-chase', label: 'Wheel chase', icon: LuRefreshCw, category: 'color', description: 'Colour wheel ripple across fixtures',
+  { id: 'wheel-chase', icon: LuRefreshCw, category: 'color',
     channels: ['Color Wheel'], waveform: 'sawtooth', defaultSpeed: 20, defaultSize: 50, defaultSpread: 90 },
-  { id: 'wheel-step', label: 'Wheel step', icon: LuDisc3, category: 'color', description: 'Step through wheel colours sharply',
+  { id: 'wheel-step', icon: LuDisc3, category: 'color',
     channels: ['Color Wheel'], waveform: 'square', defaultSpeed: 30, defaultSize: 50, defaultSpread: 0 },
-  { id: 'wheel-random', label: 'Wheel random', icon: LuDices, category: 'color', description: 'Random colour wheel jumps',
+  { id: 'wheel-random', icon: LuDices, category: 'color',
     channels: ['Color Wheel'], waveform: 'random', defaultSpeed: 40, defaultSize: 50, defaultSpread: 0 },
 
   // Intensity
-  { id: 'pulse', label: 'Pulse', icon: LuActivity, category: 'intensity', description: 'Smooth dimmer pulsing',
+  { id: 'pulse', icon: LuActivity, category: 'intensity',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 60, defaultSize: 100, defaultSpread: 0 },
-  { id: 'strobe-fx', label: 'Strobe', icon: LuZap, category: 'intensity', description: 'Fast on / off flashing',
+  { id: 'strobe-fx', icon: LuZap, category: 'intensity',
     channels: ['Dimmer'], waveform: 'square', defaultSpeed: 240, defaultSize: 100, defaultSpread: 0 },
-  { id: 'chase-intensity', label: 'Chase', icon: LuChevronsRight, category: 'intensity', description: 'Intensity chases across fixtures',
+  { id: 'chase-intensity', icon: LuChevronsRight, category: 'intensity',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 120, defaultSize: 100, defaultSpread: 90 },
-  { id: 'random-flash', label: 'Random flash', icon: LuSparkles, category: 'intensity', description: 'Random fixture flashes',
+  { id: 'random-flash', icon: LuSparkles, category: 'intensity',
     channels: ['Dimmer'], waveform: 'random', defaultSpeed: 60, defaultSize: 100, defaultSpread: 0 },
-  { id: 'breathe', label: 'Breathe', icon: LuSunDim, category: 'intensity', description: 'Slow breathing',
+  { id: 'breathe', icon: LuSunDim, category: 'intensity',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 10, defaultSize: 80, defaultSpread: 0 },
-  { id: 'bump', label: 'Bump', icon: LuSparkle, category: 'intensity', description: 'Fast attack, slow decay — once',
+  { id: 'bump', icon: LuSparkle, category: 'intensity',
     channels: ['Dimmer'], waveform: 'pulse', defaultSpeed: 120, defaultSize: 100, defaultSpread: 0, oneShot: true },
-  { id: 'strobe-burst', label: 'Strobe burst', icon: LuZap, category: 'intensity', description: 'One fast flash cycle, then stop',
+  { id: 'strobe-burst', icon: LuZap, category: 'intensity',
     channels: ['Dimmer'], waveform: 'square', defaultSpeed: 600, defaultSize: 100, defaultSpread: 0, oneShot: true },
-  { id: 'wave-dim', label: 'Dim wave', icon: LuWaves, category: 'intensity', description: 'Intensity wave across fixtures',
+  { id: 'wave-dim', icon: LuWaves, category: 'intensity',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 120 },
-  { id: 'bounce-dim', label: 'Bounce', icon: LuArrowDown, category: 'intensity', description: 'Bouncing-ball decay',
+  { id: 'bounce-dim', icon: LuArrowDown, category: 'intensity',
     channels: ['Dimmer'], waveform: 'bounce', defaultSpeed: 40, defaultSize: 100, defaultSpread: 0 },
 
   // Beam
-  { id: 'zoom-breathe', label: 'Zoom breathe', icon: LuZoomIn, category: 'beam', description: 'Zoom in and out smoothly',
+  { id: 'zoom-breathe', icon: LuZoomIn, category: 'beam',
     channels: ['Zoom'], waveform: 'sine', defaultSpeed: 15, defaultSize: 80, defaultSpread: 0 },
-  { id: 'zoom-pulse', label: 'Zoom pulse', icon: LuSun, category: 'beam', description: 'Quick zoom pulse',
+  { id: 'zoom-pulse', icon: LuSun, category: 'beam',
     channels: ['Zoom'], waveform: 'pulse', defaultSpeed: 40, defaultSize: 90, defaultSpread: 0 },
-  { id: 'iris-pulse', label: 'Iris pulse', icon: LuAperture, category: 'beam', description: 'Iris open / close',
+  { id: 'iris-pulse', icon: LuAperture, category: 'beam',
     channels: ['Iris'], waveform: 'sine', defaultSpeed: 20, defaultSize: 80, defaultSpread: 0 },
-  { id: 'focus-hunt', label: 'Focus hunt', icon: LuFocus, category: 'beam', description: 'Slow focus shift for texture',
+  { id: 'focus-hunt', icon: LuFocus, category: 'beam',
     channels: ['Focus'], waveform: 'triangle', defaultSpeed: 6, defaultSize: 40, defaultSpread: 0 },
-  { id: 'gobo-spin', label: 'Gobo cycle', icon: LuDisc3, category: 'beam', description: 'Step through the gobo wheel',
+  { id: 'gobo-spin', icon: LuDisc3, category: 'beam',
     channels: ['Gobo'], waveform: 'sawtooth', defaultSpeed: 15, defaultSize: 50, defaultSpread: 0 },
-  { id: 'prism-rotate', label: 'Prism', icon: LuTriangle, category: 'beam', description: 'Prism in / out cycle',
+  { id: 'prism-rotate', icon: LuTriangle, category: 'beam',
     channels: ['Prism'], waveform: 'sawtooth', defaultSpeed: 10, defaultSize: 60, defaultSpread: 0 },
-  { id: 'frost-fade', label: 'Frost fade', icon: LuSnowflake, category: 'beam', description: 'Fade frost in and out',
+  { id: 'frost-fade', icon: LuSnowflake, category: 'beam',
     channels: ['Frost'], waveform: 'sine', defaultSpeed: 8, defaultSize: 80, defaultSpread: 0 },
 
   // Spatial 3D
-  { id: 'spatial-color-lr', label: 'Colour sweep X', icon: LuMoveHorizontal, category: 'spatial', description: 'RGB wave left → right across the room',
+  { id: 'spatial-color-lr', icon: LuMoveHorizontal, category: 'spatial',
     waveform: 'sine', defaultSpeed: 15, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'x', compound: RGB },
-  { id: 'spatial-color-fb', label: 'Colour sweep Z', icon: LuMoveVertical, category: 'spatial', description: 'RGB wave front → back',
+  { id: 'spatial-color-fb', icon: LuMoveVertical, category: 'spatial',
     waveform: 'sine', defaultSpeed: 15, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'z', compound: RGB },
-  { id: 'spatial-color-radial', label: 'Colour radial', icon: LuRadar, category: 'spatial', description: 'RGB colours radiate from the centre',
+  { id: 'spatial-color-radial', icon: LuRadar, category: 'spatial',
     waveform: 'sine', defaultSpeed: 12, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'radial', compound: RGB },
-  { id: 'spatial-color-height', label: 'Colour height', icon: LuArrowUpDown, category: 'spatial', description: 'RGB colours shift with fixture height',
+  { id: 'spatial-color-height', icon: LuArrowUpDown, category: 'spatial',
     waveform: 'sine', defaultSpeed: 10, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'y', compound: RGB },
-  { id: 'spatial-dim-lr', label: 'Dim wave X', icon: LuWaves, category: 'spatial', description: 'Intensity wave left → right',
+  { id: 'spatial-dim-lr', icon: LuWaves, category: 'spatial',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'x' },
-  { id: 'spatial-dim-fb', label: 'Dim wave Z', icon: LuWaves, category: 'spatial', description: 'Intensity wave front → back',
+  { id: 'spatial-dim-fb', icon: LuWaves, category: 'spatial',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 30, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'z' },
-  { id: 'spatial-dim-radial', label: 'Dim radial', icon: LuCircleDot, category: 'spatial', description: 'Intensity pulse from the centre out',
+  { id: 'spatial-dim-radial', icon: LuCircleDot, category: 'spatial',
     channels: ['Dimmer'], waveform: 'sine', defaultSpeed: 20, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'radial' },
-  { id: 'spatial-strobe-lr', label: 'Strobe sweep X', icon: LuZap, category: 'spatial', description: 'Strobe sweeping left → right',
+  { id: 'spatial-strobe-lr', icon: LuZap, category: 'spatial',
     channels: ['Dimmer'], waveform: 'square', defaultSpeed: 240, defaultSize: 100, defaultSpread: 180, spatialMode: 'spatial', spatialAxis: 'x' },
-  { id: 'spatial-strobe-radial', label: 'Strobe radial', icon: LuOrbit, category: 'spatial', description: 'Strobe burst from the centre out',
+  { id: 'spatial-strobe-radial', icon: LuOrbit, category: 'spatial',
     channels: ['Dimmer'], waveform: 'square', defaultSpeed: 240, defaultSize: 100, defaultSpread: 180, spatialMode: 'spatial', spatialAxis: 'radial' },
-  { id: 'spatial-chase-lr', label: 'Chase X', icon: LuChevronsRight, category: 'spatial', description: 'Sharp intensity chase left → right',
+  { id: 'spatial-chase-lr', icon: LuChevronsRight, category: 'spatial',
     channels: ['Dimmer'], waveform: 'pulse', defaultSpeed: 60, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'x' },
-  { id: 'spatial-white-wave', label: 'White wave', icon: LuWaves, category: 'spatial', description: 'White wave across the room',
+  { id: 'spatial-white-wave', icon: LuWaves, category: 'spatial',
     channels: ['White'], waveform: 'sine', defaultSpeed: 20, defaultSize: 100, defaultSpread: 360, spatialMode: 'spatial', spatialAxis: 'x' }
 ]
 
@@ -182,24 +192,20 @@ export const ATTRIBUTES = [
   'Pan', 'Tilt', 'Zoom', 'Focus', 'Iris', 'Gobo', 'Prism', 'Frost', 'Shutter'
 ] as const
 
+const ATTRIBUTE_SET = new Set<string>(ATTRIBUTES)
+
+/** Display name of an attribute (unknown types from older shows are shown as stored) */
 export function attributeLabel(type: string): string {
-  return type === 'Color Wheel' ? 'Colour wheel' : type
+  return ATTRIBUTE_SET.has(type) ? translate(`effects.attributes.${type}` as TranslationKey) : type
 }
 
-export const WAVEFORMS: { id: WaveformType; label: string }[] = [
-  { id: 'sine', label: 'Sine' },
-  { id: 'triangle', label: 'Triangle' },
-  { id: 'sawtooth', label: 'Saw' },
-  { id: 'square', label: 'Square' },
-  { id: 'pulse', label: 'Pulse' },
-  { id: 'bounce', label: 'Bounce' },
-  { id: 'step', label: 'Step' },
-  { id: 'random', label: 'Random' },
-  { id: 'custom', label: 'Custom' }
-]
+/** Waveforms offered in the picker (display names: effects.waveforms.<id>) */
+export const WAVEFORMS: WaveformType[] = ['sine', 'triangle', 'sawtooth', 'square', 'pulse', 'bounce', 'step', 'random', 'custom']
+
+const WAVEFORM_SET = new Set<string>([...WAVEFORMS, 'constant'])
 
 export function waveformLabel(w: WaveformType): string {
-  return WAVEFORMS.find((x) => x.id === w)?.label ?? (w === 'constant' ? 'Hold' : w)
+  return WAVEFORM_SET.has(w) ? translate(`effects.waveforms.${w}` as TranslationKey) : w
 }
 
 export const DEFAULT_KEYFRAMES = [
@@ -295,7 +301,7 @@ export function effectFromTemplate(t: EffectTemplate, fixtureIds: string[]): Par
     channels = list.map((c, i) => ({ channelType: c, phaseOffset: Math.round((i * 360) / list.length), depth: Math.round(255 * size) }))
   }
   const effect: Partial<Effect> & { fixtureIds: string[] } = {
-    name: t.label,
+    name: templateLabel(t),
     waveform: t.waveform,
     speed: t.defaultSpeed / 60,
     depth: Math.round(255 * size),

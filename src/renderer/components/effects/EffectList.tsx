@@ -4,16 +4,18 @@
 // render per frame). Long-press / right-click a row for more.
 // ============================================================
 
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useRef, useState, type RefObject } from 'react'
 import type React from 'react'
 import {
-  LuCopy, LuEllipsis, LuHeadphones, LuPlay, LuRotateCcw, LuSave, LuSlidersHorizontal, LuSparkles, LuSquare, LuTrash2
+  LuCopy, LuEllipsis, LuHeadphones, LuPencil, LuPlay, LuRotateCcw, LuSave, LuSlidersHorizontal, LuSparkles, LuSquare, LuTrash2
 } from 'react-icons/lu'
 import type { CueChannelValue, Effect } from '@shared/types'
 import {
   Badge, Button, DropdownMenu, EmptyState, IconButton, SegmentedControl, ToggleButton, cn, confirm, effectCategoryIcon,
   contextMenuHandlers, formatBpm, toast, useContextMenu, type MenuEntry, type MenuPoint
 } from '@renderer/components/ui'
+import { t as translate, useT } from '@renderer/i18n'
+import { deleteWithUndo, useSelectionActions } from '@renderer/lib/selection-actions'
 import { useEffectsStore } from '@renderer/stores/effects-store'
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { useDmxStore } from '@renderer/stores/dmx-store'
@@ -26,34 +28,77 @@ type Filter = 'all' | 'running'
 
 /** "All fixtures", a group name, up to 3 names, or "N fixtures" */
 export function useTargetLabel(): (ids: string[]) => string {
+  const t = useT()
   const patch = usePatchStore((s) => s.patch)
   const groups = usePatchStore((s) => s.groups)
   return useMemo(() => {
     const names = new Map(patch.map((p) => [p.id, p.name]))
     return (ids: string[]) => {
-      if (ids.length === 0) return 'No targets'
+      if (ids.length === 0) return t('effects.targets.none')
       const set = new Set(ids)
-      if (patch.length > 0 && ids.length === patch.length && patch.every((p) => set.has(p.id))) return 'All fixtures'
+      if (patch.length > 0 && ids.length === patch.length && patch.every((p) => set.has(p.id))) return t('effects.targets.allFixtures')
       const g = groups.find((gr) => gr.fixtureIds.length === ids.length && gr.fixtureIds.every((id) => set.has(id)))
       if (g) return g.name
-      if (ids.length <= 3) return ids.map((id) => names.get(id) ?? 'Missing fixture').join(', ')
-      return `${ids.length} fixtures`
+      if (ids.length <= 3) return ids.map((id) => names.get(id) ?? t('effects.targets.missingFixture')).join(', ')
+      return t('common.fixtureCount', { count: ids.length })
     }
-  }, [patch, groups])
+  }, [patch, groups, t])
 }
 
-export async function deleteEffect(effect: Effect): Promise<void> {
-  const ok = await confirm({ title: `Delete “${effect.name}”?`, message: 'The effect is removed from the show. This cannot be undone.', confirmLabel: 'Delete effect', tone: 'danger' })
-  if (!ok) return
-  useEffectsStore.getState().removeEffect(effect.id)
+/** Noun phrase for the confirm dialog / Undo toast (en 'effect “Rainbow”', fr 'l’effet « Rainbow »') */
+export function effectLabel(effect: Pick<Effect, 'name'>): string {
+  return translate('effects.selection.effect', { name: effect.name })
+}
+
+/** Remove an effect now (synchronous: one undo step inside deleteWithUndo / selection actions) */
+function removeEffectNow(id: string): void {
+  useEffectsStore.getState().removeEffect(id)
   const ui = useEffectsUiStore.getState()
-  if (ui.editingId === effect.id) ui.setEditing(null)
+  if (ui.editingId === id) ui.setEditing(null)
+  if (ui.solo?.id === id) useEffectsUiStore.setState({ solo: null })
+}
+
+/** Delete an effect: confirm, one undo step, Undo toast */
+export function deleteEffect(effect: Effect): Promise<boolean> {
+  return deleteWithUndo({
+    label: effectLabel(effect),
+    run: () => removeEffectNow(effect.id),
+    confirm: { confirmLabel: translate('effects.editor.deleteEffect') }
+  })
 }
 
 export function duplicateEffect(effect: Effect): void {
   const { id: _id, ...rest } = effect
-  const id = useEffectsStore.getState().createEffect({ ...rest, name: `${effect.name} copy`, isRunning: false, fixtureIds: [...effect.fixtureIds] })
+  const id = useEffectsStore.getState().createEffect({
+    ...rest, name: translate('effects.list.copyName', { name: effect.name }), isRunning: false, fixtureIds: [...effect.fixtureIds]
+  })
   useEffectsUiStore.getState().setEditing(id)
+}
+
+/** Focus the name field of the editor (rename) */
+export function focusEffectName(): void {
+  requestAnimationFrame(() => {
+    const el = document.querySelector<HTMLInputElement>('[data-fx-name]')
+    el?.focus()
+    el?.select()
+  })
+}
+
+/**
+ * Delete / Mod+D / F2 on the effect being edited. Registered by the list and
+ * the editor (each with its own scope) so the keys work from either, never
+ * from the library or the targets.
+ */
+export function useEffectSelectionActions(scope: RefObject<HTMLElement | null>): void {
+  const editingId = useEffectsUiStore((s) => s.editingId)
+  const selected = useEffectsStore((s) => (editingId ? s.effects.find((e) => e.id === editingId) : undefined))
+  useSelectionActions(selected ? {
+    label: () => effectLabel(selected),
+    delete: () => removeEffectNow(selected.id),
+    confirmDelete: { confirmLabel: translate('effects.editor.deleteEffect') },
+    duplicate: () => duplicateEffect(selected),
+    rename: focusEffectName
+  } : null, { scope })
 }
 
 /** Snapshot the running effects + current output of their fixtures as a new scene */
@@ -74,17 +119,20 @@ function saveRunningAsScene(): void {
     }
   }
   const names = running.map((e) => e.name)
-  const sceneName = names.length <= 2 ? names.join(' + ') : `${names[0]} +${names.length - 1} effects`
+  const sceneName = names.length <= 2 ? names.join(' + ') : translate('effects.list.sceneNameMore', { name: names[0], count: names.length - 1 })
   const cuelistId = playback.addCuelist(sceneName)
-  playback.addCue(cuelistId, 'Cue 1', cueValues)
+  playback.addCue(cuelistId, translate('effects.list.sceneCueName'), cueValues)
   const effectSnapshots = running.map((fx) => ({ ...fx }))
   usePlaybackStore.setState((state) => ({
     cuelists: state.cuelists.map((cl) => (cl.id === cuelistId ? { ...cl, effectSnapshots } : cl))
   }))
-  toast.success(`Scene “${sceneName}” created`, { description: `${running.length} effect${running.length === 1 ? '' : 's'} captured` })
+  toast.success(translate('effects.list.sceneCreated', { name: sceneName }), { description: translate('effects.list.sceneCaptured', { count: running.length }) })
 }
 
 export function EffectList({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  const t = useT()
+  const sectionRef = useRef<HTMLElement>(null)
+  useEffectSelectionActions(sectionRef)
   const effects = useEffectsStore((s) => s.effects)
   const editingId = useEffectsUiStore((s) => s.editingId)
   const soloId = useEffectsUiStore((s) => s.solo?.id ?? null)
@@ -97,9 +145,9 @@ export function EffectList({ className, style }: { className?: string; style?: R
 
   const stopAll = async () => {
     const ok = await confirm({
-      title: 'Stop all effects?',
-      message: `${runningCount} running effect${runningCount === 1 ? '' : 's'} will stop immediately.`,
-      confirmLabel: 'Stop all effects',
+      title: t('effects.list.stopAllTitle'),
+      message: t('effects.list.stopAllText', { count: runningCount }),
+      confirmLabel: t('effects.list.stopAllAction'),
       tone: 'danger'
     })
     if (!ok) return
@@ -107,67 +155,69 @@ export function EffectList({ className, style }: { className?: string; style?: R
     useEffectsUiStore.setState({ solo: null })
   }
 
-  const removeAll = async () => {
-    const ok = await confirm({
-      title: `Delete all ${effects.length} effects?`,
-      message: 'Every effect is removed from the show. This cannot be undone.',
-      confirmLabel: 'Delete all effects',
-      tone: 'danger'
+  const removeAll = () => {
+    const count = useEffectsStore.getState().effects.length
+    if (count === 0) return
+    void deleteWithUndo({
+      label: t('effects.selection.allEffects', { count }),
+      confirm: { confirmLabel: t('effects.list.deleteAllAction') },
+      run: () => {
+        const store = useEffectsStore.getState()
+        for (const e of [...store.effects]) store.removeEffect(e.id)
+        useEffectsUiStore.setState({ editingId: null, solo: null })
+      }
     })
-    if (!ok) return
-    const store = useEffectsStore.getState()
-    for (const e of [...store.effects]) store.removeEffect(e.id)
-    useEffectsUiStore.setState({ editingId: null, solo: null })
   }
 
   const moreItems = (): MenuEntry[] => [
-    { label: 'Save running as scene', icon: LuSave, disabled: runningCount === 0, onSelect: saveRunningAsScene, description: 'Captures the running effects and their fixtures' },
+    { label: t('effects.list.saveAsScene'), icon: LuSave, disabled: runningCount === 0, onSelect: saveRunningAsScene, description: t('effects.list.saveAsSceneHint') },
     { type: 'separator' },
-    { label: 'Delete all effects…', icon: LuTrash2, danger: true, disabled: effects.length === 0, onSelect: () => { void removeAll() } }
+    { label: t('effects.list.deleteAll'), icon: LuTrash2, danger: true, disabled: effects.length === 0, onSelect: removeAll }
   ]
 
   const rowMenu = (e: Effect): MenuEntry[] => [
-    { label: 'Edit', icon: LuSlidersHorizontal, onSelect: () => useEffectsUiStore.getState().setEditing(e.id) },
-    { label: 'Restart phase', icon: LuRotateCcw, disabled: !e.isRunning, onSelect: () => useEffectsStore.getState().setEffectRunning(e.id, true) },
-    { label: 'Duplicate', icon: LuCopy, onSelect: () => duplicateEffect(e) },
+    { label: t('common.edit'), icon: LuSlidersHorizontal, onSelect: () => useEffectsUiStore.getState().setEditing(e.id) },
+    { label: t('effects.list.restartPhase'), icon: LuRotateCcw, disabled: !e.isRunning, onSelect: () => useEffectsStore.getState().setEffectRunning(e.id, true) },
+    { label: t('common.duplicate'), icon: LuCopy, onSelect: () => duplicateEffect(e) },
+    { label: t('common.renameEllipsis'), icon: LuPencil, onSelect: () => { useEffectsUiStore.getState().setEditing(e.id); focusEffectName() } },
     { type: 'separator' },
-    { label: 'Delete…', icon: LuTrash2, danger: true, onSelect: () => { void deleteEffect(e) } }
+    { label: t('common.deleteEllipsis'), icon: LuTrash2, danger: true, onSelect: () => { void deleteEffect(e) } }
   ]
 
   return (
-    <section aria-label="Effects" className={cn('flex min-h-0 flex-col bg-surface-1', className)} style={style}>
+    <section ref={sectionRef} aria-label={t('effects.list.region')} className={cn('flex min-h-0 flex-col bg-surface-1', className)} style={style}>
       <header className="flex h-control-lg shrink-0 items-center gap-2 border-b border-line-subtle pl-3 pr-1.5">
-        <h2 className="text-sm font-semibold text-fg-primary">Effects</h2>
+        <h2 className="text-sm font-semibold text-fg-primary">{t('effects.list.title')}</h2>
         <span className="text-xs tabular text-fg-tertiary">{effects.length}</span>
-        {runningCount > 0 && <Badge tone="go" className="hidden xl:inline-flex">{runningCount} RUNNING</Badge>}
+        {runningCount > 0 && <Badge tone="go" className="hidden xl:inline-flex">{t('effects.list.runningBadge', { count: runningCount })}</Badge>}
         <div className="flex-1" />
         <SegmentedControl
           size="xs"
-          aria-label="Show effects"
+          aria-label={t('effects.list.filterLabel')}
           value={filter}
           onChange={setFilter}
-          items={[{ value: 'all', label: 'All' }, { value: 'running', label: 'Running' }]}
+          items={[{ value: 'all', label: t('effects.list.filterAll') }, { value: 'running', label: t('effects.list.filterRunning') }]}
         />
         <Button size="sm" variant="danger-outline" icon={LuSquare} disabled={runningCount === 0} data-fx-stop-all onClick={() => { void stopAll() }}>
-          Stop all
+          {t('effects.list.stopAll')}
         </Button>
         <DropdownMenu
           placement="bottom-end"
           items={moreItems}
-          trigger={(p) => <IconButton {...p} size="sm" icon={LuEllipsis} label="More effect actions" />}
+          trigger={(p) => <IconButton {...p} size="sm" icon={LuEllipsis} label={t('effects.list.moreActions')} />}
         />
       </header>
 
-      <div role="listbox" aria-label="Effects" className="min-h-0 flex-1 overflow-y-auto py-1">
+      <div role="listbox" aria-label={t('effects.list.region')} className="min-h-0 flex-1 overflow-y-auto py-1">
         {effects.length === 0 ? (
-          <EmptyState size="sm" icon={LuSparkles} title="No effects yet" description="Select targets, then tap an effect in the library above to create and start it." />
+          <EmptyState size="sm" icon={LuSparkles} title={t('effects.list.emptyTitle')} description={t('effects.list.emptyText')} />
         ) : shown.length === 0 ? (
           <EmptyState
             size="sm"
             icon={LuSquare}
-            title="Nothing running"
-            description="Start an effect with its play button, or show all effects."
-            action={<Button size="sm" variant="ghost" onClick={() => setFilter('all')}>Show all</Button>}
+            title={t('effects.list.nothingRunningTitle')}
+            description={t('effects.list.nothingRunningText')}
+            action={<Button size="sm" variant="ghost" onClick={() => setFilter('all')}>{t('common.showAll')}</Button>}
           />
         ) : (
           shown.map((e) => (
@@ -194,6 +244,7 @@ const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, on
   soloed: boolean
   onMenu: (e: MenuPoint) => void
 }) {
+  const t = useT()
   const category = effectCategoryOf(effect)
   const color = CATEGORY_COLOR[category]
   const Icon = effectCategoryIcon(category)
@@ -227,7 +278,7 @@ const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, on
           tone="go"
           active={running}
           icon={running ? LuSquare : LuPlay}
-          label={running ? `Stop ${effect.name}` : `Start ${effect.name}`}
+          label={running ? t('effects.list.stop', { name: effect.name }) : t('effects.list.start', { name: effect.name })}
           data-fx-play
           onClick={() => runEffect(effect.id, !running)}
         />
@@ -237,11 +288,11 @@ const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, on
         <span className="flex min-w-0 items-center gap-1.5">
           <Icon size={12} aria-hidden className="shrink-0" style={{ color }} />
           <span className={cn('truncate text-sm', running ? 'font-medium text-fg-primary' : 'text-fg-secondary')}>{effect.name}</span>
-          {effect.oneShot && <Badge size="xs">ONE-SHOT</Badge>}
+          {effect.oneShot && <Badge size="xs">{t('effects.library.oneShotBadge')}</Badge>}
         </span>
         <span className="truncate text-xs text-fg-tertiary">
           <span className={effect.fixtureIds.length === 0 ? 'text-warning-fg' : undefined}>{targets}</span>
-          <span className="tabular"> · {effect.fixtureIds.length} fx · {waveformLabel(effect.waveform)} · {formatBpm(effect.speed * 60)}</span>
+          <span className="tabular"> · {t('common.fixtureCount', { count: effect.fixtureIds.length })} · {waveformLabel(effect.waveform)} · {formatBpm(effect.speed * 60)}</span>
         </span>
       </span>
       <span onClick={stop} className="flex items-center gap-1">
@@ -252,14 +303,14 @@ const EffectRow = memo(function EffectRow({ effect, targets, editing, soloed, on
           icon={LuHeadphones}
           pressed={soloed}
           onPressedChange={() => useEffectsUiStore.getState().toggleSolo(effect.id)}
-          tooltip={soloed ? 'Un-solo: restart the effects solo stopped' : 'Solo: stop every other effect'}
-          aria-label={`Solo ${effect.name}`}
+          tooltip={soloed ? t('effects.list.unsoloHint') : t('effects.list.soloHint')}
+          aria-label={t('effects.list.soloLabel', { name: effect.name })}
           labelClassName="hidden xl:inline"
         >
-          Solo
+          {t('effects.list.solo')}
         </ToggleButton>
-        <IconButton size="sm" icon={LuSlidersHorizontal} label={`Edit ${effect.name}`} data-fx-edit onClick={edit} active={editing} tone="info" />
-        <IconButton size="sm" icon={LuEllipsis} label="More" onClick={(e) => onMenu(e)} className="[[data-density=compact]_&]:hidden" />
+        <IconButton size="sm" icon={LuSlidersHorizontal} label={t('effects.list.editLabel', { name: effect.name })} data-fx-edit onClick={edit} active={editing} tone="info" />
+        <IconButton size="sm" icon={LuEllipsis} label={t('common.more')} onClick={(e) => onMenu(e)} className="[[data-density=compact]_&]:hidden" />
       </span>
     </div>
   )

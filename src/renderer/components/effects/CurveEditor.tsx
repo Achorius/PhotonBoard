@@ -14,6 +14,8 @@ import { LuMagnet, LuRotateCcw, LuTrash2 } from 'react-icons/lu'
 import type { WaveformKeyframe } from '@shared/types'
 import { getWaveformValue } from '@renderer/lib/effect-engine'
 import { Button, NumberField, ToggleButton, cn, palette, useDensity } from '@renderer/components/ui'
+import { t as translate, useT } from '@renderer/i18n'
+import { deleteWithUndo } from '@renderer/lib/selection-actions'
 import { DEFAULT_KEYFRAMES } from './effect-templates'
 
 interface CurveEditorProps {
@@ -34,6 +36,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
 const sortKfs = (k: WaveformKeyframe[]) => [...k].sort((a, b) => a.x - b.x)
 
 export function CurveEditor({ keyframes, onChange, color = palette.accent, height = 150, className }: CurveEditorProps) {
+  const t = useT()
   const density = useDensity()
   const touch = density === 'touch'
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -102,6 +105,12 @@ export function CurveEditor({ keyframes, onChange, color = palette.accent, heigh
     if (i <= 0 || i >= kfs.length - 1 || kfs.length <= 2) return
     onChange(kfs.filter((_, j) => j !== i))
     setSelected(null)
+  }
+
+  /** Delete button / Delete key: same as double-tap, with the Undo toast (no confirm: a point is cheap) */
+  const deletePoint = (i: number) => {
+    if (i <= 0 || i >= kfs.length - 1 || kfs.length <= 2) return
+    void deleteWithUndo({ label: translate('effects.selection.curvePoint'), confirm: false, run: () => removePoint(i) })
   }
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -180,13 +189,14 @@ export function CurveEditor({ keyframes, onChange, color = palette.accent, heigh
           onPointerCancel={(e) => end(e, true)}
           onLostPointerCapture={(e) => end(e, false)}
           role="application"
-          aria-label="Custom waveform editor"
+          aria-label={t('effects.curve.label')}
           tabIndex={0}
           onKeyDown={(e) => {
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selected !== null) {
+            // Delete here means the point, never the effect (selection actions)
+            if (e.key === 'Delete' || e.key === 'Backspace') {
               e.preventDefault()
               e.stopPropagation()
-              removePoint(selected)
+              if (selected !== null && !e.repeat) deletePoint(selected)
             }
           }}
         >
@@ -223,8 +233,8 @@ export function CurveEditor({ keyframes, onChange, color = palette.accent, heigh
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <ToggleButton size="sm" variant="ghost" tone="info" icon={LuMagnet} pressed={snap} onPressedChange={setSnap} tooltip="Snap points to the grid (Shift = free)">
-          Snap
+        <ToggleButton size="sm" variant="ghost" tone="info" icon={LuMagnet} pressed={snap} onPressedChange={setSnap} tooltip={t('effects.curve.snapHint')}>
+          {t('effects.curve.snap')}
         </ToggleButton>
         {sel ? (
           <>
@@ -249,16 +259,16 @@ export function CurveEditor({ keyframes, onChange, color = palette.accent, heigh
               unit="%"
               onChange={(v) => selected !== null && onChange(placed(kfs, selected, { x: sel.x, y: v / 100 }))}
             />
-            <Button size="sm" variant="ghost" icon={LuTrash2} disabled={selIsEdge || kfs.length <= 2} onClick={() => selected !== null && removePoint(selected)}>
-              Delete point
+            <Button size="sm" variant="ghost" icon={LuTrash2} disabled={selIsEdge || kfs.length <= 2} onClick={() => selected !== null && deletePoint(selected)}>
+              {t('effects.curve.deletePoint')}
             </Button>
           </>
         ) : (
-          <span className="text-xs text-fg-tertiary">Tap to add a point · drag to move · double-tap to remove</span>
+          <span className="text-xs text-fg-tertiary">{t('effects.curve.help')}</span>
         )}
         <div className="flex-1" />
         <Button size="sm" variant="ghost" icon={LuRotateCcw} onClick={() => { setSelected(null); onChange(DEFAULT_KEYFRAMES) }}>
-          Reset
+          {t('common.reset')}
         </Button>
       </div>
     </div>
