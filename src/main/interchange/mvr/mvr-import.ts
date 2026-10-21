@@ -135,12 +135,12 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
     if (gsdEntry.header.size > MAX_XML_BYTES) throw new Error('GeneralSceneDescription.xml is too large')
     doc = parseXml(gsdEntry.getData().toString('utf-8'))
   } catch (e) {
-    warn('error', 'mvr.invalidXml', `GeneralSceneDescription.xml could not be read: ${(e as Error).message}`)
+    warn('error', 'mvr.invalidXml', `GeneralSceneDescription.xml could not be read: ${(e as Error).message}`, { error: (e as Error).message })
     return fragment
   }
   const gsd = kid(doc, 'GeneralSceneDescription')
   if (!gsd) {
-    warn('error', 'mvr.invalidXml', 'GeneralSceneDescription.xml has no GeneralSceneDescription node')
+    warn('error', 'mvr.invalidXml', 'GeneralSceneDescription.xml has no GeneralSceneDescription node', { error: 'no GeneralSceneDescription node' })
     return fragment
   }
 
@@ -295,7 +295,7 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
         try { parsed = await ctx.parseGdtf(data, entry.entryName) } catch { parsed = null }
         if (!parsed) parsed = parseGdtfArchive(data, entry.entryName).definition
       } catch (e) {
-        warn('warning', 'mvr.gdtfUnreadable', `GDTF "${spec}" could not be read (${(e as Error).message}); looking the fixture type up in the library`, { file: spec })
+        warn('warning', 'mvr.gdtfUnreadable', `GDTF "${spec}" could not be read (${(e as Error).message}); looking the fixture type up in the library`, { file: spec, error: (e as Error).message })
       }
     } else if (spec) {
       warn('warning', 'mvr.gdtfMissing', `GDTF "${spec}" is not embedded in the MVR; looking the fixture type up in the library`, { file: spec })
@@ -307,7 +307,7 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
       const footprint = parsed.modes.find((m) => modeMatches(m.name, rec.gdtfMode))?.channelCount ?? footprintHint
       const lib = await safeFind(mfr, model, footprint)
       if (lib) {
-        warn('info', 'mvr.placeholderReplaced', `"${mfr} ${model}": the MVR embeds a placeholder GDTF (generic dimmer channels); the library definition "${lib.manufacturer} ${lib.name}" is used instead`, { fixture: `${mfr} ${model}` })
+        warn('info', 'mvr.placeholderReplaced', `"${mfr} ${model}": the MVR embeds a placeholder GDTF (generic dimmer channels); the library definition "${lib.manufacturer} ${lib.name}" is used instead`, { fixture: `${mfr} ${model}`, library: `${lib.manufacturer} ${lib.name}` })
         return { def: register(lib), how: 'library', footprints }
       }
       warn('warning', 'mvr.placeholderKept', `"${mfr} ${model}": the MVR embeds a placeholder GDTF (generic dimmer channels) and no library definition matches; channels are generic`, { fixture: `${mfr} ${model}` })
@@ -316,7 +316,7 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
     if (mfr || model) {
       const lib = await safeFind(mfr, model, footprintHint)
       if (lib) {
-        warn('info', 'mvr.libraryMatch', `"${[mfr, model].filter(Boolean).join(' ')}" resolved from the library as "${lib.manufacturer} ${lib.name}"`, { fixture: model })
+        warn('info', 'mvr.libraryMatch', `"${[mfr, model].filter(Boolean).join(' ')}" resolved from the library as "${lib.manufacturer} ${lib.name}"`, { fixture: [mfr, model].filter(Boolean).join(' '), library: `${lib.manufacturer} ${lib.name}` })
         return { def: register(lib), how: 'library', footprints }
       }
     }
@@ -410,7 +410,7 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
       entry.universe = patchedAddrs[0].addr!.universe
       entry.address = patchedAddrs[0].addr!.address
       if (entry.address + mode.channelCount - 1 > 512) {
-        warn('warning', 'mvr.addressOverflow', `"${entry.name}" at ${entry.universe + 1}.${entry.address} (${mode.channelCount} ch) runs past the end of the universe`, { fixture: entry.name })
+        warn('warning', 'mvr.addressOverflow', `"${entry.name}" at ${entry.universe + 1}.${entry.address} (${mode.channelCount} ch) runs past the end of the universe`, { fixture: entry.name, address: `${entry.universe + 1}.${entry.address}`, channels: mode.channelCount })
       }
       patch.push(entry)
     } else {
@@ -430,7 +430,7 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
       next += size
       patch.push(e)
     }
-    warn('warning', 'mvr.unpatched', `${unpatched.length} fixture(s) have no DMX address in the MVR; they were placed from universe ${unpatched[0].universe + 1}, address 1 — check the patch`, { count: unpatched.length })
+    warn('warning', 'mvr.unpatched', `${unpatched.length} fixture(s) have no DMX address in the MVR; they were placed from universe ${unpatched[0].universe + 1}, address 1 — check the patch`, { count: unpatched.length, universe: unpatched[0].universe + 1 })
   }
 
   // Console order: fixture ID, then address
@@ -438,8 +438,8 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
   fragment.patch = patch
 
   for (const m of modeIssues.values()) {
-    if (m.sameFootprint) warn('info', 'mvr.modeMapped', `${m.count} × "${m.fixture}": DMX mode "${m.wanted}" mapped to "${m.used}" (same channel count)`, { fixture: m.fixture, mode: m.wanted, count: m.count })
-    else warn('warning', 'mvr.modeNotFound', `${m.count} × "${m.fixture}": DMX mode "${m.wanted}" not found; using "${m.used}" — check the footprint`, { fixture: m.fixture, mode: m.wanted, count: m.count })
+    if (m.sameFootprint) warn('info', 'mvr.modeMapped', `${m.count} × "${m.fixture}": DMX mode "${m.wanted}" mapped to "${m.used}" (same channel count)`, { fixture: m.fixture, mode: m.wanted, used: m.used, count: m.count })
+    else warn('warning', 'mvr.modeNotFound', `${m.count} × "${m.fixture}": DMX mode "${m.wanted}" not found; using "${m.used}" — check the footprint`, { fixture: m.fixture, mode: m.wanted, used: m.used, count: m.count })
   }
   if (multiBreak > 0) warn('warning', 'mvr.multiBreak', `${multiBreak} fixture(s) use several DMX breaks; only the first break is patched`, { count: multiBreak })
   if (duplicateFid > 0) warn('warning', 'mvr.duplicateFixtureId', `${duplicateFid} fixture(s) repeat a fixture ID already used; they get a new number`, { count: duplicateFid })
@@ -492,7 +492,10 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
   // ---- what was not imported ----
   const labels: Record<string, string> = { SceneObject: 'scene objects', FocusPoint: 'focus points', Support: 'supports', VideoScreen: 'video screens', Projector: 'projectors' }
   const parts = [...ignored.entries()].map(([k, n]) => `${n} ${labels[k] ?? k}`)
-  if (parts.length) warn('info', 'mvr.ignoredObjects', `Not imported (no DMX fixture): ${parts.join(', ')}`, { count: [...ignored.values()].reduce((a, b) => a + b, 0) })
+  if (parts.length) warn('info', 'mvr.ignoredObjects', `Not imported (no DMX fixture): ${parts.join(', ')}`, {
+    count: [...ignored.values()].reduce((a, b) => a + b, 0),
+    objects: [...ignored.entries()].map(([k, n]) => `${k} × ${n}`).join(', ') // MVR node names: the same in every language
+  })
   if (extras.focus > 0) warn('info', 'mvr.focusPoints', `${extras.focus} fixture(s) reference a focus point; the fixtures keep the orientation of the MVR, focus points are not imported`, { count: extras.focus })
   const extraParts = [
     extras.customCommands && `${extras.customCommands} with custom commands`,
@@ -501,7 +504,10 @@ export async function parseMvr(bytes: Uint8Array, fileName: string, ctx: ImportC
     extras.overwrites && `${extras.overwrites} with GDTF overwrites`,
     extras.gobos && `${extras.gobos} with a custom gobo`
   ].filter(Boolean)
-  if (extraParts.length) warn('info', 'mvr.ignoredProperties', `Fixture properties not imported: ${extraParts.join(', ')}`)
+  // MVR node names (CustomCommands, Mappings…): the same in every language
+  const extraNodes = ([['CustomCommands', extras.customCommands], ['Mappings', extras.mappings], ['Connections', extras.connections], ['Overwrites', extras.overwrites], ['Gobo', extras.gobos]] as const)
+    .filter(([, n]) => n > 0).map(([k, n]) => `${k} × ${n}`)
+  if (extraParts.length) warn('info', 'mvr.ignoredProperties', `Fixture properties not imported: ${extraParts.join(', ')}`, { properties: extraNodes.join(', ') })
   if (fixtures.length === 0) warn('warning', 'mvr.noFixtures', 'The MVR contains no DMX fixture')
   return fragment
 }

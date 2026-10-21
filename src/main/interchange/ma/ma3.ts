@@ -65,7 +65,7 @@ export function readMa3Xml(root: XmlNode, doc: MaDocument = emptyMaDocument('ma3
 
   const other = childTags(gma3).filter(t => !HANDLED.has(t.toLowerCase()))
   if (other.length > 0) {
-    warn('info', 'ma.notImported', `grandMA3 objects not imported: ${other.join(', ')}`)
+    warn('info', 'ma.notImported', `grandMA3 objects not imported: ${other.join(', ')}`, { objects: other.join(', ') })
   }
   return doc
 }
@@ -240,7 +240,7 @@ function readPhasers(node: XmlNode, doc: MaDocument, part?: number): MaValue[] {
     const steps = children(ph, 'Step')
     const step = steps[0] ?? ph
     if (steps.length > 1) {
-      addWarning(doc.warnings, { level: 'warning', code: 'ma3.phaser', message: 'Phasers (multi-step values) are imported as their first step; rebuild them as PhotonBoard effects' })
+      addWarning(doc.warnings, { level: 'warning', code: 'ma3.phaser', message: 'Phasers (multi-step values) are imported as their first step; rebuild them as PhotonBoard effects', params: { count: 1 } })
     }
     let value: number | undefined
     let unit: MaValueUnit = 'percent'
@@ -254,7 +254,7 @@ function readPhasers(node: XmlNode, doc: MaDocument, part?: number): MaValue[] {
     const pr = presetRef ? /(\d+)\.(\d+)/.exec(presetRef) : null
     if (value === undefined) {
       if (!presetRef) continue
-      addWarning(doc.warnings, { level: 'warning', code: 'ma3.presetOnly', message: 'Values that only reference a preset (no stored value) were skipped' })
+      addWarning(doc.warnings, { level: 'warning', code: 'ma3.presetOnly', message: 'Values that only reference a preset (no stored value) were skipped', params: { count: 1 } })
       continue
     }
     const v: MaValue = { ref, attribute, value, unit }

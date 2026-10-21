@@ -175,7 +175,7 @@ export function writeUsitt(show: ShowFile, fixtures: FixtureDefinition[], appVer
   if (show.executor?.pages?.length) lost.push('executor pages')
   if (show.timeline?.clips?.length) lost.push('timeline')
   if (show.patch.some(p => p.position3D)) lost.push('3D positions')
-  if (lost.length > 0) warn('warning', 'usitt.notRepresentable', `Not representable in USITT ASCII, left out: ${lost.join(', ')} — use the PhotonBoard show file or MVR for those`)
+  if (lost.length > 0) warn('warning', 'usitt.notRepresentable', `Not representable in USITT ASCII, left out: ${lost.join(', ')} — use the PhotonBoard show file or MVR for those`, { count: lost.length })
 
   out.push('ENDDATA')
   return { text: out.join(EOL) + EOL, warnings }

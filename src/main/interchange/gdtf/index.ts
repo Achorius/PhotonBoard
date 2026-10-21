@@ -48,11 +48,11 @@ export const gdtfImporter: Importer = {
     return desc ? 0.6 : 0
   },
   async parse(bytes, fileName) {
-    const { definition, notes } = parseGdtfArchive(bytes, fileName)
+    const { definition, remarks } = parseGdtfArchive(bytes, fileName)
     const fragment = emptyFragment('gdtf', definition.name)
     fragment.fixtures.push(definition)
     fragment.sourceApp = 'GDTF'
-    for (const note of notes) fragment.warnings.push({ level: 'info', code: 'gdtf.note', params: { fixture: definition.name }, message: note })
+    for (const r of remarks) fragment.warnings.push({ level: 'info', code: r.code, params: { fixture: definition.name, ...r.params }, message: r.message })
     return fragment
   }
 }

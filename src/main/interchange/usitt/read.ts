@@ -125,12 +125,12 @@ function parseChanTokens(tokens: string[], warnings: ImportWarning[]): UsittLeve
   for (const tok of tokens) {
     const m = /^(\d+)[/@](.+)$/.exec(tok)
     if (!m) {
-      warnings.push({ level: 'warning', code: 'usitt.badLevel', message: `Unreadable channel level "${tok}"` })
+      warnings.push({ level: 'warning', code: 'usitt.badLevel', message: `Unreadable channel level "${tok}"`, params: { value: tok } })
       continue
     }
     const value = parseLevel(m[2])
     if (value === null) {
-      warnings.push({ level: 'warning', code: 'usitt.badLevel', message: `Unreadable channel level "${tok}"` })
+      warnings.push({ level: 'warning', code: 'usitt.badLevel', message: `Unreadable channel level "${tok}"`, params: { value: tok } })
       continue
     }
     out.push({ channel: Number(m[1]), value })
@@ -187,7 +187,7 @@ export function readUsitt(text: string): UsittDocument {
         // PATCH page channel<dimmer@level …
         for (const tok of args.slice(1)) {
           const m = /^(\d+)<(\d+)(?:@(.+))?$/.exec(tok)
-          if (!m) { doc.warnings.push({ level: 'warning', code: 'usitt.badPatch', message: `Unreadable patch entry "${tok}"` }); continue }
+          if (!m) { doc.warnings.push({ level: 'warning', code: 'usitt.badPatch', message: `Unreadable patch entry "${tok}"`, params: { value: tok } }); continue }
           const ch = Number(m[1])
           const dimmer = Number(m[2])
           const level = m[3] ? parseLevel(m[3]) ?? 255 : 255
@@ -343,7 +343,7 @@ export function readUsitt(text: string): UsittDocument {
   }
   if (ignored.size > 0) {
     const list = [...ignored.entries()].map(([k, n]) => `${k} (${n})`).join(', ')
-    doc.warnings.push({ level: 'info', code: 'usitt.ignoredKeywords', message: `Keywords not imported: ${list}`, params: { count: ignored.size } })
+    doc.warnings.push({ level: 'info', code: 'usitt.ignoredKeywords', message: `Keywords not imported: ${list}`, params: { count: ignored.size, keywords: list } })
   }
   return doc
 }

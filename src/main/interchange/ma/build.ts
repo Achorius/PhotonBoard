@@ -239,7 +239,7 @@ export async function buildFragment(doc: MaDocument, ctx: ImportContext, fileNam
   for (const d of doc.fixtures) {
     const k = refKey(d.ref)
     if (declared.has(k)) {
-      warn('info', 'ma.duplicateFixture', 'A fixture number appears more than once (multipatch); only the first is imported', { fixture: refLabel(d.ref) })
+      warn('info', 'ma.duplicateFixture', 'A fixture number appears more than once (multipatch); only the first is imported', { fixture: refLabel(d.ref), count: 1 })
       continue
     }
     declared.set(k, d)
@@ -296,7 +296,7 @@ export async function buildFragment(doc: MaDocument, ctx: ImportContext, fileNam
     if (embedded) outDefs.set(def.id, def)
     const mode = pickMode(def, d.modeName, d.footprint)
     if (d.footprint && mode.channelCount !== d.footprint && !def.id.startsWith('ma-import/')) {
-      warn('warning', 'ma.footprintMismatch', `Fixture type "${def.name}": no mode with ${d.footprint} channels, mode "${mode.name}" used`, { type: def.name })
+      warn('warning', 'ma.footprintMismatch', `Fixture type "${def.name}": no mode with ${d.footprint} channels, mode "${mode.name}" used`, { type: def.name, footprint: d.footprint, mode: mode.name })
     }
     const entry: PatchEntry = {
       id: patchIdOf(d.ref),
@@ -310,7 +310,7 @@ export async function buildFragment(doc: MaDocument, ctx: ImportContext, fileNam
     if (d.ref.idType === 'fixture' || (d.ref.idType === 'channel' && !declared.has(`fixture:${d.ref.id}`))) entry.fid = d.ref.id
     if (d.position) entry.position3D = { x: round3(d.position.x), y: round3(d.position.z), z: round3(d.position.y) }
     if (d.rotation) entry.rotation3D = { rx: round3(deg2rad(d.rotation.x)), ry: round3(deg2rad(d.rotation.z)), rz: round3(deg2rad(d.rotation.y)) }
-    if (d.extraBreaks) warn('info', 'ma.multiBreak', 'Fixtures with several DMX breaks or multipatch addresses: only the first address is imported', { fixture: entry.name })
+    if (d.extraBreaks) warn('info', 'ma.multiBreak', 'Fixtures with several DMX breaks or multipatch addresses: only the first address is imported', { fixture: entry.name, count: 1 })
     resolved.set(k, { entry, def, mode })
     if (d.universe === undefined || d.address === undefined) unpatched.push(k) // parked below
   }
@@ -387,7 +387,7 @@ export async function buildFragment(doc: MaDocument, ctx: ImportContext, fileNam
         range = info.key === 'pan' ? DEFAULT_PAN_RANGE : DEFAULT_TILT_RANGE
         if (!rangeWarned) {
           rangeWarned = true
-          warn('info', 'ma.assumedRange', `Pan / tilt values are in degrees: fixture types without a pan / tilt range use ${DEFAULT_PAN_RANGE}° / ${DEFAULT_TILT_RANGE}°`)
+          warn('info', 'ma.assumedRange', `Pan / tilt values are in degrees: fixture types without a pan / tilt range use ${DEFAULT_PAN_RANGE}° / ${DEFAULT_TILT_RANGE}°`, { pan: DEFAULT_PAN_RANGE, tilt: DEFAULT_TILT_RANGE })
         }
       }
       return clamp01(0.5 + v.value / range)
@@ -558,7 +558,7 @@ export async function buildFragment(doc: MaDocument, ctx: ImportContext, fileNam
     frag.cuelists.push(cl)
   })
   if (unsupportedTriggers.size > 0) {
-    warn('warning', 'ma.triggerUnsupported', `Cue triggers not available in PhotonBoard were imported as manual GO: ${[...unsupportedTriggers].join(', ')}`)
+    warn('warning', 'ma.triggerUnsupported', `Cue triggers not available in PhotonBoard were imported as manual GO: ${[...unsupportedTriggers].join(', ')}`, { triggers: [...unsupportedTriggers].join(', ') })
     unsupportedTriggers = new Set()
   }
 
@@ -603,10 +603,10 @@ export async function buildFragment(doc: MaDocument, ctx: ImportContext, fileNam
   if (doc.effects.length > 0) warn('info', 'ma.effectApproximate', 'grandMA effects are approximated (form → waveform, low / high → depth, phase spread → fan); speed is not exported by grandMA and was set to 1 Hz × rate')
 
   if (unmapped.size > 0) {
-    warn('warning', 'ma.attributeNotMapped', `Values of attributes without a matching channel were skipped: ${[...unmapped].slice(0, 12).join(', ')}${unmapped.size > 12 ? '…' : ''}`, { count: unmapped.size })
+    warn('warning', 'ma.attributeNotMapped', `Values of attributes without a matching channel were skipped: ${[...unmapped].slice(0, 12).join(', ')}${unmapped.size > 12 ? '…' : ''}`, { count: unmapped.size, attributes: `${[...unmapped].slice(0, 12).join(', ')}${unmapped.size > 12 ? '…' : ''}` })
   }
   if (physicalSkipped.size > 0) {
-    warn('warning', 'ma.physicalValue', `Values stored in physical units (Hz, °K…) cannot be converted to DMX and were skipped: ${[...physicalSkipped].join(', ')}`)
+    warn('warning', 'ma.physicalValue', `Values stored in physical units (Hz, °K…) cannot be converted to DMX and were skipped: ${[...physicalSkipped].join(', ')}`, { attributes: [...physicalSkipped].join(', ') })
   }
   if (relativeSkipped > 0) {
     warn('warning', 'ma.relativeValue', `${relativeSkipped} relative value(s) (grandMA relative layer) were skipped`, { count: relativeSkipped })

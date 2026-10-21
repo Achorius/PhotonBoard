@@ -38,17 +38,13 @@ import {
 } from '@renderer/lib/interchange-merge'
 import { resolveUnsaved } from '@renderer/components/layout/file-actions'
 import { closeImportWizard, useInterchangeStore, type ImportSource, type WizardError, type WizardStep } from './interchange-store'
+import { warningText } from './warning-text'
 
 // ---------------------------------------------------------------
 // Texts
 // ---------------------------------------------------------------
 
-/** A warning in the UI language (falls back to the importer's English text) */
-export function warningText(w: ImportWarning): string {
-  const key = `interchange.warnings.${w.code}`
-  if (hasTranslation(key)) return t(key as TranslationKey, w.params)
-  return w.message || w.code
-}
+export { warningText } from './warning-text'
 
 export function errorText(e: WizardError | null): string {
   if (!e) return ''

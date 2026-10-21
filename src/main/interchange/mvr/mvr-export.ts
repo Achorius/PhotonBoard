@@ -120,7 +120,8 @@ export function writeMvr(show: ShowFile, fixtures: FixtureDefinition[], opts: Mv
   if (show.effects.length) notCarried.push(`${show.effects.length} effect(s)`)
   if ((show.macros ?? []).length) notCarried.push(`${show.macros!.length} macro(s)`)
   if (notCarried.length) {
-    warnings.push({ level: 'info', code: 'mvr.export.rigOnly', message: `MVR describes the rig (fixtures, patch, positions) only; not exported: ${notCarried.join(', ')}` })
+    const count = show.groups.length + show.presets.length + show.cuelists.length + show.chases.length + show.effects.length + (show.macros ?? []).length
+    warnings.push({ level: 'info', code: 'mvr.export.rigOnly', params: { count }, message: `MVR describes the rig (fixtures, patch, positions) only; not exported: ${notCarried.join(', ')}` })
   }
   if (room.trussBars.length) {
     warnings.push({ level: 'info', code: 'mvr.export.trusses', params: { count: room.trussBars.length }, message: `${room.trussBars.length} truss bar(s) are not exported (MVR trusses need 3D models)` })

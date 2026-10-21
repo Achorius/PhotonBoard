@@ -74,7 +74,7 @@ const GROUP_COLORS = ['#e85d04', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#e
 
 class Warnings {
   readonly out: ImportWarning[] = []
-  private lists = new Map<string, { level: ImportWarningLevel; message: string; items: string[] }>()
+  private lists = new Map<string, { level: ImportWarningLevel; message: string; items: string[]; params?: Record<string, string | number> }>()
 
   add(level: ImportWarningLevel, code: string, message: string, params?: Record<string, string | number>): void {
     const w: ImportWarning = { level, code, message }
@@ -82,17 +82,17 @@ class Warnings {
     this.out.push(w)
   }
 
-  /** One warning per code listing the items ("… : A, B, C (+12 more)") */
-  item(level: ImportWarningLevel, code: string, message: string, item: string): void {
+  /** One warning per code listing the items ("… : A, B, C (+12 more)"); `params` = extra params of the message */
+  item(level: ImportWarningLevel, code: string, message: string, item: string, params?: Record<string, string | number>): void {
     const l = this.lists.get(code)
-    if (l) { if (!l.items.includes(item)) l.items.push(item) } else this.lists.set(code, { level, message, items: [item] })
+    if (l) { if (!l.items.includes(item)) l.items.push(item) } else this.lists.set(code, { level, message, items: [item], params })
   }
 
   flush(): ImportWarning[] {
     for (const [code, l] of this.lists) {
       const shown = l.items.slice(0, 12).join(', ')
       const more = l.items.length > 12 ? ` (+${l.items.length - 12} more)` : ''
-      this.out.push({ level: l.level, code, message: `${l.message}: ${shown}${more}`, params: { count: l.items.length, items: shown + more } })
+      this.out.push({ level: l.level, code, message: `${l.message}: ${shown}${more}`, params: { ...l.params, count: l.items.length, items: shown + more } })
     }
     this.lists.clear()
     return this.out
@@ -183,16 +183,16 @@ class WorkspaceImporter {
           const uni = p.outputUni !== undefined ? Number(p.outputUni) : u.index
           this.warn.add('info', 'qlcplus.output.artnet',
             `Universe ${u.index + 1} ("${u.name}") was sent by Art-Net${ip ? ` to ${ip}` : ''}, Art-Net universe ${uni}: configure the matching output in PhotonBoard (outputs are machine settings, not show data)`,
-            { universe: u.index + 1, ip, artnetUniverse: uni })
+            { universe: u.index + 1, name: u.name, ip, address: ip || 'broadcast', artnetUniverse: uni })
         } else if (o.plugin === 'E1.31') {
           const target = p.multicast === '0' ? (p.ucastIP ?? '') : 'multicast'
           this.warn.add('info', 'qlcplus.output.e131',
             `Universe ${u.index + 1} ("${u.name}") was sent by sACN (E1.31)${target ? ` (${target})` : ''}${p.universe ? `, sACN universe ${p.universe}` : ''}: configure the output in PhotonBoard`,
-            { universe: u.index + 1, target, sacnUniverse: p.universe ?? '' })
+            { universe: u.index + 1, name: u.name, target, destination: target || 'multicast', sacnUniverse: p.universe ?? '', sacn: p.universe ?? u.index + 1 })
         } else {
-          this.warn.add('info', 'qlcplus.output.other',
+          this.warn.add('info', 'qlcplus.output.plugin',
             `Universe ${u.index + 1} ("${u.name}") was sent to ${o.plugin}${o.name ? ` "${o.name}"` : ''}: configure the output in PhotonBoard`,
-            { universe: u.index + 1, plugin: o.plugin, line: o.name ?? '' })
+            { universe: u.index + 1, name: u.name, plugin: o.plugin, line: o.name ?? '' })
         }
       }
       if (u.passthrough) this.warn.item('info', 'qlcplus.passthrough', 'DMX input passthrough is not supported (universes)', String(u.index + 1))
@@ -279,7 +279,7 @@ class WorkspaceImporter {
           mode = u.modes[0]
           defId = u.id
           modeName = mode.name
-          this.warn.item('warning', 'qlcplus.fixtureNotFound',
+          this.warn.item('warning', found ? 'qlcplus.fixtureModeNotFound' : 'qlcplus.fixtureNotFound',
             found ? 'Fixture mode not found: patched as generic channels' : 'Fixture type not found in the library / catalog: patched as generic channels (install the definition, then change the fixture type)',
             `${f.manufacturer} ${f.model}${f.mode ? ` (${f.mode})` : ''}`)
         }
@@ -354,7 +354,7 @@ class WorkspaceImporter {
       is3d
         ? `${placed} fixture positions imported from the 3D view (stage ${round3(W)} × ${round3(D)} m, ${round3(H)} m high)`
         : `${placed} fixture positions imported from the 2D monitor as a front view (QLC+'s own conversion); check the depth in the 3D view`,
-      { count: placed })
+      { count: placed, width: round3(W), depth: round3(D), height: round3(H) })
     if (rotated > 0) this.warn.add('info', 'qlcplus.rotations', `${rotated} fixture rotations of the QLC+ monitor were not imported (set the mounting in the 3D view)`, { count: rotated })
   }
 
@@ -569,7 +569,7 @@ class WorkspaceImporter {
     const cl = this.newCuelist(id, s.name, [cue])
     this.frag.cuelists.push(cl)
     this.targets.set(s.id, [{ kind: 'cuelist', id, name: s.name }])
-    if (s.tempo === 'Beats') this.warn.item('info', 'qlcplus.beats', `Beat-based times converted at ${this.bpm} BPM`, s.name)
+    if (s.tempo === 'Beats') this.warn.item('info', 'qlcplus.beats', `Beat-based times converted at ${this.bpm} BPM`, s.name, { bpm: this.bpm })
     return cl
   }
 
@@ -607,7 +607,7 @@ class WorkspaceImporter {
         duration: this.seconds(duration, f)
       })
     })
-    if (f.tempo === 'Beats') this.warn.item('info', 'qlcplus.beats', `Beat-based times converted at ${this.bpm} BPM`, f.name)
+    if (f.tempo === 'Beats') this.warn.item('info', 'qlcplus.beats', `Beat-based times converted at ${this.bpm} BPM`, f.name, { bpm: this.bpm })
     return out
   }
 
@@ -1020,7 +1020,7 @@ class WorkspaceImporter {
       length: Math.max(10, Math.ceil(end)),
       loop: false
     }
-    this.warn.add('info', 'qlcplus.show', `Show "${used.name}" became the timeline (${clips.length} clips on ${used.tracks.length} tracks)`, { clips: clips.length, tracks: used.tracks.length })
+    this.warn.add('info', 'qlcplus.show', `Show "${used.name}" became the timeline (${clips.length} clips on ${used.tracks.length} tracks)`, { name: used.name, clips: clips.length, tracks: used.tracks.length })
   }
 
   // ---------------------------------------------------------- virtual console
@@ -1192,7 +1192,7 @@ class WorkspaceImporter {
       placed.set(key, { page, col, row })
       slot++
     }
-    if (dropped) this.warn.add('warning', 'qlcplus.executorPages', `${dropped} console widgets did not fit in ${MAX_EXECUTOR_PAGES} executor pages`, { count: dropped })
+    if (dropped) this.warn.add('warning', 'qlcplus.executorPages', `${dropped} console widgets did not fit in ${MAX_EXECUTOR_PAGES} executor pages`, { count: dropped, max: MAX_EXECUTOR_PAGES })
     this.frag.executor = executorLayoutFromPages(pages.filter(Boolean))
     this.warn.add('info', 'qlcplus.executors', `${cells.length - dropped} virtual console widgets became executor cells`, { count: cells.length - dropped })
   }

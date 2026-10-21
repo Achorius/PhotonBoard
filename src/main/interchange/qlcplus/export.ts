@@ -699,7 +699,7 @@ class WorkspaceExporter {
       const rows = Math.ceil(extra.length / 8)
       midiFrame = { tag: 'Frame', caption: 'MIDI', x: 10, y: 10 + y, w: 10 + 8 * 90 + 10, h: 40 + rows * 210, children: extra }
     }
-    this.warn.add('info', 'qlcplus.export.midiLine', `MIDI inputs use input line 0 of universe 1${line === MIDI_OMNI ? ' in OMNI mode' : `, MIDI channel ${line + 1}`}: pick your controller in QLC+ Inputs/Outputs`)
+    this.warn.add('info', 'qlcplus.export.midiLine', `MIDI inputs use input line 0 of universe 1${line === MIDI_OMNI ? ' in OMNI mode' : `, MIDI channel ${line + 1}`}: pick your controller in QLC+ Inputs/Outputs`, { channel: line === MIDI_OMNI ? 'OMNI' : line + 1 })
     return { frames, midiFrame, gmInput, midiLine: line, feedback }
   }
 

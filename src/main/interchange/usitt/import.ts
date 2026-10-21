@@ -64,7 +64,7 @@ export function usittToFragment(doc: UsittDocument, fileName: string): ImportedS
   for (const f of doc.mlFixtures) {
     const pers = f.personality ? doc.mlPersonalities.get(f.personality.toLowerCase()) : undefined
     if (!pers || f.startChannel === undefined) {
-      warn('warning', 'usitt.mlIncomplete', `Moving light ${f.number}: personality or start channel missing, not imported`)
+      warn('warning', 'usitt.mlIncomplete', `Moving light ${f.number}: personality or start channel missing, not imported`, { number: f.number })
       continue
     }
     let entry = mlDefs.get(pers.name)
@@ -253,7 +253,7 @@ export function usittToFragment(doc: UsittDocument, fileName: string): ImportedS
   })
 
   if (unknownChannels.size > 0) {
-    warn('warning', 'usitt.unknownChannels', `Levels for channels that could not be resolved were skipped: ${[...unknownChannels].slice(0, 20).join(', ')}`, { count: unknownChannels.size })
+    warn('warning', 'usitt.unknownChannels', `Levels for channels that could not be resolved were skipped: ${[...unknownChannels].slice(0, 20).join(', ')}`, { count: unknownChannels.size, channels: [...unknownChannels].slice(0, 20).join(', ') })
   }
   return frag
 }

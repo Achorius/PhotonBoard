@@ -281,7 +281,7 @@ describe('QLC+ sample workspaces (real files)', () => {
     expect(frag.patch).toHaveLength(1)
     expect(frag.patch[0].fixtureDefId).toBe('qlcplus-generic/dimmer-110ch')
     expect(frag.warnings.find((w) => w.code === 'qlcplus.output.e131')?.params).toMatchObject({ universe: 1, target: 'multicast', sacnUniverse: '1' })
-    expect(frag.warnings.some((w) => w.code === 'qlcplus.output.other' && w.params?.plugin === 'DMX USB')).toBe(true)
+    expect(frag.warnings.some((w) => w.code === 'qlcplus.output.plugin' && w.params?.plugin === 'DMX USB')).toBe(true)
     // its sliders listen to sACN input, not MIDI: reported, not mapped
     expect(frag.midiMappings).toHaveLength(0)
     expect(frag.warnings.some((w) => w.code === 'qlcplus.levelSlider' || w.code === 'qlcplus.inputNotMidi')).toBe(true)

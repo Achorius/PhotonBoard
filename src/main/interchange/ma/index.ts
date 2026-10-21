@@ -74,14 +74,14 @@ async function readXmlInto(doc: MaDocument | null, text: string, kind: Exclude<X
   try {
     root = parseXml(text)
   } catch (e) {
-    addWarning(target.warnings, { level: 'error', code: 'ma.badXml', message: `${fileName}: invalid XML (${(e as Error).message})` })
+    addWarning(target.warnings, { level: 'error', code: 'ma.badXml', message: `${fileName}: invalid XML (${(e as Error).message})`, params: { file: fileName, error: (e as Error).message } })
     return target
   }
   try {
     if (kind === 'ma3') readMa3Xml(root, target)
     else readMa2Xml(root, target)
   } catch (e) {
-    addWarning(target.warnings, { level: 'error', code: 'ma.readError', message: `${fileName}: ${(e as Error).message}` })
+    addWarning(target.warnings, { level: 'error', code: 'ma.readError', message: `${fileName}: ${(e as Error).message}`, params: { file: fileName, error: (e as Error).message } })
   }
   return target
 }
@@ -131,7 +131,7 @@ async function parseZip(bytes: Uint8Array, fileName: string, ctx: ImportContext)
   }
   doc.embeddedDefinitions.push(...embedded)
   if (skipped.length > 0) {
-    addWarning(doc.warnings, { level: 'info', code: 'ma.skippedFiles', message: `Files ignored in the archive: ${skipped.slice(0, 10).join(', ')}${skipped.length > 10 ? '…' : ''}`, params: { count: skipped.length } })
+    addWarning(doc.warnings, { level: 'info', code: 'ma.skippedFiles', message: `Files ignored in the archive: ${skipped.slice(0, 10).join(', ')}${skipped.length > 10 ? '…' : ''}`, params: { count: skipped.length, files: `${skipped.slice(0, 10).join(', ')}${skipped.length > 10 ? '…' : ''}` } })
   }
   return buildFragment(doc, ctx, fileName)
 }

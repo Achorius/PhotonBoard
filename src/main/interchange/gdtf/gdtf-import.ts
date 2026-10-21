@@ -38,6 +38,8 @@ export interface GdtfParseResult {
   definition: FixtureDefinition
   /** Things that could not be represented (English, for import warnings) */
   notes: string[]
+  /** The same notes with a warning code and params (`interchange.warnings.gdtf.*`) */
+  remarks: { code: string; params: Record<string, string | number>; message: string }[]
   /** GDTF FixtureTypeID (GUID) when present */
   fixtureTypeId?: string
 }
@@ -186,6 +188,11 @@ export function parseGdtfDescription(xml: string, opts: { fileName?: string } = 
   const ft = kid(root, 'FixtureType') ?? kid(doc, 'FixtureType')
   if (!ft) throw new Error('Not a GDTF description (no FixtureType)')
   const notes: string[] = []
+  const remarks: GdtfParseResult['remarks'] = []
+  const note = (code: string, message: string, params: Record<string, string | number> = {}) => {
+    notes.push(message)
+    remarks.push({ code, params, message })
+  }
 
   const baseFile = (opts.fileName ?? '').replace(/^.*[\\/]/, '').replace(/\.gdtf$/i, '')
   const [fileMfr, fileName] = baseFile.split('@')
@@ -280,11 +287,11 @@ export function parseGdtfDescription(xml: string, opts: { fileName?: string } = 
         instances.push({ dmxBreak, offsets, attribute, dmxChannel: dc, logical, geometry })
       }
     }
-    if (virtualCount > 0) notes.push(`Mode "${modeName}": ${virtualCount} virtual channel(s) without DMX address ignored`)
+    if (virtualCount > 0) note('gdtf.virtualChannels', `Mode "${modeName}": ${virtualCount} virtual channel(s) without DMX address ignored`, { mode: modeName, count: virtualCount })
 
     const breaks = [...new Set(instances.map((i) => i.dmxBreak))].sort((a, b) => a - b)
     const mainBreak = breaks[0] ?? 1
-    if (breaks.length > 1) notes.push(`Mode "${modeName}" uses ${breaks.length} DMX breaks; only break ${mainBreak} is patched (the console has one address per fixture)`)
+    if (breaks.length > 1) note('gdtf.multiBreak', `Mode "${modeName}" uses ${breaks.length} DMX breaks; only break ${mainBreak} is patched (the console has one address per fixture)`, { mode: modeName, count: breaks.length, dmxBreak: mainBreak })
     const used = instances.filter((i) => i.dmxBreak === mainBreak).sort((a, b) => a.offsets[0] - b.offsets[0])
 
     // Names: numbered when an attribute appears on several geometries / references
@@ -338,7 +345,7 @@ export function parseGdtfDescription(xml: string, opts: { fileName?: string } = 
         cellsByRef.set(inst.reference, cell)
       }
     }
-    if (overlaps > 0) notes.push(`Mode "${modeName}": ${overlaps} channel(s) sharing a DMX offset were skipped`)
+    if (overlaps > 0) note('gdtf.sharedOffset', `Mode "${modeName}": ${overlaps} channel(s) sharing a DMX offset were skipped`, { mode: modeName, count: overlaps })
 
     // Gaps → placeholders
     const modeChannels = slots.map((s) => {
@@ -355,7 +362,7 @@ export function parseGdtfDescription(xml: string, opts: { fileName?: string } = 
     modes.push(mode)
   }
 
-  if (modes.length === 0) notes.push('The GDTF file has no DMX mode')
+  if (modes.length === 0) note('gdtf.noModes', 'The GDTF file has no DMX mode')
 
   // ---- wheels with slot types from their use ----
   const wheels: FixtureWheel[] = wheelInfos.map((w) => {
@@ -429,7 +436,7 @@ export function parseGdtfDescription(xml: string, opts: { fileName?: string } = 
   if (shortName && shortName !== name) definition.shortName = shortName
   if (Object.keys(physical).length) definition.physical = physical
   if (wheels.length) definition.wheels = wheels
-  return { definition, notes, fixtureTypeId: attr(ft, 'FixtureTypeID') || undefined }
+  return { definition, notes, remarks, fixtureTypeId: attr(ft, 'FixtureTypeID') || undefined }
 
   // ---- helpers (closures over wheels / attribute features) ----
 
@@ -490,7 +497,7 @@ export function parseGdtfDescription(xml: string, opts: { fileName?: string } = 
         ranges.push(r)
       }
     }
-    if (modeDependent > 0) notes.push(`Channel "${gdtfFriendlyName(inst.attribute)}": ${modeDependent} mode-dependent function(s) not represented`)
+    if (modeDependent > 0) note('gdtf.modeDependent', `Channel "${gdtfFriendlyName(inst.attribute)}": ${modeDependent} mode-dependent function(s) not represented`, { channel: gdtfFriendlyName(inst.attribute), count: modeDependent })
     ranges.sort((a, b) => a.from - b.from)
 
     const caps: FixtureCapability[] = []

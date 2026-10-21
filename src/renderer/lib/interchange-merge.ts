@@ -311,7 +311,7 @@ export function mergeFragment(
     frag = normalized.show
     if (normalized.warnings.length > 0) warn({ level: 'info', code: 'normalized', params: { count: normalized.warnings.length }, message: normalized.warnings.slice(0, 5).join(' · ') })
   } catch (e) {
-    warn({ level: 'error', code: 'invalidFragment', message: (e as Error).message })
+    warn({ level: 'error', code: 'invalidFragment', params: { error: (e as Error).message }, message: (e as Error).message })
     return { content: base, install: [], report }
   }
 

@@ -55,14 +55,14 @@ export function readMa2Xml(root: XmlNode, doc: MaDocument = emptyMaDocument('ma2
     if (grp) doc.groups.push(grp)
     else layouts++
   }
-  if (layouts > 0) addWarning(doc.warnings, { level: 'info', code: 'ma.notImported', message: `grandMA2 layout views are not imported (${layouts})` })
+  if (layouts > 0) addWarning(doc.warnings, { level: 'info', code: 'ma2.layoutsNotImported', message: `grandMA2 layout views are not imported (${layouts})`, params: { count: layouts } })
   for (const m of descendants(ma, 'Macro')) doc.macros.push(readMacro(m))
   for (const e of descendants(ma, 'Effect')) {
     const fx = readEffect(e)
     if (fx.lines.length > 0) doc.effects.push(fx)
   }
   const other = childTags(ma).filter(t => !HANDLED.has(t.toLowerCase()))
-  if (other.length > 0) addWarning(doc.warnings, { level: 'info', code: 'ma.notImported', message: `grandMA2 objects not imported: ${other.join(', ')}` })
+  if (other.length > 0) addWarning(doc.warnings, { level: 'info', code: 'ma.notImported', message: `grandMA2 objects not imported: ${other.join(', ')}`, params: { objects: other.join(', ') } })
   return doc
 }
 
