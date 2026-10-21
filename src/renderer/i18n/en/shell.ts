@@ -24,6 +24,8 @@ export const shell = {
     trigger: 'File',
     newShow: 'New show',
     open: 'Open…',
+    openDemo: 'Open a demo…',
+    openDemoDescription: 'Ready-made shows to try PhotonBoard',
     openOnConsole: 'Open show on console',
     openRecent: 'Open recent',
     noRecent: 'No show in the shows folder',

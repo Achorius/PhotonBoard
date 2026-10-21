@@ -23,6 +23,8 @@ export const shell: Translation['shell'] = {
     trigger: 'Fichier',
     newShow: 'Nouveau show',
     open: 'Ouvrir…',
+    openDemo: 'Ouvrir une démo…',
+    openDemoDescription: 'Des shows prêts à l’emploi pour essayer PhotonBoard',
     openOnConsole: 'Ouvrir un show sur la console',
     openRecent: 'Ouvrir un show récent',
     noRecent: 'Aucun show dans le dossier des shows',

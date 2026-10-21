@@ -6,6 +6,9 @@ import { initMidiRouting } from './lib/midi-manager'
 import { startFollowGamepadLoop } from './stores/follow-store'
 import { installUsbWatch } from './lib/usb-sticks'
 import { UsbModal } from './components/file/UsbModal'
+import { DemoDialog } from './components/file/DemoDialog'
+import { openDemoDialog } from './lib/demos'
+import { InterchangeHost } from './components/interchange/InterchangeHost'
 import { Toolbar } from './components/layout/Toolbar'
 import { NavRail } from './components/layout/NavRail'
 import { StatusBar } from './components/layout/StatusBar'
@@ -144,6 +147,7 @@ export default function App() {
       listen(bridge.onMenuEvent('menu:save', () => { void requestSave() })),
       listen(bridge.onMenuEvent('menu:save-as', () => { void requestSaveAs() })),
       listen(bridge.onMenuEvent('menu:load', () => { void requestOpenShow() })),
+      listen(bridge.onMenuEvent('menu:open-demo', () => { openDemoDialog() })),
       // Edit menu (Mod+Z / redo accelerators): text undo inside a field, show undo elsewhere
       listen(bridge.onMenuEvent('menu:undo', () => { if (isEditingText()) document.execCommand('undo'); else if (!hasOpenOverlay()) undo() })),
       listen(bridge.onMenuEvent('menu:redo', () => { if (isEditingText()) document.execCommand('redo'); else if (!hasOpenOverlay()) redo() })),
@@ -235,6 +239,8 @@ export default function App() {
       {executorBarOpen && <ExecutorBar />}
       <StatusBar />
       {!isRemoteMode() && <UsbModal />}
+      {!isRemoteMode() && <DemoDialog />}
+      <InterchangeHost />
       {overlays}
     </div>
   )

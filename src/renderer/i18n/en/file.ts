@@ -41,6 +41,7 @@ export const file = {
     newShow: 'Your changes will be lost if you start a new show without saving.',
     openShow: 'Your changes will be lost if you open another show without saving.',
     openNamed: 'Your changes will be lost if you open “{name}” without saving.',
+    openDemo: 'Your changes will be lost if you open the demo “{name}” without saving.',
     replaceConsole: 'Your changes will be lost if you replace the console show without saving.',
     quit: 'Your changes will be lost if you quit without saving.',
     dontSave: 'Don’t save',
@@ -80,5 +81,23 @@ export const file = {
     replaceCopyTitle: 'Replace “{name}” on the stick?',
     replaceCopyMessage: 'A show with this name is already on {drive}.',
     modified: 'Modified {date}'
+  },
+  // Demo content shipped with the app (lib/demos.ts, components/file/DemoDialog.tsx)
+  demos: {
+    title: 'Open a demo',
+    description: 'Fictitious shows to try PhotonBoard without building one from scratch. A demo opens as a new show: Save asks for a name and the demo itself never changes.',
+    open: 'Open',
+    loading: 'Loading the demos…',
+    none: 'No demo in this installation',
+    noneHint: 'The demo files are missing from this copy of PhotonBoard.',
+    failed: 'The demos could not be listed: {error}',
+    examples: {
+      link: 'Try with an example file',
+      title: 'Example files',
+      description: 'One file per format PhotonBoard reads, made from the demo shows. Pick one to see what it brings in — nothing changes until you click Import.',
+      back: 'Back',
+      use: 'Try',
+      none: 'No example file in this installation'
+    }
   }
 }

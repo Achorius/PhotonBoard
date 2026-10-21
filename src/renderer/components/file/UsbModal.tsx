@@ -1,11 +1,11 @@
 // USB sticks: the shows on each stick (open = copy to the console, then
 // open), browse the stick, save a copy of the current show, eject.
 
-import { LuFile, LuFolderOpen, LuSave, LuUsb } from 'react-icons/lu'
+import { LuFile, LuFileInput, LuFolderOpen, LuSave, LuUsb } from 'react-icons/lu'
 import { Button, EmptyState, Modal } from '@renderer/components/ui'
 import { useT } from '@renderer/i18n'
 import { closeUsbModal, ejectUsb, useUsbStore } from '@renderer/lib/usb-sticks'
-import { requestBrowseUsb, requestOpenFromUsb, requestSaveCopyToUsb } from '@renderer/components/layout/file-actions'
+import { requestBrowseUsb, requestImport, requestOpenFromUsb, requestSaveCopyToUsb } from '@renderer/components/layout/file-actions'
 import type { RemovableDrive } from '@shared/photonboard-api'
 
 export function UsbModal() {
@@ -28,10 +28,11 @@ function DriveCard({ drive }: { drive: RemovableDrive }) {
   const t = useT()
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface-2 p-3" data-usb-drive={drive.name}>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <LuUsb size={16} aria-hidden className="text-fg-tertiary" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg-primary" title={drive.path}>{drive.name}</span>
         <Button size="sm" variant="secondary" icon={LuFolderOpen} onClick={() => { void requestBrowseUsb(drive.path) }}>{t('file.usb.browse')}</Button>
+        <Button size="sm" variant="secondary" icon={LuFileInput} onClick={() => { closeUsbModal(); void requestImport({ startDir: drive.path }) }} data-usb-import>{t('interchange.menu.importFromStick')}</Button>
         <Button size="sm" variant="secondary" icon={LuSave} onClick={() => { void requestSaveCopyToUsb(drive.path) }}>{t('file.usb.saveCopy')}</Button>
         {drive.canEject && <Button size="sm" variant="secondary" onClick={() => { void ejectUsb(drive.path) }}>{t('file.usb.eject')}</Button>}
       </div>

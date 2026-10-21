@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-crafted grandMA3 2.4 patch export (Patch > Export > grandMA3 XML), structure modelled on
+     grandMA3 FixtureType XML (gma3_library/fixturetypes) and the object properties of fixtures
+     (FID, CID, IDType, FixtureType, Mode, Patch "U.AAA"). Not a console file. -->
+<GMA3 DataVersion="2.4.0.2">
+    <Patch>
+        <FixtureTypes>
+            <FixtureType Name="Spot 18" ShortName="Spot18" Manufacturer="Demo">
+                <DMXModes>
+                    <DMXMode Name="Standard" Geometry="Body">
+                        <DMXChannels>
+                            <DMXChannel Coarse="1" Fine="2" Default="800000">
+                                <LogicalChannel Attribute="Pan"><ChannelFunction Attribute="Pan" /></LogicalChannel>
+                            </DMXChannel>
+                            <DMXChannel Coarse="3" Fine="4" Default="800000">
+                                <LogicalChannel Attribute="Tilt"><ChannelFunction Attribute="Tilt" /></LogicalChannel>
+                            </DMXChannel>
+                            <DMXChannel Coarse="5">
+                                <LogicalChannel Attribute="Color1"><ChannelFunction Attribute="Color1" /></LogicalChannel>
+                            </DMXChannel>
+                            <DMXChannel Coarse="6">
+                                <LogicalChannel Attribute="Gobo1"><ChannelFunction Attribute="Gobo1" /></LogicalChannel>
+                            </DMXChannel>
+                            <DMXChannel Coarse="7">
+                                <LogicalChannel Attribute="Shutter1"><ChannelFunction Attribute="Shutter1" /></LogicalChannel>
+                            </DMXChannel>
+                            <DMXChannel Coarse="8" Default="000000">
+                                <LogicalChannel Attribute="Dimmer" Master="Grand"><ChannelFunction Attribute="Dimmer" /></LogicalChannel>
+                            </DMXChannel>
+                        </DMXChannels>
+                    </DMXMode>
+                </DMXModes>
+            </FixtureType>
+        </FixtureTypes>
+        <Stages>
+            <Stage Name="Stage 1">
+                <Fixtures>
+                    <Fixture Name="Spot 1" FID="101" IDType="Fixture" FixtureType="1 Spot 18" Mode="Standard" Patch="1.001" PosX="-2" PosY="1.5" PosZ="6" RotX="0" RotY="0" RotZ="90" />
+                    <Fixture Name="Spot 2" FID="102" IDType="Fixture" FixtureType="1 Spot 18" Mode="Standard" Patch="1.009" PosX="2" PosY="1.5" PosZ="6" />
+                    <Fixture Name="Front 1" CID="11" IDType="Channel" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="2.001" />
+                    <Fixture Name="Spot 3 (unpatched)" FID="103" IDType="Fixture" FixtureType="1 Spot 18" Mode="Standard" Patch="" />
+                </Fixtures>
+            </Stage>
+        </Stages>
+    </Patch>
+</GMA3>

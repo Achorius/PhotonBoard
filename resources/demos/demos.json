@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "shows": [
+    {
+      "id": "club-night",
+      "file": "Club Night.pbshow",
+      "name": "Club Night",
+      "description": {
+        "en": "A small club rig on one universe: LED pars, moving heads, LED bars, strobes and haze. Colour and position presets, chases, effects and two executor pages ready for an APC mini (8×8 pads + faders).",
+        "fr": "Un petit kit de club sur un univers : PAR LED, lyres, barres LED, strobes et machine à brume. Presets couleur et position, chases, effets et deux pages d’exécuteurs prêtes pour un APC mini (8×8 pads + faders)."
+      },
+      "fixtures": 21,
+      "universes": 1
+    },
+    {
+      "id": "theatre",
+      "file": "Théâtre – soirée simple.pbshow",
+      "name": "Théâtre – soirée simple",
+      "description": {
+        "en": "A simple theatre evening: front, back and side lights on dimmers plus an LED cyclorama. One cue list with timed fades (house in, blackout, scenes, bows), groups by stage area and group faders.",
+        "fr": "Une soirée de théâtre simple : face, contres et latéraux sur gradateurs, cyclo LED. Une conduite avec des temps de montée / descente (entrée public, noir salle, scènes, saluts), des groupes par zone et des faders de groupe."
+      },
+      "fixtures": 21,
+      "universes": 1
+    },
+    {
+      "id": "concert-pro",
+      "file": "Concert Pro.pbshow",
+      "name": "Concert Pro",
+      "description": {
+        "en": "A bigger concert rig over two universes (54 fixtures): spots, washes, beams, LED pars, blinders, strobes, front and bars. Preset pools, songs with per-feature timing and cue parts, effects on speed masters, three executor pages, Stage pages, macros and a timeline.",
+        "fr": "Un kit de concert plus grand sur deux univers (54 projecteurs) : spots, wash, beams, PAR LED, blinders, strobes, face et barres. Pools de presets, morceaux avec temps par famille et parts de cue, effets sur masters de vitesse, trois pages d’exécuteurs, pages Stage, macros et timeline."
+      },
+      "fixtures": 54,
+      "universes": 2
+    }
+  ],
+  "formats": [
+    {
+      "id": "club-night-mvr",
+      "file": "formats/Club Night.mvr",
+      "format": "mvr",
+      "description": {
+        "en": "MVR scene: patch, 3D positions and embedded GDTF fixture types (Vectorworks, grandMA3, Capture…).",
+        "fr": "Scène MVR : patch, positions 3D et types de projecteurs GDTF intégrés (Vectorworks, grandMA3, Capture…)."
+      }
+    },
+    {
+      "id": "club-night-qxw",
+      "file": "formats/Club Night.qxw",
+      "format": "qlcplus-workspace",
+      "description": {
+        "en": "QLC+ workspace: fixtures, groups, scenes, chases, effects and the virtual console.",
+        "fr": "Espace de travail QLC+ : projecteurs, groupes, scènes, chases, effets et console virtuelle."
+      }
+    },
+    {
+      "id": "club-night-asc",
+      "file": "formats/Club Night.asc",
+      "format": "usitt-ascii",
+      "description": {
+        "en": "USITT ASCII: patch, groups and cues, as written by ETC, Strand or ChamSys consoles.",
+        "fr": "USITT ASCII : patch, groupes et cues, comme les écrivent les consoles ETC, Strand ou ChamSys."
+      }
+    },
+    {
+      "id": "club-night-patch-csv",
+      "file": "formats/Club Night - patch.csv",
+      "format": "csv-patch",
+      "description": {
+        "en": "Patch as a spreadsheet (CSV): name, fixture type, universe, address and mode.",
+        "fr": "Patch en tableau (CSV) : nom, type de projecteur, univers, adresse et mode."
+      }
+    },
+    {
+      "id": "generic-generic-moving-head-spot-photonboard-gdtf",
+      "file": "formats/Generic@Generic_Moving_Head_Spot@PhotonBoard.gdtf",
+      "format": "gdtf",
+      "description": {
+        "en": "One fixture type in GDTF: a moving head spot with its modes, wheels and physical data.",
+        "fr": "Un type de projecteur au format GDTF : une lyre spot avec ses modes, roues et données physiques."
+      }
+    },
+    {
+      "id": "grandma3-theatre-xml",
+      "file": "formats/grandMA3 - theatre.xml",
+      "format": "ma3-xml",
+      "description": {
+        "en": "Hand-made grandMA3 XML export: patch, a group, presets, a sequence with cue parts and a macro.",
+        "fr": "Export XML grandMA3 fait à la main : patch, un groupe, des presets, une séquence avec parts de cue et une macro."
+      }
+    },
+    {
+      "id": "grandma2-theatre-xml",
+      "file": "formats/grandMA2 - theatre.xml",
+      "format": "ma2-xml",
+      "description": {
+        "en": "Hand-made grandMA2 XML export: a fixture layer, a group, a preset, a sequence and an effect.",
+        "fr": "Export XML grandMA2 fait à la main : une couche de projecteurs, un groupe, un preset, une séquence et un effet."
+      }
+    }
+  ]
+}

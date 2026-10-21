@@ -8,8 +8,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   LuChevronDown, LuCopy, LuEraser, LuFilePlus, LuFolderOpen, LuHistory, LuLogOut, LuMonitorPlay, LuPencil, LuPiano, LuPlay,
-  LuRedo2, LuSave, LuSaveAll, LuSquare, LuTrash2, LuUndo2, LuUpload, LuFolderSearch, LuCrosshair, LuUsb
+  LuRedo2, LuSave, LuSaveAll, LuSquare, LuTrash2, LuUndo2, LuUpload, LuFolderSearch, LuCrosshair, LuUsb, LuFileInput, LuFileOutput, LuSparkles
 } from 'react-icons/lu'
+import { demosAvailable, openDemoDialog } from '@renderer/lib/demos'
 import { ejectUsb, openUsbModal, useUsbStore } from '@renderer/lib/usb-sticks'
 import { Badge, Button, Divider, DropdownMenu, IconButton, StatusDot, Tooltip, type MenuEntry } from '@renderer/components/ui'
 import { t as translate, useT } from '@renderer/i18n'
@@ -30,7 +31,8 @@ import { useRemoteConnection } from '@renderer/hooks/useRemoteConnection'
 import { MasterControls, useMidiLearnTarget } from './MasterControls'
 import { OutputHealthIndicator } from './OutputHealth'
 import {
-  requestNewShow, requestOpenShow, requestOpenShowByName, requestQuit, requestSave, requestSaveAs, requestSaveCopyToUsb, requestUploadShow
+  requestExport, requestImport, requestNewShow, requestOpenShow, requestOpenShowByName, requestQuit, requestSave, requestSaveAs,
+  requestSaveCopyToUsb, requestUploadShow
 } from './file-actions'
 
 const IS_MAC_ELECTRON = isElectronRuntime() && /mac/i.test(navigator.platform)
@@ -105,7 +107,8 @@ function FileMenu() {
   const items = (): MenuEntry[] => [
     ...(!remote ? [
       { label: t('shell.fileMenu.newShow'), icon: LuFilePlus, shortcut: 'Mod+N', onSelect: () => { void requestNewShow() } },
-      { label: t('shell.fileMenu.open'), icon: LuFolderOpen, shortcut: 'Mod+O', onSelect: () => { void requestOpenShow() } }
+      { label: t('shell.fileMenu.open'), icon: LuFolderOpen, shortcut: 'Mod+O', onSelect: () => { void requestOpenShow() } },
+      ...(demosAvailable() ? [{ label: t('shell.fileMenu.openDemo'), icon: LuSparkles, description: t('shell.fileMenu.openDemoDescription'), onSelect: openDemoDialog }] : [])
     ] : []),
     {
       label: remote ? t('shell.fileMenu.openOnConsole') : t('shell.fileMenu.openRecent'),
@@ -118,6 +121,9 @@ function FileMenu() {
     { type: 'separator' },
     { label: t('shell.fileMenu.save'), icon: LuSave, shortcut: 'Mod+S', onSelect: () => { void requestSave() } },
     { label: t('shell.fileMenu.saveAs'), icon: LuSaveAll, shortcut: 'Mod+Shift+S', onSelect: () => { void requestSaveAs() } },
+    { type: 'separator' },
+    { label: t('interchange.menu.import'), icon: LuFileInput, shortcut: remote ? undefined : 'Mod+I', description: t('interchange.menu.importDescription'), onSelect: () => { void requestImport() } },
+    { label: t('interchange.menu.export'), icon: LuFileOutput, shortcut: remote ? undefined : 'Mod+Shift+E', description: t('interchange.menu.exportDescription'), onSelect: () => { requestExport() } },
     ...(remote ? [
       { type: 'separator' } as const,
       { label: t('shell.fileMenu.upload'), icon: LuUpload, description: t('shell.fileMenu.uploadDescription'), onSelect: () => fileInput.current?.click() }

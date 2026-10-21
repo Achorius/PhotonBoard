@@ -7,14 +7,13 @@
 
 import { readFileSync, statSync } from 'fs'
 import { XMLParser } from 'fast-xml-parser'
-import AdmZip from 'adm-zip'
-import type { FixtureDefinition, FixtureChannel, FixtureMode, FixtureCapability, FixturePhysical } from '../shared/types'
+import type { FixtureDefinition, FixtureChannel, FixtureMode, FixtureCapability } from '../shared/types'
 import { convertOflFixture } from './fixture-convert-ofl'
 import { convertQxfFixture } from './fixture-convert-qxf'
+import { parseGdtfArchive } from './interchange/gdtf/gdtf-import'
 
 // Security: max file sizes to prevent denial-of-service
 const MAX_FIXTURE_FILE_SIZE = 10 * 1024 * 1024  // 10 MB max fixture file
-const MAX_GDTF_EXTRACTED_SIZE = 20 * 1024 * 1024 // 20 MB max extracted GDTF content
 
 // Secure XML parser options — disable entity processing to prevent XXE attacks
 const SAFE_XML_OPTIONS = {
@@ -136,161 +135,18 @@ export function parseGDTF(filePath: string): FixtureDefinition {
     throw new Error(`GDTF file too large: ${(fileStats.size / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
   }
 
-  const zip = new AdmZip(filePath)
-  const descEntry = zip.getEntry('description.xml')
-  if (!descEntry) throw new Error('Invalid GDTF file: missing description.xml')
-
-  // Security: check extracted size (ZIP bomb protection)
-  if (descEntry.header.size > MAX_GDTF_EXTRACTED_SIZE) {
-    throw new Error(`GDTF description.xml too large when extracted: ${(descEntry.header.size / 1024 / 1024).toFixed(1)} MB`)
-  }
-
-  const xml = descEntry.getData().toString('utf-8')
-  const parser = new XMLParser(SAFE_XML_OPTIONS)
-  const doc = parser.parse(xml)
-
-  const ftNode = doc.GDTF?.FixtureType || doc.FixtureType || {}
-  const name = ftNode['@_Name'] || ftNode['@_LongName'] || 'GDTF Fixture'
-  const mfr = ftNode['@_Manufacturer'] || 'Unknown'
-  const id = `${slugify(mfr)}/${slugify(name)}`
-
-  const channels: Record<string, FixtureChannel> = {}
-  const modes: FixtureMode[] = []
-
-  // Parse DMX Modes
-  const dmxModes = ftNode.DMXModes?.DMXMode
-  const modeList = Array.isArray(dmxModes) ? dmxModes : dmxModes ? [dmxModes] : []
-
-  for (const mode of modeList) {
-    const modeName = mode['@_Name'] || 'Default'
-    const modeChannelNames: string[] = []
-
-    const dmxChannels = mode.DMXChannels?.DMXChannel
-    const chList = Array.isArray(dmxChannels) ? dmxChannels : dmxChannels ? [dmxChannels] : []
-
-    for (const dmxCh of chList) {
-      // GDTF channels reference geometry + attribute
-      const logicalCh = dmxCh.LogicalChannel
-      const logList = Array.isArray(logicalCh) ? logicalCh : logicalCh ? [logicalCh] : []
-
-      for (const lch of logList) {
-        const attr = lch['@_Attribute'] || dmxCh['@_Attribute'] || ''
-        const chName = gdtfAttributeToName(attr) || attr || `Ch ${modeChannelNames.length + 1}`
-
-        if (!channels[chName]) {
-          const type = gdtfAttributeToType(attr)
-          const caps: FixtureCapability[] = []
-
-          // Parse channel functions as capabilities
-          const chFuncs = lch.ChannelFunction
-          const funcList = Array.isArray(chFuncs) ? chFuncs : chFuncs ? [chFuncs] : []
-          for (const func of funcList) {
-            const dmxFrom = parseDmxValue(func['@_DMXFrom'] || '0')
-            const dmxTo = parseDmxValue(func['@_DMXTo'] || func['@_PhysicalTo'] || '255')
-            caps.push({
-              dmxRange: [dmxFrom, dmxTo],
-              type: func['@_Attribute'] || type,
-              label: func['@_Name'] || func['@_Attribute'] || chName
-            })
-          }
-
-          channels[chName] = makeChannel(chName, type, caps)
-          const defVal = dmxCh['@_Default']
-          if (defVal) channels[chName].defaultValue = parseDmxValue(defVal)
-        }
-        modeChannelNames.push(chName)
-      }
-    }
-
-    modes.push({ name: modeName, channels: modeChannelNames, channelCount: modeChannelNames.length })
-  }
-
-  if (modes.length === 0 && Object.keys(channels).length > 0) {
-    modes.push({ name: 'Default', channels: Object.keys(channels), channelCount: Object.keys(channels).length })
-  }
-
-  // Parse physical
-  let physical: FixturePhysical | undefined
-  const phys = ftNode.PhysicalDescriptions
-  if (phys) {
-    const props = phys.Properties
-    physical = {
-      weight: parseFloat(props?.Weight?.['@_Value']) || undefined,
-      power: parseFloat(props?.PowerConsumption?.['@_Value']) || undefined,
-      panRange: parseFloat(ftNode.Geometries?.Geometry?.['@_PanMax']) || undefined,
-      tiltRange: parseFloat(ftNode.Geometries?.Geometry?.['@_TiltMax']) || undefined
-    }
-  }
-
-  // Parse wheels
-  let wheels: any[] | undefined
-  const wheelNodes = ftNode.Wheels?.Wheel
-  if (wheelNodes) {
-    const wList = Array.isArray(wheelNodes) ? wheelNodes : [wheelNodes]
-    wheels = wList.map((w: any) => {
-      const slots = w.Slot
-      const slotList = Array.isArray(slots) ? slots : slots ? [slots] : []
-      return {
-        name: w['@_Name'] || 'Wheel',
-        slots: slotList.map((s: any) => ({
-          type: s['@_Color'] ? 'Color' as const : 'Gobo' as const,
-          name: s['@_Name'] || 'Slot',
-          color: s['@_Color']
-        }))
-      }
-    })
-  }
-
-  return {
-    id, name, manufacturer: mfr,
-    categories: guessCategories(name, channels),
-    channels, modes,
-    physical, wheels: wheels?.length ? wheels : undefined,
-    source: 'gdtf', lastModified: new Date().toISOString()
-  }
+  return parseGDTFBuffer(readFileSync(filePath), filePath)
 }
 
-function parseDmxValue(val: string): number {
-  // GDTF uses "128/1" format (value/byte) or just numbers
-  const parts = val.split('/')
-  return Math.min(255, Math.max(0, parseInt(parts[0]) || 0))
-}
-
-function gdtfAttributeToType(attr: string): FixtureChannel['type'] {
-  const a = attr.toLowerCase()
-  if (a.includes('dimmer') || a.includes('intensity')) return 'intensity'
-  if (a.includes('pan')) return 'pan'
-  if (a.includes('tilt')) return 'tilt'
-  if (a.includes('gobo')) return 'gobo'
-  if (a.includes('color') || a.includes('red') || a.includes('green') || a.includes('blue') ||
-      a.includes('white') || a.includes('amber') || a.includes('cyan') || a.includes('magenta')) return 'color'
-  if (a.includes('shutter') || a.includes('strobe')) return 'shutter'
-  if (a.includes('prism')) return 'prism'
-  if (a.includes('speed') || a.includes('ptspeed')) return 'speed'
-  if (a.includes('fog') || a.includes('haze')) return 'fog'
-  if (a.includes('zoom') || a.includes('focus') || a.includes('iris') || a.includes('frost')) return 'generic'
-  if (a.includes('effect') || a.includes('macro')) return 'effect'
-  if (a.includes('control') || a.includes('reset') || a.includes('lamp')) return 'maintenance'
-  return 'generic'
-}
-
-function gdtfAttributeToName(attr: string): string {
-  const map: Record<string, string> = {
-    'Dimmer': 'Dimmer', 'Pan': 'Pan', 'Tilt': 'Tilt',
-    'Pan1': 'Pan', 'Tilt1': 'Tilt',
-    'ColorAdd_R': 'Red', 'ColorAdd_G': 'Green', 'ColorAdd_B': 'Blue', 'ColorAdd_W': 'White',
-    'ColorAdd_A': 'Amber', 'ColorAdd_UV': 'UV', 'ColorAdd_C': 'Cyan', 'ColorAdd_M': 'Magenta',
-    'ColorAdd_Y': 'Yellow', 'ColorSub_C': 'Cyan', 'ColorSub_M': 'Magenta', 'ColorSub_Y': 'Yellow',
-    'Color1': 'Color Wheel', 'Color2': 'Color Wheel 2',
-    'Gobo1': 'Gobo', 'Gobo2': 'Gobo 2', 'Gobo1Pos': 'Gobo Rotation', 'Gobo2Pos': 'Gobo 2 Rotation',
-    'Shutter1': 'Shutter', 'Shutter1Strobe': 'Strobe',
-    'Prism1': 'Prism', 'Prism1Pos': 'Prism Rotation',
-    'Focus1': 'Focus', 'Zoom': 'Zoom', 'Iris': 'Iris', 'Frost1': 'Frost',
-    'PanTiltSpeed': 'P/T Speed', 'EffectSpeed': 'Effect Speed',
-    'CTO': 'CTO', 'CTB': 'CTB',
-    'Effects1': 'Effect', 'Control1': 'Control', 'LampControl': 'Lamp Control',
+/** A GDTF archive already in memory (uploaded, read from disk) */
+export function parseGDTFBuffer(data: Buffer, fileName = 'fixture.gdtf'): FixtureDefinition {
+  if (data.length > MAX_FIXTURE_FILE_SIZE) {
+    throw new Error(`GDTF file too large: ${(data.length / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
   }
-  return map[attr] || ''
+  // One reader and one converter for every .gdtf (fixture library, File › Import, embedded in an MVR):
+  // the interchange GDTF module (16/24-bit offsets, geometry references, channel sets, wheels,
+  // physical data; description.xml size guard)
+  return parseGdtfArchive(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), fileName).definition
 }
 
 // ── Parser: QLC+ (.qxf) ─────────────────────────────────────────────

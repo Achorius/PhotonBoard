@@ -1,7 +1,7 @@
 // ============================================================
 // Library tab — browse fixture types (built-in, user, OFL, QLC+,
 // GDTF), read their modes and channels, patch, edit, delete,
-// import. Sources: the offline catalog (OFL + QLC+, shipped with
+// import, export one type (GDTF…, components/interchange). Sources: the offline catalog (OFL + QLC+, shipped with
 // the app — the primary one), the local library, and the Open
 // Fixture Library website ("update from the internet").
 // ============================================================
@@ -21,6 +21,7 @@ import { FixtureEditor, editorModeFor } from './FixtureEditor'
 import { OFLSearchPanel } from './OFLSearchPanel'
 import { CatalogPanel, CatalogPreview } from './CatalogPanel'
 import { installFromCatalog, useCatalogInfo } from './catalog'
+import { FixtureExportButton } from '@renderer/components/interchange/FixtureExportButton'
 
 type EditorState = { fixture?: FixtureDefinition; asCopy: boolean } | null
 type SourceTab = 'catalog' | 'library' | 'online'
@@ -113,11 +114,13 @@ export function LibraryView({ onPatch }: { onPatch: (defId: string) => void }) {
           return local ? (
             <>
               <Badge tone="go">{t('patch.shared.inLibrary')}</Badge>
+              <FixtureExportButton def={local} />
               <Button size="sm" variant="ghost" icon={LuLibrary} onClick={() => { setSelectedId(local.id); setTab('library') }}>{t('patch.view.tabs.library')}</Button>
               <Button size="sm" variant="primary" icon={LuPlus} onClick={() => onPatch(local.id)}>{t('patch.shared.patchEllipsis')}</Button>
             </>
           ) : (
             <>
+              <FixtureExportButton def={d} />
               <Button size="sm" variant="secondary" icon={LuPlus} onClick={() => { void installFromCatalog(d).then((x) => { if (x) setSelectedId(x.id) }) }}>{t('patch.library.addToLibrary')}</Button>
               <Button size="sm" variant="primary" icon={LuPlus} onClick={() => { void installFromCatalog(d).then((x) => { if (x) onPatch(x.id) }) }}>{t('patch.shared.patchEllipsis')}</Button>
             </>
@@ -151,6 +154,7 @@ export function LibraryView({ onPatch }: { onPatch: (defId: string) => void }) {
                 </Button>
               </>
             )}
+            <FixtureExportButton def={def} />
             <Button size="sm" variant="primary" icon={LuPlus} onClick={() => onPatch(def.id)}>{t('patch.shared.patchEllipsis')}</Button>
           </>
         )}

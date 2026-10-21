@@ -10,6 +10,7 @@ import {
   hasUnsavedChanges,
   listShows,
   newShow,
+  openDemoShow,
   openShow,
   openShowByName,
   saveShow,
@@ -19,6 +20,8 @@ import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { browseUsb, openShowFromUsb, saveCopyToUsb } from '@renderer/lib/usb-sticks'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { t } from '@renderer/i18n'
+// Circular on purpose (the import flow asks to save through resolveUnsaved): only called at run time
+import { requestExport as startExport, requestImport as startImport } from '@renderer/components/interchange/interchange-actions'
 
 /**
  * Unsaved changes: Save / Don't save / Cancel. `message` says what is about
@@ -49,6 +52,12 @@ export async function requestNewShow(): Promise<void> {
 export async function requestOpenShow(): Promise<void> {
   if (!(await resolveUnsaved(t('file.unsaved.openShow')))) return
   await openShow()
+}
+
+/** File › Open a demo… → a demo show (lib/demos), after the unsaved-changes question */
+export async function requestOpenDemo(id: string, name: string): Promise<boolean> {
+  if (!(await resolveUnsaved(t('file.unsaved.openDemo', { name })))) return false
+  return (await openDemoShow(id, name)).status === 'ok'
 }
 
 export async function requestOpenShowByName(name: string): Promise<void> {
@@ -100,6 +109,18 @@ export async function requestUploadShow(file: File): Promise<void> {
     })
     if (ok) await uploadShowFile(file, { overwrite: true })
   }
+}
+
+// ---- Import / export of other software's files (components/interchange) ----
+
+/** File › Import…: any supported file (wizard: preview, options, merge or new show) */
+export function requestImport(opts: { startDir?: string } = {}): Promise<void> {
+  return startImport(opts)
+}
+
+/** File › Export…: the show to an open format */
+export function requestExport(): void {
+  startExport()
 }
 
 export async function requestQuit(): Promise<void> {

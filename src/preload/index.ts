@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import { IPC } from '../shared/types'
 import type { PhotonBoardAPI, RemoteConnectionState } from '../shared/photonboard-api'
@@ -9,7 +9,7 @@ export type { PhotonBoardAPI } from '../shared/photonboard-api'
 const menuHandlers: Record<string, () => void> = {}
 
 // Register IPC listeners ONCE in preload, route to current handler
-for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load', 'menu:undo', 'menu:redo']) {
+for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load', 'menu:undo', 'menu:redo', 'menu:import', 'menu:export', 'menu:open-demo']) {
   ipcRenderer.on(channel, () => {
     const handler = menuHandlers[channel]
     if (handler) handler()
@@ -122,6 +122,33 @@ const api: PhotonBoardAPI = {
     },
     catalogInstall: async (id) =>
       JSON.parse(await ipcRenderer.invoke(IPC.FIXTURES_CATALOG_INSTALL, id))
+  },
+
+  // --- Interchange (import / export of other software's files) ---
+  // Fragments and shows cross IPC as JSON text (see show.save)
+  interchange: {
+    formats: () =>
+      ipcRenderer.invoke(IPC.INTERCHANGE_FORMATS),
+    importFile: async (req) =>
+      JSON.parse(await ipcRenderer.invoke(IPC.INTERCHANGE_IMPORT, req ?? {})),
+    importData: async (fileName, data, opts) =>
+      JSON.parse(await ipcRenderer.invoke(IPC.INTERCHANGE_IMPORT_DATA, fileName, data, opts ?? {})),
+    exportShow: (req) =>
+      ipcRenderer.invoke(IPC.INTERCHANGE_EXPORT, JSON.stringify(req)),
+    exportFixture: (req) =>
+      ipcRenderer.invoke(IPC.INTERCHANGE_EXPORT_FIXTURE, JSON.stringify(req)),
+    pathForFile: (file) => {
+      try { return webUtils.getPathForFile(file) || null } catch { return null }
+    },
+    maxDataSize: 256 * 1024 * 1024
+  },
+
+  // --- Demo content (resources/demos) ---
+  demos: {
+    list: () =>
+      ipcRenderer.invoke(IPC.DEMOS_LIST),
+    open: (id) =>
+      ipcRenderer.invoke(IPC.DEMOS_OPEN, id)
   },
 
   // --- Menu event listeners (replaces handler, guarantees single callback) ---

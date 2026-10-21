@@ -957,6 +957,26 @@ export const IPC = {
   /** Console renderer → main: answer to a main → renderer request (collect-show-content, save-show busy) */
   CONSOLE_REPLY: 'console:reply',
 
+  // Interchange: import / export of other software's files (src/main/interchange)
+  INTERCHANGE_FORMATS: 'interchange:formats',
+  /** Electron: a path (drag and drop) or the open dialog */
+  INTERCHANGE_IMPORT: 'interchange:import',
+  /** File bytes sent by the UI (remote upload, browser drop) */
+  INTERCHANGE_IMPORT_DATA: 'interchange:import-data',
+  /** Electron: save dialog + write */
+  INTERCHANGE_EXPORT: 'interchange:export',
+  /** File bytes returned to the UI (remote download) */
+  INTERCHANGE_EXPORT_DATA: 'interchange:export-data',
+  /** One fixture type (GDTF…), Electron: save dialog + write */
+  INTERCHANGE_EXPORT_FIXTURE: 'interchange:export-fixture',
+  /** One fixture type, bytes returned to the UI (remote download) */
+  INTERCHANGE_EXPORT_FIXTURE_DATA: 'interchange:export-fixture-data',
+
+  // Demo content shipped with the app (resources/demos) — console only
+  DEMOS_LIST: 'demos:list',
+  /** A demo show by id, as a new unsaved show */
+  DEMOS_OPEN: 'demos:open',
+
   // Remote access (Electron only — never reachable from remote clients)
   REMOTE_GET_SETTINGS: 'remote:get-settings',
   REMOTE_SET_SETTINGS: 'remote:set-settings',

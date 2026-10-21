@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-crafted grandMA3 export: presets (structure of grandMA3 lib_presets XML: <Preset PresetModeInternal>
+     <PresetData><Phaser IDType ID Attribute><Step/>; IDType 2 / ID 1 = the universal fixture) and a group
+     (structure of a real grandMA3 2.0 group export: <SelectionData><Item IDType ID X Y Z/>). -->
+<GMA3 DataVersion="2.3.1.1">
+    <Preset Name="Red" No="4.1" PresetModeInternal="Selective">
+        <PresetData Size="2">
+            <Phaser IDType="0" ID="101" Attribute="Color1"><Step Function="Color1" Absolute="20" /></Phaser>
+            <Phaser IDType="0" ID="102" Attribute="Color1"><Step Function="Color1" Absolute="20" /></Phaser>
+        </PresetData>
+    </Preset>
+    <Preset Name="Full" No="1.1" PresetModeInternal="Universal">
+        <PresetData Size="1">
+            <Phaser IDType="2" ID="1" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+        </PresetData>
+    </Preset>
+    <Preset Name="Floor" PresetModeInternal="Selective">
+        <PresetData Size="2">
+            <Phaser IDType="0" ID="101" Attribute="Tilt"><Step Function="Tilt" AbsolutePhys="-45" /></Phaser>
+            <Phaser IDType="0" ID="102" Attribute="Tilt"><Step Function="Tilt" AbsolutePhys="-45" /></Phaser>
+        </PresetData>
+    </Preset>
+    <Group Name="Spots R-L" Guid="0D 49 20 01 6F 48 BC 0A C1 4D FC 66 60 02 AB 7A" AlignRangeX="No" PreserveGridPositions="No">
+        <SelectionData Size="3">
+            <Item IDType="0" ID="102" X="0" Y="0" Z="0" />
+            <Item IDType="0" ID="101" X="1" Y="0" Z="0" />
+            <Item IDType="1" ID="11" X="2" Y="0" Z="0" />
+        </SelectionData>
+    </Group>
+</GMA3>

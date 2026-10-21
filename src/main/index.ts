@@ -23,6 +23,10 @@ import { RemovableWatcher, copyFileName, driveOf, ejectDrive, isInsideDrive, rem
 import { atomicWriteFile } from './atomic-write'
 import { userInfo } from 'os'
 import { existsSync } from 'fs'
+import { createInterchangeHost, type InterchangeHost } from './interchange'
+import { DemoLibrary, defaultDemoDirs } from './demos'
+import { CONSOLE_BACKGROUND, SPLASH_MAX_MS, openSplash, splashDisabled, type Splash } from './splash'
+import pkg from '../../package.json'
 
 /**
  * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
@@ -62,6 +66,10 @@ let remoteSettings: RemoteSettingsStore
 let piSave: PiSaveCoordinator
 let cleanedUp = false
 let removable: RemovableWatcher | null = null
+let interchange: InterchangeHost
+let demos: DemoLibrary
+/** Start-up splash (null once the console is shown, or when PB_NO_SPLASH=1) */
+let splash: Splash | null = null
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
@@ -78,7 +86,8 @@ function sendToMainWindow(channel: string, ...args: unknown[]): boolean {
 const MENU_LABELS = {
   en: {
     about: 'About PhotonBoard', hide: 'Hide PhotonBoard', hideOthers: 'Hide Others', unhide: 'Show All', quit: 'Quit PhotonBoard',
-    file: 'File', newShow: 'New Show', open: 'Open…', save: 'Save', saveAs: 'Save As…', close: 'Close Window',
+    file: 'File', newShow: 'New Show', open: 'Open…', openDemo: 'Open a Demo…', save: 'Save', saveAs: 'Save As…', close: 'Close Window',
+    importFile: 'Import…', exportFile: 'Export…',
     edit: 'Edit', undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
     view: 'View', reload: 'Reload', forceReload: 'Force Reload', devTools: 'Toggle Developer Tools',
     resetZoom: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
@@ -86,7 +95,8 @@ const MENU_LABELS = {
   },
   fr: {
     about: 'À propos de PhotonBoard', hide: 'Masquer PhotonBoard', hideOthers: 'Masquer les autres', unhide: 'Tout afficher', quit: 'Quitter PhotonBoard',
-    file: 'Fichier', newShow: 'Nouveau show', open: 'Ouvrir…', save: 'Enregistrer', saveAs: 'Enregistrer sous…', close: 'Fermer la fenêtre',
+    file: 'Fichier', newShow: 'Nouveau show', open: 'Ouvrir…', openDemo: 'Ouvrir une démo…', save: 'Enregistrer', saveAs: 'Enregistrer sous…', close: 'Fermer la fenêtre',
+    importFile: 'Importer…', exportFile: 'Exporter…',
     edit: 'Édition', undo: 'Annuler', redo: 'Rétablir', cut: 'Couper', copy: 'Copier', paste: 'Coller', selectAll: 'Tout sélectionner',
     view: 'Présentation', reload: 'Recharger', forceReload: 'Forcer le rechargement', devTools: 'Outils de développement',
     resetZoom: 'Taille réelle', zoomIn: 'Agrandir', zoomOut: 'Réduire', fullscreen: 'Plein écran',
@@ -127,6 +137,10 @@ function createMenu(): void {
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToMainWindow('menu:load')
         },
+        {
+          label: L.openDemo,
+          click: () => sendToMainWindow('menu:open-demo')
+        },
         { type: 'separator' },
         {
           label: L.save,
@@ -137,6 +151,17 @@ function createMenu(): void {
           label: L.saveAs,
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendToMainWindow('menu:save-as')
+        },
+        { type: 'separator' },
+        {
+          label: L.importFile,
+          accelerator: 'CmdOrCtrl+I',
+          click: () => sendToMainWindow('menu:import')
+        },
+        {
+          label: L.exportFile,
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => sendToMainWindow('menu:export')
         },
         { type: 'separator' },
         isMac ? { role: 'close' as const, label: L.close } : { role: 'quit' as const, label: L.quit }
@@ -268,6 +293,39 @@ function setupPermissions(): void {
   })
 }
 
+/**
+ * Show the console window once it is ready (it is created hidden): through
+ * the splash when there is one (minimum display time, fade out), and at the
+ * latest after SPLASH_MAX_MS whatever happens.
+ */
+function revealWhenReady(win: BrowserWindow): void {
+  let revealed = false
+  const reveal = () => {
+    if (revealed) return
+    revealed = true
+    clearTimeout(safety)
+    const show = () => {
+      if (win.isDestroyed()) return
+      win.show()
+      win.focus()
+    }
+    const current = splash
+    splash = null
+    if (current) current.finish(show)
+    else show()
+  }
+  const safety = setTimeout(() => {
+    if (!revealed) safeLog('warn', `[Main] Console window not ready after ${SPLASH_MAX_MS} ms — showing it anyway`)
+    reveal()
+  }, SPLASH_MAX_MS)
+  win.once('ready-to-show', reveal)
+  win.once('closed', () => {
+    clearTimeout(safety)
+    splash?.destroy()
+    splash = null
+  })
+}
+
 function createWindow(): void {
   const isLinux = process.platform === 'linux'
 
@@ -279,7 +337,9 @@ function createWindow(): void {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    backgroundColor: '#0a0a0f',
+    // Shown by revealWhenReady (after the splash): no white flash, no half-drawn UI
+    show: false,
+    backgroundColor: CONSOLE_BACKGROUND,
     fullscreen: isLinux,
     titleBarStyle: isLinux ? 'default' : 'hiddenInset',
     trafficLightPosition: isLinux ? undefined : { x: 15, y: 15 },
@@ -295,6 +355,7 @@ function createWindow(): void {
     }
   })
   mainWindow = win
+  revealWhenReady(win)
 
   // Disable Electron's built-in scroll-to-zoom (we handle zoom ourselves in canvas)
   win.webContents.setVisualZoomLevelLimits(1, 1)
@@ -522,6 +583,20 @@ function registerIpcHandlers(): void {
     return showManager.getRecent()
   })
 
+  // --- Demo content (resources/demos): read-only, named by id ---
+  ipcMain.handle(IPC.DEMOS_LIST, () => demos.list())
+
+  /** A demo show, opened as a new unsaved show (Save asks for a name: the demo itself stays untouched) */
+  ipcMain.handle(IPC.DEMOS_OPEN, async (_event, id: unknown): Promise<ShowLoadResult> => {
+    const path = demos.showPath(id)
+    if (!path) return { success: false, error: mt('demoNotFound') }
+    const read = await showManager.readShow(path)
+    if (!read.success || !read.show) return { success: false, error: read.error }
+    await showManager.runShowReadHook(read.show)
+    showManager.newShow({ resetCurrent: true })
+    return { success: true, show: read.show }
+  })
+
   // --- Fixtures ---
   ipcMain.handle(IPC.FIXTURES_SCAN, () => {
     const fixturesDir = join(app.getPath('userData'), 'fixtures')
@@ -602,6 +677,98 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.FIXTURES_DELETE, async (_e, fixtureId: string) => {
     return showManager.deleteUserFixture(fixtureId)
+  })
+
+  // --- Interchange (src/main/interchange): other software's files ---
+  // Results cross IPC as JSON text (fixture definitions, see FIXTURES_GET_ALL)
+  ipcMain.handle(IPC.INTERCHANGE_FORMATS, () => interchange.listFormats())
+
+  ipcMain.handle(IPC.INTERCHANGE_IMPORT, async (event, raw: unknown) => {
+    const req = (raw && typeof raw === 'object' ? raw : {}) as { path?: unknown; startDir?: unknown; format?: unknown; options?: unknown }
+    const run = {
+      format: typeof req.format === 'string' ? req.format : undefined,
+      options: req.options && typeof req.options === 'object' ? req.options as never : undefined
+    }
+    let path = typeof req.path === 'string' && req.path.length > 0 && req.path.length < 4096 ? req.path : null
+    if (!path) {
+      const result = await showOpenDialog(event, {
+        title: mt('interchangeImportTitle'),
+        filters: [
+          { name: mt('interchangeFilterAll'), extensions: interchange.importExtensions() },
+          { name: mt('allFiles'), extensions: ['*'] }
+        ],
+        defaultPath: typeof req.startDir === 'string' && req.startDir ? req.startDir : showManager.getDefaultShowsDir(),
+        properties: ['openFile']
+      })
+      if (result.canceled || !result.filePaths.length) return JSON.stringify({ success: false, canceled: true })
+      path = result.filePaths[0]
+    }
+    return JSON.stringify(await interchange.importPath(path, run))
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_IMPORT_DATA, async (_event, fileName: unknown, data: unknown, opts: unknown) => {
+    const o = (opts && typeof opts === 'object' ? opts : {}) as { format?: unknown; options?: unknown }
+    const bytes = data instanceof Uint8Array ? data : null
+    if (!bytes || typeof fileName !== 'string') return JSON.stringify({ success: false, errorCode: 'unreadable', error: 'Invalid file data' })
+    return JSON.stringify(await interchange.importBytes(bytes, fileName, {
+      format: typeof o.format === 'string' ? o.format : undefined,
+      options: o.options && typeof o.options === 'object' ? o.options as never : undefined
+    }))
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT, async (event, raw: unknown) => {
+    let req: { format?: unknown; show?: unknown; fixtures?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportShow(String(req.format ?? ''), req.show, req.fixtures)
+    if (!out.success) return out
+    const result = await showSaveDialog(event, {
+      title: mt('interchangeExportTitle'),
+      filters: [{ name: out.extension.toUpperCase(), extensions: [out.extension] }, { name: mt('allFiles'), extensions: ['*'] }],
+      defaultPath: join(showManager.getDefaultShowsDir(), out.fileName)
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      await atomicWriteFile(result.filePath, Buffer.from(out.bytes))
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+    return { success: true, path: result.filePath, warnings: out.warnings }
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT_DATA, async (_event, raw: unknown) => {
+    let req: { format?: unknown; show?: unknown; fixtures?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportShow(String(req.format ?? ''), req.show, req.fixtures)
+    if (!out.success) return out
+    return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT_FIXTURE, async (event, raw: unknown) => {
+    let req: { format?: unknown; fixture?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportFixture(String(req.format ?? ''), req.fixture)
+    if (!out.success) return out
+    // The exporter's file name ("Manufacturer@Model@Revision.gdtf" for GDTF) is the default
+    const result = await showSaveDialog(event, {
+      title: mt('interchangeExportFixtureTitle'),
+      filters: [{ name: out.extension.toUpperCase(), extensions: [out.extension] }, { name: mt('allFiles'), extensions: ['*'] }],
+      defaultPath: join(showManager.getDefaultShowsDir(), out.fileName)
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      await atomicWriteFile(result.filePath, Buffer.from(out.bytes))
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+    return { success: true, path: result.filePath, fileName: out.fileName, warnings: out.warnings }
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT_FIXTURE_DATA, async (_event, raw: unknown) => {
+    let req: { format?: unknown; fixture?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportFixture(String(req.format ?? ''), req.fixture)
+    if (!out.success) return out
+    return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
   })
 
   // --- Show helpers ---
@@ -711,6 +878,11 @@ function registerIpcHandlers(): void {
     const next: MenuLanguage = locale === 'fr' ? 'fr' : 'en'
     // Dialogs, show file errors and remote answers follow it too
     setMainLanguage(next)
+    if (next !== savedLanguage) {
+      // Remembered for the next start (splash tagline, native menus before the UI loads)
+      savedLanguage = next
+      try { saveJsonConfig(languageConfigPath(), { language: next }) } catch (e) { safeLog('warn', '[Main] Could not save the UI language:', (e as Error).message) }
+    }
     if (next === menuLanguage) return
     menuLanguage = next
     createMenu()
@@ -842,6 +1014,33 @@ async function cleanup(): Promise<void> {
   }
 }
 
+function languageConfigPath(): string {
+  return join(app.getPath('userData'), 'config', 'ui.json')
+}
+
+let savedLanguage: MenuLanguage | null = null
+
+/**
+ * UI language at start-up, before the console UI says which one it uses:
+ * the last one it reported, else what the UI picks on 'auto' (French on
+ * the Pi kiosk, else the system language).
+ */
+function startupLanguage(): MenuLanguage {
+  const loaded = loadJsonConfig<MenuLanguage>(
+    languageConfigPath(),
+    (raw) => {
+      const lang = (raw as { language?: unknown } | null)?.language
+      return lang === 'fr' || lang === 'en' ? { ok: true, value: lang } : { ok: false, error: 'not a language' }
+    },
+    () => {
+      if (process.platform === 'linux' && /^arm/.test(process.arch)) return 'fr'
+      return app.getLocale().toLowerCase().startsWith('fr') ? 'fr' : 'en'
+    }
+  )
+  if (loaded.source !== 'default') savedLanguage = loaded.value
+  return loaded.value
+}
+
 function startApp(): void {
   app.on('web-contents-created', (_event, contents) => hardenWebContents(contents))
 
@@ -857,6 +1056,23 @@ function startApp(): void {
   })
 
   app.whenReady().then(() => {
+    menuLanguage = startupLanguage()
+    setMainLanguage(menuLanguage)
+    // First thing on screen: the splash, on the display the console opens on
+    if (!splashDisabled()) {
+      try {
+        splash = openSplash({
+          // Not app.getVersion(): run as `electron out/main/index.js` (dev, tests) it is Electron's version
+          version: app.isPackaged ? app.getVersion() : String(pkg.version),
+          language: menuLanguage,
+          display: screen.getPrimaryDisplay().bounds,
+          cover: process.platform === 'linux'
+        })
+      } catch (e) {
+        safeLog('warn', '[Main] Splash screen unavailable:', (e as Error).message)
+        splash = null
+      }
+    }
     const userData = app.getPath('userData')
     showManager = new ShowFileManager(userData)
     // The user library (OFL downloads, imports, installed catalog fixtures) survives restarts
@@ -868,6 +1084,12 @@ function startApp(): void {
       mainDir: __dirname
     }))
     void fixtureCatalog.load() // index in the background: the first search is instant
+    interchange = createInterchangeHost({ getLibrary: () => showManager.getAllFixtures(), catalog: fixtureCatalog })
+    demos = new DemoLibrary(defaultDemoDirs({
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+      appPath: app.getAppPath(),
+      mainDir: __dirname
+    }))
     // A show made on another machine: install the fixture types it uses from the catalog
     showManager.setShowReadHook((show) => installMissingShowFixtures(fixtureCatalog, showManager, show))
     remoteSettings = new RemoteSettingsStore(join(userData, 'config', 'remote.json'))
@@ -905,7 +1127,8 @@ function startApp(): void {
       getVersion: () => app.getVersion(),
       getRemoteStatus,
       sendToRenderer: (channel, ...args) => { sendToMainWindow(channel, ...args) },
-      removable: { list: listRemovable, eject: ejectRemovable }
+      removable: { list: listRemovable, eject: ejectRemovable },
+      interchange
     })
 
     // Auto-open Stage window on second display if available

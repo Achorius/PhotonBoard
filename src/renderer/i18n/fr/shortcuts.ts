@@ -27,6 +27,8 @@ export const shortcuts: Translation['shortcuts'] = {
     openShow: 'Ouvrir un show',
     save: 'Enregistrer',
     saveAs: 'Enregistrer sous',
+    importFile: 'Importer (MVR, GDTF, QLC+, grandMA, USITT, CSV…)',
+    exportFile: 'Exporter vers un autre format',
     commandLine: 'Aller à la ligne de commande',
     showShortcuts: 'Afficher les raccourcis clavier'
   },
