@@ -4,6 +4,8 @@
 // exporter with the registry when loaded.
 // ============================================================
 
+import './mvr'
+import './gdtf'
 import './ma'
 import './usitt'
 import './qlcplus'

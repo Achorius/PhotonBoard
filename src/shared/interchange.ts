@@ -189,6 +189,15 @@ export interface Exporter {
   info: InterchangeFormatInfo
   /** Returns the file bytes and any warnings (e.g. "effects are not representable in USITT ASCII") */
   write(show: ShowFile, fixtures: FixtureDefinition[]): Promise<{ bytes: Uint8Array; warnings: ImportWarning[] }>
+  /**
+   * Optional (additive): export ONE fixture type, for formats that describe a
+   * fixture (GDTF, QLC+ .qxf, OFL…). The fixture wizard / library offers
+   * "Export fixture as …" for every exporter that implements it.
+   * `fileName` is the recommended file name (e.g. GDTF's
+   * "Manufacturer@Model@Comment.gdtf"); the host may use it as the default
+   * name of the save dialog.
+   */
+  writeFixture?(def: FixtureDefinition): Promise<{ bytes: Uint8Array; warnings: ImportWarning[]; fileName?: string }>
 }
 
 /** An empty fragment, convenient for importers */
