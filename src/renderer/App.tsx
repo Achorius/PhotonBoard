@@ -4,6 +4,8 @@ import { usePatchStore } from './stores/patch-store'
 import { useMidiStore } from './stores/midi-store'
 import { initMidiRouting } from './lib/midi-manager'
 import { startFollowGamepadLoop } from './stores/follow-store'
+import { installUsbWatch } from './lib/usb-sticks'
+import { UsbModal } from './components/file/UsbModal'
 import { Toolbar } from './components/layout/Toolbar'
 import { NavRail } from './components/layout/NavRail'
 import { StatusBar } from './components/layout/StatusBar'
@@ -89,6 +91,9 @@ export default function App() {
   // Executor slots follow the scene list even when the executor bar is hidden
   useEffect(() => startExecutorAutoSync(), [])
 
+  // USB sticks: toast when one with shows is plugged in (console only)
+  useEffect(() => (isRemoteMode() ? undefined : installUsbWatch()), [])
+
   // Undo / redo of show content (console and remote: each device undoes its own edits)
   useEffect(() => installHistory(), [])
 
@@ -100,17 +105,21 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     const init = async () => {
+      // MIDI routing (controller profiles, mappings) and the gamepad loop are
+      // installed first and never wait for Web MIDI: a slow or hanging MIDI
+      // request must not leave the controllers, the follow spot or the show
+      // load stuck (initMidi enumerates the ports whenever it answers).
+      try { initMidiRouting() } catch (e) { console.warn('[Init] MIDI routing skipped:', e) }
+      if (!isRemoteMode()) {
+        try { startFollowGamepadLoop() } catch (e) { console.warn('[Init] Gamepad init skipped:', e) }
+      }
       try {
         await usePatchStore.getState().loadFixtures()
       } catch (e) {
         console.error('[Init] loadFixtures failed:', e)
       }
       if (cancelled) return
-      try { await useMidiStore.getState().initMidi() } catch (e) { console.warn('[Init] MIDI init skipped:', e) }
-      try { initMidiRouting() } catch (e) { console.warn('[Init] MIDI routing skipped:', e) }
-      if (!isRemoteMode()) {
-        try { startFollowGamepadLoop() } catch (e) { console.warn('[Init] Gamepad init skipped:', e) }
-      }
+      void useMidiStore.getState().initMidi().catch((e) => console.warn('[Init] MIDI init skipped:', e))
       // Console: reload the last show (DMX outputs are machine config, applied by main).
       // Remote: the show the console is running NOW (unsaved edits included — never
       // a file, never echoed back); live state then arrives with the state broadcasts.
@@ -225,6 +234,7 @@ export default function App() {
       </div>
       {executorBarOpen && <ExecutorBar />}
       <StatusBar />
+      {!isRemoteMode() && <UsbModal />}
       {overlays}
     </div>
   )

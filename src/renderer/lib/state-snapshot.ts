@@ -84,6 +84,8 @@ export interface StateSnapshot {
   blinder: boolean
   strobe: boolean
   strobeRate: number
+  /** What the Strobe flashes (console setting) */
+  strobeMode?: 'white' | 'look'
   timelinePlaying: boolean
   /** Timeline playhead (seconds); sent with the DMX part, ~10 Hz while it moves */
   timelineTime?: number
@@ -129,7 +131,7 @@ let cachedControl: Omit<StateSnapshot, 'dmx'> | null = null
 /** Control part of the snapshot (no DMX). Cached until a source store changes. */
 export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
   if (cachedControl) return cachedControl
-  const { grandMaster, blackout, blinder, strobe, strobeRate } = useDmxStore.getState()
+  const { grandMaster, blackout, blinder, strobe, strobeRate, strobeMode } = useDmxStore.getState()
   const { cuelists, chases } = usePlaybackStore.getState()
   const { showName, isDirty } = useUiStore.getState()
   const { patch, groups, selectedFixtureIds } = usePatchStore.getState()
@@ -142,6 +144,7 @@ export function collectStateSnapshot(): Omit<StateSnapshot, 'dmx'> {
     blinder,
     strobe,
     strobeRate,
+    strobeMode,
     timelinePlaying: getTimelineState().isPlaying,
     showName,
     isDirty,
@@ -340,7 +343,7 @@ export function startStateBroadcast(): () => void {
     }),
     useDmxStore.subscribe((s, p) => {
       if (s.grandMaster !== p.grandMaster || s.blackout !== p.blackout || s.blinder !== p.blinder ||
-          s.strobe !== p.strobe || s.strobeRate !== p.strobeRate) {
+          s.strobe !== p.strobe || s.strobeRate !== p.strobeRate || s.strobeMode !== p.strobeMode) {
         onControlChange()
       }
       if (s.values !== p.values) {

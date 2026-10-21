@@ -67,7 +67,12 @@ class GamepadManagerSingleton {
 
   /** Get current raw gamepad if available */
   getRawGamepad(): Gamepad | null {
-    const gamepads = navigator.getGamepads()
+    let gamepads: (Gamepad | null)[]
+    try {
+      gamepads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : []
+    } catch {
+      return null // Gamepad API blocked (permissions policy): no gamepad
+    }
     for (const gp of gamepads) {
       if (gp && gp.connected) return gp
     }
@@ -75,6 +80,12 @@ class GamepadManagerSingleton {
   }
 
   private poll = () => {
+    this.read()
+    this.rafId = requestAnimationFrame(this.poll)
+  }
+
+  /** Read the gamepad once and notify the listeners */
+  private read(): void {
     const gp = this.getRawGamepad()
     if (gp) {
       const state: GamepadState = {
@@ -93,11 +104,12 @@ class GamepadManagerSingleton {
       this._lastState = state
       this.listeners.forEach(l => l(state))
     }
-    this.rafId = requestAnimationFrame(this.poll)
   }
 
   private onConnect = (e: GamepadEvent) => {
     console.log('[GamepadManager] Connected:', e.gamepad.id)
+    // Show it at once (the frame loop may be paused while the window is hidden)
+    this.read()
   }
 
   private onDisconnect = (e: GamepadEvent) => {

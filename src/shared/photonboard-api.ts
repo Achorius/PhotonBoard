@@ -127,12 +127,65 @@ export interface SimpleResult {
   error?: string
 }
 
+/** A game controller as the operating system sees it (Linux diagnostics) */
+export interface SystemGameController {
+  name: string
+  /** joydev node (js0…) — what Chromium reads gamepads from on Linux; null = none */
+  js: string | null
+  /** evdev node (event5…) */
+  event: string | null
+  jsReadable: boolean
+  eventReadable: boolean
+}
+
+export interface GameControllerDiagnostics {
+  /** false = no diagnostics on this system (not Linux) */
+  supported: boolean
+  controllers: SystemGameController[]
+  /** joydev kernel module present (null = unknown) */
+  joydev: boolean | null
+}
+
+/** A show file on a USB stick */
+export interface RemovableShow {
+  /** File name without .pbshow */
+  name: string
+  path: string
+  /** Path relative to the drive ("Show.pbshow", "Shows/Show.pbshow") */
+  relPath: string
+  modifiedAt: number
+}
+
+/** A mounted USB stick / removable drive */
+export interface RemovableDrive {
+  /** Volume label (mount folder name) */
+  name: string
+  /** Mount point */
+  path: string
+  /** .pbshow files, top level and one folder deep, newest first */
+  shows: RemovableShow[]
+  canEject: boolean
+}
+
+/** Hardware-strobe-less intensity channels chopped by the output engine (per universe) */
+export interface StrobeChop {
+  /** Flash rate in Hz */
+  rate: number
+  /** universe → channels (0-511) set to 0 during the dark half-periods */
+  channels: Record<number, number[]>
+}
+
 export interface PhotonBoardAPI {
   dmx: {
     setChannel(universe: number, channel: number, value: number): void
     setChannels(universe: number, channels: Record<number, number>): void
     getValues(universe: number): Promise<number[]>
     blackout(): void
+    /**
+     * Strobe chop done by the output engine, in step with its frames (even
+     * flashes): null = off. Optional (remote bridge: the console renders).
+     */
+    setStrobeChop?(chop: StrobeChop | null): void
   }
 
   /** Legacy: replaces ONLY the Art-Net part of the machine output config (persists). */
@@ -210,6 +263,31 @@ export interface PhotonBoardAPI {
     quit(): void
     /** UI language of the console ('fr' | 'en'): main localises its native menus. Optional (older bridges, remote). */
     setLanguage?(locale: string): void
+    /** Game controllers the OS sees (Follow panel diagnostics). Optional (remote, older bridges). */
+    gameControllers?(): Promise<GameControllerDiagnostics>
+  }
+
+  /**
+   * USB sticks (console only; the web remote can list and eject). Optional:
+   * older bridges / systems without removable drives support.
+   */
+  removable?: {
+    /** Mounted drives with their shows; `refresh` rescans the shows */
+    list(refresh?: boolean): Promise<RemovableDrive[]>
+    /** Drives plugged / removed / their shows changed */
+    onChange(callback: (drives: RemovableDrive[]) => void): Unsubscribe
+    /**
+     * Copy a show from a stick into the shows folder and open it (the stick
+     * can then be removed). `exists` when a show of that name is there and
+     * `overwrite` is not set.
+     */
+    importShow(path: string, opts?: { overwrite?: boolean }): Promise<ShowLoadResult>
+    /** The open dialog, starting on the stick; the chosen show is imported */
+    browse(drivePath?: string): Promise<ShowLoadResult>
+    /** Write a copy of a show to a stick (never changes the current file) */
+    saveCopy(drivePath: string, show: ShowFile, opts?: { overwrite?: boolean }): Promise<ShowSaveResult>
+    /** Flush and unmount: the stick can be pulled out */
+    eject(drivePath: string): Promise<SimpleResult>
   }
 
   stage: {

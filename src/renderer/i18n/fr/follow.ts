@@ -83,7 +83,12 @@ export const follow: Translation['follow'] = {
     dpadUp: 'Croix haut',
     dpadDown: 'Croix bas',
     dpadLeft: 'Croix gauche',
-    dpadRight: 'Croix droite'
+    dpadRight: 'Croix droite',
+    wake: 'Appuyez sur un bouton de la manette : l’application ne voit une manette qu’après l’appui sur un bouton.',
+    systemNone: 'Le système ne voit aucune manette (câble USB, appairage Bluetooth, piles ?).',
+    systemSeen: '« {name} » est branchée : appuyez sur un de ses boutons.',
+    systemNoJs: '« {name} » est branchée mais sans nœud joystick (/dev/input/js*) : le module noyau joydev manque. Mettez PhotonBoard à jour ou lancez : sudo modprobe joydev',
+    systemNoAccess: '« {name} » est branchée mais PhotonBoard ne peut pas lire /dev/input/{node} : ajoutez l’utilisateur au groupe « input » (sudo usermod -aG input $USER) puis redémarrez.'
   },
 
   help: {

@@ -20,6 +20,7 @@ import {
 import { useOutputStatus } from '@renderer/hooks/useOutputStatus'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { Notice, SettingsCard, SettingsPage } from './settings-ui'
+import { StrobeSettingsCard } from './StrobeSettings'
 import { t as translate, useT } from '@renderer/i18n'
 
 const ARTNET_PORT = 6454
@@ -363,6 +364,7 @@ function OutputsEditor() {
                 />
               ))}
             </SettingsCard>
+            <StrobeSettingsCard />
             {/* Room for the sticky apply bar */}
             {dirty && <div aria-hidden className="h-16" />}
           </>
@@ -630,6 +632,7 @@ function RemoteOutputsOverview() {
           </div>
         ))}
       </SettingsCard>
+      <StrobeSettingsCard />
     </SettingsPage>
   )
 }

@@ -11,6 +11,7 @@ export const COMMANDS = [
   'toggle-blinder',               // payload?: boolean (explicit state; omitted = toggle)
   'toggle-strobe',                // payload?: boolean (explicit state; omitted = toggle)
   'set-strobe-rate',              // payload: number Hz 1-25
+  'set-strobe-mode',              // payload: 'white' (full white flash, default) | 'look' (flash the current look)
   'reset-all',                    // no payload — masters to default + clear programmer
   'toggle-timeline',              // no payload
   'start-timeline',               // no payload

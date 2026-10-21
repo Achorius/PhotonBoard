@@ -248,6 +248,9 @@ export function handleCommand(cmd: Command): void {
       if (v !== undefined) dmx.setStrobeRate(v)
       break
     }
+    case 'set-strobe-mode':
+      if (p === 'white' || p === 'look') dmx.setStrobeMode(p)
+      break
     case 'reset-all':
       dmx.resetAll()
       break

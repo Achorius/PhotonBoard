@@ -133,6 +133,15 @@ jobs:
           check "Wi-Fi file on boot partition"  test -f "$R/boot/firmware/photonboard-wifi.txt"
           check "Companion module"              test -f "$R/opt/companion-module-dev/companion-module-photonboard/package.json"
           check "touch mapping helper"          test -x "$R/usr/local/bin/photonboard-map-touch"
+          check "USB automount helper"          test -x "$R/usr/local/sbin/photonboard-usb-mount"
+          check "USB automount udev rule"       grep -q 'photonboard-usb-mount@%k.service' "$R/etc/udev/rules.d/99-photonboard-usb-automount.rules"
+          check "USB automount service"         grep -q 'BindsTo=dev-%i.device' "$R/etc/systemd/system/photonboard-usb-mount@.service"
+          check "USB eject sudo rule"           grep -q 'photonboard-usb-mount eject /media/photonboard/\*' "$R/etc/sudoers.d/photonboard-usb"
+          check "USB mount root"                test -d "$R/media/photonboard"
+          check "exFAT / NTFS tools"            sh -c "test -e '$R/usr/sbin/mkfs.exfat' && test -e '$R/usr/bin/ntfs-3g'"
+          check "photonboard in plugdev"        sh -c "grep -E '^plugdev:' '$R/etc/group' | grep -q photonboard"
+          check "gamepad / MIDI modules"        grep -qx joydev "$R/etc/modules-load.d/photonboard.conf"
+          check "gamepad udev rule"             grep -q 'KERNEL=="js\[0-9\]\*"' "$R/etc/udev/rules.d/70-photonboard-input.rules"
           # Offline fixture library (OFL + QLC+), shipped inside the .deb since it was added:
           # reported, not fatal, so images of older releases can still be rebuilt
           FL="$R/opt/PhotonBoard/resources/fixture-library"

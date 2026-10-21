@@ -1,13 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog, session, Menu, shell, screen } from 'electron'
 import type { IpcMainInvokeEvent, OpenDialogOptions, SaveDialogOptions } from 'electron'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { DmxEngine } from './dmx-engine'
 import { DmxOutputManager } from './dmx-output-manager'
 import { ShowFileManager } from './show-file'
 import { OFLService } from './ofl-service'
 import { FixtureCatalog, defaultCatalogDirs, installCatalogFixture, installMissingShowFixtures, isCatalogId, sanitizeCatalogQuery } from './fixture-catalog'
 import { IPC, MAX_UNIVERSES, type DmxOutputsConfig } from '../shared/types'
-import type { RemoteStatus, ShowLoadResult, ShowSaveResult } from '../shared/photonboard-api'
+import type { RemovableDrive, RemoteStatus, ShowLoadResult, ShowSaveResult, SimpleResult } from '../shared/photonboard-api'
 import { startApiServer, stopApiServer, broadcastState, disconnectApiClients, getApiServerStatus } from './api-server'
 import { startWebServer, stopWebServer, broadcastToWeb, disconnectWebClients, getWebServerStatus } from './web-server'
 import { loadJsonConfig, saveJsonConfig } from './config-store'
@@ -18,6 +18,11 @@ import { lanAddresses } from './remote-access'
 import { parseShowArg } from './remote-invoke'
 import { sanitizeShowName, SHOW_EXTENSION } from './show-validation'
 import { mt, setMainLanguage } from './messages'
+import { listGameControllers } from './input-devices'
+import { RemovableWatcher, copyFileName, driveOf, ejectDrive, isInsideDrive, removableRoots } from './removable-drives'
+import { atomicWriteFile } from './atomic-write'
+import { userInfo } from 'os'
+import { existsSync } from 'fs'
 
 /**
  * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
@@ -56,6 +61,7 @@ let fixtureCatalog: FixtureCatalog
 let remoteSettings: RemoteSettingsStore
 let piSave: PiSaveCoordinator
 let cleanedUp = false
+let removable: RemovableWatcher | null = null
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
@@ -208,6 +214,44 @@ function hardenWebContents(contents: Electron.WebContents): void {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => {})
     return { action: 'deny' }
   })
+}
+
+async function listRemovable(refresh: boolean): Promise<RemovableDrive[]> {
+  if (!removable) return []
+  return refresh ? removable.refresh() : removable.current
+}
+
+/** The drives, rescanned when `path` is not on one we know (just plugged) */
+async function drivesFor(path: unknown): Promise<RemovableDrive[]> {
+  if (!removable) return []
+  if (driveOf(path, removable.current)) return removable.current
+  return removable.refresh()
+}
+
+/** Eject a stick by its mount point (console and web remote) */
+async function ejectRemovable(drivePath: unknown): Promise<SimpleResult> {
+  const drives = await drivesFor(drivePath)
+  const drive = driveOf(drivePath, drives)
+  if (!drive || drive.path !== drivePath) return { success: false, error: mt('usbNotOnStick') }
+  const result = await ejectDrive(drive.path)
+  void removable?.refresh()
+  return result
+}
+
+/**
+ * USB sticks: watch the removable mount roots; the console window is told
+ * when sticks come and go. PHOTONBOARD_REMOVABLE_ROOTS (":"-separated)
+ * replaces the roots and accepts plain folders (end-to-end tests).
+ */
+function startRemovableWatcher(): void {
+  const override = process.env.PHOTONBOARD_REMOVABLE_ROOTS
+  let user = ''
+  try { user = userInfo().username } catch { /* no passwd entry */ }
+  const roots = override ? override.split(':').filter(Boolean) : removableRoots(process.platform, user)
+  removable = new RemovableWatcher(roots, (drives) => {
+    sendToMainWindow(IPC.REMOVABLE_CHANGED, drives)
+  }, { requireMount: !override })
+  removable.start()
 }
 
 function setupPermissions(): void {
@@ -368,6 +412,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.on(IPC.DMX_BLACKOUT, () => {
     dmxEngine.blackout()
+  })
+
+  // Strobe chop in step with the output frames (renderer mixer: dmx-mixer syncStrobeChop)
+  ipcMain.on(IPC.DMX_STROBE_CHOP, (_event, chop: unknown) => {
+    if (!chop || typeof chop !== 'object') {
+      dmxEngine.setStrobeChop(null)
+      return
+    }
+    const { rate, channels } = chop as { rate?: unknown; channels?: unknown }
+    if (typeof rate !== 'number' || !channels || typeof channels !== 'object') {
+      dmxEngine.setStrobeChop(null)
+      return
+    }
+    dmxEngine.setStrobeChop(rate, channels as Record<number, number[]>)
   })
 
   // --- ArtNet (legacy compat: replaces only the Art-Net part, persists) ---
@@ -584,6 +642,66 @@ function registerIpcHandlers(): void {
     return app.getVersion()
   })
 
+  // Follow panel: game controllers the OS sees (why Chromium shows none)
+  ipcMain.handle(IPC.APP_GAME_CONTROLLERS, () => listGameControllers())
+
+  // --- USB sticks (removable-drives.ts) ---
+  ipcMain.handle(IPC.REMOVABLE_LIST, (_event, refresh: unknown) => listRemovable(refresh === true))
+
+  /** Copy a show from a stick into the shows folder, then open that copy */
+  const importFromDrive = async (path: string, overwrite: boolean): Promise<ShowLoadResult> => {
+    const read = await showManager.readShow(path)
+    if (!read.success || !read.show) return { ...read, path }
+    await showManager.runShowReadHook(read.show)
+    const name = basename(path).replace(/\.pbshow$/i, '')
+    let target: string
+    try { target = showManager.pathForName(name) } catch (e) { return { success: false, error: (e as Error).message } }
+    if (!overwrite && existsSync(target)) return { success: false, exists: true, path }
+    const saved = await showManager.saveAs({ ...read.show, name }, target)
+    if (!saved.success) return { success: false, error: saved.error, path }
+    return { success: true, show: { ...read.show, name }, path: target }
+  }
+
+  ipcMain.handle(IPC.REMOVABLE_IMPORT_SHOW, async (_event, path: unknown, opts?: { overwrite?: unknown }): Promise<ShowLoadResult> => {
+    const drives = await drivesFor(path)
+    if (!isInsideDrive(path, drives) || !/\.pbshow$/i.test(path)) return { success: false, error: mt('usbNotOnStick') }
+    return importFromDrive(path, opts?.overwrite === true)
+  })
+
+  ipcMain.handle(IPC.REMOVABLE_BROWSE, async (event, drivePath: unknown): Promise<ShowLoadResult> => {
+    const drives = removable ? await removable.refresh() : []
+    const start = driveOf(drivePath, drives) ?? drives.find((d) => d.shows.length > 0) ?? drives[0]
+    const result = await showOpenDialog(event, {
+      filters: [{ name: mt('showFileFilter'), extensions: ['pbshow'] }],
+      defaultPath: start?.path ?? showManager.getDefaultShowsDir(),
+      properties: ['openFile']
+    })
+    if (result.canceled || !result.filePaths.length) return { success: false, canceled: true }
+    const file = result.filePaths[0]
+    if (isInsideDrive(file, drives)) return importFromDrive(file, false)
+    return showManager.load(file)
+  })
+
+  ipcMain.handle(IPC.REMOVABLE_SAVE_COPY, async (_event, drivePath: unknown, showArg: unknown, opts?: { overwrite?: unknown }): Promise<ShowSaveResult> => {
+    const drives = await drivesFor(drivePath)
+    const drive = driveOf(drivePath, drives)
+    if (!drive) return { success: false, error: mt('usbNotOnStick') }
+    let show
+    try { show = parseShowArg(showArg) } catch (e) { return { success: false, error: (e as Error).message } }
+    const file = join(drive.path, copyFileName(show.name))
+    if (opts?.overwrite !== true && existsSync(file)) return { success: false, exists: true, path: file }
+    try {
+      await atomicWriteFile(file, JSON.stringify({ ...show, modifiedAt: new Date().toISOString() }, null, 2))
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      return { success: false, error: err.code === 'ENOSPC' ? mt('usbFull') : err.code === 'EROFS' || err.code === 'EACCES' ? mt('usbReadOnly') : err.message }
+    }
+    void removable?.refresh()
+    return { success: true, path: file }
+  })
+
+  ipcMain.handle(IPC.REMOVABLE_EJECT, (_event, drivePath: unknown) => ejectRemovable(drivePath))
+
   ipcMain.on(IPC.APP_QUIT, () => {
     app.quit()
   })
@@ -714,6 +832,7 @@ async function cleanup(): Promise<void> {
   stopApiServer()
   stopWebServer()
   dmxEngine?.stop()
+  removable?.stop()
   if (outputManager) {
     // Never hang the quit on a stuck serial port
     await Promise.race([
@@ -755,6 +874,7 @@ function startApp(): void {
     piSave = new PiSaveCoordinator((command) => sendToMainWindow(IPC.STAGE_COMMAND, command))
     initDmxEngine()
     registerIpcHandlers()
+    startRemovableWatcher()
     setupPermissions()
     createMenu()
     createWindow()
@@ -784,7 +904,8 @@ function startApp(): void {
       userDataPath: userData,
       getVersion: () => app.getVersion(),
       getRemoteStatus,
-      sendToRenderer: (channel, ...args) => { sendToMainWindow(channel, ...args) }
+      sendToRenderer: (channel, ...args) => { sendToMainWindow(channel, ...args) },
+      removable: { list: listRemovable, eject: ejectRemovable }
     })
 
     // Auto-open Stage window on second display if available

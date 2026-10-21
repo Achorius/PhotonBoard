@@ -1,12 +1,12 @@
 import { useMidiStore, setMidiRouter, setMappingResetFn, setMappingCleanupFn, setTimecodeProcessor, sameMidiTarget } from '../stores/midi-store'
-import { useDmxStore } from '../stores/dmx-store'
+import { useDmxStore, STROBE_RATE_MAX, STROBE_RATE_MIN } from '../stores/dmx-store'
 import { usePlaybackStore } from '../stores/playback-store'
 import { usePatchStore } from '../stores/patch-store'
 import { useEffectsStore } from '../stores/effects-store'
 import { setProgrammerChannel, clearProgrammerChannel, getProgrammerValue, getMixValue } from './dmx-mixer'
 import { toggleTimeline, rewindTimeline, setTimelineTime, stopTimeline } from './timeline-engine'
 import { processMidiForTimecode } from './timecode-engine'
-import { relativeDelta } from './midi-learn'
+import { relativeDelta, sameMidiPort } from './midi-learn'
 import { clockNow } from './runtime'
 import type { MidiMapping, MidiSourceType } from '@shared/types'
 
@@ -67,7 +67,8 @@ export function mappingMatches(
 ): boolean {
   const src = mapping.source
   if (src.type !== type || src.channel !== channel || src.number !== number) return false
-  if (src.deviceName && deviceName && src.deviceName !== deviceName) return false
+  // Same device under another name (show made on a Mac, played on the Pi…)
+  if (src.deviceName && deviceName && !sameMidiPort(src.deviceName, deviceName)) return false
   return true
 }
 
@@ -226,6 +227,17 @@ function routeMidiToTarget(mapping: MidiMapping, rawValue: number): void {
     case 'strobe': {
       // Hold = strobe on, release = strobe off
       useDmxStore.getState().toggleStrobe(rawValue > 0)
+      break
+    }
+
+    case 'strobe_rate': {
+      // Fader: 1-25 Hz over its travel; encoder: ±1 Hz per detent
+      const dmx = useDmxStore.getState()
+      if (options?.encoding === 'relative') dmx.setStrobeRate(dmx.strobeRate + relativeDelta(rawValue) * (options.inverted ? -1 : 1))
+      else {
+        const f = Math.max(0, Math.min(127, rawValue)) / 127
+        dmx.setStrobeRate(Math.round(STROBE_RATE_MIN + (options?.inverted ? 1 - f : f) * (STROBE_RATE_MAX - STROBE_RATE_MIN)))
+      }
       break
     }
 

@@ -15,6 +15,42 @@ import { useShallow } from 'zustand/react/shallow'
 import { DMX_CHANNELS_PER_UNIVERSE } from '@shared/types'
 import { markLocalChange, sendRemoteCommand, sendRemoteCommandThrottled, isRemoteMode, toDmx } from '@renderer/lib/runtime'
 
+/**
+ * What the Strobe key flashes: 'white' = every fixture at full open white
+ * (like the Blinder — fixtures dark in the current look flash too), 'look'
+ * = the current look as it is.
+ */
+export type StrobeMode = 'white' | 'look'
+
+export const STROBE_RATE_MIN = 1
+export const STROBE_RATE_MAX = 25
+const STROBE_SETTINGS_KEY = 'photonboard.strobe'
+
+/** Strobe rate / mode are operator preferences of this machine (not in the show) */
+function loadStrobeSettings(): { strobeRate: number; strobeMode: StrobeMode } {
+  const fallback = { strobeRate: 10, strobeMode: 'white' as StrobeMode }
+  try {
+    const raw = globalThis.localStorage?.getItem(STROBE_SETTINGS_KEY)
+    if (!raw) return fallback
+    const o = JSON.parse(raw) as { rate?: unknown; mode?: unknown }
+    const rate = typeof o.rate === 'number' && Number.isFinite(o.rate) ? Math.max(STROBE_RATE_MIN, Math.min(STROBE_RATE_MAX, o.rate)) : fallback.strobeRate
+    return { strobeRate: rate, strobeMode: o.mode === 'look' ? 'look' : 'white' }
+  } catch {
+    return fallback
+  }
+}
+
+function saveStrobeSettings(rate: number, mode: StrobeMode): void {
+  if (isRemoteMode()) return // the console keeps its own
+  try {
+    globalThis.localStorage?.setItem(STROBE_SETTINGS_KEY, JSON.stringify({ rate, mode }))
+  } catch {
+    // private mode / quota: kept for this session
+  }
+}
+
+const initialStrobe = loadStrobeSettings()
+
 interface DmxState {
   universeCount: number
   /**
@@ -28,6 +64,7 @@ interface DmxState {
   blinder: boolean
   strobe: boolean
   strobeRate: number // Hz (1-25)
+  strobeMode: StrobeMode
   /** Strobe phase as last published (prefer getStrobePhase() from dmx-mixer) */
   _strobePhase: boolean
 
@@ -37,6 +74,7 @@ interface DmxState {
   toggleBlinder: (on?: boolean) => void
   toggleStrobe: (on?: boolean) => void
   setStrobeRate: (rate: number) => void
+  setStrobeMode: (mode: StrobeMode) => void
   /** Masters back to defaults (GM full, no blackout/blinder/strobe) and programmer cleared */
   resetAll: () => void
 }
@@ -58,7 +96,8 @@ export const useDmxStore = create<DmxState>()(subscribeWithSelector((set, get) =
   blackout: false,
   blinder: false,
   strobe: false,
-  strobeRate: 10,
+  strobeRate: initialStrobe.strobeRate,
+  strobeMode: initialStrobe.strobeMode,
   _strobePhase: true,
 
   setGrandMaster: (value) => {
@@ -92,10 +131,23 @@ export const useDmxStore = create<DmxState>()(subscribeWithSelector((set, get) =
   },
 
   setStrobeRate: (rate) => {
-    const r = Number.isFinite(rate) ? Math.max(1, Math.min(25, rate)) : 10
-    if (r !== get().strobeRate) set({ strobeRate: r })
+    const r = Number.isFinite(rate) ? Math.max(STROBE_RATE_MIN, Math.min(STROBE_RATE_MAX, rate)) : 10
+    if (r !== get().strobeRate) {
+      set({ strobeRate: r })
+      saveStrobeSettings(r, get().strobeMode)
+    }
     markLocalChange('strobeRate')
     sendRemoteCommandThrottled('strobeRate', 'set-strobe-rate', r)
+  },
+
+  setStrobeMode: (mode) => {
+    const m: StrobeMode = mode === 'look' ? 'look' : 'white'
+    if (m !== get().strobeMode) {
+      set({ strobeMode: m })
+      saveStrobeSettings(get().strobeRate, m)
+    }
+    markLocalChange('strobeMode')
+    sendRemoteCommand('set-strobe-mode', m)
   },
 
   resetAll: () => {
@@ -117,7 +169,8 @@ export function useDmxMasters() {
     blackout: s.blackout,
     blinder: s.blinder,
     strobe: s.strobe,
-    strobeRate: s.strobeRate
+    strobeRate: s.strobeRate,
+    strobeMode: s.strobeMode
   })))
 }
 

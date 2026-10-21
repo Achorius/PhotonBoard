@@ -28,7 +28,8 @@
 // masters (group masters, GM, blackout, strobe, blinder) → park.
 // ============================================================
 
-import { useDmxStore, setDmxStoreProgrammerReset } from '@renderer/stores/dmx-store'
+import { useDmxStore, setDmxStoreProgrammerReset, type StrobeMode } from '@renderer/stores/dmx-store'
+export type { StrobeMode }
 import { usePatchStore } from '@renderer/stores/patch-store'
 import { DMX_CHANNELS_PER_UNIVERSE, MAX_UNIVERSES, type FixtureDefinition, type PatchEntry } from '@shared/types'
 import { getDeviceProfile } from './device-detect'
@@ -75,6 +76,13 @@ export interface ChannelInfo {
   fineOf: Int32Array
   /** 1 = this is the fine half of a 16-bit intensity pair (handled with its coarse channel) */
   isFine: Uint8Array
+  /** Hardware strobe range of a shutter / strobe channel (-1 = none) and the rates at its ends */
+  strobeLo: Int16Array
+  strobeHi: Int16Array
+  strobeHzLo: Float32Array
+  strobeHzHi: Float32Array
+  /** 1 = intensity channel of a fixture that strobes in hardware (the Strobe does not chop it) */
+  hwStrobe: Uint8Array
 }
 
 export interface MasterState {
@@ -84,6 +92,15 @@ export interface MasterState {
   strobe: boolean
   /** Current strobe phase: true = lit */
   strobeOn: boolean
+  /** Flash rate (Hz) for hardware strobe channels (default 10) */
+  strobeRate?: number
+  /**
+   * 'white' (default): the Strobe flashes every fixture at full open white
+   * (the Blinder look); 'look': it flashes the current look as it is.
+   */
+  strobeMode?: StrobeMode
+  /** The output engine chops the intensity (in step with its DMX frames): do not chop here */
+  externalChop?: boolean
 }
 
 const U = DMX_CHANNELS_PER_UNIVERSE
@@ -107,7 +124,12 @@ export function createChannelInfo(universeCount: number): ChannelInfo {
     defaults: new Uint8Array(size),
     blinder: new Int16Array(size).fill(-1),
     fineOf: new Int32Array(size).fill(-1),
-    isFine: new Uint8Array(size)
+    isFine: new Uint8Array(size),
+    strobeLo: new Int16Array(size).fill(-1),
+    strobeHi: new Int16Array(size).fill(-1),
+    strobeHzLo: new Float32Array(size),
+    strobeHzHi: new Float32Array(size),
+    hwStrobe: new Uint8Array(size)
   }
 }
 
@@ -144,6 +166,13 @@ export function buildChannelInfo(
       info.role[idx] = c.role
       info.defaults[idx] = c.defaultValue
       info.blinder[idx] = c.blinderValue
+      if (c.strobe) {
+        info.strobeLo[idx] = c.strobe.lo
+        info.strobeHi[idx] = c.strobe.hi
+        info.strobeHzLo[idx] = c.strobe.hzLo
+        info.strobeHzHi[idx] = c.strobe.hzHi
+      }
+      if (c.hwStrobe) info.hwStrobe[idx] = 1
       if (isIntensityRole(c.role)) {
         if (c.coarseIndex !== -1) info.isFine[idx] = 1
         const fineCh = entry.address - 1 + c.fineIndex
@@ -323,34 +352,63 @@ export interface OutputExtras {
 }
 
 /**
- * Output stage: apply the master section to the mix. Only intensity channels
- * are affected by group masters / GM / blackout / strobe; the blinder forces
- * dimmers full, shutters open and (dimmer-less fixtures) white/RGB full —
- * nothing else. Precedence: blinder < strobe < blackout (blackout always
- * kills light). Parked channels are written last, untouched by any master.
+ * Output stage: apply the master section to the mix.
+ *
+ *   Grand Master / group masters  scale intensity channels only
+ *   Blinder   every fixture at full OPEN WHITE: the per-channel blinder
+ *             values (dimmer full, shutter open, R/G/B/W/A full, CMY / CTO
+ *             0, colour & gobo wheel open — channel-classify blinderFor());
+ *             position, focus, prism, effects untouched
+ *   Strobe    fixtures with a hardware strobe: their shutter channel goes
+ *             to its strobe range at the strobe rate, intensity is NOT
+ *             chopped; other fixtures: intensity chopped (here, or by the
+ *             output engine when `externalChop`). Mode 'white' (default)
+ *             also applies the blinder values (a flashing full white, what
+ *             a live Strobe key does), 'look' strobes the current look.
+ *   Blackout  kills intensity, always wins.
+ * Parked channels are written last, untouched by any master.
  */
 export function applyMasters(mix: Uint8Array, info: ChannelInfo, masters: MasterState, out: Uint8Array, extras?: OutputExtras): void {
   const size = Math.min(mix.length, out.length, info.role.length)
   const gm = finiteByte(masters.grandMaster) / 255
-  const kill = masters.blackout || (masters.strobe && !masters.strobeOn)
-  const blinder = masters.blinder
+  const strobe = masters.strobe
+  const chop = strobe && !masters.strobeOn && !masters.externalChop
+  const forceWhite = masters.blinder || (strobe && masters.strobeMode !== 'look')
+  const rate = Number.isFinite(masters.strobeRate) ? (masters.strobeRate as number) : 10
+  const blackout = masters.blackout
   const groupScale = extras?.groupScale ?? null
   const scaleLen = groupScale ? groupScale.length : 0
+  // Hot loop (every frame, every channel): plain locals, no calls on the common path
+  const roles = info.role
+  const blinderVals = info.blinder
+  const isFineArr = info.isFine
+  const fineOf = info.fineOf
+  const hwStrobe = info.hwStrobe
+  const strobeLo = info.strobeLo
+  const DIMMER = ChannelRole.Dimmer
+  const COLOR_INTENSITY = ChannelRole.ColorIntensity
 
   for (let idx = 0; idx < size; idx++) {
-    const forced = blinder ? info.blinder[idx] : -1
+    const role = roles[idx]
 
-    if (!isIntensityRole(info.role[idx] as ChannelRole)) {
+    if (role !== DIMMER && role !== COLOR_INTENSITY) {
+      if (strobe && strobeLo[idx] >= 0) {
+        out[idx] = strobeChannelValue(info, idx, rate)
+        continue
+      }
+      const forced = forceWhite ? blinderVals[idx] : -1
       out[idx] = forced >= 0 ? forced : mix[idx]
       continue
     }
-    if (info.isFine[idx]) continue // written together with its coarse channel
+    if (isFineArr[idx]) continue // written together with its coarse channel
 
+    const forced = forceWhite ? blinderVals[idx] : -1
+    const kill = blackout || (chop && hwStrobe[idx] === 0)
     const scale = idx < scaleLen ? gm * groupScale![idx] : gm
-    const fine = info.fineOf[idx]
+    const fine = fineOf[idx]
     if (fine !== -1 && fine < size) {
       // 16-bit intensity: scale the combined value, then split it again
-      let v16 = forced >= 0 ? 65535 : Math.round((mix[idx] * 256 + mix[fine]) * scale)
+      let v16 = forced >= 0 ? forced * 257 : Math.round((mix[idx] * 256 + mix[fine]) * scale)
       if (kill) v16 = 0
       out[idx] = v16 >> 8
       out[fine] = v16 & 0xff
@@ -369,6 +427,32 @@ export function applyMasters(mix: Uint8Array, info: ChannelInfo, masters: Master
       if (p >= 0) out[idx] = p > 255 ? 255 : p
     }
   }
+}
+
+/** DMX value of a hardware strobe channel for a flash rate (Hz) */
+export function strobeChannelValue(info: ChannelInfo, idx: number, rateHz: number): number {
+  const lo = info.strobeLo[idx]
+  const hi = info.strobeHi[idx]
+  const hzLo = info.strobeHzLo[idx]
+  const span = info.strobeHzHi[idx] - hzLo
+  const f = span === 0 ? 1 : Math.max(0, Math.min(1, (rateHz - hzLo) / span))
+  return Math.round(lo + f * (hi - lo))
+}
+
+/**
+ * Channels the Strobe chops (per universe): intensity channels (16-bit
+ * pairs included) of fixtures without a hardware strobe, minus parked ones.
+ */
+export function strobeChopChannels(info: ChannelInfo, parked?: Int16Array | null): Record<number, number[]> {
+  const out: Record<number, number[]> = {}
+  const size = info.role.length
+  for (let idx = 0; idx < size; idx++) {
+    if (!isIntensityRole(info.role[idx] as ChannelRole) || info.hwStrobe[idx]) continue
+    if (parked && idx < parked.length && parked[idx] >= 0) continue
+    const u = Math.floor(idx / U)
+    ;(out[u] ??= []).push(idx % U)
+  }
+  return out
 }
 
 /** Strobe phase for a rate in Hz (one lit + one dark half-period per cycle). */
@@ -458,6 +542,10 @@ export function stopMixer(): void {
   if (timerId !== null) {
     clearInterval(timerId)
     timerId = null
+  }
+  if (chopKey !== '') {
+    try { getBridge()?.dmx.setStrobeChop?.(null) } catch { /* window closing */ }
+    chopKey = ''
   }
 }
 
@@ -754,6 +842,7 @@ export function getPreviewVersion(): number {
  */
 export function setParked(idx: Int16Array | null): void {
   parkedIdx = idx
+  parkedVersion++
   outputExtras.parked = idx
 }
 
@@ -890,12 +979,16 @@ export function runMixerFrame(now: number): void {
   const dmx = useDmxStore.getState()
   const prevStrobe = strobeOn
   strobeOn = dmx.strobe ? strobePhaseAt(now, dmx.strobeRate) : true
+  const externalChop = syncStrobeChop(dmx.strobe, dmx.strobeRate, now)
   applyMasters(mixBuf, info, {
     grandMaster: dmx.grandMaster,
     blackout: dmx.blackout,
     blinder: dmx.blinder,
     strobe: dmx.strobe,
-    strobeOn
+    strobeOn,
+    strobeRate: dmx.strobeRate,
+    strobeMode: dmx.strobeMode,
+    externalChop
   }, outputBuf, parkedIdx || groupScaleArr ? outputExtras : undefined)
 
   sendChangedChannels(info.universeCount)
@@ -910,6 +1003,39 @@ export function runMixerFrame(now: number): void {
     publishMix(info.universeCount)
     lastPublish = now
   }
+}
+
+// ---- Strobe chop in the output engine ----
+//
+// The mixer runs on a renderer timer, the DMX output on its own ~40 Hz
+// frames: an intensity chop computed here is sampled unevenly by the
+// output (flashes of 1 or 2 frames at random). When the bridge supports
+// it, the chop is done by the output engine itself, in step with its
+// frames (even flashes); the mixer only tells it which channels and the
+// rate — on change, and every second while active (the engine drops a
+// chop not refreshed for 2 s: nothing stays chopped if this window dies).
+
+const STROBE_CHOP_REFRESH_MS = 1000
+let chopKey = ''
+let chopSentAt = -Infinity
+let parkedVersion = 0
+
+/** Returns true when the output engine does the chop (the mixer must not) */
+function syncStrobeChop(strobe: boolean, rate: number, now: number): boolean {
+  const bridge = getBridge()
+  const setChop = bridge?.dmx.setStrobeChop
+  if (!setChop) return false
+  const key = strobe ? `${rate}|${infoVersion}|${parkedVersion}` : ''
+  if (key === chopKey && !(strobe && now - chopSentAt >= STROBE_CHOP_REFRESH_MS)) return strobe
+  try {
+    setChop(strobe ? { rate, channels: strobeChopChannels(channelInfo, parkedIdx) } : null)
+    chopKey = key
+    chopSentAt = now
+  } catch (e) {
+    console.error('[Mixer] strobe chop failed:', e)
+    return false
+  }
+  return strobe
 }
 
 function sendChangedChannels(universeCount: number): void {

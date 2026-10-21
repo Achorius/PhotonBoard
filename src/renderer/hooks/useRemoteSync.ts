@@ -115,7 +115,7 @@ function mirrorRunningEffects(raw: unknown[]): void {
 
 function mirrorMasters(data: Obj): void {
   const dmx = useDmxStore.getState()
-  const patch: Partial<{ grandMaster: number; blackout: boolean; blinder: boolean; strobe: boolean; strobeRate: number }> = {}
+  const patch: Partial<{ grandMaster: number; blackout: boolean; blinder: boolean; strobe: boolean; strobeRate: number; strobeMode: 'white' | 'look' }> = {}
   if (typeof data.grandMaster === 'number' && !isLocallyHeld('grandMaster')) {
     const gm = clampByte(data.grandMaster, dmx.grandMaster)
     if (gm !== dmx.grandMaster) patch.grandMaster = gm
@@ -125,6 +125,9 @@ function mirrorMasters(data: Obj): void {
   }
   if (typeof data.strobeRate === 'number' && data.strobeRate !== dmx.strobeRate && !isLocallyHeld('strobeRate')) {
     patch.strobeRate = data.strobeRate
+  }
+  if ((data.strobeMode === 'white' || data.strobeMode === 'look') && data.strobeMode !== dmx.strobeMode && !isLocallyHeld('strobeMode')) {
+    patch.strobeMode = data.strobeMode
   }
   if (Object.keys(patch).length > 0) useDmxStore.setState(patch)
 }

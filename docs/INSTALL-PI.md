@@ -82,3 +82,17 @@ Actions (`.github/workflows/pi-image.yml`) à chaque publication d'une version,
 `scripts/build-pi-image.sh` (qui exécute `scripts/pi-setup.sh --image-build`).
 Elle peut aussi être relancée à la main (onglet *Actions* → *Raspberry Pi
 image* → *Run workflow*, champ `tag`).
+
+## Clés USB, manette, MIDI (1.1.1)
+
+- **Clés USB** (FAT32, exFAT, NTFS) : montées automatiquement dans `/media/photonboard/<NOM>` dès qu'elles sont branchées
+  (service `photonboard-usb-mount@…`), démontées quand on les retire. Dans PhotonBoard : *Fichier › Ouvrir depuis une clé USB…*
+  (le show est copié dans le dossier des shows puis ouvert), *Enregistrer une copie sur la clé USB*, *Éjecter la clé USB*.
+  Nécessite l'image 1.1.1 (ou de relancer `pi-setup.sh`).
+- **Manette (poursuite)** : le module noyau `joydev` est chargé au démarrage (`/etc/modules-load.d/photonboard.conf`) et
+  `/etc/udev/rules.d/70-photonboard-input.rules` rend les manettes lisibles par l'utilisateur du kiosque. Vérification :
+  `ls -l /dev/input/js*` et `groups` (doit contenir `input`). Appuyez sur un bouton de la manette : le moteur Chromium ne
+  montre une manette qu'après un appui.
+- **MIDI** : le séquenceur ALSA (`snd-seq`) est chargé au démarrage ; un contrôleur branché après le démarrage apparaît
+  seul en quelques secondes.
+

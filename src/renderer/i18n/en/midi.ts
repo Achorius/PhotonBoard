@@ -148,6 +148,7 @@ export const midi = {
     blackout: { label: 'Blackout', description: 'Toggles blackout on each press' },
     blinder: { label: 'Blinder', description: 'Full white while held' },
     strobe: { label: 'Strobe', description: 'Strobe while held' },
+    strobe_rate: { label: 'Strobe rate', description: 'Fader / encoder: strobe speed 1-25 Hz' },
     reset: { label: 'Reset all', description: 'Clears the programmer and releases playback' },
     tap_tempo: { label: 'Tap tempo', description: 'Tap to set the tempo (the chase, or every playing chase)' },
     cuelist_go: { label: 'Scene GO', description: 'Start / stop or step a scene' },

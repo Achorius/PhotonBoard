@@ -186,6 +186,7 @@ step_dependencies() {
     libusb-1.0-0 libgbm1
     "libasound2t64|libasound2"   # ALSA runtime — required for Web MIDI (Chromium)
     alsa-utils                   # amidi / aplay -l for MIDI troubleshooting
+    exfatprogs ntfs-3g           # USB sticks: exFAT tools, NTFS fallback (FAT32 / exFAT / NTFS3 are in the kernel)
     zenity                       # native file dialogs for Electron on Linux
     "libgtk-3-0t64|libgtk-3-0"   # GTK runtime used by zenity/Electron dialogs
     # Electron/Chromium runtime libraries not pulled in by GTK (missing on
@@ -470,6 +471,185 @@ TOUCHCONF
   rm -f "$profile.pb-old"
 
   info "Auto-login and kiosk mode configured."
+}
+
+# Device access for the kiosk: game controllers (Follow spot gamepad) and
+# MIDI. Chromium (Electron) reads gamepads on Linux through the joydev node
+# /dev/input/jsN (+ evdev/hidraw for extras): the joydev module must be
+# loaded and the nodes readable by the kiosk user. The ALSA sequencer
+# (/dev/snd/seq) is what Web MIDI opens: loaded at boot so MIDI works (and
+# hotplug is seen) even when no MIDI device was plugged at start-up.
+step_devices() {
+  info "Device access: gamepads (joydev, udev rules) and MIDI (ALSA sequencer)..."
+  mkdir -p /etc/modules-load.d /etc/udev/rules.d
+  cat > /etc/modules-load.d/photonboard.conf <<'EOF2'
+# PhotonBoard (managed by pi-setup.sh)
+# Game controllers for the Follow spot: Chromium reads /dev/input/js*
+joydev
+# Web MIDI (Chromium) opens the ALSA sequencer
+snd-seq
+snd-seq-midi
+EOF2
+  cat > /etc/udev/rules.d/70-photonboard-input.rules <<'EOF2'
+# PhotonBoard (managed by pi-setup.sh): game controllers readable by the kiosk
+# user (member of "input") even without an active logind seat session.
+SUBSYSTEM=="input", KERNEL=="js[0-9]*", MODE="0664", GROUP="input", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", ENV{ID_INPUT_JOYSTICK}=="1", MODE="0660", GROUP="input", TAG+="uaccess"
+# Sony (DualShock / DualSense) and Nintendo (Switch Pro / Joy-Con) pads are
+# also read through hidraw by Chromium
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="054c", MODE="0660", GROUP="input", TAG+="uaccess"
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", MODE="0660", GROUP="input", TAG+="uaccess"
+EOF2
+  if (( ! IMAGE_BUILD )); then
+    modprobe joydev 2>/dev/null || warn "joydev kernel module not available: gamepads may not be seen by PhotonBoard."
+    modprobe snd-seq 2>/dev/null || true
+    modprobe snd-seq-midi 2>/dev/null || true
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=input --subsystem-match=hidraw 2>/dev/null || true
+  fi
+  info "Gamepad / MIDI device access configured."
+}
+
+# USB sticks: mounted automatically under /media/photonboard/<LABEL|UUID>
+# (owned by the kiosk user, rw, nosuid/nodev/noexec), unmounted when pulled
+# out. udev only TAGS the partition; a systemd template service does the
+# mount (udev's own mount namespace would hide it) and is bound to the
+# device, so removal stops it and unmounts. PhotonBoard lists the shows
+# found there and can eject a stick through a sudo rule limited to
+# "photonboard-usb-mount eject /media/photonboard/*".
+step_usb_automount() {
+  info "USB sticks: automount under /media/photonboard..."
+  mkdir -p /media/photonboard /etc/udev/rules.d /etc/sudoers.d /usr/local/sbin /etc/photonboard
+  chmod 0755 /media/photonboard
+  # Owner of the mounted sticks (the image's kiosk guard keeps it up to date)
+  [[ -s /etc/photonboard/kiosk-user ]] || printf '%s\n' "$REAL_USER" > /etc/photonboard/kiosk-user
+  cat > /usr/local/sbin/photonboard-usb-mount <<'USBMOUNT'
+#!/bin/bash
+# PhotonBoard USB stick helper (managed by pi-setup.sh)
+#   add <kernel name>      mount /dev/<name> under /media/photonboard (systemd, on plug)
+#   remove <kernel name>   unmount it (systemd, when the stick is pulled out)
+#   eject <mount point>    flush + unmount (the kiosk user, through sudo)
+set -u
+BASE=/media/photonboard
+STATE=/run/photonboard-usb
+log() { logger -t photonboard-usb -- "$*" 2>/dev/null || echo "$*" >&2; }
+kiosk_user() {
+  local u
+  u=$(head -n1 /etc/photonboard/kiosk-user 2>/dev/null || true)
+  id "$u" >/dev/null 2>&1 || u=$(getent passwd 1000 | cut -d: -f1)
+  echo "${u:-root}"
+}
+
+do_add() {
+  local kn=$1 dev=/dev/$1 type label uuid name dir u uid gid opts rc
+  [ -b "$dev" ] || exit 0
+  mkdir -p "$BASE" "$STATE"
+  if [ -f "$STATE/$kn" ] && mountpoint -q "$(cat "$STATE/$kn")"; then exit 0; fi
+  type=$(blkid -p -s TYPE -o value "$dev" 2>/dev/null)
+  label=$(blkid -p -s LABEL -o value "$dev" 2>/dev/null)
+  uuid=$(blkid -p -s UUID -o value "$dev" 2>/dev/null)
+  case $type in
+    vfat|exfat|ntfs|ntfs3) ;;
+    *) log "$dev: file system '$type' not mounted"; exit 0 ;;
+  esac
+  name=$(printf '%s' "${label:-${uuid:-$kn}}" | tr -c 'A-Za-z0-9._-' '_' | sed 's/^[._]*//' | cut -c1-48)
+  [ -n "$name" ] || name=$kn
+  dir=$BASE/$name
+  if mountpoint -q "$dir"; then dir=$BASE/$name-$kn; fi
+  mkdir -p "$dir"
+  u=$(kiosk_user); uid=$(id -u "$u"); gid=$(id -g "$u")
+  opts="nosuid,nodev,noexec,noatime,uid=$uid,gid=$gid,fmask=0133,dmask=0022"
+  case $type in
+    vfat)  mount -t vfat -o "$opts,flush,utf8,shortname=mixed" "$dev" "$dir"; rc=$? ;;
+    exfat) mount -t exfat -o "$opts" "$dev" "$dir"; rc=$? ;;
+    *)     mount -t ntfs3 -o "$opts" "$dev" "$dir" 2>/dev/null || mount -t ntfs-3g -o "$opts" "$dev" "$dir"; rc=$? ;;
+  esac
+  if [ "$rc" -ne 0 ]; then
+    rmdir "$dir" 2>/dev/null
+    log "mounting $dev ($type) failed"
+    exit 1
+  fi
+  printf '%s\n' "$dir" > "$STATE/$kn"
+  log "$dev ($type) mounted on $dir"
+}
+
+do_remove() {
+  local kn=$1 dir
+  [ -f "$STATE/$kn" ] || exit 0
+  dir=$(cat "$STATE/$kn")
+  rm -f "$STATE/$kn"
+  case $dir in "$BASE"/*) ;; *) exit 0 ;; esac
+  if mountpoint -q "$dir"; then umount -l "$dir" 2>/dev/null; fi
+  rmdir "$dir" 2>/dev/null
+  log "$dir unmounted"
+}
+
+do_eject() {
+  local dir f
+  dir=$(realpath -m -- "$1")
+  case $dir in "$BASE"/*) ;; *) echo "not a PhotonBoard USB mount: $1" >&2; exit 2 ;; esac
+  case ${dir#"$BASE"/} in */*|"") echo "not a PhotonBoard USB mount: $1" >&2; exit 2 ;; esac
+  mountpoint -q "$dir" || { echo "not mounted: $dir" >&2; exit 3; }
+  sync
+  if ! umount "$dir"; then
+    echo "the stick is busy: close what uses it and try again" >&2
+    exit 4
+  fi
+  rmdir "$dir" 2>/dev/null
+  for f in "$STATE"/*; do
+    [ -f "$f" ] && [ "$(cat "$f")" = "$dir" ] && rm -f "$f"
+  done
+  log "$dir ejected"
+}
+
+case ${1:-} in
+  add)    [ $# -eq 2 ] && do_add "$2" ;;
+  remove) [ $# -eq 2 ] && do_remove "$2" ;;
+  eject)  [ $# -eq 2 ] && do_eject "$2" ;;
+  *) echo "usage: $0 add|remove <kernel name> | eject <mount point>" >&2; exit 2 ;;
+esac
+USBMOUNT
+  chmod 0755 /usr/local/sbin/photonboard-usb-mount
+
+  cat > /etc/systemd/system/photonboard-usb-mount@.service <<'UNIT'
+[Unit]
+Description=PhotonBoard USB stick /dev/%I
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/photonboard-usb-mount add %I
+ExecStop=/usr/local/sbin/photonboard-usb-mount remove %I
+UNIT
+
+  cat > /etc/udev/rules.d/99-photonboard-usb-automount.rules <<'RULES'
+# PhotonBoard (managed by pi-setup.sh): USB sticks (FAT32, exFAT, NTFS)
+# mounted under /media/photonboard by photonboard-usb-mount@<dev>.service
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat|exfat|ntfs", TAG+="systemd", ENV{SYSTEMD_WANTS}+="photonboard-usb-mount@%k.service"
+RULES
+
+  local sudoers=/etc/sudoers.d/photonboard-usb
+  cat > "$sudoers.tmp" <<'SUDOERS'
+# PhotonBoard (managed by pi-setup.sh): the kiosk user (plugdev) may eject
+# the USB sticks PhotonBoard mounted — nothing else.
+%plugdev ALL=(root) NOPASSWD: /usr/local/sbin/photonboard-usb-mount eject /media/photonboard/*
+SUDOERS
+  chmod 0440 "$sudoers.tmp"
+  if command -v visudo >/dev/null 2>&1 && ! visudo -cf "$sudoers.tmp" >/dev/null; then
+    rm -f "$sudoers.tmp"
+    warn "sudoers rule for USB eject rejected by visudo: PhotonBoard cannot eject sticks (unplug them when idle)."
+  else
+    mv -f "$sudoers.tmp" "$sudoers"
+  fi
+
+  if (( ! IMAGE_BUILD )); then
+    systemctl daemon-reload
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=block --action=add 2>/dev/null || true
+  fi
+  info "USB sticks are mounted under /media/photonboard."
 }
 
 step_network() {
@@ -997,6 +1177,8 @@ main() {
   step_photonboard
   step_companion_module
   step_kiosk
+  step_devices
+  step_usb_automount
   step_network
   step_directories
   if (( IMAGE_BUILD )); then

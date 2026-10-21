@@ -422,6 +422,18 @@ export function createRemoteAPI(): PhotonBoardAPI {
       quit: () => { /* the remote UI never quits the Pi */ }
     },
 
+    // USB sticks of the Pi: list and eject (open / save copy happen on the console)
+    removable: {
+      list: (refresh) =>
+        invoke('removable:list', !!refresh),
+      onChange: () => () => { /* the remote lists on demand */ },
+      importShow: async () => ({ success: false, error: 'Open the show from the USB stick on the console' }),
+      browse: async () => ({ success: false, error: 'Open the show from the USB stick on the console' }),
+      saveCopy: async () => ({ success: false, error: 'Save to the USB stick on the console' }),
+      eject: (drivePath) =>
+        invoke('removable:eject', drivePath)
+    },
+
     stage: {
       open: () => { /* no stage window in remote mode */ },
       close: () => {},

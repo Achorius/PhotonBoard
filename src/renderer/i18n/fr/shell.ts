@@ -31,6 +31,10 @@ export const shell: Translation['shell'] = {
     upload: 'Envoyer un fichier show…',
     uploadDescription: 'Envoie un .pbshow de cet appareil vers la console',
     reveal: 'Afficher le fichier du show',
+    openUsb: 'Ouvrir depuis une clé USB…',
+    saveCopyUsb: 'Enregistrer une copie sur la clé USB',
+    ejectUsb: 'Éjecter la clé USB',
+    usbNone: 'Aucune clé USB branchée',
     quit: 'Quitter PhotonBoard'
   },
 

@@ -37,7 +37,9 @@ const api: PhotonBoardAPI = {
     getValues: (universe) =>
       ipcRenderer.invoke(IPC.DMX_GET_VALUES, universe),
     blackout: () =>
-      ipcRenderer.send(IPC.DMX_BLACKOUT)
+      ipcRenderer.send(IPC.DMX_BLACKOUT),
+    setStrobeChop: (chop) =>
+      ipcRenderer.send(IPC.DMX_STROBE_CHOP, chop)
   },
 
   // --- ArtNet (legacy: replaces only the Art-Net part of the machine config) ---
@@ -138,7 +140,25 @@ const api: PhotonBoardAPI = {
     quit: () =>
       ipcRenderer.send(IPC.APP_QUIT),
     setLanguage: (locale) =>
-      ipcRenderer.send(IPC.APP_SET_LANGUAGE, locale)
+      ipcRenderer.send(IPC.APP_SET_LANGUAGE, locale),
+    gameControllers: () =>
+      ipcRenderer.invoke(IPC.APP_GAME_CONTROLLERS)
+  },
+
+  // --- USB sticks ---
+  removable: {
+    list: (refresh) =>
+      ipcRenderer.invoke(IPC.REMOVABLE_LIST, !!refresh),
+    onChange: (callback) =>
+      subscribe(IPC.REMOVABLE_CHANGED, callback),
+    importShow: (path, opts) =>
+      ipcRenderer.invoke(IPC.REMOVABLE_IMPORT_SHOW, path, opts ?? {}),
+    browse: (drivePath) =>
+      ipcRenderer.invoke(IPC.REMOVABLE_BROWSE, drivePath),
+    saveCopy: (drivePath, show, opts) =>
+      ipcRenderer.invoke(IPC.REMOVABLE_SAVE_COPY, drivePath, JSON.stringify(show), opts ?? {}),
+    eject: (drivePath) =>
+      ipcRenderer.invoke(IPC.REMOVABLE_EJECT, drivePath)
   },
 
   // --- Stage Window ---

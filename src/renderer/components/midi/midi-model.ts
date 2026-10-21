@@ -31,6 +31,7 @@ export const TARGETS: Record<MidiTargetType, TargetMeta> = {
   blackout: { category: 'masters', icon: LuPower },
   blinder: { category: 'masters', icon: LuSun },
   strobe: { category: 'masters', icon: LuZap },
+  strobe_rate: { category: 'masters', icon: LuZap },
   reset: { category: 'masters', icon: LuRefreshCw },
   tap_tempo: { category: 'masters', icon: LuActivity, ref: 'chase' },
   cuelist_go: { category: 'playback', icon: LuClapperboard, ref: 'cuelist' },

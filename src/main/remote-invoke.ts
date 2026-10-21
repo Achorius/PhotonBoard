@@ -46,6 +46,11 @@ export interface RemoteInvokeDeps {
    * (ConsoleRequestCoordinator). Absent: show:get-current is unavailable.
    */
   requestFromConsole?: (type: string, payload: Record<string, unknown>) => Promise<unknown>
+  /** USB sticks of the Pi: the remote may list them and eject one */
+  removable?: {
+    list: (refresh: boolean) => Promise<unknown>
+    eject: (drivePath: unknown) => Promise<unknown>
+  }
 }
 
 /** Thrown for bad input: the message is returned to the client as the error */
@@ -268,6 +273,13 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
       // App
       case IPC.APP_GET_VERSION:
         return deps.getVersion()
+
+      // USB sticks of the Pi: list and eject only (opening / saving happen on the console)
+      case IPC.REMOVABLE_LIST:
+        return deps.removable ? deps.removable.list(args[0] === true) : []
+      case IPC.REMOVABLE_EJECT:
+        if (!deps.removable) throw new RemoteInputError('No USB stick support on this console')
+        return deps.removable.eject(args[0])
 
       // Remote access: status only. Settings (PIN) are never readable/changeable remotely.
       case IPC.REMOTE_GET_STATUS:

@@ -148,6 +148,7 @@ export const midi: Translation['midi'] = {
     blackout: { label: 'Blackout', description: 'Active ou coupe le blackout à chaque appui' },
     blinder: { label: 'Blinder', description: 'Blanc à fond tant que maintenu' },
     strobe: { label: 'Strobe', description: 'Strobe tant que maintenu' },
+    strobe_rate: { label: 'Vitesse du strobe', description: 'Fader / encodeur : vitesse du strobe 1 à 25 Hz' },
     reset: { label: 'Tout réinitialiser', description: 'Vide le programmer et relâche la restitution' },
     tap_tempo: { label: 'Tap tempo', description: 'Tapez pour régler le tempo (du chase, ou de tous les chases en cours)' },
     cuelist_go: { label: 'GO de scène', description: 'Lance, arrête ou avance une scène' },

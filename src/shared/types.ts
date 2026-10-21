@@ -663,7 +663,7 @@ export interface TimelineState {
 // --- MIDI ---
 
 export type MidiSourceType = 'cc' | 'note' | 'program'
-export type MidiTargetType = 'channel' | 'cuelist_go' | 'cuelist_fader' | 'chase_toggle' | 'chase_bpm' | 'master' | 'effect_toggle' | 'flash' | 'blackout' | 'blinder' | 'strobe' | 'reset' | 'tap_tempo' | 'timeline_play' | 'timeline_stop' | 'timeline_rewind' | 'timeline_goto_marker' | 'timeline_goto_zone'
+export type MidiTargetType = 'channel' | 'cuelist_go' | 'cuelist_fader' | 'chase_toggle' | 'chase_bpm' | 'master' | 'effect_toggle' | 'flash' | 'blackout' | 'blinder' | 'strobe' | 'strobe_rate' | 'reset' | 'tap_tempo' | 'timeline_play' | 'timeline_stop' | 'timeline_rewind' | 'timeline_goto_marker' | 'timeline_goto_zone'
 
 export interface MidiMapping {
   id: string
@@ -889,6 +889,7 @@ export const IPC = {
   DMX_SET_CHANNELS: 'dmx:set-channels',
   DMX_GET_VALUES: 'dmx:get-values',
   DMX_BLACKOUT: 'dmx:blackout',
+  DMX_STROBE_CHOP: 'dmx:strobe-chop',
 
   // ArtNet
   ARTNET_CONFIGURE: 'artnet:configure',
@@ -933,6 +934,15 @@ export const IPC = {
   APP_GET_VERSION: 'app:get-version',
   APP_QUIT: 'app:quit',
   APP_SET_LANGUAGE: 'app:set-language',
+  APP_GAME_CONTROLLERS: 'app:game-controllers',
+
+  // USB sticks
+  REMOVABLE_LIST: 'removable:list',
+  REMOVABLE_CHANGED: 'removable:changed',
+  REMOVABLE_IMPORT_SHOW: 'removable:import-show',
+  REMOVABLE_BROWSE: 'removable:browse',
+  REMOVABLE_SAVE_COPY: 'removable:save-copy',
+  REMOVABLE_EJECT: 'removable:eject',
 
   // Stage Window
   STAGE_OPEN: 'stage:open',
