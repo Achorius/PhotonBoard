@@ -13,7 +13,7 @@ const port = String(20000 + Math.floor(Math.random() * 20000))
 const app = await electron.launch({
   executablePath: exe,
   args: ['--no-sandbox'],
-  env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), PHOTONBOARD_HEADLESS_TEST: '1',
+  env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), PHOTONBOARD_HEADLESS_TEST: '1', PB_NO_SPLASH: '1',
     PHOTONBOARD_WEB_PORT: port, PHOTONBOARD_API_PORT: String(Number(port) + 1) }
 })
 const errors = []

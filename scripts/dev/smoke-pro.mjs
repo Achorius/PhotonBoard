@@ -30,7 +30,7 @@ copyFileSync(SHOW, join(showDir, `${SHOW_TITLE}.pbshow`))
 
 const app = await electron.launch({
   args: ['--no-sandbox', resolve('out/main/index.js')],
-  env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), PHOTONBOARD_HEADLESS_TEST: '1',
+  env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), PHOTONBOARD_HEADLESS_TEST: '1', PB_NO_SPLASH: '1',
     PHOTONBOARD_WEB_PORT: String(30000 + Math.floor(Math.random() * 20000)), PHOTONBOARD_API_PORT: '0' }
 })
 

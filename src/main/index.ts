@@ -24,6 +24,9 @@ import { atomicWriteFile } from './atomic-write'
 import { userInfo } from 'os'
 import { existsSync } from 'fs'
 import { createInterchangeHost, type InterchangeHost } from './interchange'
+import { DemoLibrary, defaultDemoDirs } from './demos'
+import { CONSOLE_BACKGROUND, SPLASH_MAX_MS, openSplash, splashDisabled, type Splash } from './splash'
+import pkg from '../../package.json'
 
 /**
  * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
@@ -64,6 +67,9 @@ let piSave: PiSaveCoordinator
 let cleanedUp = false
 let removable: RemovableWatcher | null = null
 let interchange: InterchangeHost
+let demos: DemoLibrary
+/** Start-up splash (null once the console is shown, or when PB_NO_SPLASH=1) */
+let splash: Splash | null = null
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
@@ -80,7 +86,7 @@ function sendToMainWindow(channel: string, ...args: unknown[]): boolean {
 const MENU_LABELS = {
   en: {
     about: 'About PhotonBoard', hide: 'Hide PhotonBoard', hideOthers: 'Hide Others', unhide: 'Show All', quit: 'Quit PhotonBoard',
-    file: 'File', newShow: 'New Show', open: 'Open…', save: 'Save', saveAs: 'Save As…', close: 'Close Window',
+    file: 'File', newShow: 'New Show', open: 'Open…', openDemo: 'Open a Demo…', save: 'Save', saveAs: 'Save As…', close: 'Close Window',
     importFile: 'Import…', exportFile: 'Export…',
     edit: 'Edit', undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
     view: 'View', reload: 'Reload', forceReload: 'Force Reload', devTools: 'Toggle Developer Tools',
@@ -89,7 +95,7 @@ const MENU_LABELS = {
   },
   fr: {
     about: 'À propos de PhotonBoard', hide: 'Masquer PhotonBoard', hideOthers: 'Masquer les autres', unhide: 'Tout afficher', quit: 'Quitter PhotonBoard',
-    file: 'Fichier', newShow: 'Nouveau show', open: 'Ouvrir…', save: 'Enregistrer', saveAs: 'Enregistrer sous…', close: 'Fermer la fenêtre',
+    file: 'Fichier', newShow: 'Nouveau show', open: 'Ouvrir…', openDemo: 'Ouvrir une démo…', save: 'Enregistrer', saveAs: 'Enregistrer sous…', close: 'Fermer la fenêtre',
     importFile: 'Importer…', exportFile: 'Exporter…',
     edit: 'Édition', undo: 'Annuler', redo: 'Rétablir', cut: 'Couper', copy: 'Copier', paste: 'Coller', selectAll: 'Tout sélectionner',
     view: 'Présentation', reload: 'Recharger', forceReload: 'Forcer le rechargement', devTools: 'Outils de développement',
@@ -130,6 +136,10 @@ function createMenu(): void {
           label: L.open,
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToMainWindow('menu:load')
+        },
+        {
+          label: L.openDemo,
+          click: () => sendToMainWindow('menu:open-demo')
         },
         { type: 'separator' },
         {
@@ -283,6 +293,39 @@ function setupPermissions(): void {
   })
 }
 
+/**
+ * Show the console window once it is ready (it is created hidden): through
+ * the splash when there is one (minimum display time, fade out), and at the
+ * latest after SPLASH_MAX_MS whatever happens.
+ */
+function revealWhenReady(win: BrowserWindow): void {
+  let revealed = false
+  const reveal = () => {
+    if (revealed) return
+    revealed = true
+    clearTimeout(safety)
+    const show = () => {
+      if (win.isDestroyed()) return
+      win.show()
+      win.focus()
+    }
+    const current = splash
+    splash = null
+    if (current) current.finish(show)
+    else show()
+  }
+  const safety = setTimeout(() => {
+    if (!revealed) safeLog('warn', `[Main] Console window not ready after ${SPLASH_MAX_MS} ms — showing it anyway`)
+    reveal()
+  }, SPLASH_MAX_MS)
+  win.once('ready-to-show', reveal)
+  win.once('closed', () => {
+    clearTimeout(safety)
+    splash?.destroy()
+    splash = null
+  })
+}
+
 function createWindow(): void {
   const isLinux = process.platform === 'linux'
 
@@ -294,7 +337,9 @@ function createWindow(): void {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    backgroundColor: '#0a0a0f',
+    // Shown by revealWhenReady (after the splash): no white flash, no half-drawn UI
+    show: false,
+    backgroundColor: CONSOLE_BACKGROUND,
     fullscreen: isLinux,
     titleBarStyle: isLinux ? 'default' : 'hiddenInset',
     trafficLightPosition: isLinux ? undefined : { x: 15, y: 15 },
@@ -310,6 +355,7 @@ function createWindow(): void {
     }
   })
   mainWindow = win
+  revealWhenReady(win)
 
   // Disable Electron's built-in scroll-to-zoom (we handle zoom ourselves in canvas)
   win.webContents.setVisualZoomLevelLimits(1, 1)
@@ -535,6 +581,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.SHOW_GET_RECENT, () => {
     return showManager.getRecent()
+  })
+
+  // --- Demo content (resources/demos): read-only, named by id ---
+  ipcMain.handle(IPC.DEMOS_LIST, () => demos.list())
+
+  /** A demo show, opened as a new unsaved show (Save asks for a name: the demo itself stays untouched) */
+  ipcMain.handle(IPC.DEMOS_OPEN, async (_event, id: unknown): Promise<ShowLoadResult> => {
+    const path = demos.showPath(id)
+    if (!path) return { success: false, error: mt('demoNotFound') }
+    const read = await showManager.readShow(path)
+    if (!read.success || !read.show) return { success: false, error: read.error }
+    await showManager.runShowReadHook(read.show)
+    showManager.newShow({ resetCurrent: true })
+    return { success: true, show: read.show }
   })
 
   // --- Fixtures ---
@@ -790,6 +850,11 @@ function registerIpcHandlers(): void {
     const next: MenuLanguage = locale === 'fr' ? 'fr' : 'en'
     // Dialogs, show file errors and remote answers follow it too
     setMainLanguage(next)
+    if (next !== savedLanguage) {
+      // Remembered for the next start (splash tagline, native menus before the UI loads)
+      savedLanguage = next
+      try { saveJsonConfig(languageConfigPath(), { language: next }) } catch (e) { safeLog('warn', '[Main] Could not save the UI language:', (e as Error).message) }
+    }
     if (next === menuLanguage) return
     menuLanguage = next
     createMenu()
@@ -921,6 +986,33 @@ async function cleanup(): Promise<void> {
   }
 }
 
+function languageConfigPath(): string {
+  return join(app.getPath('userData'), 'config', 'ui.json')
+}
+
+let savedLanguage: MenuLanguage | null = null
+
+/**
+ * UI language at start-up, before the console UI says which one it uses:
+ * the last one it reported, else what the UI picks on 'auto' (French on
+ * the Pi kiosk, else the system language).
+ */
+function startupLanguage(): MenuLanguage {
+  const loaded = loadJsonConfig<MenuLanguage>(
+    languageConfigPath(),
+    (raw) => {
+      const lang = (raw as { language?: unknown } | null)?.language
+      return lang === 'fr' || lang === 'en' ? { ok: true, value: lang } : { ok: false, error: 'not a language' }
+    },
+    () => {
+      if (process.platform === 'linux' && /^arm/.test(process.arch)) return 'fr'
+      return app.getLocale().toLowerCase().startsWith('fr') ? 'fr' : 'en'
+    }
+  )
+  if (loaded.source !== 'default') savedLanguage = loaded.value
+  return loaded.value
+}
+
 function startApp(): void {
   app.on('web-contents-created', (_event, contents) => hardenWebContents(contents))
 
@@ -936,6 +1028,23 @@ function startApp(): void {
   })
 
   app.whenReady().then(() => {
+    menuLanguage = startupLanguage()
+    setMainLanguage(menuLanguage)
+    // First thing on screen: the splash, on the display the console opens on
+    if (!splashDisabled()) {
+      try {
+        splash = openSplash({
+          // Not app.getVersion(): run as `electron out/main/index.js` (dev, tests) it is Electron's version
+          version: app.isPackaged ? app.getVersion() : String(pkg.version),
+          language: menuLanguage,
+          display: screen.getPrimaryDisplay().bounds,
+          cover: process.platform === 'linux'
+        })
+      } catch (e) {
+        safeLog('warn', '[Main] Splash screen unavailable:', (e as Error).message)
+        splash = null
+      }
+    }
     const userData = app.getPath('userData')
     showManager = new ShowFileManager(userData)
     // The user library (OFL downloads, imports, installed catalog fixtures) survives restarts
@@ -948,6 +1057,11 @@ function startApp(): void {
     }))
     void fixtureCatalog.load() // index in the background: the first search is instant
     interchange = createInterchangeHost({ getLibrary: () => showManager.getAllFixtures(), catalog: fixtureCatalog })
+    demos = new DemoLibrary(defaultDemoDirs({
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+      appPath: app.getAppPath(),
+      mainDir: __dirname
+    }))
     // A show made on another machine: install the fixture types it uses from the catalog
     showManager.setShowReadHook((show) => installMissingShowFixtures(fixtureCatalog, showManager, show))
     remoteSettings = new RemoteSettingsStore(join(userData, 'config', 'remote.json'))

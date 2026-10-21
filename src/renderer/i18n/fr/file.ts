@@ -40,6 +40,7 @@ export const file: Translation['file'] = {
     newShow: 'Vos modifications seront perdues si vous créez un nouveau show sans enregistrer.',
     openShow: 'Vos modifications seront perdues si vous ouvrez un autre show sans enregistrer.',
     openNamed: 'Vos modifications seront perdues si vous ouvrez « {name} » sans enregistrer.',
+    openDemo: 'Vos modifications seront perdues si vous ouvrez la démo « {name} » sans enregistrer.',
     replaceConsole: 'Vos modifications seront perdues si vous remplacez le show de la console sans enregistrer.',
     quit: 'Vos modifications seront perdues si vous quittez sans enregistrer.',
     dontSave: 'Ne pas enregistrer',
@@ -79,5 +80,22 @@ export const file: Translation['file'] = {
     replaceCopyTitle: 'Remplacer « {name} » sur la clé ?',
     replaceCopyMessage: 'Un show de ce nom est déjà sur {drive}.',
     modified: 'Modifié le {date}'
+  },
+  demos: {
+    title: 'Ouvrir une démo',
+    description: 'Des shows fictifs pour essayer PhotonBoard sans tout créer de zéro. La démo s’ouvre comme un nouveau show : Enregistrer demande un nom et la démo elle-même ne change jamais.',
+    open: 'Ouvrir',
+    loading: 'Chargement des démos…',
+    none: 'Aucune démo dans cette installation',
+    noneHint: 'Les fichiers de démo manquent dans cette copie de PhotonBoard.',
+    failed: 'Impossible de lister les démos : {error}',
+    examples: {
+      link: 'Essayer avec un fichier exemple',
+      title: 'Fichiers exemples',
+      description: 'Un fichier par format lu par PhotonBoard, fait à partir des shows de démo. Choisissez-en un pour voir ce qu’il apporte — rien ne change avant de cliquer sur Importer.',
+      back: 'Retour',
+      use: 'Essayer',
+      none: 'Aucun fichier exemple dans cette installation'
+    }
   }
 }

@@ -424,6 +424,24 @@ export function openShowByName(name: string): Promise<ShowIoResult> {
   })
 }
 
+/**
+ * Open a demo show shipped with the app (resources/demos) as a new,
+ * unsaved show: the console forgets its current file, so Save asks for a
+ * name and the demo itself is never written. Console only.
+ */
+export function openDemoShow(id: string, name: string): Promise<ShowIoResult> {
+  return exclusive('open', async () => {
+    const api = getBridge()?.demos
+    if (!api || isRemoteMode()) {
+      const error = t('file.errors.remoteOpen')
+      status(error, 'info', 3000)
+      return { status: 'error', error }
+    }
+    status(t('file.openingName', { name }), 'info', 0)
+    return adoptLoadResult(await api.open(id), 'open')
+  })
+}
+
 /** Start a new empty show (patch, scenes, timeline… everything cleared). */
 export function newShow(): Promise<ShowIoResult> {
   return exclusive('newShow', async () => {
