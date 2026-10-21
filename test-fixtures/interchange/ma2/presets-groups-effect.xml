@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MA xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.malighting.de/grandma2/xml/MA" xsi:schemaLocation="http://schemas.malighting.de/grandma2/xml/MA http://schemas.malighting.de/grandma2/xml/3.9.60/MA.xsd" major_vers="3" minor_vers="9" stream_vers="60">
+	<Info datetime="2021-09-28T09:40:00" showfile="testshow" />
+	<PresetPool index="2">
+		<Preset index="1" name="Center" SpecialUse="Normal">
+			<Values>
+				<Channels>
+					<PresetValue Value="0">
+						<Channel fixture_id="1" attribute_name="PAN" />
+					</PresetValue>
+					<PresetValue Value="0">
+						<Channel fixture_id="1" attribute_name="TILT" />
+					</PresetValue>
+					<PresetValue Value="-30.874996">
+						<Channel fixture_id="2" attribute_name="PAN" />
+					</PresetValue>
+				</Channels>
+			</Values>
+		</Preset>
+	</PresetPool>
+	<Preset index="5" name="Gobo look" SpecialUse="Normal">
+		<Values>
+			<Channels>
+				<PresetValue Value="20">
+					<Channel fixture_id="1" attribute_name="GOBO1" />
+				</PresetValue>
+			</Channels>
+		</Values>
+	</Preset>
+	<Group index="3" name="Macs odd">
+		<Subfixtures>
+			<Subfixture fix_id="5" />
+			<Subfixture fix_id="1" />
+			<Subfixture fix_id="3" />
+		</Subfixtures>
+	</Group>
+	<Group index="4" name="Dimmers">
+		<Subfixtures>
+			<Subfixture cha_id="1" />
+			<Subfixture cha_id="2" />
+		</Subfixtures>
+	</Group>
+	<Effect index="1" name="Tilt wave">
+		<Forms>
+			<Form index="1" name="Sin" display_2d="false" />
+		</Forms>
+		<Effectline index="0" attribute="DIM" blocks="0" groups="0" wings="0" rate="2" v1_a="0" v1_b="0" v2_a="100" v2_b="100" phase_a="0" phase_b="360" width_a="100" width_b="100">
+			<flags absolute_mode="true" form_index="1" sub_form_index="0" />
+			<Fixtures>
+				<Fixture>1</Fixture>
+				<Fixture>2</Fixture>
+				<Fixture>3</Fixture>
+			</Fixtures>
+		</Effectline>
+	</Effect>
+</MA>

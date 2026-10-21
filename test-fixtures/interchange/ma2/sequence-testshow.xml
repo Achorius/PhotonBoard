@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="styles/sequ@html@default.xsl"?>
+<?xml-stylesheet type="text/xsl" href="styles/sequ@executorsheet.xsl" alternate="yes"?>
+<MA xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.malighting.de/grandma2/xml/MA" xsi:schemaLocation="http://schemas.malighting.de/grandma2/xml/MA http://schemas.malighting.de/grandma2/xml/3.9.60/MA.xsd" major_vers="3" minor_vers="9" stream_vers="60">
+	<Info datetime="2021-09-28T09:30:00" showfile="testshow" />
+	<Sequ index="0" name="Main" timecode_slot="255" forced_position_mode="0">
+		<Cue xsi:nil="true" />
+		<Cue index="1">
+			<Number number="1" sub_number="0" />
+			<CueDatas>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel channel_id="1" attribute_name="DIM" />
+					<Value>100</Value>
+				</CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel channel_id="2" attribute_name="DIM" />
+					<Value>50</Value>
+				</CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel fixture_id="1" attribute_name="DIM" />
+					<Value>75</Value>
+				</CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel fixture_id="1" attribute_name="PAN" />
+					<Value>-45</Value>
+				</CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel fixture_id="1" attribute_name="TILT" />
+					<Value>30</Value>
+				</CueData>
+			</CueDatas>
+			<CuePart index="0" name="Opening" basic_fade="3" basic_outfade="5" />
+		</Cue>
+		<Cue index="2" trig="Follow">
+			<Number number="1" sub_number="500" />
+			<CueDatas>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel fixture_id="2" attribute_name="DIM" />
+					<Value>100</Value>
+				</CueData>
+				<CueData value_multipart_index="1" effect_multipart_index="0">
+					<Channel fixture_id="3" attribute_name="DIM" />
+					<Value>100</Value>
+				</CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0">
+					<Channel fixture_id="42" attribute_name="DIM" />
+					<Value>100</Value>
+				</CueData>
+			</CueDatas>
+			<CuePart index="0" name="Follow-on" basic_fade="2" basic_delay="1" />
+			<CuePart index="1" name="Late" basic_fade="4" basic_delay="2" />
+		</Cue>
+		<Cue index="3">
+			<Number number="2" sub_number="0" />
+			<CuePart index="0" name="Blackout" basic_fade="10" />
+		</Cue>
+	</Sequ>
+</MA>

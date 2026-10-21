@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-crafted grandMA3 sequence export. Sequence / Cue / Part attributes as written by grandMA3 2.x
+     (OffCue, CueZero, No="  1", TrigType, CueInFade…); cue values as <Phaser IDType ID Attribute><Step …/>
+     like grandMA3 preset XML (lib_presets). Fixtures 101-102 / channel 11 match patch.xml. -->
+<GMA3 DataVersion="2.3.1.1">
+    <Sequence Name="Act 1" Guid="DE 8A 3A D0 13 3D 56 0A C9 46 4D 1F 52 3F 59 6D" AutoStart="Yes" AutoStop="Yes" Tracking="Yes" WrapAround="No" Priority="High" SequMIB="Enabled">
+        <Cue Name="OffCue" Release="Yes" Assert="Assert" AllowDuplicates="" TrigType="">
+            <Part Guid="DE 8A 3A D0 58 8B F7 02 33 54 1E 29 5D 3F 59 6D" Mode="0" Action="Pool Default"/>
+        </Cue>
+        <Cue Name="CueZero" No="  0">
+            <Part Guid="DE 8A 3A D0 F1 ED 55 7B 9D 61 EF 32 5A 3F 59 6D" Mode="0" Action="Pool Default"/>
+        </Cue>
+        <Cue Name="Preset" No="  1">
+            <Part Name="Preset" Part="0" CueInFade="3.000" CueOutFade="5.000" CueInDelay="0.500" Preset2Fade="6.000" Preset4Fade="1.500">
+                <Phaser IDType="0" ID="101" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="101" Attribute="Pan"><Step Function="Pan" AbsolutePhys="-90" /></Phaser>
+                <Phaser IDType="0" ID="101" Attribute="Tilt"><Step Function="Tilt" Absolute="75" /></Phaser>
+                <Phaser IDType="0" ID="101" Attribute="Color1" AbsPreset="4.1"><Step Function="Color1" Absolute="20" /></Phaser>
+                <Phaser IDType="0" ID="102" Attribute="Dimmer" Fade="8"><Step Function="Dimmer" Absolute="50" /></Phaser>
+                <Phaser IDType="1" ID="11" Attribute="Dimmer"><Step Function="Dimmer" Absolute="80" /></Phaser>
+            </Part>
+            <Part Name="Late part" Part="1" CueInFade="10" CueInDelay="2">
+                <Phaser IDType="0" ID="102" Attribute="Gobo1"><Step Function="Gobo1" Absolute="40" /></Phaser>
+            </Part>
+        </Cue>
+        <Cue Name="Wave" No="  2" TrigType="Follow">
+            <Part Part="0" CueInFade="2">
+                <Phaser IDType="0" ID="101" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="101" Attribute="Tilt"><Step Function="Tilt" Relative="10" /></Phaser>
+                <Phaser IDType="0" ID="201" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+            </Part>
+        </Cue>
+        <Cue Name="Timed" No="  2.5" TrigType="Time" TrigTime="4">
+            <Part Part="0" CueInFade="1">
+                <Phaser IDType="0" ID="101" Attribute="Shutter1Strobe"><Step Function="Shutter1Strobe" AbsolutePhys="8.000000" /></Phaser>
+            </Part>
+        </Cue>
+        <Cue Name="Out" No="  3" TrigType="Timecode">
+            <Part Part="0" CueInFade="0">
+                <Phaser IDType="0" ID="101" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+            </Part>
+        </Cue>
+    </Sequence>
+</GMA3>

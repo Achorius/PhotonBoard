@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GMA3 DataVersion="1.4.0.2">
+    <Macro Name="Macro vivaldi" Guid="00 00 00 00 A8 F8 B9 20 78 06 00 00 A5 46 09 AA">
+    <MacroLine Command="Store Sequence 100 Cue 1 thru 21" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 1 &quot;elsobumm&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 2 &quot;masodikbumm&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 3 &quot;harmadikbumm&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 4 &quot;negyedikbumm&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 5 &quot;buliindul&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 6 &quot;bummsok&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 7 &quot;szeteses&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 8 &quot;kienged&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 9 &quot;feszul&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 10 &quot;kisszolo&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 11 &quot;lebeges&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 12 &quot;trumm&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 13 &quot;masodiksolo&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 14 &quot;vissza&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 15 &quot;megintzuz&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 16 &quot;trimtrimtrim&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 17 &quot;szedelges&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 18 &quot;szedeleg2&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 19 &quot;vissza_1&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 20 &quot;finale&quot;" Wait="0.10" />
+        <MacroLine Command="Label Sequence 100 Cue 21 &quot;stet&quot;" Wait="0.10" />
+        <MacroLine Command="Drive 2" />
+        <MacroLine Command="import Timecode &quot;vivaldi_timecode&quot;" Wait="0.10" />
+    </Macro>
+</GMA3>
