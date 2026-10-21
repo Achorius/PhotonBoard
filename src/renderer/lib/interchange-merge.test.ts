@@ -287,3 +287,175 @@ describe('new show', () => {
     expect(r.report.warnings.length).toBeGreaterThan(0)
   })
 })
+
+describe('placeholders (fixtures known only by their fixture ID)', () => {
+  const par = def('lib/par', [])
+  par.channels = {
+    Intensity: { name: 'Intensity', type: 'intensity' },
+    Red: { name: 'Red', type: 'color' },
+    Green: { name: 'Green', type: 'color' },
+    Blue: { name: 'Blue', type: 'color' }
+  }
+  par.modes = [{ name: '4ch', channels: ['Intensity', 'Red', 'Green', 'Blue'], channelCount: 4 }]
+  const holder = def('ma-import/placeholder-dimmer-red', [])
+  holder.channels = { Dimmer: { name: 'Dimmer', type: 'intensity' }, Red: { name: 'Red', type: 'color' }, Zoom: { name: 'Zoom', type: 'generic' } }
+  holder.modes = [{ name: 'Default', channels: ['Dimmer', 'Red', 'Zoom'], channelCount: 3 }]
+
+  const showPatch: PatchEntry[] = [
+    { id: 'p3', fixtureDefId: 'lib/par', modeName: '4ch', universe: 0, address: 1, name: 'Par 3', groupIds: [], fid: 3 },
+    { id: 'p4', fixtureDefId: 'lib/par', modeName: '4ch', universe: 0, address: 5, name: 'Par 4', groupIds: [], fid: 4 }
+  ]
+  const base = (): MergeContent => ({ ...emptyMergeContent(), patch: showPatch })
+
+  function maFragment(): ImportedShowFragment {
+    const f = emptyFragment('ma3-xml', 'cues')
+    f.fixtures = [holder]
+    f.patch = [
+      { id: 'ma-fix-3', fixtureDefId: holder.id, modeName: 'Default', universe: 1, address: 1, name: 'Fixture 3', groupIds: [], fid: 3 },
+      { id: 'ma-fix-42', fixtureDefId: holder.id, modeName: 'Default', universe: 1, address: 4, name: 'Fixture 42', groupIds: [], fid: 42 }
+    ]
+    f.placeholderFixtureIds = ['ma-fix-3', 'ma-fix-42']
+    f.groups = [{ id: 'g', name: 'All', color: '#ffffff', fixtureIds: ['ma-fix-3', 'ma-fix-42'], number: 1 }]
+    f.presets = [{ id: 'pr', name: 'Red', type: 'color', number: 1, values: { 'ma-fix-3': { Red: 255, Zoom: 10 } } }]
+    f.cuelists = [{
+      id: 'seq', name: 'Seq', number: 1, currentCueIndex: -1, isPlaying: false, isLooping: false, priority: 50, faderLevel: 255, flash: false,
+      cues: [{
+        id: 'c1', name: 'One', number: 1, fadeIn: 1, fadeOut: 1, delay: 0, followTime: null,
+        values: [
+          { fixtureId: 'ma-fix-3', channelName: 'Dimmer', value: 200 },
+          { fixtureId: 'ma-fix-3', channelName: 'Red', value: 100 },
+          { fixtureId: 'ma-fix-42', channelName: 'Dimmer', value: 50 }
+        ]
+      }],
+      effectSnapshots: [{
+        id: 'fx', name: 'Pulse', waveform: 'sine', speed: 1, depth: 255, offset: 0, channelType: 'Dimmer', fixtureIds: ['ma-fix-3'], fan: 0, isRunning: true
+      }]
+    }]
+    return f
+  }
+
+  it('bind to the show’s fixture with the same fixture ID; every reference follows', () => {
+    const { content, report, install } = mergeFragment(maFragment(), base(), [par], opts(), { newId: ids() })
+    expect(report.bound).toBe(1)
+    expect(report.warnings.some((w) => w.code === 'placeholdersBound')).toBe(true)
+    // fixture 42 has no counterpart: patched like before (and its type installed)
+    expect(content.patch).toHaveLength(3)
+    const added = content.patch[2]
+    expect(added.fid).toBe(42)
+    expect(install.map((d) => d.id)).toEqual([holder.id])
+    // group: the show's fixture 3 + the new fixture 42; fixture 3 lists the group
+    const group = content.groups[0]
+    expect(group.fixtureIds).toEqual(['p3', added.id])
+    expect(content.patch[0].groupIds).toEqual([group.id])
+    // values: channel names of the show's fixture (Dimmer → Intensity), no Zoom on a par
+    const cue = content.cuelists[0].cues[0]
+    expect(cue.values.map((v) => [v.fixtureId, v.channelName, v.value])).toEqual([
+      ['p3', 'Intensity', 200],
+      ['p3', 'Red', 100],
+      [added.id, 'Dimmer', 50]
+    ])
+    expect(content.presets[0].values).toEqual({ p3: { Red: 255 } })
+    expect(report.warnings.some((w) => w.code === 'valuesDropped')).toBe(true)
+    expect(content.cuelists[0].effectSnapshots?.[0].fixtureIds).toEqual(['p3'])
+  })
+
+  it('a placeholder type is not installed when every placeholder bound', () => {
+    const f = maFragment()
+    f.patch = f.patch.slice(0, 1)
+    f.placeholderFixtureIds = ['ma-fix-3']
+    f.groups[0].fixtureIds = ['ma-fix-3']
+    const { content, install } = mergeFragment(f, base(), [par], opts(), { newId: ids() })
+    expect(install).toEqual([])
+    expect(content.patch.map((p) => p.id)).toEqual(['p3', 'p4'])
+  })
+
+  it('also binds when only cues are imported; a new show patches them', () => {
+    const cuesOnly = mergeFragment(maFragment(), base(), [par], opts({ include: { cues: true } }), { newId: ids() })
+    expect(cuesOnly.content.cuelists[0].cues[0].values.map((v) => v.fixtureId)).toEqual(['p3', 'p3'])
+    const fresh = mergeFragment(maFragment(), emptyMergeContent(), [par], opts({ mode: 'new' }), { newId: ids() })
+    expect(fresh.report.bound).toBe(0)
+    expect(fresh.content.patch.map((p) => p.fid)).toEqual([3, 42])
+  })
+
+  it('without a fixture ID in the file, a placeholder is never bound', () => {
+    const f = maFragment()
+    delete f.patch[0].fid
+    const { report } = mergeFragment(f, base(), [par], opts(), { newId: ids() })
+    expect(report.bound).toBe(0)
+  })
+})
+
+describe('references the merge remaps', () => {
+  it('effect snapshots of sequences point at the merged fixtures', () => {
+    const base = contentOfShow(demo)
+    const withSnap = demo.cuelists.find((c) => c.effectSnapshots?.length)!
+    const merged = mergeFragment(fragmentOf(demo), base, library, opts(), { newId: ids() })
+    const newIds = new Set(merged.content.patch.slice(23).map((p) => p.id))
+    const copy = merged.content.cuelists.slice(base.cuelists.length).find((c) => c.name === withSnap.name)!
+    expect(copy.effectSnapshots!.length).toBe(withSnap.effectSnapshots!.length)
+    for (const e of copy.effectSnapshots!) {
+      expect(e.fixtureIds.length).toBeGreaterThan(0)
+      expect(e.fixtureIds.every((id) => newIds.has(id))).toBe(true)
+    }
+    // skip: the snapshots drive the show's own fixtures
+    const skip = mergeFragment(fragmentOf(demo), base, library, opts({ addressConflicts: 'skip' }), { newId: ids() })
+    const baseIds = new Set(base.patch.map((p) => p.id))
+    const skipped = skip.content.cuelists.slice(base.cuelists.length).find((c) => c.name === withSnap.name)!
+    expect(skipped.effectSnapshots!.every((e) => e.fixtureIds.every((id) => baseIds.has(id)))).toBe(true)
+  })
+
+  function pagesFragment(): ImportedShowFragment {
+    const f = fragmentOf(demo)
+    const p1 = createExecutorPage('fp1', 'One')
+    p1.cells[1][0] = { kind: 'cuelist', id: demo.cuelists[0].id, mode: 'toggle' }
+    const empty = createExecutorPage('fp-empty', 'Empty')
+    const p2 = createExecutorPage('fp2', 'Two')
+    p2.cells[0][0] = { kind: 'cuelist', id: demo.cuelists[1].id, mode: 'toggle' }
+    f.executor = { grid: [], columns: [], modes: [], pages: [p1, empty, p2] }
+    f.stagePages = [{
+      id: 'sp', name: 'Touch', cols: 6, rows: 4,
+      widgets: [
+        { id: 'w1', x: 0, y: 0, w: 1, h: 1, kind: 'executor', ref: '1.2.1' },
+        { id: 'w2', x: 1, y: 0, w: 1, h: 1, kind: 'executor', ref: '3.1.1' },
+        { id: 'w3', x: 2, y: 0, w: 1, h: 2, kind: 'fader', ref: '3.4', options: { target: 'column' } },
+        { id: 'w4', x: 3, y: 0, w: 1, h: 1, kind: 'executor', ref: '0.1.1' },
+        { id: 'w5', x: 4, y: 0, w: 1, h: 1, kind: 'go', ref: demo.cuelists[2].id },
+        { id: 'w6', x: 5, y: 0, w: 1, h: 1, kind: 'executor', ref: '2.1.1' }
+      ]
+    }]
+    f.macros = [
+      { id: 'm1', number: 1, name: 'Opening', lines: [{ command: `Go Sequence ${demo.cuelists[0].number}` }, { command: 'Executor 1.2' }] },
+      { id: 'm2', number: 2, name: 'Broken', lines: [{ command: 'Go Sequence 99' }] }
+    ]
+    return f
+  }
+
+  it('stage widgets follow appended executor pages', () => {
+    const base = contentOfShow(demo)
+    const own = createExecutorPage('own', 'Mine')
+    own.cells[0][0] = { kind: 'cuelist', id: demo.cuelists[0].id, mode: 'toggle' }
+    const { content, report } = mergeFragment(pagesFragment(), { ...base, executor: { ...base.executor, pages: [own] } }, library, opts(), { newId: ids() })
+    // file pages 1 and 3 (2 is empty) land on pages 2 and 3
+    expect(content.executor.pages!.map((p) => p.name)).toEqual(['Mine', 'One', 'Two'])
+    const refs = content.stagePages[content.stagePages.length - 1].widgets.map((w) => w.ref)
+    const copyOfThird = content.cuelists[base.cuelists.length + 2].id
+    expect(refs).toEqual(['2.2.1', '3.1.1', '3.4', '0.1.1', copyOfThird, '2.1.1'])
+    // the empty page of the file is gone: its widget cannot be placed
+    expect(report.warnings.find((w) => w.code === 'stageRefsUnresolved')?.params).toEqual({ count: 1 })
+  })
+
+  it('macro text follows the new object numbers and pages', () => {
+    const base = contentOfShow(demo)
+    const { content, report } = mergeFragment(pagesFragment(), base, library, opts(), { newId: ids() })
+    const copyOfFirst = content.cuelists[base.cuelists.length]
+    expect(copyOfFirst.number).not.toBe(demo.cuelists[0].number)
+    const opening = content.macros.find((m) => m.name === 'Opening')!
+    // the show's executor page stays page 1: the file's page 1 becomes page 2
+    expect(opening.lines.map((l) => l.command)).toEqual([`Go Sequence ${copyOfFirst.number}`, 'Executor 2.2'])
+    expect(content.macros.find((m) => m.name === 'Broken')!.lines[0].command).toBe('Go Sequence 99')
+    expect(report.warnings.find((w) => w.code === 'macrosRenumbered')?.params).toEqual({ count: 1 })
+    const unresolved = report.warnings.find((w) => w.code === 'macroRefsUnresolved')
+    expect(unresolved?.params?.count).toBe(1)
+    expect(String(unresolved?.params?.macros)).toContain('Broken (Sequence 99)')
+  })
+})

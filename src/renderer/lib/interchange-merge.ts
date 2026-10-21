@@ -18,8 +18,14 @@
 //     masters, executor pages, stage pages, timeline: new ids and every
 //     reference remapped (values on fixtures that were not imported are
 //     dropped, with a warning),
+//   - placeholders (fixtures an importer invented because cues / groups
+//     name them by fixture ID while the file has no patch for them) bind
+//     to the show's fixture with that fixture ID: nothing is patched,
+//     the imported values follow, channel names matched by attribute,
 //   - object numbers (fixture ID, group, sequence, preset slot…): the
-//     file's numbers are kept when free, else the next free numbers,
+//     file's numbers are kept when free, else the next free numbers;
+//     macro text ("Go Sequence 3") and stage widgets ("page.col.row")
+//     follow the new numbers / pages (lib/interchange-macros),
 //   - everything is normalised by the show-format normalisers first.
 //
 // The show's own items are returned by reference (only patch entries
@@ -29,7 +35,7 @@
 
 import { v4 as uuidv4 } from 'uuid'
 import {
-  DMX_CHANNELS_PER_UNIVERSE, MAX_UNIVERSES,
+  DMX_CHANNELS_PER_UNIVERSE, MAX_UNIVERSES, PRESET_FAMILY_NUMBER,
   type Chase, type Cue, type CueChannelValue, type Cuelist, type Effect, type ExecutorCell, type ExecutorPage, type FixtureDefinition, type Group,
   type Macro, type MidiMapping, type PatchEntry, type Preset, type RoomConfig, type ShowExecutorLayout, type ShowFile, type ShowTimeline,
   type SpeedMaster, type StagePage
@@ -38,6 +44,9 @@ import {
   DEFAULT_TIMELINE_LENGTH, MAX_EXECUTOR_PAGES, MAX_OBJECT_NUMBER, createEmptyShow, executorLayoutFromPages, normalizeShow
 } from '@shared/show-format'
 import type { ImportWarning, ImportedShowFragment, InterchangeContent, MergeOptions } from '@shared/interchange'
+import { attributeRoleOf, canonicalAttributeKey } from '@shared/attribute-families'
+import { decodeColumnRef, decodeExecRef, encodeColumnRef, encodeExecRef } from '@renderer/components/stage/executor-surface'
+import { renumberMacroLine, type MacroNumberMaps, type NumberMap } from './interchange-macros'
 
 /** The show content a merge reads and writes */
 export interface MergeContent {
@@ -81,6 +90,8 @@ export interface MergeReport {
   skipped: number
   /** Skipped fixtures matched onto the show's fixture at that address (same type) */
   matched: number
+  /** Placeholder fixtures bound to the show's fixture with the same fixture ID */
+  bound: number
   /** Objects whose number was taken and got the next free one */
   renumbered: number
   warnings: ImportWarning[]
@@ -261,7 +272,7 @@ export function mergeFragment(
   const isNew = options.mode === 'new'
   const warnings: ImportWarning[] = []
   const warn = (w: ImportWarning) => { warnings.push(w) }
-  const report: MergeReport = { added: {}, shifted: 0, skipped: 0, matched: 0, renumbered: 0, warnings }
+  const report: MergeReport = { added: {}, shifted: 0, skipped: 0, matched: 0, bound: 0, renumbered: 0, warnings }
   const offset = Math.max(0, Math.min(MAX_UNIVERSES - 1, Math.round(options.universeOffset || 0)))
 
   // -- 1. Normalise the fragment like a show file (references checked, numbers filled) --
@@ -304,15 +315,53 @@ export function mergeFragment(
     return { content: base, install: [], report }
   }
 
-  // -- 2. Fixture types --
   const libById = new Map(library.map((d) => [d.id, d]))
   const embById = new Map(fragment.fixtures.filter((d) => d && typeof d.id === 'string').map((d) => [d.id, d]))
+
+  // -- 2a. Placeholders: the show's fixture with the same fixture ID (merge only; a new show has none) --
+  const baseByFid = new Map(base.patch.filter((p) => p.fid !== undefined).map((p) => [p.fid!, p]))
+  const placeholderIds = new Set(Array.isArray(fragment.placeholderFixtureIds) ? fragment.placeholderFixtureIds : [])
+  const boundTo = new Map<string, PatchEntry>()
+  if (!isNew) {
+    for (const p of frag.patch) {
+      if (!placeholderIds.has(p.id) || p.fid === undefined || !hadNumber.patch.has(p.id)) continue
+      const target = baseByFid.get(p.fid)
+      if (target) boundTo.set(p.id, target)
+    }
+  }
+  /** Channel names of a bound placeholder → the show fixture's channel (null = no such attribute) */
+  const channelOf = new Map<string, (name: string) => string | null>()
+  for (const [pid, target] of boundTo) {
+    const p = frag.patch.find((x) => x.id === pid)!
+    const src = embById.get(p.fixtureDefId) ?? libById.get(p.fixtureDefId)
+    const dst = libById.get(target.fixtureDefId)
+    const mode = dst?.modes.find((m) => m.name === target.modeName)
+    if (!dst || !mode) continue // type unknown here: names kept
+    const coarse = mode.channels.filter((c) => !dst.channels[c]?.fineOf)
+    const cache = new Map<string, string | null>()
+    channelOf.set(pid, (name) => {
+      let hit = cache.get(name)
+      if (hit !== undefined) return hit
+      const key = canonicalAttributeKey(name)
+      const ch = src?.channels[name]
+      hit = mode.channels.includes(name) ? name
+        : coarse.find((c) => canonicalAttributeKey(c) === key)
+          ?? (attributeRoleOf(name, ch?.type, ch?.precedence) === 'dimmer'
+            ? coarse.find((c) => attributeRoleOf(c, dst.channels[c]?.type, dst.channels[c]?.precedence) === 'dimmer') ?? null
+            : null)
+      cache.set(name, hit)
+      return hit
+    })
+  }
+
+  // -- 2. Fixture types --
   const install: FixtureDefinition[] = []
   const installedIds = new Set<string>()
   const defMap = new Map<string, string>()
   const usedModes = new Map<string, Set<string>>()
   if (inc('patch')) {
     for (const p of frag.patch) {
+      if (boundTo.has(p.id)) continue // nothing patched: its type is not needed
       const s = usedModes.get(p.fixtureDefId) ?? new Set<string>()
       s.add(p.modeName)
       usedModes.set(p.fixtureDefId, s)
@@ -367,8 +416,11 @@ export function mergeFragment(
   }
   for (const [id, modes] of usedModes) resolveType(id, modes)
   if (inc('fixtures')) {
-    // Fixture types the file carries without patching them (a GDTF, a fixture library export)
-    for (const d of embById.values()) if (!defMap.has(d.id)) resolveType(d.id, new Set())
+    // Fixture types the file carries without patching them (a GDTF, a fixture library export),
+    // except the placeholder types whose fixtures all bound to the show's
+    const boundOnly = new Set([...boundTo.keys()].map((id) => frag.patch.find((p) => p.id === id)!.fixtureDefId))
+    for (const p of frag.patch) if (!boundTo.has(p.id)) boundOnly.delete(p.fixtureDefId)
+    for (const d of embById.values()) if (!defMap.has(d.id) && !boundOnly.has(d.id)) resolveType(d.id, new Set())
   }
   if (missingTypes.length > 0) warn({ level: 'warning', code: 'fixtureTypesMissing', params: { count: missingTypes.length, types: missingTypes.slice(0, 5).join(', ') } })
   report.added.fixtures = install.length
@@ -382,12 +434,17 @@ export function mergeFragment(
     occupancy.mark(p.universe, p.address, footprint(p.fixtureDefId, p.modeName))
     baseAt.set(`${p.universe}:${p.address}`, p)
   }
-  const baseByFid = new Map(base.patch.filter((p) => p.fid !== undefined).map((p) => [p.fid!, p]))
   const patchMap = new Map<string, string>()
   const newPatch: PatchEntry[] = []
   const newPatchIds = new Set<string>()
   const POSITION_KEYS = ['position3D', 'rotation3D', 'mountingAngle', 'mountingPan', 'mountingLocation', 'stagePosition'] as const
   for (const p of frag.patch) {
+    const bound = boundTo.get(p.id)
+    if (bound) {
+      patchMap.set(p.id, bound.id)
+      report.bound++
+      continue
+    }
     const defId = defMap.get(p.fixtureDefId) ?? p.fixtureDefId
     const n = footprint(defId, p.modeName)
     let universe = p.universe + offset
@@ -432,24 +489,35 @@ export function mergeFragment(
     newPatchIds.add(entry.id)
     newPatch.push(entry)
   }
+  if (report.bound > 0) warn({ level: 'info', code: 'placeholdersBound', params: { count: report.bound } })
   if (report.matched > 0) warn({ level: 'info', code: 'fixturesMatched', params: { count: report.matched } })
   if (report.shifted > 0) warn({ level: 'info', code: 'fixturesShifted', params: { count: report.shifted } })
   report.renumbered += assignNumbers(base.patch, newPatch, (p) => p.fid, (p, n) => { p.fid = n })
   report.added.patch = newPatch.length
 
   let droppedValues = 0
+  /** Channel name on the merged fixture (a bound placeholder's names follow the show fixture's) */
+  const renameChannel = (fragFixtureId: string, name: string): string | null => {
+    const f = channelOf.get(fragFixtureId)
+    return f ? f(name) : name
+  }
   const mapValues = (values: CueChannelValue[], presetMap: Map<string, string>): CueChannelValue[] => {
     const out: CueChannelValue[] = []
+    // Two placeholder channels may land on one channel of the show's fixture: the last value wins
+    const at = new Map<string, number>()
     for (const v of values) {
       const fixtureId = patchMap.get(v.fixtureId)
-      if (!fixtureId) { droppedValues++; continue }
-      const next: CueChannelValue = { ...v, fixtureId }
+      const channelName = fixtureId ? renameChannel(v.fixtureId, v.channelName) : null
+      if (!fixtureId || !channelName) { droppedValues++; continue }
+      const next: CueChannelValue = { ...v, fixtureId, channelName }
       if (v.presetId) {
         const pid = presetMap.get(v.presetId)
         if (pid) next.presetId = pid
         else delete next.presetId
       }
-      out.push(next)
+      const key = `${fixtureId}\u0000${channelName}\u0000${v.part ?? ''}`
+      const i = at.get(key)
+      if (i === undefined) { at.set(key, out.length); out.push(next) } else out[i] = next
     }
     return out
   }
@@ -497,8 +565,14 @@ export function mergeFragment(
       const values: Preset['values'] = {}
       for (const [fid, chans] of Object.entries(pr.values)) {
         const id = patchMap.get(fid)
-        if (id) values[id] = { ...chans }
-        else droppedValues += Object.keys(chans).length
+        if (!id) { droppedValues += Object.keys(chans).length; continue }
+        const out: Record<string, number> = {}
+        for (const [ch, v] of Object.entries(chans)) {
+          const name = renameChannel(fid, ch)
+          if (name) out[name] = v
+          else droppedValues++
+        }
+        if (Object.keys(out).length > 0) values[id] = { ...(values[id] ?? {}), ...out }
       }
       const preset: Preset = { ...pr, id: newId(), values }
       if (pr.typeValues) {
@@ -605,7 +679,7 @@ export function mergeFragment(
       newMacros.push(macro)
     }
     report.renumbered += assignNumbers(base.macros, newMacros, (m) => m.number || undefined, (m, n) => { m.number = n })
-    if (newMacros.length > 0 && !isNew) warn({ level: 'info', code: 'macrosCheckNumbers' })
+    // (their text follows the new numbers once the executor pages are placed, step 14)
   }
   report.added.macros = newMacros.length
 
@@ -665,30 +739,42 @@ export function mergeFragment(
   // -- 13. Executor pages and stage pages --
   let executor = base.executor
   const newStagePages: StagePage[] = []
+  /** Executor page of the file (0-based) → its index in the merged show (null = not imported) */
+  const pageMap = new Map<number, number | null>()
+  let unresolvedStageRefs = 0
+  if (!inc('executors')) for (const p of frag.executor?.pages?.keys() ?? []) pageMap.set(p, null)
   if (inc('executors')) {
     const cellMap: Record<ExecutorCell['kind'], Map<string, string>> = {
       cuelist: cuelistMap, chase: chaseMap, effect: effectMap, macro: macroMap, group: groupMap, speed: speedMap
     }
-    const imported: ExecutorPage[] = fragment.executor
-      ? (frag.executor?.pages ?? []).map((page) => ({
-        id: newId(),
-        name: page.name,
-        cells: page.cells.map((col) => col.map((cell) => {
-          if (!cell) return null
-          const id = cellMap[cell.kind]?.get(cell.id)
-          return id ? { ...cell, id } : null
-        })),
-        columns: page.columns.map((c) => {
-          const col = { ...c }
-          if (c.fader && (c.fader.kind === 'speed' || c.fader.kind === 'group')) {
-            const id = (c.fader.kind === 'speed' ? speedMap : groupMap).get(c.fader.id)
-            if (id) col.fader = { kind: c.fader.kind, id }
-            else delete col.fader
-          }
-          return col
-        })
-      })).filter(pageHasCells)
-      : []
+    // Pages of the file (index in frag.executor.pages) → their index in the merged layout
+    const fileIndex: number[] = []
+    const imported: ExecutorPage[] = []
+    if (fragment.executor) {
+      (frag.executor?.pages ?? []).forEach((page, index) => {
+        const out: ExecutorPage = {
+          id: newId(),
+          name: page.name,
+          cells: page.cells.map((col) => col.map((cell) => {
+            if (!cell) return null
+            const id = cellMap[cell.kind]?.get(cell.id)
+            return id ? { ...cell, id } : null
+          })),
+          columns: page.columns.map((c) => {
+            const col = { ...c }
+            if (c.fader && (c.fader.kind === 'speed' || c.fader.kind === 'group')) {
+              const id = (c.fader.kind === 'speed' ? speedMap : groupMap).get(c.fader.id)
+              if (id) col.fader = { kind: c.fader.kind, id }
+              else delete col.fader
+            }
+            return col
+          })
+        }
+        if (!pageHasCells(out)) return
+        fileIndex.push(index)
+        imported.push(out)
+      })
+    }
     const basePages = executor.pages ?? []
     const replaceBase = isNew || (basePages.length <= 1 && !basePages.some(pageHasCells))
     let pages = replaceBase ? imported : [...basePages, ...imported]
@@ -696,23 +782,101 @@ export function mergeFragment(
       warn({ level: 'warning', code: 'executorPagesDropped', params: { count: pages.length - MAX_EXECUTOR_PAGES, max: MAX_EXECUTOR_PAGES } })
       pages = pages.slice(0, MAX_EXECUTOR_PAGES)
     }
-    if (imported.length > 0) executor = executorLayoutFromPages(pages.length > 0 ? pages : basePages)
+    if (imported.length > 0) {
+      executor = executorLayoutFromPages(pages.length > 0 ? pages : basePages)
+      const first = replaceBase ? 0 : basePages.length
+      fileIndex.forEach((from, i) => { if (first + i < MAX_EXECUTOR_PAGES) pageMap.set(from, first + i) })
+    }
+    for (const p of frag.executor?.pages?.keys() ?? []) if (!pageMap.has(p)) pageMap.set(p, null)
     report.added.executors = imported.length
+    // Stage widgets: object ids, executor "page.col.row" and column "page.col" references
+    const all = [patchMap, groupMap, presetMap, cuelistMap, chaseMap, effectMap, macroMap, speedMap]
     for (const sp of frag.stagePages ?? []) {
-      const all = [patchMap, groupMap, presetMap, cuelistMap, chaseMap, effectMap, macroMap, speedMap]
       newStagePages.push({
         ...sp,
         id: newId(),
         widgets: sp.widgets.map((w) => {
-          const ref = w.ref ? all.map((m) => m.get(w.ref!)).find(Boolean) ?? w.ref : undefined
+          let ref = w.ref
+          if (ref) {
+            const exec = w.kind === 'executor' ? decodeExecRef(ref) : null
+            const column = !exec && w.kind === 'fader' && w.options?.target === 'column' ? decodeColumnRef(ref) : null
+            const page = exec ?? column
+            if (page) {
+              // page 'current' follows the executor page shown: nothing to remap
+              const to = page.page === 'current' ? 'current' : pageMap.get(page.page)
+              if (to === undefined || to === null) unresolvedStageRefs++
+              else ref = exec ? encodeExecRef({ ...exec, page: to }) : encodeColumnRef(to, column!.col)
+            } else {
+              const id = all.map((m) => m.get(ref!)).find(Boolean)
+              if (id) ref = id
+              else unresolvedStageRefs++
+            }
+          }
           return { ...w, id: newId(), ...(ref ? { ref } : {}) }
         })
       })
     }
+    if (unresolvedStageRefs > 0) warn({ level: 'warning', code: 'stageRefsUnresolved', params: { count: unresolvedStageRefs } })
     report.added.executors += newStagePages.length
   }
 
-  // -- 14. Room --
+  // -- 14. Macro text: object numbers of the file → their numbers in the merged show --
+  const macroNumberMaps = (): MacroNumberMaps => {
+    /** Number in the file → number of what it became (null: not imported) */
+    const numbers = <T extends { id: string }>(
+      list: T[], idMap: Map<string, string>, merged: T[], numberOf: (x: T) => number | undefined
+    ): NumberMap => {
+      const byId = new Map(merged.map((x) => [x.id, x]))
+      const out: NumberMap = new Map()
+      for (const x of list) {
+        const n = numberOf(x)
+        if (n === undefined || !Number.isFinite(n) || out.has(n)) continue
+        const id = idMap.get(x.id)
+        const to = id ? byId.get(id) : undefined
+        out.set(n, to ? numberOf(to) ?? null : null)
+      }
+      return out
+    }
+    const preset = new Map<number, NumberMap>()
+    for (const [type, family] of Object.entries(PRESET_FAMILY_NUMBER)) {
+      preset.set(family, numbers(frag.presets.filter((p) => p.type === type), presetMap, newPresets, (p) => p.number))
+    }
+    return {
+      fixture: numbers(frag.patch, patchMap, patchOut, (p) => p.fid),
+      group: numbers(frag.groups, groupMap, newGroups, (g) => g.number),
+      sequence: numbers(frag.cuelists, cuelistMap, newCuelists, (c) => c.number),
+      chase: numbers(frag.chases, chaseMap, newChases, (c) => c.number),
+      effect: numbers(frag.effects, effectMap, newEffects, (e) => e.number),
+      macro: numbers(frag.macros ?? [], macroMap, newMacros, (m) => m.number || undefined),
+      speed: numbers(frag.speedMasters ?? [], speedMap, newSpeed, (m) => m.number || undefined),
+      page: new Map([...pageMap].map(([from, to]) => [from + 1, to === null ? null : to + 1])),
+      preset
+    }
+  }
+  if (newMacros.length > 0) {
+    const maps = macroNumberMaps()
+    let rewritten = 0
+    const unresolved: string[] = []
+    for (const m of newMacros) {
+      let changed = false
+      const refs: string[] = []
+      m.lines = m.lines.map((l) => {
+        const r = renumberMacroLine(l.command, maps)
+        refs.push(...r.unresolved)
+        if (!r.changed) return l
+        changed = true
+        return { ...l, command: r.text }
+      })
+      if (changed) rewritten++
+      if (refs.length > 0) unresolved.push(`${m.name || `Macro ${m.number}`} (${[...new Set(refs)].slice(0, 3).join(', ')})`)
+    }
+    if (rewritten > 0) warn({ level: 'info', code: 'macrosRenumbered', params: { count: rewritten } })
+    if (unresolved.length > 0) {
+      warn({ level: 'warning', code: 'macroRefsUnresolved', params: { count: unresolved.length, macros: unresolved.slice(0, 5).join(' · ') } })
+    }
+  }
+
+  // -- 15. Room --
   let roomConfig = base.roomConfig
   if (inc('positions') && fragment.roomConfig) {
     const r = frag.roomConfig!
