@@ -1,10 +1,11 @@
 // ============================================================
 // PhotonBoard — ImportContext implementation (main process)
-// Fixture type lookup for importers: the user library first, then the
-// offline catalog (OFL + QLC+), with manufacturer aliases and fuzzy
-// model matching ("ADJ" = "American DJ", "Robe lighting" = "Robe",
-// "MAC Aura XB" ≈ "Mac Aura XB"); a mode with the wanted channel count
-// is preferred. Embedded GDTF / QXF definitions go through the same
+// Fixture type lookup for importers: the offline catalog's exact id
+// ("qlc/<maker>/<model>", "ofl/<maker>/<model>") first, then the user
+// library, then the offline catalog (OFL + QLC+) by name, with
+// manufacturer aliases and fuzzy model matching ("ADJ" = "American DJ",
+// "Robe lighting" = "Robe", "MAC Aura XB" ≈ "Mac Aura XB"); a mode with
+// the wanted channel count is preferred. Embedded GDTF / QXF definitions go through the same
 // parsers as the fixture library import.
 // No Electron imports: unit-tested.
 // ============================================================
@@ -13,7 +14,9 @@ import type { FixtureCatalogEntry, FixtureDefinition } from '../../shared/types'
 import type { ImportContext, ImportOptions } from '../../shared/interchange'
 import type { FixtureCatalog } from '../fixture-catalog'
 import { withinEdits } from '../fixture-catalog'
-import { parseGDTFBuffer, parseQLCPlus } from '../fixture-parsers'
+import { slugify } from '../fixture-convert-common'
+import { parseQLCPlus } from '../fixture-parsers'
+import { parseGdtfArchive } from './gdtf/gdtf-import'
 
 /** Lower-case letters and digits only, accents removed ("Clay Paky" → "claypaky") */
 export function compactKey(s: string): string {
@@ -158,8 +161,34 @@ export interface FixtureLookupDeps {
 }
 
 /**
- * Find a fixture type by manufacturer + model: library first (a tie goes to
- * the library), then the offline catalog. Null when nothing is close enough.
+ * The catalog definition whose id is exactly "<source>/<maker-slug>/<model-slug>"
+ * (QLC+ and OFL ids are built that way: a file naming the fixture like the
+ * library did finds it without fuzzy matching). The library's copy wins when
+ * that type is installed.
+ */
+export async function findExactCatalogFixture(deps: FixtureLookupDeps, manufacturer: string, model: string): Promise<FixtureDefinition | null> {
+  const catalog = deps.catalog
+  const maker = slugify(String(manufacturer ?? ''))
+  const name = slugify(String(model ?? ''))
+  if (!catalog || !maker || !name) return null
+  for (const source of ['qlc', 'ofl']) {
+    let id: string | null = null
+    try { id = await catalog.resolveId(`${source}/${maker}/${name}`) } catch { id = null }
+    if (!id) continue
+    const installed = deps.getLibrary().find((d) => d.id === id)
+    if (installed) return installed
+    try {
+      const def = await catalog.get(id)
+      if (def) return def
+    } catch { /* catalog unavailable */ }
+  }
+  return null
+}
+
+/**
+ * Find a fixture type by manufacturer + model: the catalog's exact id first,
+ * then the library by name (a tie goes to the library), then the offline
+ * catalog by name. Null when nothing is close enough.
  */
 export async function findFixture(
   deps: FixtureLookupDeps,
@@ -168,6 +197,8 @@ export async function findFixture(
   channelCount?: number
 ): Promise<FixtureDefinition | null> {
   if (!model || !String(model).trim()) return null
+  const exact = await findExactCatalogFixture(deps, manufacturer, model)
+  if (exact) return exact
   let best: { score: number; def?: FixtureDefinition; catalogId?: string } | null = null
   for (const def of deps.getLibrary()) {
     const score = scoreCandidate(
@@ -219,9 +250,12 @@ export function createImportContext(deps: FixtureLookupDeps, options?: ImportOpt
       // Each importer gets its own copy (it may rename / edit it)
       return hit.then((d) => (d ? structuredClone(d) : null))
     },
-    async parseGdtf(bytes, _fileName) {
+    async parseGdtf(bytes, fileName) {
       try {
-        return parseGDTFBuffer(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+        // Same reader as the .gdtf importer (gdtf/index.ts). No 10 MB fixture-file cap here: GDTFs
+        // embedded in an MVR carry 3D models (the whole file is capped by MAX_IMPORT_SIZE).
+        // The file name ("Maker@Model@Revision.gdtf") names the definition when the description does not.
+        return parseGdtfArchive(bytes, fileName || undefined).definition
       } catch (e) {
         console.warn('[Interchange] embedded GDTF unreadable:', (e as Error).message)
         return null

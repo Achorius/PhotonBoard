@@ -3,8 +3,11 @@
 //   import: a .gdtf fixture type → fragment with one definition
 //   export: one fixture type → .gdtf (Exporter.writeFixture), or the
 //           single fixture type of a show (Exporter.write)
-// The host should implement ImportContext.parseGdtf with
-// parseGdtfArchive() so embedded GDTFs (MVR) use this parser.
+// One reader for every .gdtf: this importer (File › Import, drop),
+// ImportContext.parseGdtf (GDTFs embedded in MVR / grandMA archives,
+// context.ts) and the fixture library import (fixture-parsers
+// parseGDTFBuffer) all go through parseGdtfArchive(). This is the only
+// importer that claims a .gdtf (host.test.ts).
 // ============================================================
 
 import type { Exporter, ImportWarning, Importer, InterchangeFormatInfo } from '../../../shared/interchange'

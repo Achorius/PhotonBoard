@@ -7,15 +7,13 @@
 
 import { readFileSync, statSync } from 'fs'
 import { XMLParser } from 'fast-xml-parser'
-import AdmZip from 'adm-zip'
 import type { FixtureDefinition, FixtureChannel, FixtureMode, FixtureCapability } from '../shared/types'
 import { convertOflFixture } from './fixture-convert-ofl'
 import { convertQxfFixture } from './fixture-convert-qxf'
-import { parseGdtfDescription } from './interchange/gdtf/gdtf-import'
+import { parseGdtfArchive } from './interchange/gdtf/gdtf-import'
 
 // Security: max file sizes to prevent denial-of-service
 const MAX_FIXTURE_FILE_SIZE = 10 * 1024 * 1024  // 10 MB max fixture file
-const MAX_GDTF_EXTRACTED_SIZE = 20 * 1024 * 1024 // 20 MB max extracted GDTF content
 
 // Secure XML parser options — disable entity processing to prevent XXE attacks
 const SAFE_XML_OPTIONS = {
@@ -140,24 +138,15 @@ export function parseGDTF(filePath: string): FixtureDefinition {
   return parseGDTFBuffer(readFileSync(filePath), filePath)
 }
 
-/** A GDTF archive already in memory (embedded in an MVR, uploaded…) */
+/** A GDTF archive already in memory (uploaded, read from disk) */
 export function parseGDTFBuffer(data: Buffer, fileName = 'fixture.gdtf'): FixtureDefinition {
   if (data.length > MAX_FIXTURE_FILE_SIZE) {
     throw new Error(`GDTF file too large: ${(data.length / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
   }
-  const zip = new AdmZip(data)
-  const descEntry = zip.getEntry('description.xml')
-  if (!descEntry) throw new Error('Invalid GDTF file: missing description.xml')
-
-  // Security: check extracted size (ZIP bomb protection)
-  if (descEntry.header.size > MAX_GDTF_EXTRACTED_SIZE) {
-    throw new Error(`GDTF description.xml too large when extracted: ${(descEntry.header.size / 1024 / 1024).toFixed(1)} MB`)
-  }
-
-  const xml = descEntry.getData().toString('utf-8')
-  // Full GDTF 1.0–1.2 converter (16/24-bit offsets, geometry references,
-  // channel sets, wheels, physical data) shared with the MVR / GDTF interchange
-  return parseGdtfDescription(xml, { fileName }).definition
+  // One reader and one converter for every .gdtf (fixture library, File › Import, embedded in an MVR):
+  // the interchange GDTF module (16/24-bit offsets, geometry references, channel sets, wheels,
+  // physical data; description.xml size guard)
+  return parseGdtfArchive(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), fileName).definition
 }
 
 // ── Parser: QLC+ (.qxf) ─────────────────────────────────────────────
