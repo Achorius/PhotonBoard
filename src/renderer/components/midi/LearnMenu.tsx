@@ -34,7 +34,7 @@ function withItems(type: MidiTargetType, index: NameIndex): MenuEntry {
 export function learnMenuItems(index: NameIndex): MenuEntry[] {
   return [
     { type: 'label', label: t('midi.learnMenu.masters') },
-    simple('master'), simple('blackout'), simple('blinder'), simple('strobe'), simple('tap_tempo'), simple('reset'),
+    simple('master'), simple('blackout'), simple('blinder'), simple('strobe'), simple('strobe_rate'), simple('tap_tempo'), simple('reset'),
     { type: 'label', label: t('midi.learnMenu.playback') },
     withItems('cuelist_go', index), withItems('cuelist_fader', index), withItems('flash', index),
     withItems('chase_toggle', index), withItems('chase_bpm', index), withItems('effect_toggle', index),

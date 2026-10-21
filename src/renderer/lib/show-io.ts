@@ -321,6 +321,11 @@ async function adoptLoadResult(result: ShowLoadResult | null | undefined, op: Sh
   return { status: 'ok', name: applied.show.name, path: result.path, warnings }
 }
 
+/** Adopt a load result obtained elsewhere (USB stick import: lib/usb-sticks) */
+export function adoptShowLoadResult(result: ShowLoadResult | null | undefined, op: ShowOp = 'open'): Promise<ShowIoResult> {
+  return exclusive(op, () => adoptLoadResult(result, op))
+}
+
 async function refreshFixtureLibrary(): Promise<void> {
   try {
     await usePatchStore.getState().loadFixtures()

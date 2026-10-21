@@ -35,7 +35,81 @@ export function detectCcEncoding(values: number[]): CcEncoding {
 
   // Many distinct values = a sweep, not an encoder
   if (new Set(vals).size > 4) return 'absolute'
+  if (slammedToEndStop(vals)) return 'absolute'
   return 'relative'
+}
+
+/**
+ * A fader pushed to its end stop: a strictly monotonic approach (at least two
+ * distinct values) then the end value repeated (hardware often re-sends 127 /
+ * 0 when the fader hits the stop). 120, 124, 127, 127 is a fader; 127, 127,
+ * 126, 127 (an encoder turned counter-clockwise) is not.
+ */
+function slammedToEndStop(vals: number[]): boolean {
+  const last = vals[vals.length - 1]
+  if (last !== 0 && last !== 127) return false
+  let k = vals.length - 1
+  while (k > 0 && vals[k - 1] === last) k--
+  const head = vals.slice(0, k)
+  if (head.length < 2) return false
+  const up = last === 127
+  const path = [...head, last]
+  for (let i = 1; i < path.length; i++) {
+    if (up ? path[i] <= path[i - 1] : path[i] >= path[i - 1]) return false
+  }
+  return true
+}
+
+/**
+ * Canonical MIDI port name, for matching a mapping's device against the port
+ * a message came from. The same device shows up under different names on
+ * different systems and sessions (a show prepared on a Mac, played on the
+ * Pi): Linux ALSA prefixes the port with its client name and cuts it at
+ * 31-32 characters ("APC mini mk2 APC mini mk2 Contro" = macOS "APC mini mk2
+ * Control"), may add " MIDI 1" ("APC MINI MIDI 1") or a "client:port"
+ * suffix that moves with the plug order ("… 20:0"). Case and spacing vary.
+ * A Windows instance prefix ("2- APC MINI") is KEPT: it tells two identical
+ * controllers apart.
+ */
+export function normalizeMidiPortName(name: string): string {
+  const cached = normalizedNames.get(name)
+  if (cached !== undefined) return cached
+  const words = name
+    .trim()
+    .replace(/\s+\d+:\d+$/, '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+  // "<client> <client> <port>" (ALSA): drop the repeated client name
+  for (let k = 1; k * 2 <= words.length; k++) {
+    if (words.slice(0, k).join(' ') === words.slice(k, 2 * k).join(' ')) {
+      words.splice(0, k)
+      break
+    }
+  }
+  const out = words.join(' ').replace(/ midi \d+$/, '')
+  if (normalizedNames.size > 256) normalizedNames.clear()
+  normalizedNames.set(name, out)
+  return out
+}
+
+/** Port names are few and matched on every message: cache their canonical form */
+const normalizedNames = new Map<string, string>()
+
+/** ALSA cuts port names around 32 characters */
+const ALSA_TRUNCATED_LENGTH = 30
+
+/**
+ * Same device? Exact name, equal canonical names, or one name is an
+ * ALSA-truncated form of the other ("… Contro" / "… Control").
+ */
+export function sameMidiPort(a: string, b: string): boolean {
+  if (a === b) return true
+  const na = normalizeMidiPortName(a)
+  const nb = normalizeMidiPortName(b)
+  if (na === nb) return na.length > 0
+  const [short, shortRaw, long] = na.length <= nb.length ? [na, a, nb] : [nb, b, na]
+  return shortRaw.trim().length >= ALSA_TRUNCATED_LENGTH && short.length >= 4 && long.startsWith(short)
 }
 
 /** Signed delta of a relative CC value (two's complement or binary offset). */

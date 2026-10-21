@@ -16,6 +16,7 @@ import {
   uploadShowFile
 } from '@renderer/lib/show-io'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
+import { browseUsb, openShowFromUsb, saveCopyToUsb } from '@renderer/lib/usb-sticks'
 import { useUiStore } from '@renderer/stores/ui-store'
 import { t } from '@renderer/i18n'
 
@@ -23,7 +24,7 @@ import { t } from '@renderer/i18n'
  * Unsaved changes: Save / Don't save / Cancel. `message` says what is about
  * to happen (translated by the caller). Resolves true when it is fine to continue.
  */
-async function resolveUnsaved(message: string): Promise<boolean> {
+export async function resolveUnsaved(message: string): Promise<boolean> {
   if (!hasUnsavedChanges()) return true
   const name = useUiStore.getState().showName
   const choice = await ask({
@@ -104,4 +105,20 @@ export async function requestUploadShow(file: File): Promise<void> {
 export async function requestQuit(): Promise<void> {
   if (!(await resolveUnsaved(t('file.unsaved.quit')))) return
   getBridge()?.app.quit()
+}
+
+// ---- USB sticks (lib/usb-sticks) ----
+
+const usbDeps = { resolveUnsaved, confirm }
+
+export function requestOpenFromUsb(path: string): Promise<boolean> {
+  return openShowFromUsb(path, usbDeps)
+}
+
+export function requestBrowseUsb(drivePath?: string): Promise<boolean> {
+  return browseUsb(drivePath, usbDeps)
+}
+
+export function requestSaveCopyToUsb(drivePath?: string): Promise<boolean> {
+  return saveCopyToUsb(drivePath, confirm)
 }

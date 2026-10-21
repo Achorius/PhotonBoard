@@ -24,8 +24,10 @@ import { onShowApplied } from '@renderer/lib/show-io'
 import { onTimelinePlayStateChange } from '@renderer/lib/timeline-engine'
 import {
   controllerPortGone, handleControllerSysex, invalidateController, listControllers, rearmFaders, resyncControllers,
-  routeControllerMessage, scheduleGhosts, syncControllers, updateOverrides
+  routeControllerMessage, scheduleGhosts, setPickupNotifier, syncControllers, updateOverrides, type PickupWait
 } from './controller-runtime'
+import { showToast } from '@renderer/stores/toast-store'
+import { t } from '@renderer/i18n'
 import { invalidateMappingFeedback, requestFeedbackFrame, setFadingProbe, startFeedback, stopFeedback } from './midi-feedback'
 import { isCuelistFading, isPlaybackControllerRunning } from '@renderer/lib/playback-controller'
 
@@ -41,6 +43,7 @@ export function startMidiControllers(): () => void {
     portDisconnected: (name, type) => controllerPortGone(name, type)
   })
   startFeedback()
+  setPickupNotifier(showPickupToast)
   // "Fading" LEDs ask the cue engine (exact) instead of guessing from fade times
   setFadingProbe((id) => (isPlaybackControllerRunning() ? isCuelistFading(id) : undefined))
 
@@ -92,11 +95,30 @@ export function startMidiControllers(): () => void {
   stopAll = () => {
     for (const u of unsubs) u()
     stopFeedback()
+    setPickupNotifier(null)
     setFadingProbe(null)
     setMidiControllerHooks({})
     stopAll = null
   }
   return stopAll
+}
+
+/**
+ * Soft takeover: a fader that does nothing yet says why, once (until it
+ * picks up or is re-armed). The on-screen fader shows a ghost meanwhile.
+ */
+function showPickupToast(w: PickupWait): void {
+  const m = /^(fader|encoder|knob):(\d+)$/.exec(w.control.id)
+  const control = m ? t('pro.midi.map.control.fader', { n: Number(m[2]) + 1 }) : w.control.id
+  const target = w.action.type === 'grand-master' ? t('pro.midi.map.action.grandMaster')
+    : w.action.type === 'column-fader' ? t('pro.midi.map.action.columnFader', { n: w.action.col + 1 })
+    : w.action.type === 'xfade' ? t('pro.midi.map.action.xfade') : ''
+  const pct = (v: number) => `${Math.round((v / 255) * 100)} %`
+  showToast('info', t('pro.midi.controllers.pickupWait', { control, target, value: pct(w.level), position: pct(w.physical) }), {
+    id: `pickup:${w.port}:${w.control.id}`,
+    description: t('pro.midi.controllers.pickupWaitHint'),
+    duration: 6000
+  })
 }
 
 /** Stop the controller layer (tests) */

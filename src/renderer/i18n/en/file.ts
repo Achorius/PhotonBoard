@@ -56,5 +56,29 @@ export const file = {
     message: 'A show with this name already exists on the console. Replacing it cannot be undone.',
     consoleTitle: 'Replace the show on the console?',
     action: 'Replace'
+  },
+  usb: {
+    title: 'USB stick',
+    detected: 'USB stick detected: {name}',
+    detectedShows: { one: '{count} show on it', other: '{count} shows on it' },
+    detectedNoShow: 'No show on it',
+    none: 'No USB stick connected',
+    noneHint: 'Plug in a USB stick (FAT32, exFAT or NTFS). It appears here within a few seconds.',
+    noShows: 'No show (.pbshow) on this stick (top level and first-level folders).',
+    open: 'Open',
+    openHint: 'The show is copied to the console’s shows folder, then opened: the stick can be removed afterwards.',
+    browse: 'Browse the stick…',
+    saveCopy: 'Save a copy on the stick',
+    eject: 'Eject',
+    ejecting: 'Ejecting {name}…',
+    ejected: '{name} can be removed safely',
+    ejectFailed: 'Could not eject {name}: {error}',
+    copied: 'Copy of {name} saved on {drive}',
+    copyFailed: 'The copy could not be saved: {error}',
+    replaceTitle: 'Replace the show “{name}” on the console?',
+    replaceMessage: 'A show with this name is already in the shows folder. The one from the stick replaces it (its previous version is kept as a backup).',
+    replaceCopyTitle: 'Replace “{name}” on the stick?',
+    replaceCopyMessage: 'A show with this name is already on {drive}.',
+    modified: 'Modified {date}'
   }
 }

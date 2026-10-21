@@ -1,7 +1,8 @@
 // Labels of controller controls and actions (Devices panel, controller map).
 
 import type { TFunction } from '@renderer/i18n'
-import type { ControlDef, ControllerAction } from '@renderer/lib/midi/controller-types'
+import type { ControlDef, ControllerAction, ControllerLayoutId, ControllerProfile } from '@renderer/lib/midi/controller-types'
+import { buildBindings } from '@renderer/lib/midi/layouts'
 import { resolveActionPage } from '@renderer/lib/midi/led-states'
 import { parsePoolRef, resolveGroupRef, resolveMacroRef, resolvePresetRef } from '@renderer/lib/midi/pool-refs'
 import { useExecutorStore } from '@renderer/stores/executor-store'
@@ -12,6 +13,7 @@ import { usePoolStore } from '@renderer/stores/pool-store'
 import type { ExecutorCell, MidiMapping } from '@shared/types'
 import { useControllerStore } from '@renderer/stores/controller-store'
 import { getProfile } from '@renderer/lib/midi/profiles'
+import { sameMidiPort } from '@renderer/lib/midi-learn'
 
 /** Name of what an executor cell holds ('' when unknown) */
 export function cellName(cell: ExecutorCell): string {
@@ -127,10 +129,63 @@ export function overriddenProfileName(mapping: MidiMapping): string | null {
   const { detected, settings } = useControllerStore.getState()
   const src = mapping.source
   for (const d of detected) {
-    if (src.deviceName && src.deviceName !== d.port) continue
+    if (src.deviceName && !sameMidiPort(src.deviceName, d.port)) continue
     if (!settings.find((s) => s.port === d.port)?.enabled) continue
     const profile = getProfile(d.profileId)
     if (profile?.controls.some((c) => c.type === src.type && c.channel === src.channel && c.number === src.number)) return profile.name
   }
   return null
+}
+
+/**
+ * Plain-language summary of what a profile's faders and side buttons do in a
+ * layout (the pads are described by the layout hint). Controls a user
+ * mapping takes over are listed apart: the mapping wins on them.
+ */
+export function profileSummary(profile: ControllerProfile, layout: ControllerLayoutId, t: TFunction, overridden: ReadonlySet<string> = new Set()): string[] {
+  const bindings = buildBindings(profile, layout)
+  const byControl = new Map(bindings.map((b) => [b.control, b]))
+  const controls = new Map(profile.controls.map((c) => [c.id, c]))
+  const lines: string[] = []
+
+  // Faders / encoders on column faders: one line for the run, then the others one by one
+  const cols: number[] = []
+  const others: string[] = []
+  for (const c of profile.controls) {
+    if (c.kind !== 'fader' && c.kind !== 'encoder') continue
+    const b = byControl.get(c.id)
+    if (!b || overridden.has(c.id)) continue
+    if (b.action.type === 'column-fader' && /^(fader|encoder):\d+$/.test(c.id)) cols.push(Number(c.id.split(':')[1]) + 1)
+    else others.push(t('pro.midi.controllers.drivesControl', { control: controlLabel(c, t), action: actionLabel(b.action, t) }))
+  }
+  if (cols.length > 0) lines.push(t('pro.midi.controllers.drivesFaders', { from: Math.min(...cols), to: Math.max(...cols) }))
+  lines.push(...others)
+
+  const scenes = profile.controls
+    .filter((c) => c.id.startsWith('scene:') && !overridden.has(c.id))
+    .map((c) => byControl.get(c.id))
+    .filter((b): b is NonNullable<typeof b> => !!b)
+    .map((b) => actionLabel(b.action, t))
+  if (scenes.length > 0) lines.push(t('pro.midi.controllers.drivesScenes', { list: scenes.join(' · ') }))
+
+  const pages = profile.controls
+    .map((c) => byControl.get(c.id))
+    .filter((b) => b?.action.type === 'page' && typeof b.action.page === 'number' && b.control.startsWith('track:'))
+    .map((b) => (b!.action as { page: number }).page + 1)
+  if (pages.length > 0) lines.push(t('pro.midi.controllers.drivesTracks', { from: Math.min(...pages), to: Math.max(...pages) }))
+
+  const taken = [...overridden].map((id) => controls.get(id)).filter((c): c is ControlDef => !!c).map((c) => controlLabel(c, t))
+  if (taken.length > 0) lines.push(t('pro.midi.controllers.drivesOverridden', { list: taken.join(', ') }))
+  return lines
+}
+
+
+/** Profile controls a user mapping takes over on this port */
+export function overriddenControls(profile: ControllerProfile, port: string, mappings: readonly MidiMapping[]): Set<string> {
+  const out = new Set<string>()
+  for (const c of profile.controls) {
+    if (mappings.some((m) => m.source.type === c.type && m.source.channel === c.channel && m.source.number === c.number
+      && (!m.source.deviceName || sameMidiPort(m.source.deviceName, port)))) out.add(c.id)
+  }
+  return out
 }

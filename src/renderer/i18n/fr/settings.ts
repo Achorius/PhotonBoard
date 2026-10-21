@@ -12,6 +12,19 @@ export const settings: Translation['settings'] = {
   },
   outputsHealth: 'Sorties : {health}',
 
+  strobe: {
+    title: 'Strobe et Blinder',
+    subtitle: 'Ce que font les touches Strobe et Blinder (barre du haut, fenêtre Scène, télécommandes, contrôleurs MIDI)',
+    mode: 'Le strobe fait flasher',
+    modeWhite: 'Plein feu blanc',
+    modeLook: 'Le look actuel',
+    modeWhiteHint: 'Tous les projecteurs flashent en plein feu blanc, même ceux éteints dans le look actuel (comportement attendu d’une touche Strobe en live).',
+    modeLookHint: 'Le look actuel flashe tel quel : les projecteurs éteints dans le look restent éteints.',
+    rate: 'Vitesse du strobe',
+    rateHint: 'Les projecteurs qui ont un canal strobe utilisent leur propre strobe à cette vitesse ; les autres flashent par leur intensité (DMX : 20 Hz au plus).',
+    rateValue: '{value} Hz',
+    blinderHint: 'Blinder : tous les projecteurs en plein feu blanc — gradateur à fond, shutter ouvert, RVB / blanc à fond, CMY et correction de couleur retirés, roues de couleur et de gobo ouvertes. Position, zoom, focus, prisme et effets ne bougent pas.'
+  },
   display: {
     title: 'Affichage',
     description: 'L’apparence de la console sur cet écran. Enregistré par appareil : le Pi, un portable et chaque tablette gardent leur propre choix.',

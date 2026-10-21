@@ -4,6 +4,8 @@ import type { MidiMapping, MidiDevice, MidiSourceType, MidiTargetType } from '@s
 import { detectCcEncoding } from '@renderer/lib/midi-learn'
 import { t } from '@renderer/i18n'
 import { controllersWantSysex } from '@renderer/lib/midi/controller-sysex'
+import { matchProfile } from '@renderer/lib/midi/profiles'
+import { isRemoteMode } from '@renderer/lib/runtime'
 
 /** How long MIDI learn keeps listening after the first CC to tell faders from encoders */
 export const LEARN_CAPTURE_MS = 450
@@ -135,130 +137,12 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   apiStatus: 'pending',
   apiError: null,
 
-  initMidi: async () => {
-    if (!navigator.requestMIDIAccess) {
-      console.error('[MIDI] Web MIDI API is not available in this browser/environment')
-      set({ apiStatus: 'unavailable', apiError: t('midi.api.unsupported'), devices: [] })
-      return
-    }
-
-    try {
-      // Reuse existing MIDIAccess if available (avoids reinit loop)
-      let access: MIDIAccess
-      if (currentMidiAccess) {
-        access = currentMidiAccess
-      } else {
-        access = await requestAccess(controllersWantSysex([]))
-        currentMidiAccess = access
-      }
-
-      // A recognised controller needs SysEx (RGB LEDs, mode switch, fader
-      // positions) and this access has none: ask again, once, with SysEx.
-      if (!access.sysexEnabled && !sysexDenied) {
-        const names: string[] = []
-        access.inputs.forEach((input) => { if (input.name) names.push(input.name) })
-        if (controllersWantSysex(names)) {
-          try {
-            const withSysex = await navigator.requestMIDIAccess({ sysex: true })
-            detachAccess(access)
-            access = withSysex
-            currentMidiAccess = withSysex
-          } catch (e) {
-            sysexDenied = true
-            console.warn('[MIDI] SysEx refused; controllers use palette LEDs and fader pickup:', e)
-          }
-        }
-      }
-
-      const devices: MidiDevice[] = []
-
-      access.inputs.forEach((input) => {
-        devices.push({
-          id: input.id,
-          name: input.name || t('common.unknown'),
-          manufacturer: input.manufacturer || '',
-          type: 'input',
-          connected: input.state === 'connected'
-        })
-
-        // Listen for MIDI messages (reassigning is safe, replaces previous handler)
-        input.onmidimessage = (event: MIDIMessageEvent) => {
-          if (!event.data || event.data.length < 1) return
-          const [status, data1, data2] = event.data
-          const deviceName = input.name || undefined
-
-          // Route system messages (MTC quarter frame 0xF1) to timecode engine,
-          // SysEx replies (controller fader positions) to the controller layer
-          if (status >= 0xf0) {
-            if (status === 0xf0 && deviceName && controllerHooks.sysex) {
-              try { controllerHooks.sysex(event.data, deviceName) } catch (e) { console.error('[MIDI] SysEx handling failed:', e) }
-            }
-            if (timecodeProcessor) timecodeProcessor(status, data1 || 0, data2 || 0)
-            return
-          }
-
-          if (event.data.length < 2) return
-          const type = status & 0xf0
-          const channel = (status & 0x0f) + 1
-
-          if (type === 0xb0) {
-            // Control Change
-            const value = data2 || 0
-            get().setLastMessage({ type: 'cc', channel, number: data1, value, deviceName })
-            if (get().isLearning) get().completeLearn({ type: 'cc', channel, number: data1, value, deviceName })
-            handleMidiInput('cc', channel, data1, value, deviceName)
-          } else if (type === 0x90 && data2 > 0) {
-            // Note On
-            get().setLastMessage({ type: 'note', channel, number: data1, value: data2, deviceName })
-            if (get().isLearning) get().completeLearn({ type: 'note', channel, number: data1, deviceName })
-            if (deviceName) noteHeld(deviceName, channel, data1, true)
-            handleMidiInput('note', channel, data1, data2, deviceName)
-          } else if (type === 0x80 || (type === 0x90 && data2 === 0)) {
-            // Note Off
-            get().logMessage({ type: 'noteoff', channel, number: data1, value: 0, deviceName })
-            if (deviceName) noteHeld(deviceName, channel, data1, false)
-            handleMidiInput('note', channel, data1, 0, deviceName)
-          } else if (type === 0xc0) {
-            // Program Change: momentary trigger (no release message exists)
-            get().setLastMessage({ type: 'program', channel, number: data1, value: 127, deviceName })
-            if (get().isLearning) get().completeLearn({ type: 'program', channel, number: data1, deviceName })
-            handleMidiInput('program', channel, data1, 127, deviceName)
-          }
-        }
-      })
-
-      access.outputs.forEach((output) => {
-        devices.push({
-          id: output.id,
-          name: output.name || t('common.unknown'),
-          manufacturer: output.manufacturer || '',
-          type: 'output',
-          connected: output.state === 'connected'
-        })
-      })
-
-      // Listen for device changes — use module-level debounce to prevent reinit loop
-      access.onstatechange = (event: Event) => {
-        // A device unplugged: release what it held at once (flash, blinder,
-        // TRIG scenes…) — nothing may stay stuck until the reinit
-        const port = (event as MIDIConnectionEvent).port
-        if (port && port.state === 'disconnected' && port.name) {
-          if (port.type === 'input') releaseHeldNotes(port.name)
-          try { controllerHooks.portDisconnected?.(port.name, port.type) } catch (e) { console.error('[MIDI] disconnect handling failed:', e) }
-        }
-        // Don't reinit while learning
-        if (get().isLearning) return
-        if (reinitTimeout) clearTimeout(reinitTimeout)
-        reinitTimeout = setTimeout(() => { get().initMidi() }, 2000)
-      }
-
-      set({ devices, apiStatus: 'available', apiError: null })
-      try { controllerHooks.access?.(access) } catch (e) { console.error('[MIDI] controller sync failed:', e) }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      console.error('[MIDI] Failed to access Web MIDI API:', msg, e)
-      set({ apiStatus: 'error', apiError: msg, devices: [] })
-    }
+  initMidi: () => {
+    // One (re)initialisation at a time: the rescan, a statechange and the
+    // Rescan button may all ask at once
+    if (initInFlight) return initInFlight
+    initInFlight = runInitMidi().finally(() => { initInFlight = null })
+    return initInFlight
   },
 
   startLearn: (target) => {
@@ -289,7 +173,7 @@ export const useMidiStore = create<MidiState>((set, get) => ({
         timer: setTimeout(() => {
           const capture = learnCapture
           learnCapture = null
-          if (capture) finishLearn(capture.source, detectCcEncoding(capture.values))
+          if (capture) finishLearn(capture.source, learnedCcEncoding(capture.source, capture.values))
         }, LEARN_CAPTURE_MS)
       }
       return
@@ -347,6 +231,194 @@ export const useMidiStore = create<MidiState>((set, get) => ({
   setMappings: (mappings) => set({ mappings: dedupeMappings(mappings) })
 }))
 
+// ---- (Re)initialisation, hotplug rescan ----
+
+let initInFlight: Promise<void> | null = null
+/** Ids / states / names of the ports at the last enumeration */
+let portSignature = ''
+let lastAccessError: string | null = null
+/** Web MIDI refused for good (permission): no background retry */
+let accessDenied = false
+
+/** Hotplug fallback: how often the port list is compared */
+export const MIDI_RESCAN_MS = 2500
+/** Web MIDI failed (no ALSA sequencer yet on a Pi that just booted…): retry period */
+export const MIDI_RETRY_MS = 10000
+let rescanTimer: ReturnType<typeof setInterval> | null = null
+let lastRetry = 0
+
+function accessSignature(access: MIDIAccess): string {
+  const parts: string[] = []
+  const add = (p: MIDIPort) => { parts.push(`${p.type}|${p.id}|${p.state}|${p.name ?? ''}`) }
+  access.inputs.forEach(add)
+  access.outputs.forEach(add)
+  return parts.sort().join('\n')
+}
+
+/**
+ * Devices plugged after start-up must appear without a manual rescan.
+ * MIDIAccess.onstatechange normally reports them, but on Linux (Chromium /
+ * ALSA) it is not always fired: compare the port list every few seconds and
+ * re-enumerate (devices, controller profiles, LEDs) when it changed. While
+ * Web MIDI is unavailable because its first request failed, retry it now
+ * and then (the ALSA sequencer can appear after the app started).
+ */
+function ensureRescan(): void {
+  if (rescanTimer || typeof setInterval !== 'function') return
+  rescanTimer = setInterval(rescanTick, MIDI_RESCAN_MS)
+}
+
+/** One rescan step (exported for tests) */
+export function rescanTick(now = Date.now()): void {
+  const st = useMidiStore.getState()
+  if (st.isLearning || initInFlight) return
+  const access = currentMidiAccess
+  if (access) {
+    if (accessSignature(access) !== portSignature) void st.initMidi()
+    return
+  }
+  // Retry only on the console: a browser (web remote) would ask the user for MIDI permission again and again
+  if (st.apiStatus === 'error' && !accessDenied && !isRemoteMode() && now - lastRetry >= MIDI_RETRY_MS) {
+    lastRetry = now
+    void st.initMidi()
+  }
+}
+
+async function runInitMidi(): Promise<void> {
+  const set = useMidiStore.setState
+  const get = useMidiStore.getState
+  ensureRescan()
+  if (!navigator.requestMIDIAccess) {
+    if (get().apiStatus !== 'unavailable') console.error('[MIDI] Web MIDI API is not available in this browser/environment')
+    set({ apiStatus: 'unavailable', apiError: t('midi.api.unsupported'), devices: [] })
+    return
+  }
+
+  try {
+    // Reuse existing MIDIAccess if available (avoids reinit loop)
+    let access: MIDIAccess
+    if (currentMidiAccess) {
+      access = currentMidiAccess
+    } else {
+      access = await requestAccess(controllersWantSysex([]))
+      currentMidiAccess = access
+    }
+
+    // A recognised controller needs SysEx (RGB LEDs, mode switch, fader
+    // positions) and this access has none: ask again, once, with SysEx.
+    if (!access.sysexEnabled && !sysexDenied) {
+      const names: string[] = []
+      access.inputs.forEach((input) => { if (input.name) names.push(input.name) })
+      if (controllersWantSysex(names)) {
+        try {
+          const withSysex = await requestWithTimeout({ sysex: true })
+          detachAccess(access)
+          access = withSysex
+          currentMidiAccess = withSysex
+        } catch (e) {
+          sysexDenied = true
+          console.warn('[MIDI] SysEx refused; controllers use palette LEDs and fader pickup:', e)
+        }
+      }
+    }
+
+    const devices: MidiDevice[] = []
+
+    access.inputs.forEach((input) => {
+      devices.push({
+        id: input.id,
+        name: input.name || t('common.unknown'),
+        manufacturer: input.manufacturer || '',
+        type: 'input',
+        connected: input.state === 'connected'
+      })
+
+      // Listen for MIDI messages (reassigning is safe, replaces previous handler)
+      input.onmidimessage = (event: MIDIMessageEvent) => {
+        if (!event.data || event.data.length < 1) return
+        const [status, data1, data2] = event.data
+        const deviceName = input.name || undefined
+
+        // Route system messages (MTC quarter frame 0xF1) to timecode engine,
+        // SysEx replies (controller fader positions) to the controller layer
+        if (status >= 0xf0) {
+          if (status === 0xf0 && deviceName && controllerHooks.sysex) {
+            try { controllerHooks.sysex(event.data, deviceName) } catch (e) { console.error('[MIDI] SysEx handling failed:', e) }
+          }
+          if (timecodeProcessor) timecodeProcessor(status, data1 || 0, data2 || 0)
+          return
+        }
+
+        if (event.data.length < 2) return
+        const type = status & 0xf0
+        const channel = (status & 0x0f) + 1
+
+        if (type === 0xb0) {
+          // Control Change
+          const value = data2 || 0
+          get().setLastMessage({ type: 'cc', channel, number: data1, value, deviceName })
+          if (get().isLearning) get().completeLearn({ type: 'cc', channel, number: data1, value, deviceName })
+          handleMidiInput('cc', channel, data1, value, deviceName)
+        } else if (type === 0x90 && data2 > 0) {
+          // Note On
+          get().setLastMessage({ type: 'note', channel, number: data1, value: data2, deviceName })
+          if (get().isLearning) get().completeLearn({ type: 'note', channel, number: data1, deviceName })
+          if (deviceName) noteHeld(deviceName, channel, data1, true)
+          handleMidiInput('note', channel, data1, data2, deviceName)
+        } else if (type === 0x80 || (type === 0x90 && data2 === 0)) {
+          // Note Off
+          get().logMessage({ type: 'noteoff', channel, number: data1, value: 0, deviceName })
+          if (deviceName) noteHeld(deviceName, channel, data1, false)
+          handleMidiInput('note', channel, data1, 0, deviceName)
+        } else if (type === 0xc0) {
+          // Program Change: momentary trigger (no release message exists)
+          get().setLastMessage({ type: 'program', channel, number: data1, value: 127, deviceName })
+          if (get().isLearning) get().completeLearn({ type: 'program', channel, number: data1, deviceName })
+          handleMidiInput('program', channel, data1, 127, deviceName)
+        }
+      }
+    })
+
+    access.outputs.forEach((output) => {
+      devices.push({
+        id: output.id,
+        name: output.name || t('common.unknown'),
+        manufacturer: output.manufacturer || '',
+        type: 'output',
+        connected: output.state === 'connected'
+      })
+    })
+
+    // Listen for device changes — use module-level debounce to prevent reinit loop
+    access.onstatechange = (event: Event) => {
+      // A device unplugged: release what it held at once (flash, blinder,
+      // TRIG scenes…) — nothing may stay stuck until the reinit
+      const port = (event as MIDIConnectionEvent).port
+      if (port && port.state === 'disconnected' && port.name) {
+        if (port.type === 'input') releaseHeldNotes(port.name)
+        try { controllerHooks.portDisconnected?.(port.name, port.type) } catch (e) { console.error('[MIDI] disconnect handling failed:', e) }
+      }
+      // Don't reinit while learning
+      if (get().isLearning) return
+      if (reinitTimeout) clearTimeout(reinitTimeout)
+      reinitTimeout = setTimeout(() => { get().initMidi() }, 2000)
+    }
+
+    portSignature = accessSignature(access)
+    lastAccessError = null
+    set({ devices, apiStatus: 'available', apiError: null })
+    try { controllerHooks.access?.(access) } catch (e) { console.error('[MIDI] controller sync failed:', e) }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // Logged once per distinct error: the background retry must not flood the console
+    if (msg !== lastAccessError) console.error('[MIDI] Failed to access Web MIDI API:', msg, e)
+    lastAccessError = msg
+    accessDenied = e instanceof Error && (e.name === 'SecurityError' || e.name === 'NotAllowedError')
+    const st = get()
+    if (st.apiStatus !== 'error' || st.apiError !== msg || st.devices.length > 0) set({ apiStatus: 'error', apiError: msg, devices: [] })
+  }
+}
+
 // ---- MIDI learn capture ----
 
 let learnCapture: { source: LearnSource; values: number[]; timer: ReturnType<typeof setTimeout> } | null = null
@@ -354,6 +426,20 @@ let learnCapture: { source: LearnSource; values: number[]; timer: ReturnType<typ
 function cancelLearnCapture(): void {
   if (learnCapture) clearTimeout(learnCapture.timer)
   learnCapture = null
+}
+
+/**
+ * Encoding of a learned CC. A control a controller profile knows as a FADER
+ * is always absolute (an APC mini fader pushed to its stop re-sends 127 and
+ * looks like an encoder to the heuristic); otherwise the captured values
+ * decide (lib/midi-learn detectCcEncoding).
+ */
+export function learnedCcEncoding(source: LearnSource, values: number[]): 'absolute' | 'relative' {
+  if (source.deviceName) {
+    const control = matchProfile(source.deviceName)?.controls.find((c) => c.type === 'cc' && c.channel === source.channel && c.number === source.number)
+    if (control?.kind === 'fader') return 'absolute'
+  }
+  return detectCcEncoding(values)
 }
 
 function finishLearn(source: LearnSource, encoding: 'absolute' | 'relative'): void {
@@ -414,16 +500,49 @@ export function getMidiAccess(): MIDIAccess | null {
 
 let sysexDenied = false
 
+/** A Web MIDI request that never settles must not block MIDI for good */
+export const MIDI_ACCESS_TIMEOUT_MS = 8000
+
+/**
+ * navigator.requestMIDIAccess with a time limit. A request that answers
+ * after the limit is not lost: if nothing else got an access meanwhile, it
+ * becomes the current access and the ports are enumerated.
+ */
+function requestWithTimeout(opts: MIDIOptions): Promise<MIDIAccess> {
+  return new Promise<MIDIAccess>((resolve, reject) => {
+    let done = false
+    const timer = setTimeout(() => {
+      done = true
+      reject(new Error('Web MIDI did not answer (timeout)'))
+    }, MIDI_ACCESS_TIMEOUT_MS)
+    navigator.requestMIDIAccess(opts).then((access) => {
+      if (!done) {
+        done = true
+        clearTimeout(timer)
+        resolve(access)
+      } else if (!currentMidiAccess) {
+        currentMidiAccess = access
+        void useMidiStore.getState().initMidi()
+      }
+    }, (e) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      reject(e)
+    })
+  })
+}
+
 async function requestAccess(sysex: boolean): Promise<MIDIAccess> {
   if (sysex && !sysexDenied) {
     try {
-      return await navigator.requestMIDIAccess({ sysex: true })
+      return await requestWithTimeout({ sysex: true })
     } catch (e) {
       sysexDenied = true
       console.warn('[MIDI] SysEx refused, opening MIDI without it:', e)
     }
   }
-  return navigator.requestMIDIAccess({ sysex: false })
+  return requestWithTimeout({ sysex: false })
 }
 
 /** Stop listening to an access we replace (else every message arrives twice) */
@@ -468,6 +587,13 @@ export function __resetMidiForTests(): void {
   midiRouter = null
   if (reinitTimeout) clearTimeout(reinitTimeout)
   reinitTimeout = null
+  if (rescanTimer) clearInterval(rescanTimer)
+  rescanTimer = null
+  initInFlight = null
+  portSignature = ''
+  lastAccessError = null
+  accessDenied = false
+  lastRetry = 0
 }
 
 // Module-level debounce for device state changes (must persist across initMidi calls)

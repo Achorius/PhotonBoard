@@ -34,7 +34,10 @@ const EN = {
   fixtureFilterXml: 'XML fixtures (grandMA, etc.)',
   fixtureFilterJson: 'JSON (OFL / PhotonBoard)',
   fixtureFilterCsv: 'CSV / TSV',
-  allFiles: 'All files'
+  allFiles: 'All files',
+  usbNotOnStick: 'This file is not on a connected USB stick.',
+  usbFull: 'The USB stick is full.',
+  usbReadOnly: 'The USB stick is read-only (or write-protected).'
 } as const
 
 export type MainMessageKey = keyof typeof EN
@@ -63,7 +66,10 @@ const FR: Record<MainMessageKey, string> = {
   fixtureFilterXml: 'Projecteurs XML (grandMA, etc.)',
   fixtureFilterJson: 'JSON (OFL / PhotonBoard)',
   fixtureFilterCsv: 'CSV / TSV',
-  allFiles: 'Tous les fichiers'
+  allFiles: 'Tous les fichiers',
+  usbNotOnStick: 'Ce fichier n’est pas sur une clé USB branchée.',
+  usbFull: 'La clé USB est pleine.',
+  usbReadOnly: 'La clé USB est en lecture seule (ou protégée en écriture).'
 }
 
 const MESSAGES: Record<MainLanguage, Record<MainMessageKey, string>> = { en: EN, fr: FR }

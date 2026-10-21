@@ -32,6 +32,10 @@ export const shell = {
     upload: 'Upload show file…',
     uploadDescription: 'Send a .pbshow from this device to the console',
     reveal: 'Reveal show file',
+    openUsb: 'Open from a USB stick…',
+    saveCopyUsb: 'Save a copy on the USB stick',
+    ejectUsb: 'Eject the USB stick',
+    usbNone: 'No USB stick connected',
     quit: 'Quit PhotonBoard'
   },
 

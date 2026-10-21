@@ -143,17 +143,21 @@ describe('applyMasters (output stage)', () => {
     expect(out[GOBO]).toBe(40)
   })
 
-  it('blinder: dimmers full, shutter open, dimmer-less RGB full, nothing else touched', () => {
+  it('blinder: every fixture at full open white — dimmer, shutter, RGB, wheels open; heads never move', () => {
     const out = output(base, { blinder: true })
     expect(out[MH_DIM]).toBe(255)
     expect(out[SHUTTER]).toBe(22)
     expect(out[PAR_R]).toBe(255)
     expect(out[PAR_G]).toBe(255)
+    // a fixture WITH a dimmer: its colour goes white too (dimmer 255 × black = dark before 1.1.1)
+    expect(out[MH_RED]).toBe(255)
+    expect(out[addr(mh, MOVING_HEAD, 'Green')]).toBe(255)
+    expect(out[addr(mh, MOVING_HEAD, 'Blue')]).toBe(255)
+    expect(out[addr(mh, MOVING_HEAD, 'Color Wheel')]).toBe(0) // open slot
+    expect(out[GOBO]).toBe(0) // gobo wheel open
     expect(out[PAN]).toBe(60)
     expect(out[TILT]).toBe(70)
-    expect(out[GOBO]).toBe(40)
     expect(out[RESET]).toBe(0) // never fires a lamp-off / reset macro
-    expect(out[MH_RED]).toBe(base[MH_RED])
   })
 
   it('blackout wins over blinder', () => {
@@ -162,13 +166,17 @@ describe('applyMasters (output stage)', () => {
     expect(out[PAN]).toBe(60)
   })
 
-  it('strobe toggles intensity only', () => {
-    const dark = output(base, { strobe: true, strobeOn: false })
-    expect(dark[MH_DIM]).toBe(0)
-    expect(dark[PAR_R]).toBe(0)
+  it('strobe (current look): chops intensity of fixtures without hardware strobe, drives the shutter of the others', () => {
+    const dark = output(base, { strobe: true, strobeOn: false, strobeMode: 'look', strobeRate: 10 })
+    expect(dark[PAR_R]).toBe(0) // no strobe channel: chopped
+    expect(dark[DIM]).toBe(0)
+    expect(dark[MH_DIM]).toBe(200) // hardware strobe: intensity kept at the look…
+    expect(dark[SHUTTER]).toBeGreaterThanOrEqual(64) // …shutter in its strobe range (64-95)
+    expect(dark[SHUTTER]).toBeLessThanOrEqual(95)
     expect(dark[PAN]).toBe(60)
-    const lit = output(base, { strobe: true, strobeOn: true })
+    const lit = output(base, { strobe: true, strobeOn: true, strobeMode: 'look' })
     expect(lit[MH_DIM]).toBe(200)
+    expect(lit[PAR_R]).toBe(200)
   })
 
   it('scales a 16-bit dimmer on the combined value', () => {

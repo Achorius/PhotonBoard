@@ -13,6 +13,19 @@ export const settings = {
   },
   outputsHealth: 'Outputs: {health}',
 
+  strobe: {
+    title: 'Strobe & Blinder',
+    subtitle: 'What the Strobe and Blinder keys do (top bar, Stage window, remotes, MIDI controllers)',
+    mode: 'Strobe flashes',
+    modeWhite: 'Full white',
+    modeLook: 'Current look',
+    modeWhiteHint: 'Every fixture flashes at full open white, even the ones dark in the current look (what a live Strobe key does).',
+    modeLookHint: 'The current look flashes as it is: fixtures dark in the look stay dark.',
+    rate: 'Strobe rate',
+    rateHint: 'Fixtures with a strobe channel use their own strobe at this rate; the others are flashed through their intensity (DMX: 20 Hz at most).',
+    rateValue: '{value} Hz',
+    blinderHint: 'Blinder: every fixture at full open white — dimmer full, shutter open, RGB / white full, CMY and colour correction out, colour and gobo wheels open. Position, zoom, focus, prism and effects are left as they are.'
+  },
   display: {
     title: 'Display',
     description: 'How the console looks on this screen. Saved per device: the Pi, a laptop and each tablet keep their own choice.',

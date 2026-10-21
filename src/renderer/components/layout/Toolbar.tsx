@@ -8,8 +8,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   LuChevronDown, LuCopy, LuEraser, LuFilePlus, LuFolderOpen, LuHistory, LuLogOut, LuMonitorPlay, LuPencil, LuPiano, LuPlay,
-  LuRedo2, LuSave, LuSaveAll, LuSquare, LuTrash2, LuUndo2, LuUpload, LuFolderSearch, LuCrosshair
+  LuRedo2, LuSave, LuSaveAll, LuSquare, LuTrash2, LuUndo2, LuUpload, LuFolderSearch, LuCrosshair, LuUsb
 } from 'react-icons/lu'
+import { ejectUsb, openUsbModal, useUsbStore } from '@renderer/lib/usb-sticks'
 import { Badge, Button, Divider, DropdownMenu, IconButton, StatusDot, Tooltip, type MenuEntry } from '@renderer/components/ui'
 import { t as translate, useT } from '@renderer/i18n'
 import { redo, undo, useHistoryStore } from '@renderer/lib/history'
@@ -29,7 +30,7 @@ import { useRemoteConnection } from '@renderer/hooks/useRemoteConnection'
 import { MasterControls, useMidiLearnTarget } from './MasterControls'
 import { OutputHealthIndicator } from './OutputHealth'
 import {
-  requestNewShow, requestOpenShow, requestOpenShowByName, requestQuit, requestSave, requestSaveAs, requestUploadShow
+  requestNewShow, requestOpenShow, requestOpenShowByName, requestQuit, requestSave, requestSaveAs, requestSaveCopyToUsb, requestUploadShow
 } from './file-actions'
 
 const IS_MAC_ELECTRON = isElectronRuntime() && /mac/i.test(navigator.platform)
@@ -84,6 +85,18 @@ function BrandMark() {
 // File menu
 // ---------------------------------------------------------------
 
+/** USB stick entries of the File menu (console) */
+function usbMenuEntries(t: ReturnType<typeof useT>): MenuEntry[] {
+  const drives = useUsbStore.getState().drives
+  const none = drives.length === 0
+  return [
+    { type: 'separator' },
+    { label: t('shell.fileMenu.openUsb'), icon: LuUsb, onSelect: openUsbModal },
+    { label: t('shell.fileMenu.saveCopyUsb'), icon: LuSave, disabled: none, description: none ? t('shell.fileMenu.usbNone') : undefined, onSelect: () => { void requestSaveCopyToUsb() } },
+    { label: t('shell.fileMenu.ejectUsb'), icon: LuUsb, disabled: none, description: none ? t('shell.fileMenu.usbNone') : drives.map((d) => d.name).join(', '), onSelect: () => { void ejectUsb() } }
+  ]
+}
+
 function FileMenu() {
   const t = useT()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -109,6 +122,7 @@ function FileMenu() {
       { type: 'separator' } as const,
       { label: t('shell.fileMenu.upload'), icon: LuUpload, description: t('shell.fileMenu.uploadDescription'), onSelect: () => fileInput.current?.click() }
     ] : [
+      ...(getBridge()?.removable ? usbMenuEntries(t) : []),
       { type: 'separator' } as const,
       { label: t('shell.fileMenu.reveal'), icon: LuFolderSearch, onSelect: () => { void getBridge()?.show.reveal() } },
       { type: 'separator' } as const,

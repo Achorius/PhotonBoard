@@ -82,7 +82,12 @@ export const follow = {
     dpadUp: 'D-pad up',
     dpadDown: 'D-pad down',
     dpadLeft: 'D-pad left',
-    dpadRight: 'D-pad right'
+    dpadRight: 'D-pad right',
+    wake: 'Press any button on the gamepad: the app only sees a gamepad after a button press.',
+    systemNone: 'The system sees no game controller (USB cable, Bluetooth pairing, batteries?).',
+    systemSeen: '“{name}” is connected: press one of its buttons.',
+    systemNoJs: '“{name}” is connected but has no joystick node (/dev/input/js*): the joydev kernel module is missing. Update PhotonBoard or run: sudo modprobe joydev',
+    systemNoAccess: '“{name}” is connected but PhotonBoard may not read /dev/input/{node}: add the user to the “input” group (sudo usermod -aG input $USER) and restart.'
   },
 
   help: {

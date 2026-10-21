@@ -55,5 +55,29 @@ export const file: Translation['file'] = {
     message: 'Un show porte déjà ce nom sur la console. Le remplacement est définitif.',
     consoleTitle: 'Remplacer le show de la console ?',
     action: 'Remplacer'
+  },
+  usb: {
+    title: 'Clé USB',
+    detected: 'Clé USB détectée : {name}',
+    detectedShows: { one: '{count} show dessus', other: '{count} shows dessus' },
+    detectedNoShow: 'Aucun show dessus',
+    none: 'Aucune clé USB branchée',
+    noneHint: 'Branchez une clé USB (FAT32, exFAT ou NTFS). Elle apparaît ici en quelques secondes.',
+    noShows: 'Aucun show (.pbshow) sur cette clé (racine et dossiers de premier niveau).',
+    open: 'Ouvrir',
+    openHint: 'Le show est copié dans le dossier des shows de la console puis ouvert : la clé peut ensuite être retirée.',
+    browse: 'Parcourir la clé…',
+    saveCopy: 'Enregistrer une copie sur la clé USB',
+    eject: 'Éjecter',
+    ejecting: 'Éjection de {name}…',
+    ejected: '{name} peut être retirée en toute sécurité',
+    ejectFailed: 'Impossible d’éjecter {name} : {error}',
+    copied: 'Copie de {name} enregistrée sur {drive}',
+    copyFailed: 'La copie n’a pas pu être enregistrée : {error}',
+    replaceTitle: 'Remplacer le show « {name} » sur la console ?',
+    replaceMessage: 'Un show de ce nom est déjà dans le dossier des shows. Celui de la clé le remplace (sa version précédente est gardée en sauvegarde).',
+    replaceCopyTitle: 'Remplacer « {name} » sur la clé ?',
+    replaceCopyMessage: 'Un show de ce nom est déjà sur {drive}.',
+    modified: 'Modifié le {date}'
   }
 }

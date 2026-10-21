@@ -8,6 +8,9 @@ import { Button, Field, Section, SegmentedControl, StatusDot, Switch, cn } from 
 import { t as translate, useT, type TranslationKey } from '@renderer/i18n'
 import { useFollowStore } from '@renderer/stores/follow-store'
 import { XBOX_AXES, XBOX_BUTTONS, gamepadManager } from '@renderer/lib/gamepad-manager'
+import { getBridge } from '@renderer/lib/runtime'
+import type { GameControllerDiagnostics } from '@shared/photonboard-api'
+import { gamepadHelpLines } from './gamepad-help'
 
 /** Labels printed on the controller (same in every language) */
 const BUTTON_NAMES: Record<number, string> = {
@@ -64,7 +67,7 @@ export function GamepadSection() {
         </div>
       </div>
 
-      {g.connected && <GamepadLive trigger={g.activateButton} />}
+      {g.connected ? <GamepadLive trigger={g.activateButton} /> : <GamepadHelp />}
 
       <Field label={t('follow.gamepad.activation')}>
         <SegmentedControl<'hold' | 'toggle'>
@@ -95,6 +98,31 @@ export function GamepadSection() {
         <Switch checked={g.invertZ} onChange={(invertZ) => setConfig({ invertZ })} label={t('follow.gamepad.invertZ')} />
       </div>
     </Section>
+  )
+}
+
+/** What the operating system sees, polled while no gamepad is visible */
+function useSystemControllers(): GameControllerDiagnostics | null {
+  const [diag, setDiag] = useState<GameControllerDiagnostics | null>(null)
+  useEffect(() => {
+    const ask = getBridge()?.app.gameControllers
+    if (!ask) return
+    let alive = true
+    const poll = () => { ask().then((d) => { if (alive) setDiag(d) }).catch(() => {}) }
+    poll()
+    const id = setInterval(poll, 3000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
+  return diag
+}
+
+function GamepadHelp() {
+  useT()
+  const diag = useSystemControllers()
+  return (
+    <div className="flex flex-col gap-1 text-xs text-fg-secondary" data-gamepad-help>
+      {gamepadHelpLines(diag).map((line) => <p key={line}>{line}</p>)}
+    </div>
   )
 }
 

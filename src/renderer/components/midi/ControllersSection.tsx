@@ -8,11 +8,14 @@ import { Button, Field, Modal, SegmentedControl, Select, StatusDot, Switch, cn }
 import { useT } from '@renderer/i18n'
 import { useControllerStore, type DetectedController } from '@renderer/stores/controller-store'
 import { useMidiStore } from '@renderer/stores/midi-store'
+import { useExecutorStore } from '@renderer/stores/executor-store'
 import type { ControllerLayoutId, ControllerSettings } from '@renderer/lib/midi/controller-types'
 import { CONTROLLER_LAYOUTS } from '@renderer/lib/midi/layouts'
 import { effectiveProfile, getProfile } from '@renderer/lib/midi/profiles'
 import { testControllerLeds } from '@renderer/lib/midi/controller-runtime'
+import { sameMidiPort } from '@renderer/lib/midi-learn'
 import { ControllerMap } from './ControllerMap'
+import { overriddenControls, profileSummary } from './controller-model'
 
 export function ControllersSection({ label }: { label: React.ReactNode }) {
   const detected = useControllerStore((s) => s.detected)
@@ -31,7 +34,10 @@ const ControllerCard = memo(function ControllerCard({ detected }: { detected: De
   const t = useT()
   const settings = useControllerStore((s) => s.settings.find((x) => x.port === detected.port))
   const testing = useControllerStore((s) => s.testing === detected.port)
-  const handMapped = useMidiStore((s) => s.mappings.some((m) => m.source.deviceName === detected.port))
+  const handMapped = useMidiStore((s) => s.mappings.some((m) => !!m.source.deviceName && sameMidiPort(m.source.deviceName, detected.port)))
+  const mappings = useMidiStore((s) => s.mappings)
+  // Executor pages / names show in the summary: follow them
+  useExecutorStore((s) => s.pages)
   const [mapOpen, setMapOpen] = useState(false)
   const profile = getProfile(detected.profileId)
   if (!profile || !settings) return null
@@ -80,6 +86,12 @@ const ControllerCard = memo(function ControllerCard({ detected }: { detected: De
               />
             </Field>
           )}
+          <div className="flex flex-col gap-1 rounded-md bg-surface-1 px-2.5 py-2" data-controller-summary>
+            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-fg-tertiary">{t('pro.midi.controllers.drives')}</span>
+            <ul className="flex flex-col gap-0.5 text-xs text-fg-secondary">
+              {profileSummary(profile, settings.layout, t, overriddenControls(profile, detected.port, mappings)).map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          </div>
           {profile.rgbCapable && (
             <Switch checked={!!settings.rgbLeds} onChange={(rgbLeds) => update({ rgbLeds })} label={t('pro.midi.controllers.rgb')} description={t('pro.midi.controllers.rgbHint')} />
           )}

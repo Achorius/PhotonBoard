@@ -23,7 +23,8 @@ import { useControllerStore, ghostKey, GM_GHOST_KEY, type DetectedController } f
 import { useMidiStore } from '@renderer/stores/midi-store'
 import { useExecutorStore } from '@renderer/stores/executor-store'
 import { mappingMatches } from '@renderer/lib/midi-manager'
-import type { ControlDef, ControlId, ControllerBinding, ControllerProfile, ControllerSettings, LedState } from './controller-types'
+import { sameMidiPort } from '@renderer/lib/midi-learn'
+import type { ControlDef, ControlId, ControllerAction, ControllerBinding, ControllerProfile, ControllerSettings, LedState } from './controller-types'
 import { buildBindings } from './layouts'
 import { effectiveProfile, findOutputPort, matchProfile } from './profiles'
 import { TAKEOVER_TOLERANCE, dmxToMidi, initialTakeover, midiToDmx, needsGhost, rearm, takeover, type TakeoverState } from './takeover'
@@ -241,7 +242,7 @@ function doSync(access: MidiAccessLike | null): void {
     if (!profile || seen.has(name)) continue
     seen.add(name)
     // A device the user already mapped by hand starts with its profile off
-    const handMapped = mappings.some((m) => m.source.deviceName === name)
+    const handMapped = mappings.some((m) => !!m.source.deviceName && sameMidiPort(m.source.deviceName, name))
     const settings = store.ensureSettings(name, {
       profileId: profile.id,
       layout: profile.defaultLayouts[0] ?? 'executors-2pages',
@@ -329,6 +330,26 @@ export function routeControllerMessage(type: MidiSourceType, channel: number, nu
   return true
 }
 
+/** A fader moved but waits to pick up its value (soft takeover) */
+export interface PickupWait {
+  port: string
+  control: ControlDef
+  action: ControllerAction
+  /** Value the fader must reach (0-255) */
+  level: number
+  /** Where the fader is (0-255) */
+  physical: number
+}
+
+let pickupNotifier: ((w: PickupWait) => void) | null = null
+/** port + control already notified since its last pickup / re-arm */
+const pickupNotified = new Set<string>()
+
+/** Called once per fader each time it waits for pickup (the app shows a toast) */
+export function setPickupNotifier(fn: ((w: PickupWait) => void) | null): void {
+  pickupNotifier = fn
+}
+
 function handleFader(c: ControllerRuntime, control: ControlDef, binding: ControllerBinding, raw: number): void {
   const action = binding.action
   const logical = faderLogicalLevel(action)
@@ -339,7 +360,16 @@ function handleFader(c: ControllerRuntime, control: ControlDef, binding: Control
   } else {
     const r = takeover(c.takeover.get(control.id) ?? initialTakeover(), raw, dmxToMidi(logical), TAKEOVER_TOLERANCE)
     c.takeover.set(control.id, r.state)
-    if (r.apply) performFader(action, midiToDmx(raw))
+    const key = `${c.port}\u0000${control.id}`
+    if (r.apply) {
+      pickupNotified.delete(key)
+      performFader(action, midiToDmx(raw))
+    } else if (!pickupNotified.has(key)) {
+      // Tell the operator ONCE why the fader does nothing yet (the ghost on
+      // the on-screen fader shows where it is)
+      pickupNotified.add(key)
+      try { pickupNotifier?.({ port: c.port, control, action, level: logical, physical: midiToDmx(raw) }) } catch (e) { console.error('[MIDI] pickup notice failed:', e) }
+    }
   }
   c.values.set(control.id, raw)
   scheduleGhosts()
@@ -362,6 +392,7 @@ export function handleControllerSysex(data: ArrayLike<number>, deviceName: strin
 
 /** Page change / show load: every column fader must pick up again */
 export function rearmFaders(includeMaster: boolean): void {
+  pickupNotified.clear()
   for (const c of controllers.values()) {
     for (const [id, st] of c.takeover) {
       const b = c.bindingByControl.get(id)
@@ -432,5 +463,7 @@ export function __resetControllersForTests(): void {
   ghostTimer = null
   lastGhostRun = 0
   requestFeedback = () => {}
+  pickupNotifier = null
+  pickupNotified.clear()
 }
 
