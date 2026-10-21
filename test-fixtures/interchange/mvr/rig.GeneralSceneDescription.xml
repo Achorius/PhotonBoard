@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<!-- Hand-written MVR 1.6 scene for PhotonBoard tests (CC0), in the style of a grandMA3 /
+     Vectorworks export: two layers, a group object holding a truss with fixtures in its
+     child list (relative matrices), absolute and "universe.address" DMX addresses, a
+     second DMX break, a GDTF that is not embedded, an unpatched fixture, classes,
+     a position, focus point and scene object. The test zips it together with the two
+     GDTF descriptions of ../gdtf. -->
+<GeneralSceneDescription verMajor="1" verMinor="6" provider="grandMA3" providerVersion="2.1.1.5">
+  <UserData>
+    <Data provider="grandMA3" ver="1"/>
+  </UserData>
+  <Scene>
+    <AUXData>
+      <Class uuid="C1000000-0000-4000-8000-000000000001" name="Lighting-Spots"/>
+      <Class uuid="C1000000-0000-4000-8000-000000000002" name="Lighting-Floor"/>
+      <Position uuid="B1000000-0000-4000-8000-000000000001" name="FOH Position"/>
+      <Symdef uuid="D1000000-0000-4000-8000-000000000001" name="Truss 10m">
+        <ChildList>
+          <Geometry3D fileName="truss.glb"/>
+        </ChildList>
+      </Symdef>
+    </AUXData>
+    <Layers>
+      <Layer name="Rig" uuid="A1000000-0000-4000-8000-000000000001">
+        <Matrix>{1,0,0}{0,1,0}{0,0,1}{0,0,0}</Matrix>
+        <ChildList>
+          <GroupObject name="FOH" uuid="E1000000-0000-4000-8000-000000000001">
+            <Matrix>{1,0,0}{0,1,0}{0,0,1}{0,-6000,0}</Matrix>
+            <ChildList>
+              <Truss name="FOH Truss" uuid="F1000000-0000-4000-8000-000000000001">
+                <Matrix>{1,0,0}{0,1,0}{0,0,1}{-5000,0,7000}</Matrix>
+                <Position>B1000000-0000-4000-8000-000000000001</Position>
+                <Geometries>
+                  <Symbol uuid="F1000000-0000-4000-8000-0000000000aa" symdef="D1000000-0000-4000-8000-000000000001"/>
+                </Geometries>
+                <ChildList>
+                  <Fixture name="Spot 1" uuid="11111111-1111-4111-8111-111111111111">
+                    <Matrix>{1.000000,0.000000,0.000000}{0.000000,0.866025,0.500000}{0.000000,-0.500000,0.866025}{2000,0,-300}</Matrix>
+                    <Classing>C1000000-0000-4000-8000-000000000001</Classing>
+                    <GDTFSpec>PhotonBoard Labs@Test Spot 300.gdtf</GDTFSpec>
+                    <GDTFMode>Standard 16bit</GDTFMode>
+                    <Focus>4A B1 94 62 A6 E3 4C 3B B2 5A D8 09 9F 78 17 0C</Focus>
+                    <Position>B1000000-0000-4000-8000-000000000001</Position>
+                    <Function>Key</Function>
+                    <DMXInvertPan>true</DMXInvertPan>
+                    <Addresses>
+                      <Address break="0">1</Address>
+                      <Address break="1">513</Address>
+                    </Addresses>
+                    <FixtureID>101</FixtureID>
+                    <FixtureIDNumeric>101</FixtureIDNumeric>
+                    <UnitNumber>1</UnitNumber>
+                    <CustomId>0</CustomId>
+                    <Color>0.640000,0.330000,21.260000</Color>
+                    <CustomCommands>
+                      <CustomCommand>Beam_Dimmer.Dimmer.Dimmer,f 50</CustomCommand>
+                    </CustomCommands>
+                  </Fixture>
+                  <Fixture name="Spot 2" uuid="22222222-2222-4222-8222-222222222222">
+                    <Matrix>{1,0,0}{0,1,0}{0,0,1}{8000,0,-300}</Matrix>
+                    <Classing>C1000000-0000-4000-8000-000000000001</Classing>
+                    <GDTFSpec>PhotonBoard Labs@Test Spot 300.gdtf</GDTFSpec>
+                    <GDTFMode>standard 16BIT</GDTFMode>
+                    <Position>B1000000-0000-4000-8000-000000000001</Position>
+                    <Function>Key</Function>
+                    <Addresses>
+                      <Address break="0">1.19</Address>
+                    </Addresses>
+                    <FixtureID>A102</FixtureID>
+                    <UnitNumber>2</UnitNumber>
+                    <Color>0.640000,0.330000,21.260000</Color>
+                  </Fixture>
+                </ChildList>
+              </Truss>
+            </ChildList>
+          </GroupObject>
+          <Fixture name="Floor Wash" uuid="33333333-3333-4333-8333-333333333333">
+            <Matrix>{1,0,0}{0,-0.866025,0.5}{0,-0.5,-0.866025}{0,2000,200}</Matrix>
+            <Classing>C1000000-0000-4000-8000-000000000002</Classing>
+            <GDTFSpec>PhotonBoard Labs@Test Bar 4</GDTFSpec>
+            <GDTFMode>13 channel</GDTFMode>
+            <Addresses>
+              <Address break="0">2.1</Address>
+            </Addresses>
+            <FixtureID>201</FixtureID>
+            <UnitNumber>0</UnitNumber>
+          </Fixture>
+          <Fixture name="Side Light" uuid="44444444-4444-4444-8444-444444444444">
+            <Matrix>{0,-1,0}{0,0,1}{-1,0,0}{-7000,0,3000}</Matrix>
+            <GDTFSpec>Martin@MAC Aura.gdtf</GDTFSpec>
+            <GDTFMode>Standard 14ch</GDTFMode>
+            <Addresses>
+              <Address break="0">1025</Address>
+            </Addresses>
+            <FixtureID>301</FixtureID>
+          </Fixture>
+          <Fixture name="Unpatched PAR" uuid="55555555-5555-4555-8555-555555555555">
+            <Matrix>{1,0,0}{0,1,0}{0,0,1}{1000,1000,5000}</Matrix>
+            <GDTFSpec>Nobody@Mystery Par.gdtf</GDTFSpec>
+            <GDTFMode>3 channel</GDTFMode>
+            <Addresses>
+              <Address break="0">0</Address>
+            </Addresses>
+            <FixtureID>101</FixtureID>
+          </Fixture>
+          <FocusPoint name="Centre" uuid="4AB19462-A6E3-4C3B-B25A-D8099F78170C">
+            <Matrix>{1,0,0}{0,1,0}{0,0,1}{0,0,1700}</Matrix>
+            <Geometries/>
+          </FocusPoint>
+          <SceneObject name="Riser" uuid="66666666-6666-4666-8666-666666666666">
+            <Matrix>{1,0,0}{0,1,0}{0,0,1}{0,4000,0}</Matrix>
+            <Geometries>
+              <Geometry3D fileName="riser.glb"/>
+            </Geometries>
+          </SceneObject>
+        </ChildList>
+      </Layer>
+      <Layer name="Stage" uuid="A1000000-0000-4000-8000-000000000002">
+        <Matrix>{1,0,0}{0,1,0}{0,0,1}{0,0,500}</Matrix>
+        <ChildList>
+          <GroupObject uuid="E1000000-0000-4000-8000-000000000002">
+            <ChildList>
+              <Fixture name="Spot 3" uuid="77777777-7777-4777-8777-777777777777">
+                <Matrix>{1,0,0}{0,1,0}{0,0,1}{0,4000,5500}</Matrix>
+                <GDTFSpec>PhotonBoard Labs@Test Spot 300.gdtf</GDTFSpec>
+                <GDTFMode>Basic 8bit</GDTFMode>
+                <DMXInvertTilt>true</DMXInvertTilt>
+                <Addresses>
+                  <Address break="0">37</Address>
+                </Addresses>
+                <FixtureID>103</FixtureID>
+              </Fixture>
+            </ChildList>
+          </GroupObject>
+        </ChildList>
+      </Layer>
+    </Layers>
+  </Scene>
+</GeneralSceneDescription>
