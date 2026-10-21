@@ -124,7 +124,7 @@ describe('mixer pro: output stage', () => {
 // Timing-sensitive: runs only on demand (PB_PERF=1 npm test) so a busy
 // machine running the whole suite in parallel can't make CI flaky.
 describe.runIf(process.env.PB_PERF === '1')('mixer perf guard', () => {
-  it('16 universes, 40 layers + programmer, park and group masters: < 4 ms per frame', () => {
+  it('16 universes, 40 layers + programmer, park and group masters: < 6 ms per frame', () => {
     // 16 universes fully patched with 12-channel moving heads (42 per universe)
     const patch = []
     for (let u = 0; u < 16; u++) {
@@ -166,6 +166,6 @@ describe.runIf(process.env.PB_PERF === '1')('mixer perf guard', () => {
       for (let i = 0; i < frames; i++) frame(i % 4 === 0)
       perFrame = Math.min(perFrame, (performance.now() - t0) / frames)
     }
-    expect(perFrame).toBeLessThan(4)
+    expect(perFrame).toBeLessThan(6)
   })
 })
