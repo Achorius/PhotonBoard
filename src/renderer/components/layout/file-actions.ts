@@ -10,6 +10,7 @@ import {
   hasUnsavedChanges,
   listShows,
   newShow,
+  openDemoShow,
   openShow,
   openShowByName,
   saveShow,
@@ -51,6 +52,12 @@ export async function requestNewShow(): Promise<void> {
 export async function requestOpenShow(): Promise<void> {
   if (!(await resolveUnsaved(t('file.unsaved.openShow')))) return
   await openShow()
+}
+
+/** File › Open a demo… → a demo show (lib/demos), after the unsaved-changes question */
+export async function requestOpenDemo(id: string, name: string): Promise<boolean> {
+  if (!(await resolveUnsaved(t('file.unsaved.openDemo', { name })))) return false
+  return (await openDemoShow(id, name)).status === 'ok'
 }
 
 export async function requestOpenShowByName(name: string): Promise<void> {

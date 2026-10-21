@@ -21,6 +21,7 @@ import { closeImportWizard, setMergeOptions, useInterchangeStore } from './inter
 import { applyImport, errorText, importFile, loadFormats, pickAnotherFile, warningText } from './interchange-actions'
 import { formatName } from './format-names'
 import { CsvMapping } from './CsvMapping'
+import { ExampleFiles, ExampleFilesLink } from './ExampleFiles'
 
 const ORIGIN_TONE: Record<FixtureTypeOrigin, 'go' | 'info' | 'accent' | 'warning' | 'danger'> = {
   library: 'go', catalog: 'info', file: 'accent', generic: 'warning', missing: 'danger'
@@ -120,13 +121,21 @@ function ImportButton({ busy }: { busy: boolean }) {
 
 function PickStep({ onChoose }: { onChoose: () => void }) {
   const t = useT()
+  // Example files shipped with the app (console): picked in place
+  const [examples, setExamples] = useState(false)
+  if (examples) return <ExampleFiles onBack={() => setExamples(false)} />
   return (
     <>
       <EmptyState
         icon={LuFileInput}
         title={t('interchange.wizard.pickTitle')}
         description={<>{t('interchange.wizard.pickDescription')} {t('interchange.wizard.dropHint')}</>}
-        action={<Button variant="primary" size="lg" icon={LuFiles} onClick={onChoose}>{t('interchange.wizard.chooseFile')}</Button>}
+        action={
+          <div className="flex flex-col items-center gap-2">
+            <Button variant="primary" size="lg" icon={LuFiles} onClick={onChoose}>{t('interchange.wizard.chooseFile')}</Button>
+            <ExampleFilesLink onOpen={() => setExamples(true)} />
+          </div>
+        }
       />
       <SupportedFormats />
     </>

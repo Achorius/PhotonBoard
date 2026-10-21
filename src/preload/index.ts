@@ -9,7 +9,7 @@ export type { PhotonBoardAPI } from '../shared/photonboard-api'
 const menuHandlers: Record<string, () => void> = {}
 
 // Register IPC listeners ONCE in preload, route to current handler
-for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load', 'menu:undo', 'menu:redo', 'menu:import', 'menu:export']) {
+for (const channel of ['menu:new', 'menu:save', 'menu:save-as', 'menu:load', 'menu:undo', 'menu:redo', 'menu:import', 'menu:export', 'menu:open-demo']) {
   ipcRenderer.on(channel, () => {
     const handler = menuHandlers[channel]
     if (handler) handler()
@@ -139,6 +139,14 @@ const api: PhotonBoardAPI = {
       try { return webUtils.getPathForFile(file) || null } catch { return null }
     },
     maxDataSize: 256 * 1024 * 1024
+  },
+
+  // --- Demo content (resources/demos) ---
+  demos: {
+    list: () =>
+      ipcRenderer.invoke(IPC.DEMOS_LIST),
+    open: (id) =>
+      ipcRenderer.invoke(IPC.DEMOS_OPEN, id)
   },
 
   // --- Menu event listeners (replaces handler, guarantees single callback) ---

@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PhotonBoard example file (hand-made, fictitious, free to use).
+     Shows the structure of grandMA3 XML exports (patch, Group, Preset, Sequence with cue parts, Macro)
+     in one file so that the import wizard can show everything PhotonBoard reads from them.
+     A real grandMA3 writes one object type per file (pool "Export" buttons / the Export command).
+     Not derived from any console show file. -->
+<GMA3 DataVersion="2.1.1.5">
+    <Patch>
+        <FixtureTypes>
+            <FixtureType Name="Demo LED Cyc" ShortName="LEDCyc" Manufacturer="PhotonBoard Demo">
+                <DMXModes>
+                    <DMXMode Name="RGBW" Geometry="Body">
+                        <DMXChannels>
+                            <DMXChannel Coarse="1" Default="000000">
+                                <LogicalChannel Attribute="Dimmer" Master="Grand"><ChannelFunction Attribute="Dimmer" /></LogicalChannel>
+                            </DMXChannel>
+                            <DMXChannel Coarse="2"><LogicalChannel Attribute="ColorAdd_R"><ChannelFunction Attribute="ColorAdd_R" /></LogicalChannel></DMXChannel>
+                            <DMXChannel Coarse="3"><LogicalChannel Attribute="ColorAdd_G"><ChannelFunction Attribute="ColorAdd_G" /></LogicalChannel></DMXChannel>
+                            <DMXChannel Coarse="4"><LogicalChannel Attribute="ColorAdd_B"><ChannelFunction Attribute="ColorAdd_B" /></LogicalChannel></DMXChannel>
+                            <DMXChannel Coarse="5"><LogicalChannel Attribute="ColorAdd_W"><ChannelFunction Attribute="ColorAdd_W" /></LogicalChannel></DMXChannel>
+                        </DMXChannels>
+                    </DMXMode>
+                </DMXModes>
+            </FixtureType>
+        </FixtureTypes>
+        <Stages>
+            <Stage Name="Theatre">
+                <Fixtures>
+                    <Fixture Name="Face 1" FID="1" IDType="Fixture" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="1.001" PosX="-3" PosY="-6" PosZ="6.8" />
+                    <Fixture Name="Face 2" FID="2" IDType="Fixture" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="1.002" PosX="-1" PosY="-6" PosZ="6.8" />
+                    <Fixture Name="Face 3" FID="3" IDType="Fixture" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="1.003" PosX="1" PosY="-6" PosZ="6.8" />
+                    <Fixture Name="Face 4" FID="4" IDType="Fixture" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="1.004" PosX="3" PosY="-6" PosZ="6.8" />
+                    <Fixture Name="Contre 1" FID="11" IDType="Fixture" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="1.011" PosX="-2" PosY="2.5" PosZ="6.8" />
+                    <Fixture Name="Contre 2" FID="12" IDType="Fixture" FixtureType="Generic@Dimmer" Mode="Mode 0" Patch="1.012" PosX="2" PosY="2.5" PosZ="6.8" />
+                    <Fixture Name="Cyc 1" FID="21" IDType="Fixture" FixtureType="1 Demo LED Cyc" Mode="RGBW" Patch="1.021" PosX="-3" PosY="4.2" PosZ="0.1" />
+                    <Fixture Name="Cyc 2" FID="22" IDType="Fixture" FixtureType="1 Demo LED Cyc" Mode="RGBW" Patch="1.026" PosX="0" PosY="4.2" PosZ="0.1" />
+                    <Fixture Name="Cyc 3" FID="23" IDType="Fixture" FixtureType="1 Demo LED Cyc" Mode="RGBW" Patch="1.031" PosX="3" PosY="4.2" PosZ="0.1" />
+                </Fixtures>
+            </Stage>
+        </Stages>
+    </Patch>
+    <Group Name="Face" Guid="5A 10 00 01 00 00 00 00 00 00 00 00 00 00 00 01">
+        <SelectionData Size="4">
+            <Item IDType="0" ID="1" X="0" Y="0" Z="0" />
+            <Item IDType="0" ID="2" X="1" Y="0" Z="0" />
+            <Item IDType="0" ID="3" X="2" Y="0" Z="0" />
+            <Item IDType="0" ID="4" X="3" Y="0" Z="0" />
+        </SelectionData>
+    </Group>
+    <Preset Name="Ciel bleu" No="4.1" PresetModeInternal="Selective">
+        <PresetData Size="6">
+            <Phaser IDType="0" ID="21" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="30" /></Phaser>
+            <Phaser IDType="0" ID="21" Attribute="ColorAdd_B"><Step Function="ColorAdd_B" Absolute="100" /></Phaser>
+            <Phaser IDType="0" ID="22" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="30" /></Phaser>
+            <Phaser IDType="0" ID="22" Attribute="ColorAdd_B"><Step Function="ColorAdd_B" Absolute="100" /></Phaser>
+            <Phaser IDType="0" ID="23" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="30" /></Phaser>
+            <Phaser IDType="0" ID="23" Attribute="ColorAdd_B"><Step Function="ColorAdd_B" Absolute="100" /></Phaser>
+        </PresetData>
+    </Preset>
+    <Preset Name="Coucher de soleil" No="4.2" PresetModeInternal="Selective">
+        <PresetData Size="6">
+            <Phaser IDType="0" ID="21" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+            <Phaser IDType="0" ID="21" Attribute="ColorAdd_G"><Step Function="ColorAdd_G" Absolute="30" /></Phaser>
+            <Phaser IDType="0" ID="22" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+            <Phaser IDType="0" ID="22" Attribute="ColorAdd_G"><Step Function="ColorAdd_G" Absolute="30" /></Phaser>
+            <Phaser IDType="0" ID="23" Attribute="ColorAdd_R"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+            <Phaser IDType="0" ID="23" Attribute="ColorAdd_G"><Step Function="ColorAdd_G" Absolute="30" /></Phaser>
+        </PresetData>
+    </Preset>
+    <Sequence Name="Conduite" Guid="5A 10 00 02 00 00 00 00 00 00 00 00 00 00 00 01" Tracking="Yes" WrapAround="No" Priority="Normal">
+        <Cue Name="OffCue" Release="Yes" Assert="Assert">
+            <Part Guid="5A 10 00 02 00 00 00 00 00 00 00 00 00 00 00 02" Mode="0" Action="Pool Default" />
+        </Cue>
+        <Cue Name="CueZero" No="  0">
+            <Part Guid="5A 10 00 02 00 00 00 00 00 00 00 00 00 00 00 03" Mode="0" Action="Pool Default" />
+        </Cue>
+        <Cue Name="Ouverture" No="  1">
+            <Part Name="Face" Part="0" CueInFade="4.000" CueOutFade="4.000">
+                <Phaser IDType="0" ID="1" Attribute="Dimmer"><Step Function="Dimmer" Absolute="70" /></Phaser>
+                <Phaser IDType="0" ID="2" Attribute="Dimmer"><Step Function="Dimmer" Absolute="70" /></Phaser>
+                <Phaser IDType="0" ID="3" Attribute="Dimmer"><Step Function="Dimmer" Absolute="70" /></Phaser>
+                <Phaser IDType="0" ID="4" Attribute="Dimmer"><Step Function="Dimmer" Absolute="70" /></Phaser>
+            </Part>
+            <Part Name="Cyclo" Part="1" CueInFade="6.000" CueInDelay="2.000">
+                <Phaser IDType="0" ID="21" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="22" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="23" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="21" Attribute="ColorAdd_B" AbsPreset="4.1"><Step Function="ColorAdd_B" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="22" Attribute="ColorAdd_B" AbsPreset="4.1"><Step Function="ColorAdd_B" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="23" Attribute="ColorAdd_B" AbsPreset="4.1"><Step Function="ColorAdd_B" Absolute="100" /></Phaser>
+            </Part>
+        </Cue>
+        <Cue Name="Soir" No="  2">
+            <Part Part="0" CueInFade="8.000" Preset4Fade="10.000">
+                <Phaser IDType="0" ID="11" Attribute="Dimmer"><Step Function="Dimmer" Absolute="80" /></Phaser>
+                <Phaser IDType="0" ID="12" Attribute="Dimmer"><Step Function="Dimmer" Absolute="80" /></Phaser>
+                <Phaser IDType="0" ID="21" Attribute="ColorAdd_R" AbsPreset="4.2"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="22" Attribute="ColorAdd_R" AbsPreset="4.2"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="23" Attribute="ColorAdd_R" AbsPreset="4.2"><Step Function="ColorAdd_R" Absolute="100" /></Phaser>
+            </Part>
+        </Cue>
+        <Cue Name="Saluts" No="  3" TrigType="Follow">
+            <Part Part="0" CueInFade="2.000">
+                <Phaser IDType="0" ID="1" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="2" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="3" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+                <Phaser IDType="0" ID="4" Attribute="Dimmer"><Step Function="Dimmer" Absolute="100" /></Phaser>
+            </Part>
+        </Cue>
+        <Cue Name="Noir" No="  4">
+            <Part Part="0" CueInFade="3.000">
+                <Phaser IDType="0" ID="1" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="2" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="3" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="4" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="11" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="12" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="21" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="22" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+                <Phaser IDType="0" ID="23" Attribute="Dimmer"><Step Function="Dimmer" Absolute="0" /></Phaser>
+            </Part>
+        </Cue>
+    </Sequence>
+    <Macro Name="Début" Guid="5A 10 00 03 00 00 00 00 00 00 00 00 00 00 00 01">
+        <MacroLine Command="Go Sequence 1" />
+        <MacroLine Command="Fixture 21 Thru 23 At Full" Wait="1" />
+    </Macro>
+</GMA3>

@@ -54,6 +54,17 @@ qui bloque les apps non certifiées Apple.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  POUR DÉCOUVRIR (démos incluses)
+
+  - Fichier › Ouvrir une démo… : trois shows fictifs prêts à
+    jouer (Club Night, Théâtre – soirée simple, Concert Pro).
+    La démo s'ouvre comme un nouveau show : rien n'est modifié.
+  - Fichier › Importer… › « Essayer avec un fichier exemple » :
+    un fichier par format importable (MVR, QLC+, USITT, CSV,
+    GDTF, grandMA2 / grandMA3 XML).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
   EN CAS DE PROBLÈME
 
   - macOS 11 (Big Sur) ou plus récent requis
