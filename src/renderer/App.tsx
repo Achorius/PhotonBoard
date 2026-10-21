@@ -6,6 +6,7 @@ import { initMidiRouting } from './lib/midi-manager'
 import { startFollowGamepadLoop } from './stores/follow-store'
 import { installUsbWatch } from './lib/usb-sticks'
 import { UsbModal } from './components/file/UsbModal'
+import { InterchangeHost } from './components/interchange/InterchangeHost'
 import { Toolbar } from './components/layout/Toolbar'
 import { NavRail } from './components/layout/NavRail'
 import { StatusBar } from './components/layout/StatusBar'
@@ -235,6 +236,7 @@ export default function App() {
       {executorBarOpen && <ExecutorBar />}
       <StatusBar />
       {!isRemoteMode() && <UsbModal />}
+      <InterchangeHost />
       {overlays}
     </div>
   )
