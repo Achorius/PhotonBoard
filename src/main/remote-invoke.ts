@@ -27,6 +27,7 @@ import { isWebRemoteCommandType } from '../shared/remote-commands'
 import type { ShowFile } from '../shared/types'
 import type { ShowLoadResult, ShowSaveResult, RemoteStatus } from '../shared/photonboard-api'
 import { mt } from './messages'
+import type { InterchangeHost } from './interchange'
 
 export interface RemoteInvokeDeps {
   dmxEngine: DmxEngine
@@ -51,7 +52,15 @@ export interface RemoteInvokeDeps {
     list: (refresh: boolean) => Promise<unknown>
     eject: (drivePath: unknown) => Promise<unknown>
   }
+  /** Import / export of other software's files (absent: unavailable on the remote) */
+  interchange?: InterchangeHost
 }
+
+/**
+ * Largest file a remote may upload for import: the bytes travel as base64
+ * inside one WebSocket message (web-server MAX_WS_MESSAGE_SIZE ≈ 20 MB).
+ */
+export const MAX_REMOTE_IMPORT_SIZE = 14 * 1024 * 1024
 
 /** Thrown for bad input: the message is returned to the client as the error */
 export class RemoteInputError extends Error {}
@@ -269,6 +278,42 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
         if (!isCatalogId(args[0])) throw new RemoteInputError('Invalid fixture ID')
         if (!deps.fixtureCatalog) throw new RemoteInputError('The offline fixture library is not available')
         return installCatalogFixture(deps.fixtureCatalog, showManager, args[0])
+
+      // Interchange: the remote uploads the file's bytes (base64) and downloads exports
+      case IPC.INTERCHANGE_FORMATS:
+        if (!deps.interchange) return { importers: [], exporters: [], recognised: [] }
+        return deps.interchange.listFormats()
+      case IPC.INTERCHANGE_IMPORT:
+        return JSON.stringify({ success: false, errorCode: 'remoteNoDialog', error: 'Pick a file on this device to import it' })
+      case IPC.INTERCHANGE_IMPORT_DATA: {
+        if (!deps.interchange) throw new RemoteInputError('Import is not available on this console')
+        const [fileName, data, rawOpts] = args
+        if (typeof fileName !== 'string' || fileName.length === 0 || fileName.length > 255) throw new RemoteInputError('Invalid file name')
+        if (typeof data !== 'string' || data.length > Math.ceil(MAX_REMOTE_IMPORT_SIZE / 3) * 4 + 4) {
+          return JSON.stringify({ success: false, errorCode: 'tooLargeRemote', error: 'The file is too large to send from the remote' })
+        }
+        const opts = optionsArg(rawOpts)
+        const bytes = Buffer.from(data, 'base64')
+        const result = await deps.interchange.importBytes(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), fileName, {
+          format: typeof opts.format === 'string' ? opts.format : undefined,
+          options: isPlainObject(opts.options) ? opts.options : undefined
+        })
+        return JSON.stringify(result)
+      }
+      case IPC.INTERCHANGE_EXPORT:
+        return { success: false, error: 'Use the download on the remote' }
+      case IPC.INTERCHANGE_EXPORT_DATA: {
+        if (!deps.interchange) throw new RemoteInputError('Export is not available on this console')
+        let req: unknown = args[0]
+        if (typeof req === 'string') {
+          if (req.length > MAX_SHOW_FILE_SIZE * 2) throw new RemoteInputError('Export request is too large')
+          try { req = JSON.parse(req) } catch { throw new RemoteInputError('Invalid export request') }
+        }
+        if (!isPlainObject(req) || typeof req.format !== 'string') throw new RemoteInputError('Invalid export request')
+        const out = await deps.interchange.exportShow(req.format, req.show, req.fixtures)
+        if (!out.success) return out
+        return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
+      }
 
       // App
       case IPC.APP_GET_VERSION:

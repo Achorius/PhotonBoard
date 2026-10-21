@@ -19,6 +19,7 @@ import type {
   ShowFile
 } from './types'
 import type { CurrentShowContent } from './remote-commands'
+import type { ImportOptions, ImportResult, ImportWarning, InterchangeFormatInfo } from './interchange'
 
 /** Every `on*` listener returns this; call it to remove the listener. */
 export type Unsubscribe = () => void
@@ -175,6 +176,46 @@ export interface StrobeChop {
   channels: Record<number, number[]>
 }
 
+/** Formats the console reads / writes (interchange) */
+export interface InterchangeFormatList {
+  importers: InterchangeFormatInfo[]
+  exporters: InterchangeFormatInfo[]
+  /** Closed formats recognised (the wizard explains how to export them) */
+  recognised: { key: string; app: string; extensions: string[] }[]
+}
+
+/** An import result with the file it came from (re-run with options: CSV column mapping) */
+export type InterchangeImportResult = ImportResult & { fileName?: string; path?: string }
+
+export interface InterchangeImportRequest {
+  /** Electron: import this file; omitted = open dialog */
+  path?: string
+  /** Open dialog: start in this folder (a USB stick) */
+  startDir?: string
+  format?: string
+  options?: ImportOptions
+}
+
+export interface InterchangeExportRequest {
+  format: string
+  show: ShowFile
+  /** Definitions of every fixture type the show uses */
+  fixtures: FixtureDefinition[]
+}
+
+export interface InterchangeExportResult {
+  success: boolean
+  canceled?: boolean
+  error?: string
+  errorCode?: string
+  /** Electron: where the file was written */
+  path?: string
+  /** Remote: suggested file name and content (base64) for the browser download */
+  fileName?: string
+  data?: string
+  warnings?: ImportWarning[]
+}
+
 export interface PhotonBoardAPI {
   dmx: {
     setChannel(universe: number, channel: number, value: number): void
@@ -288,6 +329,24 @@ export interface PhotonBoardAPI {
     saveCopy(drivePath: string, show: ShowFile, opts?: { overwrite?: boolean }): Promise<ShowSaveResult>
     /** Flush and unmount: the stick can be pulled out */
     eject(drivePath: string): Promise<SimpleResult>
+  }
+
+  /**
+   * Import / export of other software's files (MVR, GDTF, QLC+, grandMA XML,
+   * USITT ASCII, CSV, .pbshow…). Optional: older bridges.
+   */
+  interchange?: {
+    formats(): Promise<InterchangeFormatList>
+    /** Electron: import `path`, or ask with the open dialog. Remote: unsupported (use importData). */
+    importFile(req?: InterchangeImportRequest): Promise<InterchangeImportResult>
+    /** Import file bytes read by the UI (browser upload / drop) */
+    importData(fileName: string, data: Uint8Array, opts?: { format?: string; options?: ImportOptions }): Promise<InterchangeImportResult>
+    /** Electron: save dialog + write. Remote: returns the bytes for a browser download. */
+    exportShow(req: InterchangeExportRequest): Promise<InterchangeExportResult>
+    /** Electron only: path of a dropped file (null when unknown) */
+    pathForFile?(file: File): string | null
+    /** Largest file importData accepts on this bridge (bytes) */
+    maxDataSize: number
   }
 
   stage: {

@@ -37,7 +37,10 @@ const EN = {
   allFiles: 'All files',
   usbNotOnStick: 'This file is not on a connected USB stick.',
   usbFull: 'The USB stick is full.',
-  usbReadOnly: 'The USB stick is read-only (or write-protected).'
+  usbReadOnly: 'The USB stick is read-only (or write-protected).',
+  interchangeFilterAll: 'All supported formats',
+  interchangeImportTitle: 'Import a show, patch or fixture file',
+  interchangeExportTitle: 'Export the show'
 } as const
 
 export type MainMessageKey = keyof typeof EN
@@ -69,7 +72,10 @@ const FR: Record<MainMessageKey, string> = {
   allFiles: 'Tous les fichiers',
   usbNotOnStick: 'Ce fichier n’est pas sur une clé USB branchée.',
   usbFull: 'La clé USB est pleine.',
-  usbReadOnly: 'La clé USB est en lecture seule (ou protégée en écriture).'
+  usbReadOnly: 'La clé USB est en lecture seule (ou protégée en écriture).',
+  interchangeFilterAll: 'Tous les formats pris en charge',
+  interchangeImportTitle: 'Importer un show, un patch ou un projecteur',
+  interchangeExportTitle: 'Exporter le show'
 }
 
 const MESSAGES: Record<MainLanguage, Record<MainMessageKey, string>> = { en: EN, fr: FR }

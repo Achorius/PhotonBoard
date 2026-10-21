@@ -22,7 +22,9 @@ import type {
   ShowExecutorLayout,
   ShowFile,
   ShowTimeline,
-  Macro
+  Macro,
+  SpeedMaster,
+  StagePage
 } from './types'
 
 /** Stable importer / exporter ids */
@@ -104,7 +106,58 @@ export interface ImportedShowFragment {
   timeline?: ShowTimeline
   executor?: ShowExecutorLayout
   roomConfig?: RoomConfig
+  /** Additive (host): speed masters referenced by cuelists / chases / effects / executor cells */
+  speedMasters?: SpeedMaster[]
+  /** Additive (host): touch pages (merged with the executors) */
+  stagePages?: StagePage[]
+  /** Additive (host): table-shaped sources (CSV): columns found, for the wizard's column-mapping step */
+  tabular?: TabularImportInfo
   warnings: ImportWarning[]
+}
+
+/** Fields a column of a patch table can map to (CSV import) */
+export type TabularField =
+  | 'fid'
+  | 'name'
+  | 'manufacturer'
+  | 'model'
+  | 'fixtureType'
+  | 'mode'
+  | 'channels'
+  | 'universe'
+  | 'address'
+  | 'x'
+  | 'y'
+  | 'z'
+  | 'rotX'
+  | 'rotY'
+  | 'rotZ'
+  | 'groups'
+  | 'position'
+
+/** What a table import found (returned with the fragment) */
+export interface TabularImportInfo {
+  delimiter: ',' | ';' | '\t'
+  hasHeader: boolean
+  /** Header cells (or "Column n" when there is no header row) */
+  headers: string[]
+  /** Field of each column (null = ignored) */
+  columns: (TabularField | null)[]
+  /** First data rows (max 8), for the preview */
+  sample: string[][]
+  rowCount: number
+  /** False when the column detection is unsure: the wizard asks the operator to check the mapping */
+  confident: boolean
+}
+
+/** Options the operator chose in the wizard; passed to importers through ImportContext.options */
+export interface ImportOptions {
+  tabular?: {
+    delimiter?: ',' | ';' | '\t'
+    hasHeader?: boolean
+    /** Field of each column (null = ignored) */
+    columns?: (TabularField | null)[]
+  }
 }
 
 export interface ImportRequest {
@@ -112,6 +165,8 @@ export interface ImportRequest {
   path: string
   /** Force a format instead of auto-detection */
   format?: InterchangeFormatId
+  /** Additive: operator choices (CSV column mapping…) */
+  options?: ImportOptions
 }
 
 export type ImportResult =
@@ -167,6 +222,8 @@ export interface ImportContext {
   parseGdtf(bytes: Uint8Array, fileName: string): Promise<FixtureDefinition | null>
   /** Parse an embedded QLC+ fixture definition (XML text) */
   parseQxf(xml: string, fileName: string): Promise<FixtureDefinition | null>
+  /** Additive: operator choices for this import (CSV column mapping…); absent on the first pass */
+  options?: ImportOptions
 }
 
 export interface Importer {

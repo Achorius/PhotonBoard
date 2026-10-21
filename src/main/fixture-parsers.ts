@@ -136,7 +136,15 @@ export function parseGDTF(filePath: string): FixtureDefinition {
     throw new Error(`GDTF file too large: ${(fileStats.size / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
   }
 
-  const zip = new AdmZip(filePath)
+  return parseGDTFBuffer(readFileSync(filePath))
+}
+
+/** A GDTF archive already in memory (embedded in an MVR, uploaded…) */
+export function parseGDTFBuffer(data: Buffer): FixtureDefinition {
+  if (data.length > MAX_FIXTURE_FILE_SIZE) {
+    throw new Error(`GDTF file too large: ${(data.length / 1024 / 1024).toFixed(1)} MB (max ${MAX_FIXTURE_FILE_SIZE / 1024 / 1024} MB)`)
+  }
+  const zip = new AdmZip(data)
   const descEntry = zip.getEntry('description.xml')
   if (!descEntry) throw new Error('Invalid GDTF file: missing description.xml')
 
