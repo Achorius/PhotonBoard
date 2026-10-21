@@ -972,6 +972,11 @@ export const IPC = {
   /** One fixture type, bytes returned to the UI (remote download) */
   INTERCHANGE_EXPORT_FIXTURE_DATA: 'interchange:export-fixture-data',
 
+  // Demo content shipped with the app (resources/demos) — console only
+  DEMOS_LIST: 'demos:list',
+  /** A demo show by id, as a new unsaved show */
+  DEMOS_OPEN: 'demos:open',
+
   // Remote access (Electron only — never reachable from remote clients)
   REMOTE_GET_SETTINGS: 'remote:get-settings',
   REMOTE_SET_SETTINGS: 'remote:set-settings',

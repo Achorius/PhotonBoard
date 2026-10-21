@@ -10,6 +10,8 @@ leave PhotonBoard at any time. The exact list on your machine is in **Settings �
 ## Importing
 
 **File › Import…** (Mod+I), **drop a file on the window**, or **USB stick › Import from this stick…**
+No file at hand? The wizard's first step has **Try with an example file**: one file per format, shipped with the
+app (`resources/demos/formats`, made from the demo shows of **File › Open a demo…**).
 
 1. PhotonBoard detects the format (content first, extension second) and reads the file.
 2. The wizard shows what it found: fixture types (and where each comes from: *your library*, the *offline
@@ -97,6 +99,8 @@ peut quitter PhotonBoard à tout moment. La liste exacte est dans **Réglages �
 ## Importer
 
 **Fichier › Importer…** (Mod+I), **déposer un fichier sur la fenêtre**, ou **Clé USB › Importer depuis cette clé…**
+Pas de fichier sous la main ? La première étape de l’assistant propose **Essayer avec un fichier exemple** : un fichier
+par format, livré avec l’application (`resources/demos/formats`, fait à partir des démos de **Fichier › Ouvrir une démo…**).
 
 1. PhotonBoard détecte le format (d’abord le contenu, puis l’extension) et lit le fichier.
 2. L’assistant montre ce qu’il a trouvé : types de projecteurs (et leur provenance : *votre bibliothèque*, la

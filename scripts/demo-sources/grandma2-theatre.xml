@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PhotonBoard example file (hand-made, fictitious, free to use).
+     Shows the structure of grandMA2 XML exports (fixture layer, Group, Preset, Sequ, Effect) in one
+     file so that the import wizard can show everything PhotonBoard reads from them. A real grandMA2
+     writes one object type per file (Export command). Not derived from any console show file. -->
+<MA xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.malighting.de/grandma2/xml/MA" xsi:schemaLocation="http://schemas.malighting.de/grandma2/xml/MA http://schemas.malighting.de/grandma2/xml/3.9.60/MA.xsd" major_vers="3" minor_vers="9" stream_vers="60">
+	<Info datetime="2026-10-01T20:00:00" showfile="photonboard_demo" />
+	<Layer index="1" name="Theatre">
+		<Fixture index="0" name="Face 1" fixture_id="1">
+			<FixtureType name="1 Dimmer 00"><No>1</No></FixtureType>
+			<SubFixture index="0" react_to_grandmaster="true" color="ffffff">
+				<Patch><Address>1</Address></Patch>
+				<AbsolutePosition><Location x="-3" y="-6" z="6.8" /><Rotation x="0" y="0" z="0" /><Scaling x="1" y="1" z="1" /></AbsolutePosition>
+				<Channel index="0" />
+			</SubFixture>
+		</Fixture>
+		<Fixture index="1" name="Face 2" fixture_id="2">
+			<FixtureType name="1 Dimmer 00"><No>1</No></FixtureType>
+			<SubFixture index="0" react_to_grandmaster="true" color="ffffff">
+				<Patch><Address>2</Address></Patch>
+				<AbsolutePosition><Location x="-1" y="-6" z="6.8" /><Rotation x="0" y="0" z="0" /><Scaling x="1" y="1" z="1" /></AbsolutePosition>
+				<Channel index="0" />
+			</SubFixture>
+		</Fixture>
+		<Fixture index="2" name="Face 3" fixture_id="3">
+			<FixtureType name="1 Dimmer 00"><No>1</No></FixtureType>
+			<SubFixture index="0" react_to_grandmaster="true" color="ffffff">
+				<Patch><Address>3</Address></Patch>
+				<AbsolutePosition><Location x="1" y="-6" z="6.8" /><Rotation x="0" y="0" z="0" /><Scaling x="1" y="1" z="1" /></AbsolutePosition>
+				<Channel index="0" />
+			</SubFixture>
+		</Fixture>
+		<Fixture index="3" name="Face 4" fixture_id="4">
+			<FixtureType name="1 Dimmer 00"><No>1</No></FixtureType>
+			<SubFixture index="0" react_to_grandmaster="true" color="ffffff">
+				<Patch><Address>4</Address></Patch>
+				<AbsolutePosition><Location x="3" y="-6" z="6.8" /><Rotation x="0" y="0" z="0" /><Scaling x="1" y="1" z="1" /></AbsolutePosition>
+				<Channel index="0" />
+			</SubFixture>
+		</Fixture>
+		<Fixture index="4" name="Contre 1" fixture_id="11">
+			<FixtureType name="1 Dimmer 00"><No>1</No></FixtureType>
+			<SubFixture index="0" react_to_grandmaster="true" color="ffffff">
+				<Patch><Address>11</Address></Patch>
+				<AbsolutePosition><Location x="-2" y="2.5" z="6.8" /><Rotation x="0" y="0" z="0" /><Scaling x="1" y="1" z="1" /></AbsolutePosition>
+				<Channel index="0" />
+			</SubFixture>
+		</Fixture>
+		<Fixture index="5" name="Contre 2" fixture_id="12">
+			<FixtureType name="1 Dimmer 00"><No>1</No></FixtureType>
+			<SubFixture index="0" react_to_grandmaster="true" color="ffffff">
+				<Patch><Address>12</Address></Patch>
+				<AbsolutePosition><Location x="2" y="2.5" z="6.8" /><Rotation x="0" y="0" z="0" /><Scaling x="1" y="1" z="1" /></AbsolutePosition>
+				<Channel index="0" />
+			</SubFixture>
+		</Fixture>
+	</Layer>
+	<Group index="1" name="Face">
+		<Subfixtures>
+			<Subfixture fix_id="1" />
+			<Subfixture fix_id="2" />
+			<Subfixture fix_id="3" />
+			<Subfixture fix_id="4" />
+		</Subfixtures>
+	</Group>
+	<Preset index="1" name="Face 70%" SpecialUse="Normal">
+		<Values>
+			<Channels>
+				<PresetValue Value="70"><Channel fixture_id="1" attribute_name="DIM" /></PresetValue>
+				<PresetValue Value="70"><Channel fixture_id="2" attribute_name="DIM" /></PresetValue>
+				<PresetValue Value="70"><Channel fixture_id="3" attribute_name="DIM" /></PresetValue>
+				<PresetValue Value="70"><Channel fixture_id="4" attribute_name="DIM" /></PresetValue>
+			</Channels>
+		</Values>
+	</Preset>
+	<Sequ index="1" name="Conduite" timecode_slot="255" forced_position_mode="0">
+		<Cue xsi:nil="true" />
+		<Cue index="1">
+			<Number number="1" sub_number="0" />
+			<CueDatas>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="1" attribute_name="DIM" /><Value>70</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="2" attribute_name="DIM" /><Value>70</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="3" attribute_name="DIM" /><Value>70</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="4" attribute_name="DIM" /><Value>70</Value></CueData>
+			</CueDatas>
+			<CuePart index="0" name="Ouverture" basic_fade="4" basic_outfade="4" />
+		</Cue>
+		<Cue index="2">
+			<Number number="2" sub_number="0" />
+			<CueDatas>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="11" attribute_name="DIM" /><Value>80</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="12" attribute_name="DIM" /><Value>80</Value></CueData>
+				<CueData value_multipart_index="1" effect_multipart_index="0"><Channel fixture_id="1" attribute_name="DIM" /><Value>40</Value></CueData>
+				<CueData value_multipart_index="1" effect_multipart_index="0"><Channel fixture_id="4" attribute_name="DIM" /><Value>40</Value></CueData>
+			</CueDatas>
+			<CuePart index="0" name="Contres" basic_fade="6" />
+			<CuePart index="1" name="Face basse" basic_fade="8" basic_delay="2" />
+		</Cue>
+		<Cue index="3" trig="Follow">
+			<Number number="2" sub_number="500" />
+			<CueDatas>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="1" attribute_name="DIM" /><Value>100</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="4" attribute_name="DIM" /><Value>100</Value></CueData>
+			</CueDatas>
+			<CuePart index="0" name="Saluts" basic_fade="2" />
+		</Cue>
+		<Cue index="4">
+			<Number number="3" sub_number="0" />
+			<CueDatas>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="1" attribute_name="DIM" /><Value>0</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="2" attribute_name="DIM" /><Value>0</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="3" attribute_name="DIM" /><Value>0</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="4" attribute_name="DIM" /><Value>0</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="11" attribute_name="DIM" /><Value>0</Value></CueData>
+				<CueData value_multipart_index="0" effect_multipart_index="0"><Channel fixture_id="12" attribute_name="DIM" /><Value>0</Value></CueData>
+			</CueDatas>
+			<CuePart index="0" name="Noir" basic_fade="3" />
+		</Cue>
+	</Sequ>
+	<Effect index="1" name="Respiration face">
+		<Forms>
+			<Form index="1" name="Sin" display_2d="false" />
+		</Forms>
+		<Effectline index="0" attribute="DIM" blocks="0" groups="0" wings="0" rate="1" v1_a="20" v1_b="20" v2_a="80" v2_b="80" phase_a="0" phase_b="360" width_a="100" width_b="100">
+			<flags absolute_mode="true" form_index="1" sub_form_index="0" />
+			<Fixtures>
+				<Fixture>1</Fixture>
+				<Fixture>2</Fixture>
+				<Fixture>3</Fixture>
+				<Fixture>4</Fixture>
+			</Fixtures>
+		</Effectline>
+	</Effect>
+</MA>

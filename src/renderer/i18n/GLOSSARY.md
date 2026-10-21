@@ -118,6 +118,7 @@ Canal…) sont **à réutiliser** : `t('common.scene')`, `t('common.fixtureCount
 | Beam angle / aperture | **ouverture** | « Ouverture du faisceau ». |
 | Truss | **pont** | (voir plus haut) ; nom par défaut d'un pont créé : « Pont 1 », « Pont 2 »… |
 | Offline catalog | **Catalogue (hors ligne)** | Catalogue de projecteurs embarqué (Pi sans réseau). |
+| Demo (show) / example file | **démo** (« Ouvrir une démo… ») / **fichier exemple** | Contenu livré avec l'application (`resources/demos`) ; sur le Pi, dossier `Documents/PhotonBoard/Démos`. |
 | Merge mode (HTP / LTP) | **Fusion (HTP / LTP)** | HTP / LTP restent en anglais. |
 | Pan / Tilt range | **Course pan / tilt** | « Course » = amplitude mécanique. |
 | Spread / offset (patch, fan) | **Écart** | |

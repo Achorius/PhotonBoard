@@ -41,7 +41,8 @@ const EN = {
   interchangeFilterAll: 'All supported formats',
   interchangeImportTitle: 'Import a show, patch or fixture file',
   interchangeExportTitle: 'Export the show',
-  interchangeExportFixtureTitle: 'Export the fixture type'
+  interchangeExportFixtureTitle: 'Export the fixture type',
+  demoNotFound: 'This demo is not available in this installation.'
 } as const
 
 export type MainMessageKey = keyof typeof EN
@@ -77,7 +78,8 @@ const FR: Record<MainMessageKey, string> = {
   interchangeFilterAll: 'Tous les formats pris en charge',
   interchangeImportTitle: 'Importer un show, un patch ou un projecteur',
   interchangeExportTitle: 'Exporter le show',
-  interchangeExportFixtureTitle: 'Exporter le type de projecteur'
+  interchangeExportFixtureTitle: 'Exporter le type de projecteur',
+  demoNotFound: 'Cette démo n’est pas disponible dans cette installation.'
 }
 
 const MESSAGES: Record<MainLanguage, Record<MainMessageKey, string>> = { en: EN, fr: FR }

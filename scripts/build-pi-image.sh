@@ -279,6 +279,11 @@ if MISSING=$(chroot "$MNT" /bin/sh -c 'ldd /opt/PhotonBoard/photonboard' | grep 
 $MISSING"
 fi
 info "All PhotonBoard libraries resolve."
+if compgen -G "$MNT/home/*/Documents/PhotonBoard/Démos/*.pbshow" >/dev/null; then
+  info "Demo shows installed in Documents/PhotonBoard/Démos."
+else
+  warn "No demo shows in Documents/PhotonBoard/Démos (the .deb has no resources/demos?)."
+fi
 
 # ---------------------------------------------------------------- 5. generalise
 info "Generalising the image..."

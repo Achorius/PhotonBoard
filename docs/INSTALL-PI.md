@@ -64,6 +64,7 @@ l'écriture de la carte (avant de la mettre dans le Pi) :
 | Nom sur le réseau | `photonboard.local` |
 | Fuseau horaire / clavier | Europe/Paris / AZERTY français |
 | Spectacles | dossier `Documents/PhotonBoard` de l'utilisateur |
+| Démos | `Documents/PhotonBoard/Démos` : trois shows fictifs (Club Night, Théâtre – soirée simple, Concert Pro) et, dans `Formats`, un fichier exemple par format importable (MVR, QLC+, USITT, CSV, GDTF, grandMA2/3 XML). Aussi dans PhotonBoard : *Fichier › Ouvrir une démo…* |
 | SSH | **désactivé** par défaut. Pour l'activer : créez un fichier vide nommé `ssh` (sans extension) sur le disque `bootfs`, puis démarrez le Pi ; ensuite `ssh photonboard@photonboard.local` |
 
 - Si `photonboard.local` ne répond pas (certains Windows ou réseaux), utilisez

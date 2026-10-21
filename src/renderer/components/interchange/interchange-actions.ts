@@ -133,11 +133,15 @@ async function runSource(source: ImportSource, options?: ImportOptions): Promise
   }
 }
 
-/** File › Import…: the OS dialog (console) or the wizard's file picker (remote) */
+/**
+ * File › Import…: the wizard's first step (choose a file, or try an example
+ * file shipped with the app). Import from a USB stick (`startDir`) goes
+ * straight to the OS dialog on that stick.
+ */
 export async function requestImport(opts: { startDir?: string } = {}): Promise<void> {
   void loadFormats()
   const api = getBridge()?.interchange
-  if (!api || isRemoteMode()) {
+  if (!api || isRemoteMode() || !opts.startDir) {
     useInterchangeStore.setState({ importOpen: true, step: api ? 'pick' : 'error', error: api ? null : { code: 'unavailable' }, fragment: null, guidance: null })
     return
   }
@@ -160,6 +164,12 @@ export async function pickAnotherFile(): Promise<void> {
   } catch (e) {
     useInterchangeStore.setState({ step: 'error', error: { message: (e as Error).message } })
   }
+}
+
+/** An example file shipped with the app (resources/demos/formats, console only) */
+export function importExampleFile(path: string, fileName: string): Promise<void> {
+  void loadFormats()
+  return runSource({ kind: 'path', path, fileName })
 }
 
 /** A file picked in the browser or dropped on the window */

@@ -23,7 +23,7 @@
 #   3. Installs companion-module-photonboard
 #   4. Configures tty1 auto-login + X11 kiosk (+ touchscreen mapping helper)
 #   5. Configures network (hostname, mDNS, timezone, firewall ports)
-#   6. Creates the show directory
+#   6. Creates the show directory (with the demo shows in Documents/PhotonBoard/Démos)
 #
 # Image-build mode (--image-build, used by build-pi-image.sh): runs inside a
 # chroot of a NOT-yet-booted Raspberry Pi OS image to produce a ready-to-flash
@@ -725,6 +725,35 @@ step_directories() {
   mkdir -p "$SHOWS_DIR" "$cfg/config"
   chown "$REAL_USER:" "$REAL_HOME/Documents" "$SHOWS_DIR" "$REAL_HOME/.config" "$cfg" "$cfg/config"
   info "Show directory: $SHOWS_DIR"
+  install_demos
+}
+
+# Demo shows and example import files shipped with the app
+# (/opt/PhotonBoard/resources/demos) → ~/Documents/PhotonBoard/Démos, owned
+# by the kiosk user. Files already there are never overwritten (a demo the
+# operator changed stays theirs); a re-run only adds what is missing.
+install_demos() {
+  local src=/opt/PhotonBoard/resources/demos
+  local dst="$SHOWS_DIR/Démos"
+  local group f
+  if [[ ! -d $src ]]; then
+    warn "No demo files in $src (PhotonBoard older than 1.1.2?) — skipped."
+    return 0
+  fi
+  group=$(id -gn "$REAL_USER")
+  install -d -m 0755 -o "$REAL_USER" -g "$group" "$dst"
+  for f in "$src"/*.pbshow; do
+    [[ -f $f && ! -e $dst/${f##*/} ]] || continue
+    install -m 0644 -o "$REAL_USER" -g "$group" "$f" "$dst/${f##*/}"
+  done
+  if [[ -d $src/formats ]]; then
+    install -d -m 0755 -o "$REAL_USER" -g "$group" "$dst/Formats"
+    for f in "$src"/formats/*; do
+      [[ -f $f && ! -e $dst/Formats/${f##*/} ]] || continue
+      install -m 0644 -o "$REAL_USER" -g "$group" "$f" "$dst/Formats/${f##*/}"
+    done
+  fi
+  info "Demos: $dst"
 }
 
 # ============================================================

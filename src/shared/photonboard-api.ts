@@ -20,6 +20,7 @@ import type {
 } from './types'
 import type { CurrentShowContent } from './remote-commands'
 import type { ImportOptions, ImportResult, ImportWarning, InterchangeFormatInfo } from './interchange'
+import type { DemoList } from './demos'
 
 /** Every `on*` listener returns this; call it to remove the listener. */
 export type Unsubscribe = () => void
@@ -360,6 +361,16 @@ export interface PhotonBoardAPI {
     pathForFile?(file: File): string | null
     /** Largest file importData accepts on this bridge (bytes) */
     maxDataSize: number
+  }
+
+  /**
+   * Demo shows and example import files shipped with the app (console only;
+   * absent on the web remote and older bridges).
+   */
+  demos?: {
+    list(): Promise<DemoList>
+    /** A demo show as a new, unsaved show (the console forgets its current file) */
+    open(id: string): Promise<ShowLoadResult>
   }
 
   stage: {
