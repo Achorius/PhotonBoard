@@ -37,7 +37,7 @@ import {
   type MergeReport
 } from '@renderer/lib/interchange-merge'
 import { resolveUnsaved } from '@renderer/components/layout/file-actions'
-import { closeImportWizard, useInterchangeStore, type ImportSource, type WizardError } from './interchange-store'
+import { closeImportWizard, useInterchangeStore, type ImportSource, type WizardError, type WizardStep } from './interchange-store'
 
 // ---------------------------------------------------------------
 // Texts
@@ -94,11 +94,11 @@ function isShowEmpty(): boolean {
   return s.patch.length === 0 && s.cuelists.length === 0 && s.presets.length === 0 && s.chases.length === 0
 }
 
-function adoptResult(res: InterchangeImportResult | null | undefined, source: ImportSource | null): void {
+function adoptResult(res: InterchangeImportResult | null | undefined, source: ImportSource | null, back?: WizardStep): void {
   const store = useInterchangeStore
   if (!res || (!res.success && res.canceled)) {
-    // Dialog closed: back to the picker (or nothing when the wizard was not shown yet)
-    if (store.getState().fragment || store.getState().step === 'pick') store.setState({ step: store.getState().fragment ? 'preview' : 'pick' })
+    // Dialog closed: back where the wizard was (or closed when it was not shown yet)
+    if (back && back !== 'loading' && back !== 'applying') store.setState({ step: back })
     else closeImportWizard()
     return
   }
@@ -157,9 +157,10 @@ export async function requestImport(opts: { startDir?: string } = {}): Promise<v
 export async function pickAnotherFile(): Promise<void> {
   const api = getBridge()?.interchange
   if (!api) return
-  useInterchangeStore.setState({ step: 'loading', fragment: null, guidance: null, error: null })
+  const back = useInterchangeStore.getState().step
+  useInterchangeStore.setState({ step: 'loading' })
   try {
-    adoptResult(await api.importFile({}), null)
+    adoptResult(await api.importFile({}), null, back)
   } catch (e) {
     useInterchangeStore.setState({ step: 'error', error: { message: (e as Error).message } })
   }
@@ -248,10 +249,12 @@ async function fetchCatalogTypes(ids: string[]): Promise<FixtureDefinition[]> {
   return out
 }
 
-function logRemarks(name: string, report: MergeReport, extra: ImportWarning[]): number {
+/** Remarks of the merge itself (the reader's were shown in the preview): logged, summed up in the toast */
+function mergeRemarks(name: string, report: MergeReport, extra: ImportWarning[]): string | undefined {
   const all = [...extra, ...report.warnings]
   if (all.length > 0) console.info(`[Interchange] "${name}":\n${all.map((w) => `  [${w.level}] ${warningText(w)}`).join('\n')}`)
-  return all.filter((w) => w.level !== 'info').length
+  const serious = all.filter((w) => w.level !== 'info')
+  return serious.length > 0 ? t('interchange.done.withRemarks', { count: serious.length, first: warningText(serious[0]) }) : undefined
 }
 
 /** Import the wizard's fragment with its options. Resolves true when something was applied. */
@@ -286,9 +289,8 @@ export async function applyImport(): Promise<boolean> {
       library = usePatchStore.getState().fixtures
     }
 
-    const remarks = logRemarks(fragment.name, result.report, [...fragment.warnings, ...installWarnings])
+    const remarkText = mergeRemarks(fragment.name, result.report, installWarnings)
     const what = describeCounts(result.report.added)
-    const remarkText = remarks > 0 ? t('interchange.done.withRemarks', { count: remarks }) : undefined
 
     if (options.mode === 'new') {
       const show = showFromContent(result.content, fragment.name)

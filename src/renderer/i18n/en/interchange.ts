@@ -129,7 +129,7 @@ export const interchange = {
     merged: 'Imported from “{name}”: {what}',
     nothing: 'Nothing was imported from “{name}”',
     newShow: '“{name}” opened as a new show',
-    withRemarks: { one: '{count} remark — see the console log', other: '{count} remarks — see the console log' }
+    withRemarks: { one: '{count} remark: {first}', other: '{count} remarks — first: {first}' }
   },
   export: {
     title: 'Export the show',

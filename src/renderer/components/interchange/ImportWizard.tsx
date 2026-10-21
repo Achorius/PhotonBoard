@@ -125,7 +125,7 @@ function PickStep({ onChoose }: { onChoose: () => void }) {
       <EmptyState
         icon={LuFileInput}
         title={t('interchange.wizard.pickTitle')}
-        description={<>{t('interchange.wizard.pickDescription')} {!isRemoteMode() && t('interchange.wizard.dropHint')}</>}
+        description={<>{t('interchange.wizard.pickDescription')} {t('interchange.wizard.dropHint')}</>}
         action={<Button variant="primary" size="lg" icon={LuFiles} onClick={onChoose}>{t('interchange.wizard.chooseFile')}</Button>}
       />
       <SupportedFormats />

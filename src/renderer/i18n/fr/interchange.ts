@@ -129,7 +129,7 @@ export const interchange: Translation['interchange'] = {
     merged: 'Importé depuis « {name} » : {what}',
     nothing: 'Rien n’a été importé depuis « {name} »',
     newShow: '« {name} » ouvert comme nouveau show',
-    withRemarks: { one: '{count} remarque — voir le journal de la console', other: '{count} remarques — voir le journal de la console' }
+    withRemarks: { one: '{count} remarque : {first}', other: '{count} remarques — première : {first}' }
   },
   export: {
     title: 'Exporter le show',
