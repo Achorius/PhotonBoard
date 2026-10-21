@@ -125,7 +125,7 @@ export function createInterchangeHost(deps: InterchangeHostDeps) {
         if (guidance) {
           return { success: false, errorCode: 'unsupported', detectedFormat: guidance.app, guidance, error: `${guidance.app} files cannot be read directly`, fileName: name }
         }
-        return { success: false, errorCode: 'unknownFormat', error: 'This file is not in a format PhotonBoard can import', fileName: name }
+        return { success: false, errorCode: 'unknownFormat', error: 'PhotonBoard cannot read this file format', fileName: name }
       }
       importer = detected.importer
     }
@@ -137,7 +137,9 @@ export function createInterchangeHost(deps: InterchangeHostDeps) {
       JSON.stringify(fragment)
       return { success: true, fragment, fileName: name }
     } catch (e) {
-      console.warn(`[Interchange] ${importer.info.id} import of "${name}" failed:`, e)
+      // No text ending with the word "import" right before a quote anywhere in main: electron-vite's
+      // ESM shim plugin takes it for an import statement and inserts its CommonJS shims there
+      console.warn('[Interchange] reading failed:', importer.info.id, name, e)
       return { success: false, errorCode: 'parseFailed', detectedFormat: importer.info.name, error: errorText(e), fileName: name }
     }
   }

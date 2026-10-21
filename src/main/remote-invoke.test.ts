@@ -195,3 +195,50 @@ describe('show:get-current', () => {
     await expect(handle(IPC.SHOW_GET_CURRENT, [{}])).rejects.toThrow(RemoteInputError)
   })
 })
+
+describe('remote interchange (import / export of other formats)', () => {
+  const withHost = async () => {
+    const { createInterchangeHost } = await import('./interchange')
+    return createRemoteInvokeHandler({
+      dmxEngine: engine, outputManager, showManager,
+      oflService: new OFLService({ fetch: async () => { throw new Error('offline') } }),
+      piSave, userDataPath: join(root, 'userData'), getVersion: () => '1',
+      getRemoteStatus: () => ({ web: { port: 1, listening: true, clients: 0 }, api: { port: 2, listening: true, clients: 0 }, addresses: [] }),
+      sendToRenderer: () => {},
+      interchange: createInterchangeHost({ getLibrary: () => showManager.getAllFixtures() })
+    })
+  }
+
+  it('imports bytes sent as base64 and answers JSON text', async () => {
+    const h = await withHost()
+    const csv = Buffer.from('Fixture ID,Name,Patch,Channels\n1,Par,1.001,3\n').toString('base64')
+    const res = JSON.parse(await h(IPC.INTERCHANGE_IMPORT_DATA, ['patch.csv', csv, {}]) as string)
+    expect(res.success).toBe(true)
+    expect(res.fragment.patch[0]).toMatchObject({ name: 'Par', address: 1 })
+  })
+
+  it('explains closed formats, refuses oversized uploads and console paths', async () => {
+    const h = await withHost()
+    const ma = JSON.parse(await h(IPC.INTERCHANGE_IMPORT_DATA, ['Gig.show', Buffer.from('x').toString('base64'), {}]) as string)
+    expect(ma.guidance.app).toBe('grandMA3')
+    const big = 'A'.repeat(20 * 1024 * 1024)
+    expect(JSON.parse(await h(IPC.INTERCHANGE_IMPORT_DATA, ['big.mvr', big, {}]) as string).errorCode).toBe('tooLargeRemote')
+    await expect(h(IPC.INTERCHANGE_IMPORT_DATA, [42, '', {}])).rejects.toBeInstanceOf(RemoteInputError)
+    expect(JSON.parse(await h(IPC.INTERCHANGE_IMPORT, [{ path: '/etc/passwd' }]) as string).success).toBe(false)
+  })
+
+  it('exports as base64 for a browser download', async () => {
+    const h = await withHost()
+    const res: any = await h(IPC.INTERCHANGE_EXPORT_DATA, [JSON.stringify({ format: 'csv-patch', show: show('Gig'), fixtures: [] })])
+    expect(res.success).toBe(true)
+    expect(res.fileName).toBe('Gig.csv')
+    expect(Buffer.from(res.data, 'base64').toString('utf8')).toMatch(/^Fixture ID,Name/)
+    const formats: any = await h(IPC.INTERCHANGE_FORMATS, [])
+    expect(formats.exporters.map((f: any) => f.id)).toContain('csv-patch-excel')
+  })
+
+  it('reports interchange as unavailable without a host', async () => {
+    await expect(handle(IPC.INTERCHANGE_IMPORT_DATA, ['a.csv', '', {}])).rejects.toThrow(/not available/)
+    expect(await handle(IPC.INTERCHANGE_FORMATS, [])).toEqual({ importers: [], exporters: [], recognised: [] })
+  })
+})

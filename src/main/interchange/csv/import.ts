@@ -138,7 +138,6 @@ export async function importCsvPatch(bytes: Uint8Array, fileName: string, ctx: I
     confident: opts?.columns ? true : detected.confident
   }
   fragment.tabular = tabular
-  fragment.sourceApp = 'CSV'
 
   const col = (f: TabularField) => columns.indexOf(f)
   if (col('address') < 0 && col('universe') < 0) warn({ level: 'warning', code: 'csvNoAddressColumn' })

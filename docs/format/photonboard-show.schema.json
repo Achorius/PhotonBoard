@@ -1,0 +1,1718 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://photonboard.app/schema/photonboard-show-v3.json",
+  "title": "PhotonBoard show (.pbshow)",
+  "description": "A PhotonBoard show file: UTF-8 JSON, format version 3 (v1 \"1.0.0\" and v2 files validate too). Readers ignore unknown properties and use defaults for missing ones (docs/format/README.md); PhotonBoard normalises every file with normalizeShow() (src/shared/show-format.ts).",
+  "type": "object",
+  "anyOf": [
+    {
+      "required": [
+        "version"
+      ]
+    },
+    {
+      "required": [
+        "patch"
+      ]
+    },
+    {
+      "required": [
+        "cuelists"
+      ]
+    }
+  ],
+  "properties": {
+    "version": {
+      "type": [
+        "string",
+        "number"
+      ],
+      "description": "Format version: \"3\" (current), \"2\", \"1.0.0\""
+    },
+    "name": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "description": "ISO 8601 date"
+    },
+    "modifiedAt": {
+      "type": "string",
+      "description": "ISO 8601 date"
+    },
+    "patch": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/patchEntry"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "presets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/preset"
+      }
+    },
+    "cuelists": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cuelist"
+      }
+    },
+    "chases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chase"
+      }
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/effect"
+      }
+    },
+    "midiMappings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/midiMapping"
+      }
+    },
+    "stageLayout": {
+      "$ref": "#/$defs/stageLayout"
+    },
+    "roomConfig": {
+      "$ref": "#/$defs/roomConfig"
+    },
+    "timeline": {
+      "$ref": "#/$defs/timeline"
+    },
+    "executor": {
+      "$ref": "#/$defs/executor"
+    },
+    "macros": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/macro"
+      }
+    },
+    "speedMasters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/speedMaster"
+      }
+    },
+    "stagePages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stagePage"
+      }
+    },
+    "parked": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cueChannelValue"
+      },
+      "description": "Parked channels (output frozen at these values)"
+    },
+    "groupMasters": {
+      "type": "object",
+      "description": "Group master levels by group id (missing = 255)",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255,
+        "description": "DMX value 0-255"
+      }
+    },
+    "artnetConfig": {
+      "type": "array",
+      "description": "Deprecated (v1): ignored"
+    },
+    "dmxOutputs": {
+      "type": "array",
+      "description": "Deprecated (v1): ignored"
+    }
+  },
+  "$defs": {
+    "position3D": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "Metres, stage left (-) to right (+)"
+        },
+        "y": {
+          "type": "number",
+          "description": "Metres above the floor"
+        },
+        "z": {
+          "type": "number",
+          "description": "Metres, downstage (-) to upstage (+)"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "description": "Origin = centre of the stage at floor level"
+    },
+    "rotation3D": {
+      "type": "object",
+      "properties": {
+        "rx": {
+          "type": "number",
+          "description": "Radians"
+        },
+        "ry": {
+          "type": "number",
+          "description": "Radians"
+        },
+        "rz": {
+          "type": "number",
+          "description": "Radians"
+        }
+      },
+      "required": [
+        "rx",
+        "ry",
+        "rz"
+      ]
+    },
+    "patchEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "fixtureDefId": {
+          "type": "string",
+          "description": "Fixture type id in the library: 'ofl/<maker>/<model>' / 'qlc/<maker>/<model>' (offline catalog), '<maker>/<model>' (OFL download), user ids..."
+        },
+        "modeName": {
+          "type": "string",
+          "description": "Name of a mode of that fixture type"
+        },
+        "universe": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "description": "0-based universe (0-15)"
+        },
+        "address": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512,
+          "description": "1-based DMX start address"
+        },
+        "name": {
+          "type": "string"
+        },
+        "groupIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ids of the groups this fixture belongs to (mirror of Group.fixtureIds)"
+        },
+        "fid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Fixture ID (command line, pro views)"
+        },
+        "stagePosition": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "rotation": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "rotation"
+          ],
+          "description": "Legacy 2D stage plot position"
+        },
+        "position3D": {
+          "$ref": "#/$defs/position3D"
+        },
+        "rotation3D": {
+          "$ref": "#/$defs/rotation3D"
+        },
+        "mountingAngle": {
+          "type": "number",
+          "description": "Degrees, 0 = pointing straight down (static fixtures)"
+        },
+        "mountingPan": {
+          "type": "number",
+          "description": "Degrees, horizontal aim (static fixtures)"
+        },
+        "mountingLocation": {
+          "enum": [
+            "ceiling",
+            "floor",
+            "wall-left",
+            "wall-right",
+            "wall-back"
+          ]
+        },
+        "beamAngle": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 180,
+          "description": "Degrees"
+        },
+        "panInvert": {
+          "type": "boolean"
+        },
+        "tiltInvert": {
+          "type": "boolean"
+        },
+        "pixelInvert": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "fixtureDefId",
+        "modeName",
+        "universe",
+        "address"
+      ],
+      "description": "One patched fixture"
+    },
+    "group": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "CSS colour, usually #rrggbb"
+        },
+        "fixtureIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Patch entry ids, in selection order"
+        },
+        "parentGroupId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Object number (1-99999)"
+        }
+      },
+      "required": [
+        "id",
+        "fixtureIds"
+      ]
+    },
+    "preset": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "intensity",
+            "color",
+            "position",
+            "gobo",
+            "beam",
+            "focus",
+            "control",
+            "full"
+          ],
+          "description": "Family (pool): 'full' = all attributes"
+        },
+        "values": {
+          "type": "object",
+          "description": "Selective values: patch entry id -> { channel name -> DMX value }",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255,
+              "description": "DMX value 0-255"
+            }
+          }
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Object number (1-99999)"
+        },
+        "scope": {
+          "enum": [
+            "selective",
+            "global",
+            "universal"
+          ]
+        },
+        "typeValues": {
+          "type": "object",
+          "description": "Global values: fixture type id -> { channel name -> DMX value }",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255,
+              "description": "DMX value 0-255"
+            }
+          }
+        },
+        "universal": {
+          "type": "object",
+          "description": "Universal values: canonical attribute key -> DMX value",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255,
+            "description": "DMX value 0-255"
+          }
+        },
+        "color": {
+          "type": "string",
+          "description": "CSS colour, usually #rrggbb"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "values"
+      ]
+    },
+    "cueChannelValue": {
+      "type": "object",
+      "properties": {
+        "fixtureId": {
+          "type": "string",
+          "description": "Patch entry id"
+        },
+        "channelName": {
+          "type": "string",
+          "description": "Channel name of the fixture type"
+        },
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Always the resolved DMX value, also when presetId is set"
+        },
+        "presetId": {
+          "type": "string"
+        },
+        "fade": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "part": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        }
+      },
+      "required": [
+        "fixtureId",
+        "channelName",
+        "value"
+      ]
+    },
+    "cuePart": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "name": {
+          "type": "string"
+        },
+        "fade": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "fadeOut": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        }
+      },
+      "required": [
+        "index"
+      ]
+    },
+    "cue": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "number": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Cue number (1, 1.5, 2...)"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cueChannelValue"
+          }
+        },
+        "fadeIn": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "fadeOut": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Seconds"
+        },
+        "followTime": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "null = manual GO; seconds = auto follow"
+        },
+        "color": {
+          "type": "string",
+          "description": "CSS colour, usually #rrggbb"
+        },
+        "featureTiming": {
+          "type": "object",
+          "properties": {
+            "intensity": {
+              "type": "object",
+              "properties": {
+                "fade": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                },
+                "delay": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                }
+              }
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "fade": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                },
+                "delay": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                }
+              }
+            },
+            "colour": {
+              "type": "object",
+              "properties": {
+                "fade": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                },
+                "delay": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                }
+              }
+            },
+            "beam": {
+              "type": "object",
+              "properties": {
+                "fade": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                },
+                "delay": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                }
+              }
+            },
+            "control": {
+              "type": "object",
+              "properties": {
+                "fade": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                },
+                "delay": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3600,
+                  "description": "Seconds"
+                }
+              }
+            }
+          },
+          "description": "Per-feature fade / delay (seconds)",
+          "additionalProperties": false
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cuePart"
+          }
+        },
+        "followMode": {
+          "enum": [
+            "after-fade",
+            "after-go"
+          ]
+        },
+        "block": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "values"
+      ]
+    },
+    "effect": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "waveform": {
+          "enum": [
+            "sine",
+            "square",
+            "sawtooth",
+            "triangle",
+            "random",
+            "pulse",
+            "bounce",
+            "step",
+            "custom",
+            "constant"
+          ]
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Hz"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "DMX value 0-255"
+        },
+        "offset": {
+          "type": "number",
+          "description": "Degrees"
+        },
+        "channelType": {
+          "type": "string",
+          "description": "Attribute driven ('Dimmer', 'Pan', 'Red'...)"
+        },
+        "fixtureIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fan": {
+          "type": "number",
+          "description": "Phase spread across fixtures, degrees"
+        },
+        "isRunning": {
+          "type": "boolean",
+          "description": "Runtime: always false in a file"
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "channelType": {
+                "type": "string"
+              },
+              "phaseOffset": {
+                "type": "number"
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255,
+                "description": "DMX value 0-255"
+              },
+              "frequencyMultiplier": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 64
+              },
+              "waveform": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "channelType"
+            ]
+          }
+        },
+        "oneShot": {
+          "type": "boolean"
+        },
+        "keyframes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "spatialMode": {
+          "enum": [
+            "index",
+            "spatial"
+          ]
+        },
+        "spatialAxis": {
+          "enum": [
+            "x",
+            "y",
+            "z",
+            "radial"
+          ]
+        },
+        "fadeIn": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600
+        },
+        "fadeOut": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Object number (1-99999)"
+        },
+        "speedMasterId": {
+          "type": "string"
+        },
+        "speedMultiplier": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 64
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "cuelist": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "cues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cue"
+          }
+        },
+        "currentCueIndex": {
+          "type": "integer",
+          "description": "Runtime: -1 in a file"
+        },
+        "isPlaying": {
+          "type": "boolean",
+          "description": "Runtime: false in a file"
+        },
+        "isLooping": {
+          "type": "boolean"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "faderLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "DMX value 0-255"
+        },
+        "flash": {
+          "type": "boolean",
+          "description": "Runtime"
+        },
+        "effectSnapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Object number (1-99999)"
+        },
+        "tracking": {
+          "type": "boolean"
+        },
+        "mib": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "delay": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3600,
+              "description": "Seconds"
+            },
+            "fade": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3600,
+              "description": "Seconds"
+            }
+          }
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        },
+        "priorityMode": {
+          "enum": [
+            "normal",
+            "swap",
+            "super"
+          ]
+        },
+        "speedMasterId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "cues"
+      ],
+      "description": "A sequence (\"scene\" in the UI): a cue list with tracking"
+    },
+    "chase": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Unique id within its list (any string; UUIDs in practice)"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/cueChannelValue"
+                }
+              },
+              "holdTime": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3600
+              }
+            },
+            "required": [
+              "id",
+              "values"
+            ]
+          }
+        },
+        "currentStepIndex": {
+          "type": "integer",
+          "description": "Runtime"
+        },
+        "isPlaying": {
+          "type": "boolean",
+          "description": "Runtime"
+        },
+        "isLooping": {
+          "type": "boolean"
+        },
+        "bpm": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "fadePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "direction": {
+          "enum": [
+            "forward",
+            "backward",
+            "bounce",
+            "random"
+          ]
+        },
+        "faderLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "DMX value 0-255"
+        },
+        "priority": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Object number (1-99999)"
+        },
+        "speedMasterId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "steps"
+      ]
+    },
+    "midiMapping": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "deviceName": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "cc",
+                "note",
+                "program"
+              ]
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "channel",
+                "cuelist_go",
+                "cuelist_fader",
+                "chase_toggle",
+                "chase_bpm",
+                "master",
+                "effect_toggle",
+                "flash",
+                "blackout",
+                "blinder",
+                "strobe",
+                "strobe_rate",
+                "reset",
+                "tap_tempo",
+                "timeline_play",
+                "timeline_stop",
+                "timeline_rewind",
+                "timeline_goto_marker",
+                "timeline_goto_zone"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "parameter": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "inverted": {
+              "type": "boolean"
+            },
+            "encoding": {
+              "enum": [
+                "absolute",
+                "relative"
+              ]
+            },
+            "behavior": {
+              "enum": [
+                "direct",
+                "toggle",
+                "trigger",
+                "flash"
+              ]
+            },
+            "feedback": {
+              "enum": [
+                "note",
+                "cc"
+              ]
+            }
+          }
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target"
+      ]
+    },
+    "stageLayout": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "backgroundImage": {
+          "type": "string"
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "patchId": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "rotation": {
+                "type": "number"
+              },
+              "scale": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "patchId"
+            ]
+          }
+        }
+      },
+      "description": "Legacy 2D stage plot"
+    },
+    "trussBar": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "z": {
+          "type": "number",
+          "description": "Metres"
+        },
+        "y": {
+          "type": "number",
+          "description": "Metres"
+        },
+        "width": {
+          "type": "number",
+          "description": "Metres"
+        },
+        "color": {
+          "type": "string",
+          "description": "CSS colour, usually #rrggbb"
+        }
+      }
+    },
+    "roomConfig": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "trussBars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trussBar"
+          }
+        },
+        "stageEdgeZ": {
+          "type": "number"
+        }
+      },
+      "description": "3D room (metres)"
+    },
+    "timeline": {
+      "type": "object",
+      "properties": {
+        "clips": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Unique id within its list (any string; UUIDs in practice)"
+              },
+              "cuelistId": {
+                "type": "string"
+              },
+              "trackIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "startTime": {
+                "type": "number",
+                "minimum": 0
+              },
+              "duration": {
+                "type": "number",
+                "minimum": 0
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour, usually #rrggbb"
+              },
+              "name": {
+                "type": "string"
+              },
+              "fadeIn": {
+                "type": "number",
+                "minimum": 0
+              },
+              "fadeOut": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "cuelistId"
+            ]
+          }
+        },
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Unique id within its list (any string; UUIDs in practice)"
+              },
+              "time": {
+                "type": "number",
+                "minimum": 0
+              },
+              "name": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour, usually #rrggbb"
+              }
+            }
+          }
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Unique id within its list (any string; UUIDs in practice)"
+              },
+              "name": {
+                "type": "string"
+              },
+              "startTime": {
+                "type": "number",
+                "minimum": 0
+              },
+              "endTime": {
+                "type": "number",
+                "minimum": 0
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour, usually #rrggbb"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "trackCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "trackNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "length": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 36000,
+          "description": "Seconds"
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "timecode": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "enum": [
+                "internal",
+                "mtc"
+              ]
+            },
+            "fps": {
+              "enum": [
+                24,
+                25,
+                29.97,
+                30
+              ]
+            },
+            "chase": {
+              "type": "boolean"
+            },
+            "dropoutMs": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "executorCell": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "cuelist",
+                "chase",
+                "effect",
+                "macro",
+                "group",
+                "speed"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "mode": {
+              "enum": [
+                "toggle",
+                "trigger",
+                "flash"
+              ]
+            },
+            "button": {
+              "enum": [
+                "toggle",
+                "go",
+                "goBack",
+                "flash",
+                "temp",
+                "off",
+                "select",
+                "swap",
+                "pause",
+                "learn"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        }
+      ]
+    },
+    "executorColumn": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "CSS colour, usually #rrggbb"
+        },
+        "fader": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "column",
+                "cell",
+                "grandmaster",
+                "speed",
+                "group",
+                "rate",
+                "xfade"
+              ]
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      }
+    },
+    "executorPage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/executorCell"
+            }
+          },
+          "description": "[column][row], 8 x 4"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/executorColumn"
+          }
+        }
+      }
+    },
+    "executor": {
+      "type": "object",
+      "properties": {
+        "grid": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "description": "v2: page 1, cuelist ids [column][row] (mirror of pages[0] in v3)"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour, usually #rrggbb"
+              }
+            }
+          }
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "toggle",
+                "trigger",
+                "flash"
+              ]
+            }
+          }
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/executorPage"
+          },
+          "description": "v3: executor pages (the truth when present), max 16"
+        }
+      }
+    },
+    "macro": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "CSS colour, usually #rrggbb"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "wait": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3600,
+                    "description": "Seconds"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "id",
+        "lines"
+      ]
+    },
+    "speedMaster": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999
+        },
+        "name": {
+          "type": "string"
+        },
+        "bpm": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 999
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "stagePage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id within its list (any string; UUIDs in practice)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "cols": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Unique id within its list (any string; UUIDs in practice)"
+              },
+              "x": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "w": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "h": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "kind": {
+                "enum": [
+                  "executor",
+                  "fader",
+                  "macro",
+                  "preset",
+                  "group",
+                  "master",
+                  "speed",
+                  "go",
+                  "clock",
+                  "label"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour, usually #rrggbb"
+              },
+              "options": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  }
+}
