@@ -967,10 +967,12 @@ async function main(): Promise<void> {
   }
   writeFileSync(join(FORMATS, 'README.txt'), README)
 
+  const ids = new Set(formats.map((f) => f.file.toLowerCase()))
+  if (ids.size !== formats.length) throw new Error('Two example files have the same name')
   const manifest: DemoManifest = {
     version: 1,
     shows,
-    formats: formats.map((f) => ({ id: f.file.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), file: `formats/${f.file}`, format: f.format, description: f.description }))
+    formats: formats.map((f) => ({ id: f.file.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), file: `formats/${f.file}`, format: f.format, description: f.description }))
   }
   writeFileSync(join(OUT, 'demos.json'), JSON.stringify(manifest, null, 2) + '\n')
 

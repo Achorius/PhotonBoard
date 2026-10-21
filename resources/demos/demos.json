@@ -37,7 +37,7 @@
   ],
   "formats": [
     {
-      "id": "club-night",
+      "id": "club-night-mvr",
       "file": "formats/Club Night.mvr",
       "format": "mvr",
       "description": {
@@ -46,7 +46,7 @@
       }
     },
     {
-      "id": "club-night",
+      "id": "club-night-qxw",
       "file": "formats/Club Night.qxw",
       "format": "qlcplus-workspace",
       "description": {
@@ -55,7 +55,7 @@
       }
     },
     {
-      "id": "club-night",
+      "id": "club-night-asc",
       "file": "formats/Club Night.asc",
       "format": "usitt-ascii",
       "description": {
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": "club-night-patch",
+      "id": "club-night-patch-csv",
       "file": "formats/Club Night - patch.csv",
       "format": "csv-patch",
       "description": {
@@ -73,7 +73,7 @@
       }
     },
     {
-      "id": "generic-generic-moving-head-spot-photonboard",
+      "id": "generic-generic-moving-head-spot-photonboard-gdtf",
       "file": "formats/Generic@Generic_Moving_Head_Spot@PhotonBoard.gdtf",
       "format": "gdtf",
       "description": {
@@ -82,7 +82,7 @@
       }
     },
     {
-      "id": "grandma3-theatre",
+      "id": "grandma3-theatre-xml",
       "file": "formats/grandMA3 - theatre.xml",
       "format": "ma3-xml",
       "description": {
@@ -91,7 +91,7 @@
       }
     },
     {
-      "id": "grandma2-theatre",
+      "id": "grandma2-theatre-xml",
       "file": "formats/grandMA2 - theatre.xml",
       "format": "ma2-xml",
       "description": {

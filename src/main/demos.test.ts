@@ -40,6 +40,8 @@ describe('bundled demos', () => {
       expect(demoText(item.description, 'fr').length).toBeGreaterThan(20)
     }
     expect(totalSize(DIR)).toBeLessThan(2 * 1024 * 1024)
+    const ids = [...list.shows.map((s) => s.id), ...list.formats.map((f) => f.id)]
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('resolves ids only through the manifest', () => {
@@ -76,7 +78,7 @@ describe('bundled demos', () => {
   it.each([...list.shows.map((s) => [s.id, demos.showPath(s.id)!]), ...list.formats.map((f) => [f.fileName, f.path])])(
     '%s imports through the registry without errors', async (_name, path) => {
       const res = await host.importPath(path)
-      expect(res.success, res.error).toBe(true)
+      expect(res.success, res.success ? '' : res.error).toBe(true)
       if (!res.success) return
       expect(res.fragment.warnings.filter((w) => w.level === 'error')).toEqual([])
       expect(res.fragment.patch.length + res.fragment.fixtures.length).toBeGreaterThan(0)
