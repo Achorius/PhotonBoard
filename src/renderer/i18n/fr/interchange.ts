@@ -144,6 +144,12 @@ export const interchange: Translation['interchange'] = {
     none: 'Aucun format d’export n’est disponible.',
     remarks: { one: 'Exporté avec {count} remarque : {first}', other: 'Exporté avec {count} remarques : {first}' }
   },
+  fixtureExport: {
+    as: 'Exporter en {format}',
+    menu: 'Exporter…',
+    tooltip: 'Écrire ce type de projecteur dans un fichier {format} pour une autre console, un visualiseur ou les outils du fabricant',
+    failed: '« {name} » n’a pas pu être exporté : {error}'
+  },
   drop: {
     title: 'Déposer pour importer',
     hint: 'Show, patch, type de projecteur ou export de console'
@@ -161,6 +167,7 @@ export const interchange: Translation['interchange'] = {
     remoteNoDialog: 'Choisissez un fichier sur cet appareil.',
     invalidShow: 'Le show n’a pas pu être exporté : {error}',
     exportFailed: 'L’export a échoué : {error}',
+    invalidFixture: 'Ce type de projecteur ne peut pas être exporté : sa définition est incomplète.',
     unavailable: 'L’import et l’export ne sont pas disponibles sur cette connexion.',
     generic: 'Échec de l’import : {error}',
     title: 'Impossible d’importer ce fichier'

@@ -967,6 +967,10 @@ export const IPC = {
   INTERCHANGE_EXPORT: 'interchange:export',
   /** File bytes returned to the UI (remote download) */
   INTERCHANGE_EXPORT_DATA: 'interchange:export-data',
+  /** One fixture type (GDTF…), Electron: save dialog + write */
+  INTERCHANGE_EXPORT_FIXTURE: 'interchange:export-fixture',
+  /** One fixture type, bytes returned to the UI (remote download) */
+  INTERCHANGE_EXPORT_FIXTURE_DATA: 'interchange:export-fixture-data',
 
   // Remote access (Electron only — never reachable from remote clients)
   REMOTE_GET_SETTINGS: 'remote:get-settings',

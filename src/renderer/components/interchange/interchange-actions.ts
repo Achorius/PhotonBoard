@@ -361,6 +361,44 @@ function downloadBase64(fileName: string, base64: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
+/** Formats that write one fixture type (GDTF…): "Export fixture as …" in the fixture library */
+export function fixtureExportFormats(): { id: string; name: string; extensions: string[] }[] {
+  if (!getBridge()?.interchange?.exportFixture) return []
+  return useInterchangeStore.getState().formats?.fixtureExporters ?? []
+}
+
+/** Export one fixture type. Console: save dialog (exporter's file name); remote: download. */
+export async function exportFixtureAs(format: string, fixture: FixtureDefinition): Promise<boolean> {
+  const api = getBridge()?.interchange
+  if (!api?.exportFixture) {
+    showToast('error', t('interchange.errors.unavailable'))
+    return false
+  }
+  try {
+    const res = await api.exportFixture({ format, fixture })
+    if (!res || res.canceled) return false
+    if (!res.success) {
+      const err = res.errorCode && hasTranslation(`interchange.errors.${res.errorCode}`)
+        ? t(`interchange.errors.${res.errorCode}` as TranslationKey, { error: res.error ?? '' })
+        : res.error ?? ''
+      showToast('error', t('interchange.fixtureExport.failed', { name: fixture.name, error: err }))
+      return false
+    }
+    if (res.data && res.fileName) downloadBase64(res.fileName, res.data)
+    const warnings = (res.warnings ?? []).filter((w) => w.level !== 'info')
+    const done = res.path ? t('interchange.export.saved', { path: res.path }) : t('interchange.export.downloaded', { file: res.fileName ?? '' })
+    showToast(warnings.length ? 'warning' : 'success', done, {
+      id: 'interchange-export-fixture',
+      description: warnings.length ? t('interchange.export.remarks', { count: warnings.length, first: warningText(warnings[0]) }) : undefined,
+      duration: warnings.length ? 8000 : 4000
+    })
+    return true
+  } catch (e) {
+    showToast('error', t('interchange.fixtureExport.failed', { name: fixture.name, error: (e as Error).message }))
+    return false
+  }
+}
+
 /** Export the current show to `format`. Resolves true when written / downloaded. */
 export async function exportShowAs(format: string): Promise<boolean> {
   const api = getBridge()?.interchange

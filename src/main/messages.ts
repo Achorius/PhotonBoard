@@ -40,7 +40,8 @@ const EN = {
   usbReadOnly: 'The USB stick is read-only (or write-protected).',
   interchangeFilterAll: 'All supported formats',
   interchangeImportTitle: 'Import a show, patch or fixture file',
-  interchangeExportTitle: 'Export the show'
+  interchangeExportTitle: 'Export the show',
+  interchangeExportFixtureTitle: 'Export the fixture type'
 } as const
 
 export type MainMessageKey = keyof typeof EN
@@ -75,7 +76,8 @@ const FR: Record<MainMessageKey, string> = {
   usbReadOnly: 'La clé USB est en lecture seule (ou protégée en écriture).',
   interchangeFilterAll: 'Tous les formats pris en charge',
   interchangeImportTitle: 'Importer un show, un patch ou un projecteur',
-  interchangeExportTitle: 'Exporter le show'
+  interchangeExportTitle: 'Exporter le show',
+  interchangeExportFixtureTitle: 'Exporter le type de projecteur'
 }
 
 const MESSAGES: Record<MainLanguage, Record<MainMessageKey, string>> = { en: EN, fr: FR }

@@ -96,6 +96,7 @@ export function createInterchangeHost(deps: InterchangeHostDeps) {
     return {
       importers: listImporters().map((i) => i.info),
       exporters: listExporters().map((e) => e.info),
+      fixtureExporters: listExporters().filter((e) => typeof e.writeFixture === 'function').map((e) => e.info),
       recognised: listUnsupported()
     }
   }
@@ -183,7 +184,28 @@ export function createInterchangeHost(deps: InterchangeHostDeps) {
     }
   }
 
-  return { listFormats, importExtensions, importBytes, importPath, exportShow }
+  /** One fixture type to a fixture format (GDTF…): exporters implementing writeFixture */
+  async function exportFixture(format: InterchangeFormatId, defRaw: unknown): Promise<HostExportResult> {
+    const exporter = getExporter(format)
+    if (!exporter?.writeFixture) return { success: false, errorCode: 'unknownFormat', error: `Unknown fixture export format "${String(format).slice(0, 64)}"` }
+    const def = defRaw as FixtureDefinition | null
+    if (!def || typeof def !== 'object' || typeof def.id !== 'string' || !Array.isArray(def.modes) || !def.channels || typeof def.channels !== 'object') {
+      return { success: false, errorCode: 'invalidFixture', error: 'Invalid fixture definition' }
+    }
+    try {
+      const { bytes, warnings, fileName } = await exporter.writeFixture(def)
+      const extension = exporter.info.extensions[0] ?? 'dat'
+      const base = `${def.manufacturer ? `${def.manufacturer} ` : ''}${def.name || 'Fixture'}`
+      const safe = (s: string) => s.replace(/[\\/:*?"<>|\x00-\x1f]+/g, ' ').trim().slice(0, 160)
+      const name = safe(fileName ?? '') || `${safe(base) || 'Fixture'}.${extension}`
+      return { success: true, bytes, fileName: name, extension, warnings: arr(warnings) }
+    } catch (e) {
+      console.warn(`[Interchange] ${format} fixture export failed:`, e)
+      return { success: false, errorCode: 'exportFailed', error: errorText(e) }
+    }
+  }
+
+  return { listFormats, importExtensions, importBytes, importPath, exportShow, exportFixture }
 }
 
 export type InterchangeHost = ReturnType<typeof createInterchangeHost>

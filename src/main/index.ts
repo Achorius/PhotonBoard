@@ -683,6 +683,34 @@ function registerIpcHandlers(): void {
     return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
   })
 
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT_FIXTURE, async (event, raw: unknown) => {
+    let req: { format?: unknown; fixture?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportFixture(String(req.format ?? ''), req.fixture)
+    if (!out.success) return out
+    // The exporter's file name ("Manufacturer@Model@Revision.gdtf" for GDTF) is the default
+    const result = await showSaveDialog(event, {
+      title: mt('interchangeExportFixtureTitle'),
+      filters: [{ name: out.extension.toUpperCase(), extensions: [out.extension] }, { name: mt('allFiles'), extensions: ['*'] }],
+      defaultPath: join(showManager.getDefaultShowsDir(), out.fileName)
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      await atomicWriteFile(result.filePath, Buffer.from(out.bytes))
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+    return { success: true, path: result.filePath, fileName: out.fileName, warnings: out.warnings }
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT_FIXTURE_DATA, async (_event, raw: unknown) => {
+    let req: { format?: unknown; fixture?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportFixture(String(req.format ?? ''), req.fixture)
+    if (!out.success) return out
+    return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
+  })
+
   // --- Show helpers ---
   ipcMain.handle(IPC.SHOW_GET_PATH, () => {
     return showManager.getCurrentPath()

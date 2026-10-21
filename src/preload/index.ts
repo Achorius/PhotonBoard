@@ -135,6 +135,8 @@ const api: PhotonBoardAPI = {
       JSON.parse(await ipcRenderer.invoke(IPC.INTERCHANGE_IMPORT_DATA, fileName, data, opts ?? {})),
     exportShow: (req) =>
       ipcRenderer.invoke(IPC.INTERCHANGE_EXPORT, JSON.stringify(req)),
+    exportFixture: (req) =>
+      ipcRenderer.invoke(IPC.INTERCHANGE_EXPORT_FIXTURE, JSON.stringify(req)),
     pathForFile: (file) => {
       try { return webUtils.getPathForFile(file) || null } catch { return null }
     },

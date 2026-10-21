@@ -315,6 +315,21 @@ export function createRemoteInvokeHandler(deps: RemoteInvokeDeps) {
         return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
       }
 
+      case IPC.INTERCHANGE_EXPORT_FIXTURE:
+        return { success: false, error: 'Use the download on the remote' }
+      case IPC.INTERCHANGE_EXPORT_FIXTURE_DATA: {
+        if (!deps.interchange) throw new RemoteInputError('Export is not available on this console')
+        let req: unknown = args[0]
+        if (typeof req === 'string') {
+          if (req.length > MAX_SHOW_FILE_SIZE) throw new RemoteInputError('Export request is too large')
+          try { req = JSON.parse(req) } catch { throw new RemoteInputError('Invalid export request') }
+        }
+        if (!isPlainObject(req) || typeof req.format !== 'string') throw new RemoteInputError('Invalid export request')
+        const out = await deps.interchange.exportFixture(req.format, req.fixture)
+        if (!out.success) return out
+        return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
+      }
+
       // App
       case IPC.APP_GET_VERSION:
         return deps.getVersion()

@@ -199,6 +199,22 @@ describe('interchange host', () => {
     expect(bad.success === false && bad.errorCode).toBe('invalidShow')
   })
 
+  it('exports one fixture type with the exporter’s file name', async () => {
+    expect(host.listFormats().fixtureExporters?.map((f) => f.id)).toEqual(['gdtf'])
+    const def: FixtureDefinition = { ...genericDefinition('Wash 7', 7), id: 'user/wash-7', manufacturer: 'Acme', name: 'Wash 7' }
+    const out = await host.exportFixture('gdtf', def)
+    expect(out.success).toBe(true)
+    if (out.success) {
+      expect(out.extension).toBe('gdtf')
+      expect(out.fileName).toBe('Acme@Wash_7@PhotonBoard.gdtf')
+      const back = await host.importBytes(out.bytes, out.fileName)
+      expect(back.success && back.fragment.fixtures[0].modes[0].channelCount).toBe(7)
+    }
+    expect((await host.exportFixture('csv-patch', def)).success).toBe(false)
+    const bad = await host.exportFixture('gdtf', { id: 'x' })
+    expect(bad.success === false && bad.errorCode).toBe('invalidFixture')
+  })
+
   it('sanitises fragments from importers', () => {
     const f = sanitizeFragment({ name: '', patch: null, fixtures: [{ id: 'x' }], warnings: [{ code: 'a' }, null] } as never, 'mvr', 'rig.mvr')
     expect(f).toMatchObject({ format: 'mvr', name: 'rig', patch: [], fixtures: [], groups: [] })

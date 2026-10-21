@@ -21,3 +21,8 @@ export function formatName(id: string, formats?: InterchangeFormatList | null): 
   const reg = formats?.importers.find((f) => f.id === id) ?? formats?.exporters.find((f) => f.id === id)
   return reg?.name ?? KNOWN[id] ?? id
 }
+
+/** Short name for buttons ("GDTF" rather than "GDTF (General Device Type Format)") */
+export function shortFormatName(id: string, fallback = id): string {
+  return KNOWN[id] ?? fallback
+}

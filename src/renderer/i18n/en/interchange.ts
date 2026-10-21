@@ -144,6 +144,12 @@ export const interchange = {
     none: 'No export format is available.',
     remarks: { one: 'Exported with {count} remark: {first}', other: 'Exported with {count} remarks: {first}' }
   },
+  fixtureExport: {
+    as: 'Export as {format}',
+    menu: 'Export…',
+    tooltip: 'Write this fixture type as a {format} file for another console, visualiser or the manufacturer’s tools',
+    failed: '“{name}” could not be exported: {error}'
+  },
   drop: {
     title: 'Drop to import',
     hint: 'Show, patch, fixture type or console export'
@@ -161,6 +167,7 @@ export const interchange = {
     remoteNoDialog: 'Choose a file on this device.',
     invalidShow: 'The show could not be exported: {error}',
     exportFailed: 'The export failed: {error}',
+    invalidFixture: 'This fixture type cannot be exported: its definition is incomplete.',
     unavailable: 'Import and export are not available on this connection.',
     generic: 'Import failed: {error}',
     title: 'Cannot import this file'

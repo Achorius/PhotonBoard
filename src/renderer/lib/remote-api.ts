@@ -440,6 +440,8 @@ export function createRemoteAPI(): PhotonBoardAPI {
       },
       exportShow: (req) =>
         invokeWithTimeout(SLOW_TIMEOUT_MS, 'interchange:export-data', JSON.stringify(req)),
+      exportFixture: (req) =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'interchange:export-fixture-data', JSON.stringify(req)),
       maxDataSize: REMOTE_IMPORT_MAX
     },
 

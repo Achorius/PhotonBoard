@@ -180,6 +180,8 @@ export interface StrobeChop {
 export interface InterchangeFormatList {
   importers: InterchangeFormatInfo[]
   exporters: InterchangeFormatInfo[]
+  /** Additive: exporters that write ONE fixture type (GDTF…): "Export fixture as …" */
+  fixtureExporters?: InterchangeFormatInfo[]
   /** Closed formats recognised (the wizard explains how to export them) */
   recognised: { key: string; app: string; extensions: string[] }[]
 }
@@ -201,6 +203,12 @@ export interface InterchangeExportRequest {
   show: ShowFile
   /** Definitions of every fixture type the show uses */
   fixtures: FixtureDefinition[]
+}
+
+export interface InterchangeFixtureExportRequest {
+  /** A format of InterchangeFormatList.fixtureExporters ('gdtf') */
+  format: string
+  fixture: FixtureDefinition
 }
 
 export interface InterchangeExportResult {
@@ -343,6 +351,11 @@ export interface PhotonBoardAPI {
     importData(fileName: string, data: Uint8Array, opts?: { format?: string; options?: ImportOptions }): Promise<InterchangeImportResult>
     /** Electron: save dialog + write. Remote: returns the bytes for a browser download. */
     exportShow(req: InterchangeExportRequest): Promise<InterchangeExportResult>
+    /**
+     * Additive: export ONE fixture type (GDTF…). Electron: save dialog named
+     * after the exporter's suggested file name. Remote: the bytes for a download.
+     */
+    exportFixture?(req: InterchangeFixtureExportRequest): Promise<InterchangeExportResult>
     /** Electron only: path of a dropped file (null when unknown) */
     pathForFile?(file: File): string | null
     /** Largest file importData accepts on this bridge (bytes) */

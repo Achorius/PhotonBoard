@@ -237,6 +237,18 @@ describe('remote interchange (import / export of other formats)', () => {
     expect(formats.exporters.map((f: any) => f.id)).toContain('csv-patch-excel')
   })
 
+  it('exports one fixture type (GDTF) as base64, never with a console dialog', async () => {
+    const h = await withHost()
+    const def = showManager.getAllFixtures().find((d) => d.modes.length > 0)!
+    const res: any = await h(IPC.INTERCHANGE_EXPORT_FIXTURE_DATA, [JSON.stringify({ format: 'gdtf', fixture: def })])
+    expect(res.success).toBe(true)
+    expect(res.fileName).toMatch(/@.*\.gdtf$/)
+    expect(Buffer.from(res.data, 'base64').subarray(0, 2).toString('latin1')).toBe('PK')
+    expect((await h(IPC.INTERCHANGE_EXPORT_FIXTURE, [JSON.stringify({ format: 'gdtf', fixture: def })]) as any).success).toBe(false)
+    expect((await h(IPC.INTERCHANGE_EXPORT_FIXTURE_DATA, [JSON.stringify({ format: 'csv-patch', fixture: def })]) as any).errorCode).toBe('unknownFormat')
+    await expect(h(IPC.INTERCHANGE_EXPORT_FIXTURE_DATA, ['{bad'])).rejects.toBeInstanceOf(RemoteInputError)
+  })
+
   it('reports interchange as unavailable without a host', async () => {
     await expect(handle(IPC.INTERCHANGE_IMPORT_DATA, ['a.csv', '', {}])).rejects.toThrow(/not available/)
     expect(await handle(IPC.INTERCHANGE_FORMATS, [])).toEqual({ importers: [], exporters: [], recognised: [] })
