@@ -1,0 +1,3075 @@
+{
+  "version": "3",
+  "name": "Théâtre – soirée simple",
+  "createdAt": "2026-10-01T20:00:00.000Z",
+  "modifiedAt": "2026-10-01T20:00:00.000Z",
+  "patch": [
+    {
+      "id": "theatre-fx-001",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 1,
+      "name": "Face jardin 1",
+      "groupIds": [
+        "theatre-grp-022",
+        "theatre-grp-025"
+      ],
+      "stagePosition": {
+        "x": 392,
+        "y": 96,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -4,
+        "y": 6.8,
+        "z": -6
+      },
+      "mountingAngle": 40,
+      "mountingLocation": "ceiling",
+      "fid": 1
+    },
+    {
+      "id": "theatre-fx-002",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 2,
+      "name": "Face jardin 2",
+      "groupIds": [
+        "theatre-grp-022",
+        "theatre-grp-025"
+      ],
+      "stagePosition": {
+        "x": 475,
+        "y": 96,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -2.4,
+        "y": 6.8,
+        "z": -6
+      },
+      "mountingAngle": 40,
+      "mountingLocation": "ceiling",
+      "fid": 2
+    },
+    {
+      "id": "theatre-fx-003",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 3,
+      "name": "Face centre 1",
+      "groupIds": [
+        "theatre-grp-022",
+        "theatre-grp-026"
+      ],
+      "stagePosition": {
+        "x": 558,
+        "y": 96,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -0.7999999999999998,
+        "y": 6.8,
+        "z": -6
+      },
+      "mountingAngle": 40,
+      "mountingLocation": "ceiling",
+      "fid": 3
+    },
+    {
+      "id": "theatre-fx-004",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 4,
+      "name": "Face centre 2",
+      "groupIds": [
+        "theatre-grp-022",
+        "theatre-grp-026"
+      ],
+      "stagePosition": {
+        "x": 642,
+        "y": 96,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 0.7999999999999998,
+        "y": 6.8,
+        "z": -6
+      },
+      "mountingAngle": 40,
+      "mountingLocation": "ceiling",
+      "fid": 4
+    },
+    {
+      "id": "theatre-fx-005",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 5,
+      "name": "Face cour 1",
+      "groupIds": [
+        "theatre-grp-022",
+        "theatre-grp-027"
+      ],
+      "stagePosition": {
+        "x": 725,
+        "y": 96,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 2.4000000000000004,
+        "y": 6.8,
+        "z": -6
+      },
+      "mountingAngle": 40,
+      "mountingLocation": "ceiling",
+      "fid": 5
+    },
+    {
+      "id": "theatre-fx-006",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 6,
+      "name": "Face cour 2",
+      "groupIds": [
+        "theatre-grp-022",
+        "theatre-grp-027"
+      ],
+      "stagePosition": {
+        "x": 808,
+        "y": 96,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 4,
+        "y": 6.8,
+        "z": -6
+      },
+      "mountingAngle": 40,
+      "mountingLocation": "ceiling",
+      "fid": 6
+    },
+    {
+      "id": "theatre-fx-007",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 7,
+      "name": "PC contre 1",
+      "groupIds": [
+        "theatre-grp-023",
+        "theatre-grp-025"
+      ],
+      "stagePosition": {
+        "x": 392,
+        "y": 385,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -4,
+        "y": 6.8,
+        "z": 2.5
+      },
+      "mountingAngle": 25,
+      "mountingLocation": "ceiling",
+      "fid": 7
+    },
+    {
+      "id": "theatre-fx-008",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 8,
+      "name": "PC contre 2",
+      "groupIds": [
+        "theatre-grp-023",
+        "theatre-grp-026"
+      ],
+      "stagePosition": {
+        "x": 531,
+        "y": 385,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -1.3333333333333335,
+        "y": 6.8,
+        "z": 2.5
+      },
+      "mountingAngle": 25,
+      "mountingLocation": "ceiling",
+      "fid": 8
+    },
+    {
+      "id": "theatre-fx-009",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 9,
+      "name": "PC contre 3",
+      "groupIds": [
+        "theatre-grp-023",
+        "theatre-grp-026"
+      ],
+      "stagePosition": {
+        "x": 669,
+        "y": 385,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 1.333333333333333,
+        "y": 6.8,
+        "z": 2.5
+      },
+      "mountingAngle": 25,
+      "mountingLocation": "ceiling",
+      "fid": 9
+    },
+    {
+      "id": "theatre-fx-010",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 10,
+      "name": "PC contre 4",
+      "groupIds": [
+        "theatre-grp-023",
+        "theatre-grp-027"
+      ],
+      "stagePosition": {
+        "x": 808,
+        "y": 385,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 4,
+        "y": 6.8,
+        "z": 2.5
+      },
+      "mountingAngle": 25,
+      "mountingLocation": "ceiling",
+      "fid": 10
+    },
+    {
+      "id": "theatre-fx-011",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 11,
+      "name": "Latéral jardin 1",
+      "groupIds": [
+        "theatre-grp-024",
+        "theatre-grp-025"
+      ],
+      "stagePosition": {
+        "x": 262,
+        "y": 266,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -6.5,
+        "y": 2.2,
+        "z": -1
+      },
+      "mountingAngle": 70,
+      "mountingLocation": "floor",
+      "fid": 11
+    },
+    {
+      "id": "theatre-fx-012",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 12,
+      "name": "Latéral jardin 2",
+      "groupIds": [
+        "theatre-grp-024",
+        "theatre-grp-025"
+      ],
+      "stagePosition": {
+        "x": 262,
+        "y": 351,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -6.5,
+        "y": 2.2,
+        "z": 1.5
+      },
+      "mountingAngle": 70,
+      "mountingLocation": "floor",
+      "fid": 12
+    },
+    {
+      "id": "theatre-fx-013",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 13,
+      "name": "Latéral cour 1",
+      "groupIds": [
+        "theatre-grp-024",
+        "theatre-grp-027"
+      ],
+      "stagePosition": {
+        "x": 938,
+        "y": 266,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 6.5,
+        "y": 2.2,
+        "z": -1
+      },
+      "mountingAngle": 70,
+      "mountingLocation": "floor",
+      "fid": 13
+    },
+    {
+      "id": "theatre-fx-014",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 14,
+      "name": "Latéral cour 2",
+      "groupIds": [
+        "theatre-grp-024",
+        "theatre-grp-027"
+      ],
+      "stagePosition": {
+        "x": 938,
+        "y": 351,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 6.5,
+        "y": 2.2,
+        "z": 1.5
+      },
+      "mountingAngle": 70,
+      "mountingLocation": "floor",
+      "fid": 14
+    },
+    {
+      "id": "theatre-fx-015",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 15,
+      "name": "Douche centre",
+      "groupIds": [
+        "theatre-grp-026"
+      ],
+      "stagePosition": {
+        "x": 600,
+        "y": 300,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 0,
+        "y": 6.8,
+        "z": 0
+      },
+      "mountingLocation": "ceiling",
+      "fid": 15
+    },
+    {
+      "id": "theatre-fx-016",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 16,
+      "name": "Salle 1",
+      "groupIds": [
+        "theatre-grp-029"
+      ],
+      "stagePosition": {
+        "x": 392,
+        "y": -6,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -4,
+        "y": 6.8,
+        "z": -9
+      },
+      "mountingLocation": "ceiling",
+      "fid": 16
+    },
+    {
+      "id": "theatre-fx-017",
+      "fixtureDefId": "generic/dimmer",
+      "modeName": "1ch",
+      "universe": 0,
+      "address": 17,
+      "name": "Salle 2",
+      "groupIds": [
+        "theatre-grp-029"
+      ],
+      "stagePosition": {
+        "x": 808,
+        "y": -6,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 4,
+        "y": 6.8,
+        "z": -9
+      },
+      "mountingLocation": "ceiling",
+      "fid": 17
+    },
+    {
+      "id": "theatre-fx-018",
+      "fixtureDefId": "generic/rgbw",
+      "modeName": "4ch",
+      "universe": 0,
+      "address": 21,
+      "name": "Cyclo 1",
+      "groupIds": [
+        "theatre-grp-028"
+      ],
+      "stagePosition": {
+        "x": 366,
+        "y": 443,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -4.5,
+        "y": 0.1,
+        "z": 4.2
+      },
+      "mountingAngle": 20,
+      "mountingLocation": "floor",
+      "fid": 21
+    },
+    {
+      "id": "theatre-fx-019",
+      "fixtureDefId": "generic/rgbw",
+      "modeName": "4ch",
+      "universe": 0,
+      "address": 25,
+      "name": "Cyclo 2",
+      "groupIds": [
+        "theatre-grp-028"
+      ],
+      "stagePosition": {
+        "x": 522,
+        "y": 443,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": -1.5,
+        "y": 0.1,
+        "z": 4.2
+      },
+      "mountingAngle": 20,
+      "mountingLocation": "floor",
+      "fid": 22
+    },
+    {
+      "id": "theatre-fx-020",
+      "fixtureDefId": "generic/rgbw",
+      "modeName": "4ch",
+      "universe": 0,
+      "address": 29,
+      "name": "Cyclo 3",
+      "groupIds": [
+        "theatre-grp-028"
+      ],
+      "stagePosition": {
+        "x": 678,
+        "y": 443,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 1.5,
+        "y": 0.1,
+        "z": 4.2
+      },
+      "mountingAngle": 20,
+      "mountingLocation": "floor",
+      "fid": 23
+    },
+    {
+      "id": "theatre-fx-021",
+      "fixtureDefId": "generic/rgbw",
+      "modeName": "4ch",
+      "universe": 0,
+      "address": 33,
+      "name": "Cyclo 4",
+      "groupIds": [
+        "theatre-grp-028"
+      ],
+      "stagePosition": {
+        "x": 834,
+        "y": 443,
+        "rotation": 0
+      },
+      "position3D": {
+        "x": 4.5,
+        "y": 0.1,
+        "z": 4.2
+      },
+      "mountingAngle": 20,
+      "mountingLocation": "floor",
+      "fid": 24
+    }
+  ],
+  "groups": [
+    {
+      "id": "theatre-grp-022",
+      "name": "Face",
+      "color": "#eab308",
+      "fixtureIds": [
+        "theatre-fx-001",
+        "theatre-fx-002",
+        "theatre-fx-003",
+        "theatre-fx-004",
+        "theatre-fx-005",
+        "theatre-fx-006"
+      ],
+      "number": 1
+    },
+    {
+      "id": "theatre-grp-023",
+      "name": "Contres",
+      "color": "#3b82f6",
+      "fixtureIds": [
+        "theatre-fx-007",
+        "theatre-fx-008",
+        "theatre-fx-009",
+        "theatre-fx-010"
+      ],
+      "number": 2
+    },
+    {
+      "id": "theatre-grp-024",
+      "name": "Latéraux",
+      "color": "#a855f7",
+      "fixtureIds": [
+        "theatre-fx-011",
+        "theatre-fx-012",
+        "theatre-fx-013",
+        "theatre-fx-014"
+      ],
+      "number": 3
+    },
+    {
+      "id": "theatre-grp-025",
+      "name": "Jardin",
+      "color": "#22c55e",
+      "fixtureIds": [
+        "theatre-fx-001",
+        "theatre-fx-002",
+        "theatre-fx-007",
+        "theatre-fx-011",
+        "theatre-fx-012"
+      ],
+      "number": 4
+    },
+    {
+      "id": "theatre-grp-026",
+      "name": "Centre",
+      "color": "#f97316",
+      "fixtureIds": [
+        "theatre-fx-003",
+        "theatre-fx-004",
+        "theatre-fx-008",
+        "theatre-fx-009",
+        "theatre-fx-015"
+      ],
+      "number": 5
+    },
+    {
+      "id": "theatre-grp-027",
+      "name": "Cour",
+      "color": "#06b6d4",
+      "fixtureIds": [
+        "theatre-fx-005",
+        "theatre-fx-006",
+        "theatre-fx-010",
+        "theatre-fx-013",
+        "theatre-fx-014"
+      ],
+      "number": 6
+    },
+    {
+      "id": "theatre-grp-028",
+      "name": "Cyclo",
+      "color": "#6366f1",
+      "fixtureIds": [
+        "theatre-fx-018",
+        "theatre-fx-019",
+        "theatre-fx-020",
+        "theatre-fx-021"
+      ],
+      "number": 7
+    },
+    {
+      "id": "theatre-grp-029",
+      "name": "Salle",
+      "color": "#94a3b8",
+      "fixtureIds": [
+        "theatre-fx-016",
+        "theatre-fx-017"
+      ],
+      "number": 8
+    }
+  ],
+  "presets": [
+    {
+      "id": "theatre-pre-030",
+      "name": "Ciel de jour",
+      "type": "color",
+      "values": {
+        "theatre-fx-018": {
+          "Red": 90,
+          "Green": 160,
+          "Blue": 255,
+          "White": 120
+        },
+        "theatre-fx-019": {
+          "Red": 90,
+          "Green": 160,
+          "Blue": 255,
+          "White": 120
+        },
+        "theatre-fx-020": {
+          "Red": 90,
+          "Green": 160,
+          "Blue": 255,
+          "White": 120
+        },
+        "theatre-fx-021": {
+          "Red": 90,
+          "Green": 160,
+          "Blue": 255,
+          "White": 120
+        }
+      },
+      "number": 1,
+      "scope": "selective",
+      "color": "#60a5fa"
+    },
+    {
+      "id": "theatre-pre-031",
+      "name": "Coucher de soleil",
+      "type": "color",
+      "values": {
+        "theatre-fx-018": {
+          "Red": 255,
+          "Green": 80,
+          "Blue": 10,
+          "White": 0
+        },
+        "theatre-fx-019": {
+          "Red": 255,
+          "Green": 80,
+          "Blue": 10,
+          "White": 0
+        },
+        "theatre-fx-020": {
+          "Red": 255,
+          "Green": 80,
+          "Blue": 10,
+          "White": 0
+        },
+        "theatre-fx-021": {
+          "Red": 255,
+          "Green": 80,
+          "Blue": 10,
+          "White": 0
+        }
+      },
+      "number": 2,
+      "scope": "selective",
+      "color": "#f97316"
+    },
+    {
+      "id": "theatre-pre-032",
+      "name": "Nuit",
+      "type": "color",
+      "values": {
+        "theatre-fx-018": {
+          "Red": 10,
+          "Green": 0,
+          "Blue": 140,
+          "White": 0
+        },
+        "theatre-fx-019": {
+          "Red": 10,
+          "Green": 0,
+          "Blue": 140,
+          "White": 0
+        },
+        "theatre-fx-020": {
+          "Red": 10,
+          "Green": 0,
+          "Blue": 140,
+          "White": 0
+        },
+        "theatre-fx-021": {
+          "Red": 10,
+          "Green": 0,
+          "Blue": 140,
+          "White": 0
+        }
+      },
+      "number": 3,
+      "scope": "selective",
+      "color": "#312e81"
+    },
+    {
+      "id": "theatre-pre-033",
+      "name": "Blanc",
+      "type": "color",
+      "values": {
+        "theatre-fx-018": {
+          "Red": 255,
+          "Green": 255,
+          "Blue": 255,
+          "White": 255
+        },
+        "theatre-fx-019": {
+          "Red": 255,
+          "Green": 255,
+          "Blue": 255,
+          "White": 255
+        },
+        "theatre-fx-020": {
+          "Red": 255,
+          "Green": 255,
+          "Blue": 255,
+          "White": 255
+        },
+        "theatre-fx-021": {
+          "Red": 255,
+          "Green": 255,
+          "Blue": 255,
+          "White": 255
+        }
+      },
+      "number": 4,
+      "scope": "selective",
+      "color": "#e5e7eb"
+    },
+    {
+      "id": "theatre-pre-034",
+      "name": "Face 70 %",
+      "type": "intensity",
+      "values": {
+        "theatre-fx-001": {
+          "Dimmer": 178
+        },
+        "theatre-fx-002": {
+          "Dimmer": 178
+        },
+        "theatre-fx-003": {
+          "Dimmer": 178
+        },
+        "theatre-fx-004": {
+          "Dimmer": 178
+        },
+        "theatre-fx-005": {
+          "Dimmer": 178
+        },
+        "theatre-fx-006": {
+          "Dimmer": 178
+        }
+      },
+      "number": 1,
+      "scope": "selective"
+    },
+    {
+      "id": "theatre-pre-035",
+      "name": "Plein feu",
+      "type": "intensity",
+      "values": {
+        "theatre-fx-001": {
+          "Dimmer": 255
+        },
+        "theatre-fx-002": {
+          "Dimmer": 255
+        },
+        "theatre-fx-003": {
+          "Dimmer": 255
+        },
+        "theatre-fx-004": {
+          "Dimmer": 255
+        },
+        "theatre-fx-005": {
+          "Dimmer": 255
+        },
+        "theatre-fx-006": {
+          "Dimmer": 255
+        },
+        "theatre-fx-007": {
+          "Dimmer": 255
+        },
+        "theatre-fx-008": {
+          "Dimmer": 255
+        },
+        "theatre-fx-009": {
+          "Dimmer": 255
+        },
+        "theatre-fx-010": {
+          "Dimmer": 255
+        },
+        "theatre-fx-011": {
+          "Dimmer": 255
+        },
+        "theatre-fx-012": {
+          "Dimmer": 255
+        },
+        "theatre-fx-013": {
+          "Dimmer": 255
+        },
+        "theatre-fx-014": {
+          "Dimmer": 255
+        },
+        "theatre-fx-015": {
+          "Dimmer": 255
+        }
+      },
+      "number": 2,
+      "scope": "selective"
+    }
+  ],
+  "cuelists": [
+    {
+      "id": "theatre-seq-047",
+      "name": "Spectacle",
+      "cues": [
+        {
+          "id": "theatre-cue-036",
+          "name": "Entrée public",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-016",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-017",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 50
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 50
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 50
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 50
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 50
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 50
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null,
+          "color": "#94a3b8"
+        },
+        {
+          "id": "theatre-cue-037",
+          "name": "Noir salle",
+          "number": 2,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-016",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-017",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 0
+            }
+          ],
+          "fadeIn": 5,
+          "fadeOut": 5,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "theatre-cue-038",
+          "name": "Ouverture",
+          "number": 3,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 130
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 130
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 130
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 130
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 1,
+          "followTime": null,
+          "color": "#22c55e"
+        },
+        {
+          "id": "theatre-cue-039",
+          "name": "Scène 1 – jour",
+          "number": 4,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 150
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 120
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            }
+          ],
+          "fadeIn": 4,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "theatre-cue-040",
+          "name": "Scène 2 – soir",
+          "number": 5,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 140
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 140
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 140
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 140
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 140
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 140
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 180
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 160
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 255,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 80,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 10,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 255,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 80,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 10,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 255,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 80,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 10,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 255,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 80,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 10,
+              "presetId": "theatre-pre-031"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-031"
+            }
+          ],
+          "fadeIn": 8,
+          "fadeOut": 6,
+          "delay": 0,
+          "followTime": null,
+          "color": "#f97316"
+        },
+        {
+          "id": "theatre-cue-041",
+          "name": "Monologue",
+          "number": 6,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-015",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 40
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 0
+            }
+          ],
+          "fadeIn": 6,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "theatre-cue-042",
+          "name": "Nuit",
+          "number": 7,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 60
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 80
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 80
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 80
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 80
+            },
+            {
+              "fixtureId": "theatre-fx-015",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 10,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 140,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 10,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 140,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 10,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 140,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 10,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 140,
+              "presetId": "theatre-pre-032"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 0,
+              "presetId": "theatre-pre-032"
+            }
+          ],
+          "fadeIn": 7,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null,
+          "color": "#4f46e5"
+        },
+        {
+          "id": "theatre-cue-043",
+          "name": "Final",
+          "number": 8,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 90,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 160,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 255,
+              "presetId": "theatre-pre-030"
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 120,
+              "presetId": "theatre-pre-030"
+            }
+          ],
+          "fadeIn": 2,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "theatre-cue-044",
+          "name": "Saluts",
+          "number": 9,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 230
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 200
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 0
+            }
+          ],
+          "fadeIn": 1.5,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": 8
+        },
+        {
+          "id": "theatre-cue-045",
+          "name": "Noir final",
+          "number": 10,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-015",
+              "channelName": "Dimmer",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 0
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 0
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        },
+        {
+          "id": "theatre-cue-046",
+          "name": "Salle",
+          "number": 11,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-016",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-017",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ],
+          "fadeIn": 5,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null,
+          "color": "#94a3b8"
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false,
+      "number": 1
+    },
+    {
+      "id": "theatre-seq-049",
+      "name": "Service (plein feu)",
+      "cues": [
+        {
+          "id": "theatre-cue-048",
+          "name": "Plein feu",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-007",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-008",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-009",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-010",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-011",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-012",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-013",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-014",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-015",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-018",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-019",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-020",
+              "channelName": "White",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Red",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Green",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "Blue",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-021",
+              "channelName": "White",
+              "value": 255
+            }
+          ],
+          "fadeIn": 2,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false,
+      "number": 2
+    },
+    {
+      "id": "theatre-seq-051",
+      "name": "Lumière salle",
+      "cues": [
+        {
+          "id": "theatre-cue-050",
+          "name": "Salle",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-016",
+              "channelName": "Dimmer",
+              "value": 255
+            },
+            {
+              "fixtureId": "theatre-fx-017",
+              "channelName": "Dimmer",
+              "value": 255
+            }
+          ],
+          "fadeIn": 3,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false,
+      "number": 3
+    },
+    {
+      "id": "theatre-seq-053",
+      "name": "Face seule",
+      "cues": [
+        {
+          "id": "theatre-cue-052",
+          "name": "Face 70 %",
+          "number": 1,
+          "values": [
+            {
+              "fixtureId": "theatre-fx-001",
+              "channelName": "Dimmer",
+              "value": 178
+            },
+            {
+              "fixtureId": "theatre-fx-002",
+              "channelName": "Dimmer",
+              "value": 178
+            },
+            {
+              "fixtureId": "theatre-fx-003",
+              "channelName": "Dimmer",
+              "value": 178
+            },
+            {
+              "fixtureId": "theatre-fx-004",
+              "channelName": "Dimmer",
+              "value": 178
+            },
+            {
+              "fixtureId": "theatre-fx-005",
+              "channelName": "Dimmer",
+              "value": 178
+            },
+            {
+              "fixtureId": "theatre-fx-006",
+              "channelName": "Dimmer",
+              "value": 178
+            }
+          ],
+          "fadeIn": 2,
+          "fadeOut": 2,
+          "delay": 0,
+          "followTime": null
+        }
+      ],
+      "currentCueIndex": -1,
+      "isPlaying": false,
+      "isLooping": false,
+      "priority": 50,
+      "faderLevel": 255,
+      "flash": false,
+      "number": 4
+    }
+  ],
+  "chases": [],
+  "effects": [],
+  "midiMappings": [],
+  "stageLayout": {
+    "width": 1200,
+    "height": 600,
+    "fixtures": [
+      {
+        "patchId": "theatre-fx-001",
+        "x": 392,
+        "y": 96,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-002",
+        "x": 475,
+        "y": 96,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-003",
+        "x": 558,
+        "y": 96,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-004",
+        "x": 642,
+        "y": 96,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-005",
+        "x": 725,
+        "y": 96,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-006",
+        "x": 808,
+        "y": 96,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-007",
+        "x": 392,
+        "y": 385,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-008",
+        "x": 531,
+        "y": 385,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-009",
+        "x": 669,
+        "y": 385,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-010",
+        "x": 808,
+        "y": 385,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-011",
+        "x": 262,
+        "y": 266,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-012",
+        "x": 262,
+        "y": 351,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-013",
+        "x": 938,
+        "y": 266,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-014",
+        "x": 938,
+        "y": 351,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-015",
+        "x": 600,
+        "y": 300,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-016",
+        "x": 392,
+        "y": -6,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-017",
+        "x": 808,
+        "y": -6,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-018",
+        "x": 366,
+        "y": 443,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-019",
+        "x": 522,
+        "y": 443,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-020",
+        "x": 678,
+        "y": 443,
+        "rotation": 0,
+        "scale": 1
+      },
+      {
+        "patchId": "theatre-fx-021",
+        "x": 834,
+        "y": 443,
+        "rotation": 0,
+        "scale": 1
+      }
+    ]
+  },
+  "roomConfig": {
+    "width": 14,
+    "depth": 14,
+    "height": 7,
+    "trussBars": [
+      {
+        "id": "theatre-face",
+        "name": "Pont face",
+        "z": -6,
+        "y": 6.85,
+        "width": 10
+      },
+      {
+        "id": "theatre-perche-1",
+        "name": "Perche 1",
+        "z": 0,
+        "y": 6.85,
+        "width": 10
+      },
+      {
+        "id": "theatre-perche-2",
+        "name": "Perche 2",
+        "z": 2.5,
+        "y": 6.85,
+        "width": 10
+      }
+    ],
+    "stageEdgeZ": -2
+  },
+  "timeline": {
+    "clips": [],
+    "markers": [],
+    "zones": [],
+    "trackCount": 3,
+    "trackNames": [],
+    "length": 120,
+    "loop": false,
+    "timecode": {
+      "source": "internal",
+      "fps": 25,
+      "chase": false,
+      "dropoutMs": 1000,
+      "offset": 0
+    }
+  },
+  "executor": {
+    "grid": [
+      [
+        "theatre-seq-047",
+        null,
+        null,
+        null
+      ],
+      [
+        "theatre-seq-051",
+        null,
+        null,
+        null
+      ],
+      [
+        "theatre-seq-049",
+        "theatre-seq-053",
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        null
+      ]
+    ],
+    "columns": [
+      {
+        "title": "Conduite",
+        "color": "#22c55e"
+      },
+      {
+        "title": "Salle",
+        "color": "#94a3b8"
+      },
+      {
+        "title": "Service",
+        "color": "#e5e7eb"
+      },
+      {
+        "title": "Face",
+        "color": "#eab308"
+      },
+      {
+        "title": "Contres",
+        "color": "#3b82f6"
+      },
+      {
+        "title": "Latéraux",
+        "color": "#a855f7"
+      },
+      {
+        "title": "Cyclo",
+        "color": "#6366f1"
+      },
+      {
+        "title": "Salle",
+        "color": "#94a3b8"
+      }
+    ],
+    "modes": [
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ],
+      [
+        "toggle",
+        "toggle",
+        "toggle",
+        "toggle"
+      ]
+    ],
+    "pages": [
+      {
+        "id": "theatre-page-1",
+        "name": "Conduite",
+        "cells": [
+          [
+            {
+              "kind": "cuelist",
+              "id": "theatre-seq-047",
+              "mode": "toggle",
+              "button": "go"
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "cuelist",
+              "id": "theatre-seq-051",
+              "mode": "toggle"
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "cuelist",
+              "id": "theatre-seq-049",
+              "mode": "toggle"
+            },
+            {
+              "kind": "cuelist",
+              "id": "theatre-seq-053",
+              "mode": "toggle"
+            },
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "group",
+              "id": "theatre-grp-022",
+              "mode": "toggle"
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "group",
+              "id": "theatre-grp-023",
+              "mode": "toggle"
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "group",
+              "id": "theatre-grp-024",
+              "mode": "toggle"
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "group",
+              "id": "theatre-grp-028",
+              "mode": "toggle"
+            },
+            null,
+            null,
+            null
+          ],
+          [
+            {
+              "kind": "group",
+              "id": "theatre-grp-029",
+              "mode": "toggle"
+            },
+            null,
+            null,
+            null
+          ]
+        ],
+        "columns": [
+          {
+            "title": "Conduite",
+            "color": "#22c55e"
+          },
+          {
+            "title": "Salle",
+            "color": "#94a3b8"
+          },
+          {
+            "title": "Service",
+            "color": "#e5e7eb"
+          },
+          {
+            "title": "Face",
+            "color": "#eab308",
+            "fader": {
+              "kind": "group",
+              "id": "theatre-grp-022"
+            }
+          },
+          {
+            "title": "Contres",
+            "color": "#3b82f6",
+            "fader": {
+              "kind": "group",
+              "id": "theatre-grp-023"
+            }
+          },
+          {
+            "title": "Latéraux",
+            "color": "#a855f7",
+            "fader": {
+              "kind": "group",
+              "id": "theatre-grp-024"
+            }
+          },
+          {
+            "title": "Cyclo",
+            "color": "#6366f1",
+            "fader": {
+              "kind": "group",
+              "id": "theatre-grp-028"
+            }
+          },
+          {
+            "title": "Salle",
+            "color": "#94a3b8",
+            "fader": {
+              "kind": "group",
+              "id": "theatre-grp-029"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "macros": [
+    {
+      "id": "theatre-mac-054",
+      "number": 1,
+      "name": "Début du spectacle",
+      "lines": [
+        {
+          "command": "Go Sequence 1"
+        }
+      ],
+      "color": "#22c55e"
+    },
+    {
+      "id": "theatre-mac-055",
+      "number": 2,
+      "name": "Tout éteindre",
+      "lines": [
+        {
+          "command": "Release"
+        }
+      ],
+      "color": "#64748b"
+    }
+  ],
+  "speedMasters": [],
+  "stagePages": [
+    {
+      "id": "theatre-stage-056",
+      "name": "Régie",
+      "cols": 6,
+      "rows": 4,
+      "widgets": [
+        {
+          "id": "theatre-w-057",
+          "x": 0,
+          "y": 0,
+          "w": 3,
+          "h": 2,
+          "kind": "go",
+          "ref": "theatre-seq-047",
+          "label": "Spectacle"
+        },
+        {
+          "id": "theatre-w-058",
+          "x": 3,
+          "y": 0,
+          "w": 3,
+          "h": 1,
+          "kind": "clock"
+        },
+        {
+          "id": "theatre-w-059",
+          "x": 3,
+          "y": 1,
+          "w": 1,
+          "h": 1,
+          "kind": "master",
+          "options": {
+            "fn": "blackout"
+          }
+        },
+        {
+          "id": "theatre-w-060",
+          "x": 4,
+          "y": 1,
+          "w": 1,
+          "h": 1,
+          "kind": "executor",
+          "ref": "1.2.1"
+        },
+        {
+          "id": "theatre-w-061",
+          "x": 5,
+          "y": 1,
+          "w": 1,
+          "h": 1,
+          "kind": "executor",
+          "ref": "1.3.1"
+        },
+        {
+          "id": "theatre-w-062",
+          "x": 0,
+          "y": 2,
+          "w": 1,
+          "h": 2,
+          "kind": "fader",
+          "ref": "theatre-grp-022",
+          "options": {
+            "target": "group"
+          }
+        },
+        {
+          "id": "theatre-w-063",
+          "x": 1,
+          "y": 2,
+          "w": 1,
+          "h": 2,
+          "kind": "fader",
+          "ref": "theatre-grp-023",
+          "options": {
+            "target": "group"
+          }
+        },
+        {
+          "id": "theatre-w-064",
+          "x": 2,
+          "y": 2,
+          "w": 1,
+          "h": 2,
+          "kind": "fader",
+          "ref": "theatre-grp-024",
+          "options": {
+            "target": "group"
+          }
+        },
+        {
+          "id": "theatre-w-065",
+          "x": 3,
+          "y": 2,
+          "w": 1,
+          "h": 2,
+          "kind": "fader",
+          "ref": "theatre-grp-028",
+          "options": {
+            "target": "group"
+          }
+        },
+        {
+          "id": "theatre-w-066",
+          "x": 4,
+          "y": 2,
+          "w": 1,
+          "h": 2,
+          "kind": "fader",
+          "ref": "theatre-grp-029",
+          "options": {
+            "target": "group"
+          }
+        },
+        {
+          "id": "theatre-w-067",
+          "x": 5,
+          "y": 2,
+          "w": 1,
+          "h": 2,
+          "kind": "master",
+          "options": {
+            "fn": "gm"
+          }
+        }
+      ]
+    }
+  ],
+  "parked": [],
+  "groupMasters": {}
+}

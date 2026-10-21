@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "fixtures:build": "node scripts/build-fixture-library.mjs",
     "fixtures:update": "node scripts/build-fixture-library.mjs --update",
+    "demos:build": "vite-node scripts/build-demos.ts",
     "screenshots": "electron-vite build && xvfb-run -a -s \"-screen 0 1920x1080x24\" node scripts/dev/screenshot.mjs screenshots"
   },
   "dependencies": {
@@ -73,6 +74,10 @@
       {
         "from": "resources/fixture-library",
         "to": "fixture-library"
+      },
+      {
+        "from": "resources/demos",
+        "to": "demos"
       }
     ],
     "mac": {
