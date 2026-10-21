@@ -105,6 +105,15 @@ export interface ImportedShowFragment {
   executor?: ShowExecutorLayout
   roomConfig?: RoomConfig
   warnings: ImportWarning[]
+  /**
+   * Ids of `patch` entries the importer had to invent because cues /
+   * presets / groups reference them by fixture number (`fid`) while the
+   * file carries no patch for them (grandMA XML, USITT ASCII channels).
+   * They are patched on a free universe; when merging into a show, the
+   * merge step may bind them to existing fixtures with the same `fid`
+   * instead of adding them. Optional, additive.
+   */
+  placeholderFixtureIds?: string[]
 }
 
 export interface ImportRequest {
