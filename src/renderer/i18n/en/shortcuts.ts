@@ -27,6 +27,8 @@ export const shortcuts = {
     openShow: 'Open show',
     save: 'Save',
     saveAs: 'Save as',
+    importFile: 'Import (MVR, GDTF, QLC+, grandMA, USITT, CSV…)',
+    exportFile: 'Export to another format',
     commandLine: 'Focus the command line',
     showShortcuts: 'Show keyboard shortcuts'
   },

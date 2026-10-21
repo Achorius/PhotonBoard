@@ -31,7 +31,8 @@ export function PatchPanel() {
   const anchor = useRef<string | null>(null)
 
   const defs = useMemo(() => new Map(fixtures.map((f) => [f.id, f])), [fixtures])
-  const fixtureNumber = useMemo(() => new Map(patch.map((p, i) => [p.id, i + 1])), [patch])
+  // Fixture ID (fid) when the fixture has one (pro shows, imports), else the list position
+  const fixtureNumber = useMemo(() => new Map(patch.map((p, i) => [p.id, p.fid ?? i + 1])), [patch])
   const universes = useMemo(() => [...new Set(patch.map((p) => p.universe))].sort((a, b) => a - b), [patch])
   const selected = useMemo(() => new Set(selectedIds), [selectedIds])
 
@@ -39,9 +40,9 @@ export function PatchPanel() {
     const q = query.trim().toLowerCase()
     return patch
       .filter((p) => universe === 'all' || p.universe === universe)
-      .filter((p) => !q || p.name.toLowerCase().includes(q) || (defs.get(p.fixtureDefId)?.name.toLowerCase().includes(q) ?? false) || formatAddress(p.universe, p.address).includes(q))
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || String(fixtureNumber.get(p.id)) === q || (defs.get(p.fixtureDefId)?.name.toLowerCase().includes(q) ?? false) || formatAddress(p.universe, p.address).includes(q))
       .sort((a, b) => a.universe - b.universe || a.address - b.address)
-  }, [patch, universe, query, defs])
+  }, [patch, universe, query, defs, fixtureNumber])
 
   const onRowSelect = (id: string, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => {
     const store = usePatchStore.getState()

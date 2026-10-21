@@ -79,7 +79,12 @@ export function getShortcutGroups(t: TFunction): ShortcutGroup[] {
         { keys: 'Mod+N', label: t('shortcuts.items.newShow') },
         { keys: 'Mod+O', label: t('shortcuts.items.openShow') },
         { keys: 'Mod+S', label: t('shortcuts.items.save') },
-        { keys: 'Mod+Shift+S', label: t('shortcuts.items.saveAs') }
+        { keys: 'Mod+Shift+S', label: t('shortcuts.items.saveAs') },
+        // Application menu accelerators (console only: the remote imports from the File menu)
+        ...(!isRemoteMode() ? [
+          { keys: 'Mod+I', label: t('shortcuts.items.importFile') },
+          { keys: 'Mod+Shift+E', label: t('shortcuts.items.exportFile') }
+        ] : [])
       ]
     },
     {
