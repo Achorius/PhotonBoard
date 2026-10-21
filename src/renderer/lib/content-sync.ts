@@ -392,7 +392,20 @@ export function applyContentFromRemote(payload: unknown): boolean {
     }
   }, origin, seq)
   if (origin && seq !== undefined) appliedSeq.set(origin, Math.max(appliedSeq.get(origin) ?? 0, seq))
+  if (sections.includes('patch')) reloadLibraryForUnknownTypes()
   return true
+}
+
+/**
+ * A remote patched fixture types it installed into the console's library
+ * (offline catalog, file import): the console's copy of the library must
+ * know them before the mixer can drive those fixtures.
+ */
+function reloadLibraryForUnknownTypes(): void {
+  const { patch, fixtures } = usePatchStore.getState()
+  const known = new Set(fixtures.map(f => f.id))
+  if (patch.every(p => known.has(p.fixtureDefId))) return
+  usePatchStore.getState().loadFixtures().catch((e) => console.warn('[Content] fixture library reload failed:', e))
 }
 
 /** Console: the current show content for a remote (show:get-current). */

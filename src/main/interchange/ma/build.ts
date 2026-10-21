@@ -154,7 +154,7 @@ function genericDefinition(id: string, name: string, attributes: string[], footp
     list.push(n)
   }
   return {
-    id, name, manufacturer: 'grandMA import', categories: guessCategories(channels), channels,
+    id, name, manufacturer: 'grandMA (imported)', categories: guessCategories(channels), channels,
     modes: [{ name: `${list.length}ch`, channels: list, channelCount: list.length }],
     source: 'user'
   }

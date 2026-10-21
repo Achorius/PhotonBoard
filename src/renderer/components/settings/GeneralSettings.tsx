@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react'
 import {
   LuFile, LuFilePlus2, LuFolderOpen, LuFolderSearch, LuHand, LuKeyboard, LuLanguages, LuLayoutPanelLeft, LuMonitor, LuMousePointer2,
-  LuPanelBottom, LuPiano, LuSave, LuSquareTerminal, LuSaveAll, LuSparkles, LuTimer, LuWandSparkles
+  LuPanelBottom, LuPiano, LuSave, LuSquareTerminal, LuSaveAll, LuSparkles, LuTimer, LuWandSparkles, LuFileInput, LuFileOutput, LuArrowLeftRight
 } from 'react-icons/lu'
 import { Badge, Button, Kbd, SegmentedControl, Switch, cn, type DensityPreference } from '@renderer/components/ui'
 import { detectAutoDensity, useShowTitle, useUiStore, type LanguagePreference } from '@renderer/stores/ui-store'
@@ -13,7 +13,8 @@ import { LOCALE_NAMES, detectSystemLocale, t as translate, useT } from '@rendere
 import { getDeviceProfile } from '@renderer/lib/device-detect'
 import { getBridge, isRemoteMode } from '@renderer/lib/runtime'
 import { isTimecodeChase, isTimecodeEnabled, getTimecodeFramerate } from '@renderer/lib/timecode-engine'
-import { requestNewShow, requestOpenShow, requestSave, requestSaveAs } from '@renderer/components/layout/file-actions'
+import { requestExport, requestImport, requestNewShow, requestOpenShow, requestSave, requestSaveAs } from '@renderer/components/layout/file-actions'
+import { SupportedFormats } from '@renderer/components/interchange/ImportWizard'
 import { InfoRow, SettingRow, SettingsCard, SettingsPage } from './settings-ui'
 
 // ---------------------------------------------------------------
@@ -183,6 +184,8 @@ export function ShowSettings() {
         )}
       </SettingsCard>
 
+      <FormatsCard />
+
       <SettingsCard icon={LuTimer} title={t('settings.show.inputs')} subtitle={t('settings.show.inputsSubtitle')}>
         <SettingRow label={t('settings.show.midi')} description={t('settings.show.midiDescription')}>
           <Button size="sm" variant="secondary" icon={LuPiano} onClick={() => go('midi')}>{t('settings.show.openMidi')}</Button>
@@ -199,6 +202,29 @@ export function ShowSettings() {
         </SettingRow>
       </SettingsCard>
     </SettingsPage>
+  )
+}
+
+/** Formats the console imports / exports (also in About) */
+function FormatsCard() {
+  const t = useT()
+  return (
+    <SettingsCard
+      icon={LuArrowLeftRight}
+      title={t('interchange.formatsPage.title')}
+      subtitle={t('interchange.formatsPage.description')}
+      actions={
+        <>
+          <Button size="sm" icon={LuFileInput} onClick={() => { void requestImport() }}>{t('interchange.menu.import')}</Button>
+          <Button size="sm" variant="ghost" icon={LuFileOutput} onClick={() => { requestExport() }}>{t('interchange.menu.export')}</Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 px-4 py-3" data-supported-formats>
+        <SupportedFormats showExports />
+        <p className="text-xs text-fg-tertiary">{t('interchange.formatsPage.openFormat')}</p>
+      </div>
+    </SettingsCard>
   )
 }
 
@@ -248,6 +274,8 @@ export function AboutSettings() {
           <Button size="sm" icon={LuKeyboard} onClick={() => useUiStore.getState().setShortcutsOpen(true)}>{t('settings.about.showShortcuts')}</Button>
         </SettingRow>
       </SettingsCard>
+
+      <FormatsCard />
 
       <SettingsCard icon={LuPanelBottom} title={t('settings.about.credits')}>
         <ul className={cn('flex flex-col gap-1.5 px-4 py-3 text-sm text-fg-secondary')}>

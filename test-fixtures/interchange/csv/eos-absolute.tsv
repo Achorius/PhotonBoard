@@ -1,0 +1,6 @@
+Channel	Address	Type	Label	Purpose
+1	1	Source Four 750W	SL Front	Front
+2	2	Source Four 750W	SR Front	Front
+11	513	Chauvet SlimPAR 64	Cyc 1	Cyc
+12	520	Chauvet SlimPAR 64	Cyc 2	Cyc
+21		Robe Robin 600E Spot	Mover	Movers

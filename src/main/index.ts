@@ -23,6 +23,7 @@ import { RemovableWatcher, copyFileName, driveOf, ejectDrive, isInsideDrive, rem
 import { atomicWriteFile } from './atomic-write'
 import { userInfo } from 'os'
 import { existsSync } from 'fs'
+import { createInterchangeHost, type InterchangeHost } from './interchange'
 
 /**
  * The engine holds every universe the UI can patch (16 × 512 bytes). Outputs
@@ -62,6 +63,7 @@ let remoteSettings: RemoteSettingsStore
 let piSave: PiSaveCoordinator
 let cleanedUp = false
 let removable: RemovableWatcher | null = null
+let interchange: InterchangeHost
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
@@ -79,6 +81,7 @@ const MENU_LABELS = {
   en: {
     about: 'About PhotonBoard', hide: 'Hide PhotonBoard', hideOthers: 'Hide Others', unhide: 'Show All', quit: 'Quit PhotonBoard',
     file: 'File', newShow: 'New Show', open: 'Open…', save: 'Save', saveAs: 'Save As…', close: 'Close Window',
+    importFile: 'Import…', exportFile: 'Export…',
     edit: 'Edit', undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
     view: 'View', reload: 'Reload', forceReload: 'Force Reload', devTools: 'Toggle Developer Tools',
     resetZoom: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
@@ -87,6 +90,7 @@ const MENU_LABELS = {
   fr: {
     about: 'À propos de PhotonBoard', hide: 'Masquer PhotonBoard', hideOthers: 'Masquer les autres', unhide: 'Tout afficher', quit: 'Quitter PhotonBoard',
     file: 'Fichier', newShow: 'Nouveau show', open: 'Ouvrir…', save: 'Enregistrer', saveAs: 'Enregistrer sous…', close: 'Fermer la fenêtre',
+    importFile: 'Importer…', exportFile: 'Exporter…',
     edit: 'Édition', undo: 'Annuler', redo: 'Rétablir', cut: 'Couper', copy: 'Copier', paste: 'Coller', selectAll: 'Tout sélectionner',
     view: 'Présentation', reload: 'Recharger', forceReload: 'Forcer le rechargement', devTools: 'Outils de développement',
     resetZoom: 'Taille réelle', zoomIn: 'Agrandir', zoomOut: 'Réduire', fullscreen: 'Plein écran',
@@ -137,6 +141,17 @@ function createMenu(): void {
           label: L.saveAs,
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendToMainWindow('menu:save-as')
+        },
+        { type: 'separator' },
+        {
+          label: L.importFile,
+          accelerator: 'CmdOrCtrl+I',
+          click: () => sendToMainWindow('menu:import')
+        },
+        {
+          label: L.exportFile,
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => sendToMainWindow('menu:export')
         },
         { type: 'separator' },
         isMac ? { role: 'close' as const, label: L.close } : { role: 'quit' as const, label: L.quit }
@@ -604,6 +619,70 @@ function registerIpcHandlers(): void {
     return showManager.deleteUserFixture(fixtureId)
   })
 
+  // --- Interchange (src/main/interchange): other software's files ---
+  // Results cross IPC as JSON text (fixture definitions, see FIXTURES_GET_ALL)
+  ipcMain.handle(IPC.INTERCHANGE_FORMATS, () => interchange.listFormats())
+
+  ipcMain.handle(IPC.INTERCHANGE_IMPORT, async (event, raw: unknown) => {
+    const req = (raw && typeof raw === 'object' ? raw : {}) as { path?: unknown; startDir?: unknown; format?: unknown; options?: unknown }
+    const run = {
+      format: typeof req.format === 'string' ? req.format : undefined,
+      options: req.options && typeof req.options === 'object' ? req.options as never : undefined
+    }
+    let path = typeof req.path === 'string' && req.path.length > 0 && req.path.length < 4096 ? req.path : null
+    if (!path) {
+      const result = await showOpenDialog(event, {
+        title: mt('interchangeImportTitle'),
+        filters: [
+          { name: mt('interchangeFilterAll'), extensions: interchange.importExtensions() },
+          { name: mt('allFiles'), extensions: ['*'] }
+        ],
+        defaultPath: typeof req.startDir === 'string' && req.startDir ? req.startDir : showManager.getDefaultShowsDir(),
+        properties: ['openFile']
+      })
+      if (result.canceled || !result.filePaths.length) return JSON.stringify({ success: false, canceled: true })
+      path = result.filePaths[0]
+    }
+    return JSON.stringify(await interchange.importPath(path, run))
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_IMPORT_DATA, async (_event, fileName: unknown, data: unknown, opts: unknown) => {
+    const o = (opts && typeof opts === 'object' ? opts : {}) as { format?: unknown; options?: unknown }
+    const bytes = data instanceof Uint8Array ? data : null
+    if (!bytes || typeof fileName !== 'string') return JSON.stringify({ success: false, errorCode: 'unreadable', error: 'Invalid file data' })
+    return JSON.stringify(await interchange.importBytes(bytes, fileName, {
+      format: typeof o.format === 'string' ? o.format : undefined,
+      options: o.options && typeof o.options === 'object' ? o.options as never : undefined
+    }))
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT, async (event, raw: unknown) => {
+    let req: { format?: unknown; show?: unknown; fixtures?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportShow(String(req.format ?? ''), req.show, req.fixtures)
+    if (!out.success) return out
+    const result = await showSaveDialog(event, {
+      title: mt('interchangeExportTitle'),
+      filters: [{ name: out.extension.toUpperCase(), extensions: [out.extension] }, { name: mt('allFiles'), extensions: ['*'] }],
+      defaultPath: join(showManager.getDefaultShowsDir(), out.fileName)
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      await atomicWriteFile(result.filePath, Buffer.from(out.bytes))
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+    return { success: true, path: result.filePath, warnings: out.warnings }
+  })
+
+  ipcMain.handle(IPC.INTERCHANGE_EXPORT_DATA, async (_event, raw: unknown) => {
+    let req: { format?: unknown; show?: unknown; fixtures?: unknown }
+    try { req = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof req) ?? {} } catch { return { success: false, error: 'Invalid export request' } }
+    const out = await interchange.exportShow(String(req.format ?? ''), req.show, req.fixtures)
+    if (!out.success) return out
+    return { success: true, fileName: out.fileName, data: Buffer.from(out.bytes).toString('base64'), warnings: out.warnings }
+  })
+
   // --- Show helpers ---
   ipcMain.handle(IPC.SHOW_GET_PATH, () => {
     return showManager.getCurrentPath()
@@ -868,6 +947,7 @@ function startApp(): void {
       mainDir: __dirname
     }))
     void fixtureCatalog.load() // index in the background: the first search is instant
+    interchange = createInterchangeHost({ getLibrary: () => showManager.getAllFixtures(), catalog: fixtureCatalog })
     // A show made on another machine: install the fixture types it uses from the catalog
     showManager.setShowReadHook((show) => installMissingShowFixtures(fixtureCatalog, showManager, show))
     remoteSettings = new RemoteSettingsStore(join(userData, 'config', 'remote.json'))
@@ -905,7 +985,8 @@ function startApp(): void {
       getVersion: () => app.getVersion(),
       getRemoteStatus,
       sendToRenderer: (channel, ...args) => { sendToMainWindow(channel, ...args) },
-      removable: { list: listRemovable, eject: ejectRemovable }
+      removable: { list: listRemovable, eject: ejectRemovable },
+      interchange
     })
 
     // Auto-open Stage window on second display if available

@@ -1,0 +1,6 @@
+N° Projo;Nom;Fabricant;Modèle;Mode;Univers;Adresse;Perche;X (mm);Y (mm);Z (mm)
+1;Face jardin;ADJ;Mega Par Profile Plus;6 canaux;1;1;Face;-2500;-1000;4500,5
+2;Face cour;ADJ;Mega Par Profile Plus;6 canaux;1;7;Face;2500;-1000;4500,5
+3;Contre 1;Showtec;LED Par 56;;1;13;Contre;-1500;3000;5000
+4;Contre 2;Showtec;LED Par 56;;1;19;Contre;1500;3000;5000
+5;Découpe;Projecteur inconnu;Découpe 1kW;;2;1;Face;0;-1000;4500

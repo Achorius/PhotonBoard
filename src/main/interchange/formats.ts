@@ -4,6 +4,8 @@
 // exporter with the registry when loaded.
 // ============================================================
 
+import './photonboard'
+import './csv'
 import './mvr'
 import './gdtf'
 import './ma'

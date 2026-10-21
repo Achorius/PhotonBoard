@@ -270,7 +270,7 @@ toast.success(t('settings.outputs.applied'))
   not `patch.noFixturesPatched`). Each view owns one area file: `i18n/en/<area>.ts` (source of truth) +
   `i18n/fr/<area>.ts` (typed `Translation['<area>']`: a missing or extra key does not compile). Areas:
   common, units, ui, errors, shell, shortcuts, edit, file, settings, stage, remote, patch, fixtures,
-  effects, scenes, timeline, visualizer, layout, midi, follow. Reuse `common.*` (Save, Delete, Scene, Cue,
+  effects, scenes, timeline, visualizer, layout, midi, follow, pro, interchange. Reuse `common.*` (Save, Delete, Scene, Cue,
   `common.fixtureCount`…) instead of duplicating. `other` is reserved for plurals.
 - **Never concatenate** sentence pieces (`'Delete ' + name`) or plural by hand (`fixture${n > 1 ? 's' : ''}`):
   one key with placeholders / plural forms. Word order differs between languages.

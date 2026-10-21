@@ -30,6 +30,20 @@ const DEFAULT_TIMEOUT_MS = 15_000
 /** Saves wait for the Pi renderer to answer, uploads carry a whole show */
 const SLOW_TIMEOUT_MS = 45_000
 const CONNECT_WAIT_MS = 20_000
+/** Import: parsing an MVR with many GDTFs on a Pi takes a while */
+const IMPORT_TIMEOUT_MS = 150_000
+/** Same limit as the console (remote-invoke MAX_REMOTE_IMPORT_SIZE) */
+const REMOTE_IMPORT_MAX = 14 * 1024 * 1024
+
+/** Bytes → base64 without blowing the call stack on large files */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)))
+  }
+  return btoa(binary)
+}
 const RECONNECT_DELAYS_MS = [1000, 2000, 3000, 5000]
 
 let ws: WebSocket | null = null
@@ -409,6 +423,24 @@ export function createRemoteAPI(): PhotonBoardAPI {
         invokeWithTimeout(SLOW_TIMEOUT_MS, 'fixtures:catalog-get', id),
       catalogInstall: (id) =>
         invokeWithTimeout(SLOW_TIMEOUT_MS, 'fixtures:catalog-install', id)
+    },
+
+    // Import / export: the file's bytes travel as base64 (one WebSocket message, see MAX_REMOTE_IMPORT_SIZE)
+    interchange: {
+      formats: () =>
+        invoke('interchange:formats'),
+      importFile: async () =>
+        ({ success: false, errorCode: 'remoteNoDialog', error: 'Pick a file on this device to import it' }),
+      importData: async (fileName, data, opts) => {
+        if (data.byteLength > REMOTE_IMPORT_MAX) {
+          return { success: false, errorCode: 'tooLargeRemote', error: 'The file is too large to send from the remote' }
+        }
+        const json = await invokeWithTimeout(IMPORT_TIMEOUT_MS, 'interchange:import-data', fileName, bytesToBase64(data), opts ?? {})
+        return typeof json === 'string' ? JSON.parse(json) : json
+      },
+      exportShow: (req) =>
+        invokeWithTimeout(SLOW_TIMEOUT_MS, 'interchange:export-data', JSON.stringify(req)),
+      maxDataSize: REMOTE_IMPORT_MAX
     },
 
     onMenuEvent: () => {

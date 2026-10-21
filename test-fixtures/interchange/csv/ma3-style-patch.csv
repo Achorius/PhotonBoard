@@ -1,0 +1,10 @@
+Fixture ID,Name,Fixture Type,Mode,Patch,Position X,Position Y,Position Z,Rotation Z,Layer
+101,Spot 1,Martin MAC Aura,Standard,1.001,-4.5,2,6,0,Front Truss
+102,Spot 2,Martin MAC Aura,Standard,1.015,-1.5,2,6,0,Front Truss
+103,Spot 3,Martin MAC Aura,Standard,1.029,1.5,2,6,0,Front Truss
+104,Spot 4,Martin MAC Aura,Standard,1.043,4.5,2,6,0,Front Truss
+201,Wash 1,Robe Robin 600 LED Wash,Mode 3,2.001,-3,5,7,180,Back Truss
+202,Wash 2,Robe Robin 600 LED Wash,Mode 3,2.016,3,5,7,180,Back Truss
+301,Beam 1,Clay Paky Sharpy,Standard,2.101,-2,5,7,180,Back Truss
+302,Beam 2,Clay Paky Sharpy,Standard,2.117,2,5,7,180,Back Truss
+401,Hazer,Unknown Brand FogMaster 3000,2ch,3.001,0,6,0,0,Floor

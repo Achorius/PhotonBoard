@@ -26,6 +26,7 @@ import { layout } from './fr/layout'
 import { midi } from './fr/midi'
 import { follow } from './fr/follow'
 import { pro } from './fr/pro'
+import { interchange } from './fr/interchange'
 
 export const fr: Translation = {
   common,
@@ -48,5 +49,6 @@ export const fr: Translation = {
   layout,
   midi,
   follow,
-  pro
+  pro,
+  interchange
 }
