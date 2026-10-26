@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Fake udevadm for tests: `udevadm info -q path|property -n NODE` from
+# $PB_FAKE_TOUCH_DIR/udev/<eventN>.path / .props
+set -u
+q='' n=''
+while (( $# )); do
+  case $1 in
+    info) ;;
+    -q|--query) q=$2; shift ;;
+    --query=*) q=${1#*=} ;;
+    -n|--name) n=$2; shift ;;
+    --name=*) n=${1#*=} ;;
+  esac
+  shift
+done
+f=${PB_FAKE_TOUCH_DIR:?}/udev/$(basename "$n")
+case $q in
+  path) [[ -e $f.path ]] && cat "$f.path" || { echo "Unknown device \"$n\"" >&2; exit 4; } ;;
+  property) [[ -e $f.props ]] && cat "$f.props" || { echo "Unknown device \"$n\"" >&2; exit 4; } ;;
+  *) echo "fake udevadm: unsupported query $q" >&2; exit 1 ;;
+esac

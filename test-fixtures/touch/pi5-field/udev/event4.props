@@ -1,0 +1,8 @@
+DEVPATH=/devices/platform/axi/1000120000.pcie/1f00200000.usb/xhci-hcd.0/usb1/1-1/1-1.4/1-1.4.4/1-1.4.4:1.1/0003:27C0:0859.0005/input/input4/event4
+DEVNAME=/dev/input/event4
+SUBSYSTEM=input
+ID_INPUT=1
+ID_INPUT_MOUSE=1
+ID_BUS=usb
+ID_VENDOR_ID=27c0
+ID_MODEL_ID=0859

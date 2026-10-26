@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake xrandr for tests: prints $PB_FAKE_TOUCH_STATE/xrandr.txt or $PB_FAKE_TOUCH_DIR/xrandr.txt
+S=${PB_FAKE_TOUCH_STATE:-/nonexistent}
+if [[ -e $S/xrandr.txt ]]; then cat "$S/xrandr.txt"; else cat "${PB_FAKE_TOUCH_DIR:?}/xrandr.txt"; fi

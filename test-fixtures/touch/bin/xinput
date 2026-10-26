@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Fake xinput for tests: answers from $PB_FAKE_TOUCH_DIR (a fixture folder:
+# xinput-list.txt, devices.tsv = id<TAB>name<TAB>node), records set-prop /
+# map-to-output calls in $PB_FAKE_TOUCH_STATE/calls.log and keeps each
+# device's Coordinate Transformation Matrix in $PB_FAKE_TOUCH_STATE/ctm-<id>.
+set -u
+D=${PB_FAKE_TOUCH_DIR:?}
+S=${PB_FAKE_TOUCH_STATE:?}
+pick() { if [[ -e $S/$1 ]]; then echo "$S/$1"; else echo "$D/$1"; fi; }
+field() { awk -F'\t' -v id="$1" -v col="$2" '$1 == id {print $col; exit}' "$(pick devices.tsv)"; }
+case ${1:-} in
+  list)
+    if [[ ${2:-} == --name-only ]]; then
+      n=$(field "${3:-}" 2); [[ -n $n ]] || { echo "unable to find device ${3:-}" >&2; exit 1; }
+      echo "$n"
+    else
+      cat "$(pick xinput-list.txt)"
+    fi ;;
+  list-props)
+    id=${2:-}; n=$(field "$id" 2); node=$(field "$id" 3)
+    [[ -n $n ]] || { echo "unable to find device $id" >&2; exit 1; }
+    ctm="1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000"
+    [[ -e $S/ctm-$id ]] && ctm=$(cat "$S/ctm-$id")
+    printf "Device '%s':\n\tDevice Enabled (115):\t1\n\tCoordinate Transformation Matrix (116):\t%s\n\tlibinput Send Events Mode Enabled (250):\t0, 0\n\tDevice Node (270):\t\"%s\"\n\tDevice Product ID (271):\t10176, 2137\n" "$n" "$ctm" "$node" ;;
+  set-prop)
+    id=${2:-}; prop=${3:-}; shift 3
+    [[ -n $(field "$id" 2) ]] || { echo "unable to find device $id" >&2; exit 1; }
+    echo "set-prop $id $prop $*" >> "$S/calls.log"
+    if [[ $prop == "Coordinate Transformation Matrix" ]]; then
+      out=""; for v in "$@"; do out+="${out:+, }$(printf '%.6f' "$v")"; done
+      echo "$out" > "$S/ctm-$id"
+    fi ;;
+  map-to-output)
+    echo "map-to-output ${2:-} ${3:-}" >> "$S/calls.log" ;;
+  *) echo "fake xinput: unsupported: $*" >&2; exit 1 ;;
+esac

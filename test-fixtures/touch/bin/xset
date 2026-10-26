@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake xset for tests: X is always "ready"
+exit 0

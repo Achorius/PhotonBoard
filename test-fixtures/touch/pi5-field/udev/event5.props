@@ -1,0 +1,7 @@
+DEVPATH=/devices/platform/axi/1000120000.pcie/1f00200000.usb/xhci-hcd.0/usb1/1-1/1-1.4/1-1.4.4/1-1.4.4:1.2/0003:27C0:0859.0006/input/input5/event5
+DEVNAME=/dev/input/event5
+SUBSYSTEM=input
+ID_INPUT=1
+ID_INPUT_KEY=1
+ID_INPUT_KEYBOARD=1
+ID_BUS=usb
