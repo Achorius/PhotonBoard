@@ -69,13 +69,22 @@ l'écriture de la carte (avant de la mettre dans le Pi) :
 
 - Si `photonboard.local` ne répond pas (certains Windows ou réseaux), utilisez
   l'adresse IP du Pi, visible dans l'interface de votre box/routeur.
-- Écrans tactiles inversés (deux écrans) : voir `/etc/photonboard/touch-map.conf`
-  (`SWAP=1`).
-- Le tactile ne répond pas : *Réglages › Écrans tactiles › Lancer le
-  diagnostic* montre ce que le Pi voit (dalles détectées, pilote utilisé,
-  association écran ↔ dalle) et peut l'enregistrer sur une clé USB. Le
-  tactile passe par le câble USB / USB-C de l'écran (le HDMI seul ne suffit
-  pas) et chaque écran doit être bien alimenté.
+- Le tactile agit sur le mauvais écran, est décalé ou inversé : tout se règle
+  dans PhotonBoard, au doigt, sans souris ni terminal — *Réglages › Affichage ›
+  Écrans tactiles* : **Associer les dalles tactiles (assistant)** (touchez
+  l'écran qui affiche son numéro en grand), puis par dalle l'écran,
+  l'orientation, *Inverser X / Y* et **Calibrer…** (4 cibles + vérification au
+  centre) ; **Tester le tactile** montre où arrive chaque toucher. Ces réglages
+  sont enregistrés dans `~/.config/photonboard/touch.json` et appliqués au
+  démarrage et à chaque rebranchement d'une dalle (le script
+  `/etc/photonboard/touch-map.conf` ne sert plus que tant qu'aucun réglage
+  n'a été fait dans PhotonBoard).
+- Le tactile ne répond pas : la même page indique combien de dalles tactiles
+  le Pi voit, et *Lancer le diagnostic* montre le détail (dalles détectées,
+  pilote utilisé, association écran ↔ dalle) et peut l'enregistrer sur une clé
+  USB. Le tactile passe par le câble USB / USB-C de l'écran (le HDMI seul ne
+  suffit pas) et chaque écran doit être bien alimenté. Le réglage du tactile
+  demande la session X11 de l'image (pas Wayland).
 - Mise à jour de PhotonBoard plus tard : réécrire la carte avec la nouvelle
   image (pensez à sauvegarder vos spectacles avant), ou, avec Internet et SSH,
   `curl -fsSL https://raw.githubusercontent.com/Achorius/PhotonBoard/main/scripts/pi-setup.sh | sudo bash`.

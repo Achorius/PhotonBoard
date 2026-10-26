@@ -19,7 +19,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
-          'stage-preload': resolve(__dirname, 'src/preload/stage-preload.ts')
+          'stage-preload': resolve(__dirname, 'src/preload/stage-preload.ts'),
+          'touch-overlay': resolve(__dirname, 'src/preload/touch-overlay.ts')
         }
       }
     }

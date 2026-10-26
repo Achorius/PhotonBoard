@@ -160,6 +160,117 @@ export interface TouchReport {
   remapOk?: boolean
 }
 
+// --- Touchscreen setup (Linux X11 console: Settings › Display › Touchscreens) ---
+
+/** Panel rotation in degrees (counter-clockwise, like xrandr "left" = 90) */
+export type TouchRotation = 0 | 90 | 180 | 270
+
+/** What the operator chose for one touch panel (saved in ~/.config/photonboard/touch.json) */
+export interface TouchPanelSettings {
+  /** xrandr output the panel drives ("HDMI-2"); null = automatic order */
+  output: string | null
+  rotation: TouchRotation
+  invertX: boolean
+  invertY: boolean
+  /**
+   * Affine correction [a, b, c, d, e, f] (x' = a·x + b·y + c, y' = d·x + e·y + f)
+   * in normalized device space, from the calibration wizard; null = none
+   */
+  calibration: number[] | null
+}
+
+/** touch.json: one entry per panel, keyed by "<usb port>|<name>" */
+export interface TouchSetupConfig {
+  version: 1
+  panels: Record<string, TouchPanelSettings & { port: string; name: string }>
+}
+
+/** A connected, active xrandr output (desktop pixels) */
+export interface TouchOutput {
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  primary: boolean
+  /** xrandr rotation of the output itself */
+  rotation: TouchRotation
+}
+
+/** A touch panel: a USB port with at least one udev touchscreen / tablet node */
+export interface TouchPanel {
+  /** "<usb port>|<name>": key of its saved settings */
+  key: string
+  /** USB port path ("1-1.4.4") */
+  port: string
+  name: string
+  /** Every X pointer device of the panel (all get the same matrix) */
+  ids: number[]
+  /** Its event nodes (/dev/input/eventN) */
+  nodes: string[]
+  /** Saved settings, null = automatic */
+  saved: TouchPanelSettings | null
+  /** Output it is mapped to by the current setup (saved, else automatic), null = none */
+  output: string | null
+  /** The output comes from the automatic order (nothing saved for it) */
+  automatic: boolean
+  /** What its current X matrix maps to: an output name, 'all' (whole desktop), 'custom', or null (unknown) */
+  current: string | null
+}
+
+export interface TouchSetupInfo {
+  /** false: not available here (see reason) */
+  supported: boolean
+  reason?: 'not-linux' | 'wayland' | 'no-x' | 'error'
+  error?: string
+  outputs: TouchOutput[]
+  panels: TouchPanel[]
+  desktop: { width: number; height: number }
+  /** Saved setup (null = automatic for every panel) */
+  saved: TouchSetupConfig | null
+  configPath: string
+}
+
+/** touchSetup.save: settings for some panels (merged over the saved setup) */
+export interface TouchSetupSaveRequest {
+  panels: Record<string, TouchPanelSettings>
+}
+
+export interface TouchSetupResult {
+  ok: boolean
+  error?: string
+  info: TouchSetupInfo
+}
+
+export interface TouchIdentifyResult {
+  ok: boolean
+  canceled?: boolean
+  reason?: 'unsupported' | 'no-panels' | 'no-outputs' | 'no-access' | 'busy' | 'error'
+  error?: string
+  /** One line per output, in screen order: the panel assigned to it (key) or null */
+  assignments: { output: string; panel: string | null }[]
+  info?: TouchSetupInfo
+}
+
+export interface TouchCalibrateResult {
+  ok: boolean
+  canceled?: boolean
+  reason?: 'unsupported' | 'no-panel' | 'no-output' | 'busy' | 'error'
+  error?: string
+  calibration?: number[]
+  /** Distance between the centre check touch and the centre, in pixels */
+  errorPx?: number
+  info?: TouchSetupInfo
+}
+
+export interface TouchTestResult {
+  ok: boolean
+  reason?: 'unsupported' | 'no-outputs' | 'busy' | 'error'
+  error?: string
+  /** Touches seen on each output during the test */
+  touches: Record<string, number>
+}
+
 /** A show file on a USB stick */
 export interface RemovableShow {
   /** File name without .pbshow */
@@ -333,6 +444,25 @@ export interface PhotonBoardAPI {
     touchReport?(): Promise<TouchReport>
     /** Linux: re-apply the touchscreen → screen mapping, then a fresh report. Console only. */
     touchRemap?(): Promise<TouchReport>
+  }
+
+  /**
+   * Touchscreen setup (Linux X11 console only, never on the web remote):
+   * panels, outputs, assignment by touch, orientation, calibration, test.
+   * Every call resolves (errors are in the result), none throws.
+   */
+  touchSetup?: {
+    list(): Promise<TouchSetupInfo>
+    /** Save settings for some panels (merged over the saved setup) and apply */
+    save(config: TouchSetupSaveRequest): Promise<TouchSetupResult>
+    /** Assignment wizard: an overlay on every screen, "touch THIS screen" one at a time */
+    identify(): Promise<TouchIdentifyResult>
+    /** Calibration wizard on the panel's screen (4 targets + centre check) */
+    calibrate(port: string): Promise<TouchCalibrateResult>
+    /** Touch test: an overlay on every screen draws where each touch lands */
+    test(): Promise<TouchTestResult>
+    /** Forget the saved settings of one panel (by key or port), or of all: back to automatic */
+    reset(port?: string): Promise<TouchSetupResult>
   }
 
   /**

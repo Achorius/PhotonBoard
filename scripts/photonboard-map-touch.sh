@@ -9,13 +9,22 @@
 # session: whatever happens it exits 0 and logs what it did to
 # /tmp/photonboard-touch-map.log.
 #
-# Touchscreens are found by what udev says they are (ID_INPUT_TOUCHSCREEN
-# or ID_INPUT_TABLET: many cheap touch panels, e.g. "wch.cn TouchScreen",
-# also expose a pen interface), whatever their name. Works with any number
-# of touchscreens: plugged directly into the Pi (ports "1-1", "3-2"...) or
-# through a hub ("1-1.2"). Touchscreens are sorted by USB port and matched
-# in order with the connected outputs (sorted by name: HDMI-1, HDMI-2);
-# extra touchscreens/outputs are logged and left alone.
+# A touch panel is a USB port with at least one event node udev calls a
+# touchscreen (ID_INPUT_TOUCHSCREEN or ID_INPUT_TABLET: many cheap panels,
+# e.g. "wch.cn TouchScreen", also expose a pen interface), whatever its
+# name. EVERY X pointer device on that port is mapped (a panel often has
+# two or three HID interfaces, each its own xinput device); pointers on
+# other ports (a mouse receiver on the same hub...) never are. Works with
+# any number of panels: plugged directly into the Pi (ports "1-1", "3-2"...)
+# or through a hub ("1-1.4.4"). Panels are sorted by USB port and matched in
+# order with the connected outputs (sorted by name: HDMI-1, HDMI-2); extra
+# panels/outputs are logged and left alone.
+#
+# Settings › Display › Touchscreens in PhotonBoard sets the panels up by
+# touch (assign, orientation, calibration) and saves that in
+# ~/.config/photonboard/touch.json: when that file exists PhotonBoard
+# applies it itself and this helper's apply mode does nothing (--list and
+# --report still work, and the report shows the saved setup).
 #
 # Config (optional, shell syntax): /etc/photonboard/touch-map.conf
 #   SWAP=1                          swap the first two touchscreens
@@ -38,6 +47,11 @@ set -u
 
 CFG=${PB_TOUCH_CONF:-/etc/photonboard/touch-map.conf}
 LOGFILE=${PB_TOUCH_LOG:-/tmp/photonboard-touch-map.log}
+# Written by PhotonBoard (Settings › Display › Touchscreens)
+APP_CFG=${XDG_CONFIG_HOME:-${HOME:-/nonexistent}/.config}/photonboard/touch.json
+# Event nodes scanned for touch panels; PB_TOUCH_WAIT=0 skips the start-up waits (tests)
+INPUT_DIR=${PB_INPUT_DIR:-/dev/input}
+WAIT=${PB_TOUCH_WAIT:-1}
 MODE=apply
 
 case ${1:-} in
@@ -74,33 +88,71 @@ device_node() { # device_node XINPUT_ID
   xinput list-props "$1" 2>/dev/null | sed -n 's/.*Device Node[^"]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
-# Touch pointer devices as "id<TAB>node<TAB>name", one per line
-touch_devices() {
+usb_port() { # usb_port /dev/input/eventN -> "1-1" / "1-1.2"
+  udevadm info -q path -n "$1" 2>/dev/null | tr '/' '\n' | grep -E '^[0-9]+-[0-9]+(\.[0-9]+)*$' | tail -n1
+}
+
+# X slave pointers as "id<TAB>node<TAB>name", one per line (keyboard
+# interfaces cannot be mapped)
+pointer_devices() {
   local line id node name
   while IFS= read -r line; do
-    [[ $line =~ slave[[:space:]]+pointer ]] || continue   # keyboard interfaces cannot be mapped
+    [[ $line =~ slave[[:space:]]+pointer ]] || continue
     [[ $line =~ id=([0-9]+) ]] || continue
     id=${BASH_REMATCH[1]}
     name=$(xinput list --name-only "$id" 2>/dev/null)
-    [[ -z $TOUCH_NAME || $name == *"$TOUCH_NAME"* ]] || continue
     node=$(device_node "$id")
     [[ -n $node ]] || continue
-    # Without TOUCH_NAME, keep what udev calls a touchscreen / tablet
-    [[ -n $TOUCH_NAME ]] || is_touch_node "$node" || continue
     printf '%s\t%s\t%s\n' "$id" "$node" "$name"
   done < <(xinput list 2>/dev/null)
 }
 
-usb_port() { # usb_port /dev/input/eventN -> "1-1" / "1-1.2"
-  udevadm info -q path -n "$1" 2>/dev/null | tr '/' '\n' | grep -E '^[0-9]+-[0-9]+(\.[0-9]+)*$' | tail -n1
+# USB ports holding a touch panel, one per line: ports of the event nodes
+# udev calls a touchscreen / tablet (all of /dev/input, and the X devices)
+touch_ports() {
+  local f id node name port
+  {
+    for f in "$INPUT_DIR"/event*; do
+      [[ -e $f ]] || continue
+      is_touch_node "$f" && usb_port "$f"
+    done
+    while IFS=$'\t' read -r id node name; do
+      is_touch_node "$node" && usb_port "$node"
+    done < <(pointer_devices)
+  } | grep . | sort -u
+}
+
+# Touch pointer devices as "id<TAB>node<TAB>name<TAB>port", one per line:
+# every X pointer on a touch panel's USB port. With TOUCH_NAME: every X
+# pointer whose name contains it (grouped by its USB port).
+touch_devices() {
+  local id node name port ports
+  ports=$'\n'$(touch_ports)$'\n'
+  while IFS=$'\t' read -r id node name; do
+    port=$(usb_port "$node")
+    if [[ -n $TOUCH_NAME ]]; then
+      [[ $name == *"$TOUCH_NAME"* ]] || continue
+    else
+      [[ -n $port && $ports == *$'\n'"$port"$'\n'* ]] || continue
+    fi
+    printf '%s\t%s\t%s\t%s\n' "$id" "$node" "$name" "$port"
+  done < <(pointer_devices)
 }
 
 map_touch() {
   local apply=$1
   log "$(date) — mapping touchscreens (DISPLAY=$DISPLAY${TOUCH_NAME:+, TOUCH_NAME='$TOUCH_NAME'})"
 
+  if [[ -e $APP_CFG ]]; then
+    if [[ $apply == 1 ]]; then
+      log "Touchscreens managed by PhotonBoard ($APP_CFG: Settings › Display › Touchscreens) — nothing applied here."
+      return 0
+    fi
+    log "Note: managed by PhotonBoard ($APP_CFG) — PhotonBoard applies its own setup, not this plan."
+  fi
+
   local i
-  if [[ $apply == 1 ]]; then
+  if [[ $apply == 1 && $WAIT != 0 ]]; then
     for i in $(seq 1 30); do                     # wait for X (up to 30 s)
       x_ready && break
       sleep 1
@@ -113,7 +165,7 @@ map_touch() {
 
   # Wait (up to 10 s) until the number of touch devices is stable for 2 s.
   local count prev=-1 stable=0
-  if [[ $apply == 1 ]]; then
+  if [[ $apply == 1 && $WAIT != 0 ]]; then
     for i in $(seq 1 10); do
       count=$(touch_devices | wc -l)
       if [[ $count -gt 0 && $count -eq $prev ]]; then
@@ -130,8 +182,7 @@ map_touch() {
   # Group the touch pointer devices by USB port.
   declare -A port_ids=()
   local id node name port
-  while IFS=$'\t' read -r id node name; do
-    port=$(usb_port "$node")
+  while IFS=$'\t' read -r id node name port; do
     if [[ -z $port ]]; then log "  id=$id '$name' node=$node: not on USB — skipped"; continue; fi
     port_ids[$port]+="$id "
     log "  id=$id '$name' node=$node port=$port"
@@ -237,8 +288,22 @@ report() {
     log ""
     log "== Mapping (what would be applied now) =="
     map_touch 0
+    log ""
+    log "Current transformation matrices:"
+    local id node name port
+    while IFS=$'\t' read -r id node name port; do
+      log "  id=$id '$name' port=${port:-?}: $(xinput list-props "$id" 2>/dev/null | sed -n 's/.*Coordinate Transformation Matrix[^:]*:[[:space:]]*//p' | head -n1)"
+    done < <(touch_devices)
   else
     log "X is not running on $DISPLAY."
+  fi
+  log ""
+  log "== PhotonBoard touch setup ($APP_CFG) =="
+  if [[ -r $APP_CFG ]]; then
+    sed 's/^/  /' "$APP_CFG"
+    log ""
+  else
+    log "  (none: automatic mapping by this helper)"
   fi
   log ""
   log "== Last mapping at startup ($LOGFILE) =="

@@ -1,0 +1,5 @@
+DEVPATH=/devices/platform/axi/107c701400.hdmi/rc/rc0/input6/event6
+DEVNAME=/dev/input/event6
+SUBSYSTEM=input
+ID_INPUT=1
+ID_INPUT_KEY=1

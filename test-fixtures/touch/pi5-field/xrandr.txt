@@ -1,0 +1,8 @@
+Screen 0: minimum 320 x 200, current 3840 x 1080, maximum 7680 x 7680
+HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 527mm x 296mm
+   1920x1080     60.00*+  50.00    59.94  
+   1280x720      60.00    50.00    59.94  
+   720x576       50.00  
+HDMI-2 connected 1920x1080+1920+0 (normal left inverted right x axis y axis) 527mm x 296mm
+   1920x1080     60.00*+  50.00    59.94  
+   1280x720      60.00    50.00    59.94  

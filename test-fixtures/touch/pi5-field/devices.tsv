@@ -1,0 +1,11 @@
+6	Logitech Wireless Mouse	/dev/input/event0
+7	Logitech Wireless Keyboard PID:4075	/dev/input/event1
+8	wch.cn TouchScreen	/dev/input/event3
+9	wch.cn TouchScreen	/dev/input/event4
+10	wch.cn TouchScreen	/dev/input/event5
+11	vc4-hdmi-0	/dev/input/event6
+12	vc4-hdmi-1	/dev/input/event7
+13	Logitech Wireless Keyboard PID:4075	/dev/input/event1
+14	vc4-hdmi-0	/dev/input/event6
+15	vc4-hdmi-1	/dev/input/event7
+16	Logitech Wireless Mouse	/dev/input/event0
