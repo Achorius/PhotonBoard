@@ -937,6 +937,16 @@ export const IPC = {
   APP_GAME_CONTROLLERS: 'app:game-controllers',
   SYSTEM_TOUCH_REPORT: 'system:touch-report',
   SYSTEM_TOUCH_REMAP: 'system:touch-remap',
+  // Touchscreen setup (Linux X11 console only)
+  TOUCH_SETUP_LIST: 'touch-setup:list',
+  TOUCH_SETUP_SAVE: 'touch-setup:save',
+  TOUCH_SETUP_IDENTIFY: 'touch-setup:identify',
+  TOUCH_SETUP_CALIBRATE: 'touch-setup:calibrate',
+  TOUCH_SETUP_TEST: 'touch-setup:test',
+  TOUCH_SETUP_RESET: 'touch-setup:reset',
+  /** Touch wizard overlays ↔ main */
+  TOUCH_OVERLAY_MESSAGE: 'touch-overlay:message',
+  TOUCH_OVERLAY_STATE: 'touch-overlay:state',
 
   // USB sticks
   REMOVABLE_LIST: 'removable:list',

@@ -20,7 +20,9 @@ import { sanitizeShowName, SHOW_EXTENSION } from './show-validation'
 import { mt, setMainLanguage } from './messages'
 import { listGameControllers } from './input-devices'
 import { RemovableWatcher, copyFileName, driveOf, ejectDrive, isInsideDrive, removableRoots, safeTextFileName } from './removable-drives'
-import { touchRemap, touchReport, type HelperDirs } from './touch-diagnostics'
+import { INSTALLED_TOUCH_HELPER, touchRemap, touchReport, type HelperDirs } from './touch-diagnostics'
+import { TouchSetupService } from './touch-wizards'
+import { touchConfigPath } from './touch-setup'
 import { atomicWriteFile } from './atomic-write'
 import { userInfo } from 'os'
 import { existsSync } from 'fs'
@@ -71,6 +73,8 @@ let interchange: InterchangeHost
 let demos: DemoLibrary
 /** Start-up splash (null once the console is shown, or when PB_NO_SPLASH=1) */
 let splash: Splash | null = null
+/** Settings › Display › Touchscreens (Linux X11) */
+let touchSetup: TouchSetupService | null = null
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
@@ -823,6 +827,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SYSTEM_TOUCH_REPORT, () => touchReport({ dirs: touchDirs() }))
   ipcMain.handle(IPC.SYSTEM_TOUCH_REMAP, () => touchRemap({ dirs: touchDirs() }))
 
+  // Touchscreen setup: panels ↔ screens, orientation, calibration, wizards.
+  // Console only (the web remote never reaches ipcMain). Never throws.
+  const touch = new TouchSetupService({
+    deps: () => ({}),
+    language: () => menuLanguage,
+    preloadPath: join(__dirname, '../preload/touch-overlay.mjs'),
+    // At start / on device changes: once PhotonBoard owns the setup (touch.json), or on the Pi kiosk
+    autoApply: () => existsSync(touchConfigPath()) || existsSync(INSTALLED_TOUCH_HELPER) || process.env.PB_TOUCH_AUTO_APPLY === '1',
+    focusConsole: () => getMainWindow()?.focus(),
+    log: (...args) => safeLog('log', ...args)
+  })
+  touchSetup = touch
+  const touchFailure = (e: unknown) => ({ ok: false, reason: 'error' as const, error: e instanceof Error ? e.message : String(e) })
+  ipcMain.handle(IPC.TOUCH_SETUP_LIST, () => touch.list())
+  ipcMain.handle(IPC.TOUCH_SETUP_SAVE, (_event, config: unknown) => touch.save(config))
+  ipcMain.handle(IPC.TOUCH_SETUP_RESET, (_event, which: unknown) => touch.reset(which))
+  ipcMain.handle(IPC.TOUCH_SETUP_IDENTIFY, () => touch.identify().catch((e) => ({ ...touchFailure(e), assignments: [] })))
+  ipcMain.handle(IPC.TOUCH_SETUP_CALIBRATE, (_event, port: unknown) => touch.calibrate(port).catch(touchFailure))
+  ipcMain.handle(IPC.TOUCH_SETUP_TEST, () => touch.test().catch((e) => ({ ...touchFailure(e), touches: {} })))
+
   // --- USB sticks (removable-drives.ts) ---
   ipcMain.handle(IPC.REMOVABLE_LIST, (_event, refresh: unknown) => listRemovable(refresh === true))
 
@@ -1029,6 +1053,7 @@ function stopStageSync(): void {
 /** Stop servers and outputs (once). Called from will-quit, which covers Cmd+Q too. */
 async function cleanup(): Promise<void> {
   stopStageSync()
+  touchSetup?.dispose()
   piSave?.dispose()
   stopApiServer()
   stopWebServer()
@@ -1129,6 +1154,8 @@ function startApp(): void {
     setupPermissions()
     createMenu()
     createWindow()
+    // Touch panels → screens (saved setup / automatic), and again when input devices change
+    if (process.platform === 'linux') touchSetup?.startAutoApply()
 
     // Remote clients must re-authenticate when the PIN is turned on or changed
     remoteSettings.onChange((next, prev) => {

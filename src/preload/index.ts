@@ -177,6 +177,22 @@ const api: PhotonBoardAPI = {
       ipcRenderer.invoke(IPC.SYSTEM_TOUCH_REMAP)
   },
 
+  // --- Touchscreen setup (Linux X11 console) ---
+  touchSetup: {
+    list: () =>
+      ipcRenderer.invoke(IPC.TOUCH_SETUP_LIST),
+    save: (config) =>
+      ipcRenderer.invoke(IPC.TOUCH_SETUP_SAVE, config),
+    identify: () =>
+      ipcRenderer.invoke(IPC.TOUCH_SETUP_IDENTIFY),
+    calibrate: (port) =>
+      ipcRenderer.invoke(IPC.TOUCH_SETUP_CALIBRATE, port),
+    test: () =>
+      ipcRenderer.invoke(IPC.TOUCH_SETUP_TEST),
+    reset: (port) =>
+      ipcRenderer.invoke(IPC.TOUCH_SETUP_RESET, port)
+  },
+
   // --- USB sticks ---
   removable: {
     list: (refresh) =>
