@@ -370,6 +370,38 @@ install_touch_helper() {
   info "Installed $dst"
 }
 
+# Touchscreens on libinput. Since Debian 13 (Trixie), the wacom X driver
+# claims EVERY device udev calls a tablet, not only Wacom ones (its
+# "Wacom USB tablet class" lost its 056a vendor match). Many USB touch
+# panels (wch.cn, ILITEK, eGalax... e.g. portable 15" touch monitors) also
+# expose a pen interface, are tagged as tablets and end up on the wacom
+# driver, where touch does nothing. Hand them back to libinput (this file
+# sorts after 70-wacom.conf, so it wins); real Wacom devices (056a) keep
+# the wacom driver.
+write_touch_xorg_conf() {
+  mkdir -p /etc/X11/xorg.conf.d
+  cat > /etc/X11/xorg.conf.d/90-photonboard-touch.conf <<'XCONF'
+# PhotonBoard (managed by pi-setup.sh): touchscreens and touch panels'
+# pen interfaces use libinput, not the wacom driver (Debian 13 binds it to
+# any tablet). Real Wacom devices (USB vendor 056a) are left alone.
+Section "InputClass"
+  Identifier "PhotonBoard touchscreens"
+  MatchIsTouchscreen "on"
+  MatchDevicePath "/dev/input/event*"
+  NoMatchUSBID "056a:*"
+  Driver "libinput"
+EndSection
+Section "InputClass"
+  Identifier "PhotonBoard touch panel pens"
+  MatchIsTablet "on"
+  MatchDevicePath "/dev/input/event*"
+  NoMatchUSBID "056a:*"
+  Driver "libinput"
+EndSection
+XCONF
+  info "Touchscreens: /etc/X11/xorg.conf.d/90-photonboard-touch.conf (libinput)"
+}
+
 write_xinitrc() { # write_xinitrc FILE
   cat > "$1" <<'XINITRC'
 #!/bin/bash
@@ -430,9 +462,10 @@ ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
 EOF
   (( IMAGE_BUILD )) || systemctl daemon-reload
 
-  # Touchscreen mapping helper (maps the wch.cn touchscreens to their HDMI
-  # output by stable USB port path).
+  # Touchscreen mapping helper (maps each touchscreen to its HDMI output by
+  # stable USB port path) and the X input driver for touchscreens.
   install_touch_helper
+  write_touch_xorg_conf
   mkdir -p /etc/photonboard
   if [[ ! -f /etc/photonboard/touch-map.conf ]]; then
     cat > /etc/photonboard/touch-map.conf <<'TOUCHCONF'
@@ -440,7 +473,7 @@ EOF
 # Set SWAP=1 if the left/right touchscreens are inverted.
 SWAP=0
 # Optional overrides:
-#TOUCH_NAME='wch.cn TouchScreen'
+#TOUCH_NAME='wch.cn TouchScreen'   (default: every touchscreen)
 #OUTPUTS="HDMI-1 HDMI-2"
 #PORT_MAP="1-1=HDMI-1 1-2=HDMI-2"
 TOUCHCONF
