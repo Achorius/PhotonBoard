@@ -19,7 +19,8 @@ import { parseShowArg } from './remote-invoke'
 import { sanitizeShowName, SHOW_EXTENSION } from './show-validation'
 import { mt, setMainLanguage } from './messages'
 import { listGameControllers } from './input-devices'
-import { RemovableWatcher, copyFileName, driveOf, ejectDrive, isInsideDrive, removableRoots } from './removable-drives'
+import { RemovableWatcher, copyFileName, driveOf, ejectDrive, isInsideDrive, removableRoots, safeTextFileName } from './removable-drives'
+import { touchRemap, touchReport, type HelperDirs } from './touch-diagnostics'
 import { atomicWriteFile } from './atomic-write'
 import { userInfo } from 'os'
 import { existsSync } from 'fs'
@@ -812,6 +813,16 @@ function registerIpcHandlers(): void {
   // Follow panel: game controllers the OS sees (why Chromium shows none)
   ipcMain.handle(IPC.APP_GAME_CONTROLLERS, () => listGameControllers())
 
+  // Settings › Touchscreens (Linux): the touch helper's report / re-map.
+  // Console only — the web remote never reaches these.
+  const touchDirs = (): HelperDirs => ({
+    resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+    appPath: app.getAppPath(),
+    mainDir: __dirname
+  })
+  ipcMain.handle(IPC.SYSTEM_TOUCH_REPORT, () => touchReport({ dirs: touchDirs() }))
+  ipcMain.handle(IPC.SYSTEM_TOUCH_REMAP, () => touchRemap({ dirs: touchDirs() }))
+
   // --- USB sticks (removable-drives.ts) ---
   ipcMain.handle(IPC.REMOVABLE_LIST, (_event, refresh: unknown) => listRemovable(refresh === true))
 
@@ -868,6 +879,24 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.REMOVABLE_EJECT, (_event, drivePath: unknown) => ejectRemovable(drivePath))
+
+  /** A text file (touchscreen diagnostic…) at the ROOT of a listed stick */
+  ipcMain.handle(IPC.REMOVABLE_SAVE_TEXT, async (_event, drivePath: unknown, fileName: unknown, text: unknown): Promise<ShowSaveResult> => {
+    const drives = await drivesFor(drivePath)
+    const drive = driveOf(drivePath, drives)
+    if (!drive || drive.path !== drivePath) return { success: false, error: mt('usbNotOnStick') }
+    const name = safeTextFileName(fileName)
+    if (!name || typeof text !== 'string' || text.length > 8 * 1024 * 1024) return { success: false, error: mt('usbInvalidFile') }
+    const file = join(drive.path, name)
+    try {
+      await atomicWriteFile(file, text)
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      return { success: false, error: err.code === 'ENOSPC' ? mt('usbFull') : err.code === 'EROFS' || err.code === 'EACCES' ? mt('usbReadOnly') : err.message }
+    }
+    void removable?.refresh()
+    return { success: true, path: file }
+  })
 
   ipcMain.on(IPC.APP_QUIT, () => {
     app.quit()

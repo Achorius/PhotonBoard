@@ -1,6 +1,6 @@
 {
   "name": "photonboard",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Professional DMX lighting control application",
   "author": {
     "name": "PhotonBoard",
@@ -111,6 +111,12 @@
             "arm64",
             "armv7l"
           ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "scripts/photonboard-map-touch.sh",
+          "to": "pi/photonboard-map-touch.sh"
         }
       ],
       "category": "AudioVideo",

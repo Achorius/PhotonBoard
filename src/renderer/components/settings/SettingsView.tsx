@@ -2,7 +2,7 @@
 // Settings — machine & per-device configuration.
 //   Outputs        DMX outputs (machine config, dmxOutputs API)
 //   Remote access  web remote URL + QR, PIN, Companion API
-//   Display        language, density, executor bar, sidebar, 3D quality
+//   Display        language, density, touchscreens (Linux), executor bar, sidebar, 3D quality
 //   Show           current file, save / open, backups, MIDI & timecode links
 //   About          version, platform, credits
 // ============================================================

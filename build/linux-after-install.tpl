@@ -57,6 +57,34 @@ PBEOF
         udevadm control --reload-rules 2>/dev/null || true
         udevadm trigger --subsystem-match=input --subsystem-match=hidraw 2>/dev/null || true
     fi
+    # Touchscreens on libinput: Debian 13's wacom X driver claims any device
+    # udev calls a tablet, including the pen interface of USB touch panels,
+    # and touch then does nothing (same file as pi-setup.sh; read at the
+    # next X start)
+    mkdir -p /etc/X11/xorg.conf.d
+    cat > /etc/X11/xorg.conf.d/90-photonboard-touch.conf <<'PBEOF'
+# PhotonBoard (managed by pi-setup.sh): touchscreens and touch panels'
+# pen interfaces use libinput, not the wacom driver (Debian 13 binds it to
+# any tablet). Real Wacom devices (USB vendor 056a) are left alone.
+Section "InputClass"
+  Identifier "PhotonBoard touchscreens"
+  MatchIsTouchscreen "on"
+  MatchDevicePath "/dev/input/event*"
+  NoMatchUSBID "056a:*"
+  Driver "libinput"
+EndSection
+Section "InputClass"
+  Identifier "PhotonBoard touch panel pens"
+  MatchIsTablet "on"
+  MatchDevicePath "/dev/input/event*"
+  NoMatchUSBID "056a:*"
+  Driver "libinput"
+EndSection
+PBEOF
+    # Touchscreen → screen mapping helper started by ~/.xinitrc
+    if [ -f '/opt/${sanitizedProductName}/resources/pi/photonboard-map-touch.sh' ]; then
+        install -m 0755 '/opt/${sanitizedProductName}/resources/pi/photonboard-map-touch.sh' /usr/local/bin/photonboard-map-touch || true
+    fi
     # The kiosk user reads the gamepad nodes through the "input" group
     if [ -f /etc/photonboard/kiosk-user ]; then
         PB_KIOSK_USER=$(head -n1 /etc/photonboard/kiosk-user)
