@@ -68,7 +68,26 @@ export const settings = {
     previewButton: 'Button',
     previewPrimary: 'Primary',
     previewTouch: 'Touch · 44 px targets',
-    previewCompact: 'Compact · 30 px controls'
+    previewCompact: 'Compact · 30 px controls',
+    // Touchscreens card (Linux console): touch helper report / re-map
+    touch: {
+      title: 'Touchscreens',
+      description: 'Touchscreens not responding, or a finger acting on the wrong screen? See what the system detects, and pair each touch panel with its screen again.',
+      run: 'Run diagnostic',
+      remap: 'Re-map touchscreens',
+      running: 'Running the diagnostic…',
+      remapping: 'Re-mapping the touchscreens (up to a minute)…',
+      dialogTitle: 'Touchscreen diagnostic',
+      dialogDescription: 'What the system sees. Take a photo of this screen or save it to a USB stick for support. Highlighted lines need attention.',
+      remapDone: 'Touchscreens re-mapped',
+      remapFailed: 'The re-mapping reported an error (see the report)',
+      failed: 'The diagnostic could not run: {error}',
+      saveUsb: 'Save to USB stick',
+      saveUsbNamed: 'Save to {name}',
+      saved: 'Saved on {drive}: {file}',
+      saveFailed: 'Could not save on the USB stick: {error}',
+      noUsb: 'Plug in a USB stick to save the report on it.'
+    }
   },
 
   show: {

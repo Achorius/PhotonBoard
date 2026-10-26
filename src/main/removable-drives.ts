@@ -146,6 +146,13 @@ export function copyFileName(showName: string): string {
   return `${base}${SHOW_EXT}`
 }
 
+/** A plain ".txt" file name for the root of a drive (diagnostic reports), or null when unsafe */
+export function safeTextFileName(name: unknown): string | null {
+  if (typeof name !== 'string') return null
+  if (!/^[\w][\w .()-]{0,119}\.txt$/i.test(name) || name.includes('..')) return null
+  return name
+}
+
 // ---------------- Watcher ----------------
 
 export class RemovableWatcher {

@@ -113,6 +113,12 @@
           ]
         }
       ],
+      "extraResources": [
+        {
+          "from": "scripts/photonboard-map-touch.sh",
+          "to": "pi/photonboard-map-touch.sh"
+        }
+      ],
       "category": "AudioVideo",
       "icon": "build/icon.png",
       "synopsis": "DMX lighting console",

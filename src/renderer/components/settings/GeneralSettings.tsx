@@ -16,6 +16,7 @@ import { isTimecodeChase, isTimecodeEnabled, getTimecodeFramerate } from '@rende
 import { requestExport, requestImport, requestNewShow, requestOpenShow, requestSave, requestSaveAs } from '@renderer/components/layout/file-actions'
 import { SupportedFormats } from '@renderer/components/interchange/ImportWizard'
 import { InfoRow, SettingRow, SettingsCard, SettingsPage } from './settings-ui'
+import { TouchscreensCard, touchDiagnosticsAvailable } from './TouchscreenSettings'
 
 // ---------------------------------------------------------------
 // Display
@@ -91,6 +92,8 @@ export function DisplaySettings() {
         </SettingRow>
         <DensityPreview density={density} />
       </SettingsCard>
+
+      {touchDiagnosticsAvailable() && <TouchscreensCard />}
 
       <SettingsCard icon={LuLayoutPanelLeft} title={t('settings.display.layout')}>
         <SettingRow label={t('settings.display.executorBar')} description={t('settings.display.executorBarDescription')}>

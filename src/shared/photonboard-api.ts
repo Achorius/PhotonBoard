@@ -148,6 +148,18 @@ export interface GameControllerDiagnostics {
   joydev: boolean | null
 }
 
+/** Touchscreen diagnostic (Linux: Settings › Display › Touchscreens) */
+export interface TouchReport {
+  /** false = not available on this system (not Linux) */
+  supported: boolean
+  /** Plain-text report (photonboard-map-touch --report), with the helper's errors if any */
+  text: string
+  /** The report ran to completion */
+  ok: boolean
+  /** touchRemap only: the mapping was re-applied without error */
+  remapOk?: boolean
+}
+
 /** A show file on a USB stick */
 export interface RemovableShow {
   /** File name without .pbshow */
@@ -315,6 +327,12 @@ export interface PhotonBoardAPI {
     setLanguage?(locale: string): void
     /** Game controllers the OS sees (Follow panel diagnostics). Optional (remote, older bridges). */
     gameControllers?(): Promise<GameControllerDiagnostics>
+    /** process.platform of the console ('linux', 'darwin'…). Optional (remote, older bridges). */
+    platform?: string
+    /** Linux: full touchscreen diagnostic (read-only). Console only, never on the web remote. */
+    touchReport?(): Promise<TouchReport>
+    /** Linux: re-apply the touchscreen → screen mapping, then a fresh report. Console only. */
+    touchRemap?(): Promise<TouchReport>
   }
 
   /**
@@ -338,6 +356,11 @@ export interface PhotonBoardAPI {
     saveCopy(drivePath: string, show: ShowFile, opts?: { overwrite?: boolean }): Promise<ShowSaveResult>
     /** Flush and unmount: the stick can be pulled out */
     eject(drivePath: string): Promise<SimpleResult>
+    /**
+     * Write a text file (diagnostic report…) at the root of a stick, replacing
+     * a file of that name. `fileName`: a plain ".txt" name. Console only.
+     */
+    saveText?(drivePath: string, fileName: string, text: string): Promise<ShowSaveResult>
   }
 
   /**

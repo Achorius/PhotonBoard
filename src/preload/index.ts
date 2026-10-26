@@ -169,7 +169,12 @@ const api: PhotonBoardAPI = {
     setLanguage: (locale) =>
       ipcRenderer.send(IPC.APP_SET_LANGUAGE, locale),
     gameControllers: () =>
-      ipcRenderer.invoke(IPC.APP_GAME_CONTROLLERS)
+      ipcRenderer.invoke(IPC.APP_GAME_CONTROLLERS),
+    platform: process.platform,
+    touchReport: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_TOUCH_REPORT),
+    touchRemap: () =>
+      ipcRenderer.invoke(IPC.SYSTEM_TOUCH_REMAP)
   },
 
   // --- USB sticks ---
@@ -185,7 +190,9 @@ const api: PhotonBoardAPI = {
     saveCopy: (drivePath, show, opts) =>
       ipcRenderer.invoke(IPC.REMOVABLE_SAVE_COPY, drivePath, JSON.stringify(show), opts ?? {}),
     eject: (drivePath) =>
-      ipcRenderer.invoke(IPC.REMOVABLE_EJECT, drivePath)
+      ipcRenderer.invoke(IPC.REMOVABLE_EJECT, drivePath),
+    saveText: (drivePath, fileName, text) =>
+      ipcRenderer.invoke(IPC.REMOVABLE_SAVE_TEXT, drivePath, fileName, text)
   },
 
   // --- Stage Window ---

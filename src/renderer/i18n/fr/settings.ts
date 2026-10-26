@@ -67,7 +67,25 @@ export const settings: Translation['settings'] = {
     previewButton: 'Bouton',
     previewPrimary: 'Principal',
     previewTouch: 'Tactile · cibles de 44 px',
-    previewCompact: 'Compacte · commandes de 30 px'
+    previewCompact: 'Compacte · commandes de 30 px',
+    touch: {
+      title: 'Écrans tactiles',
+      description: 'Les écrans tactiles ne réagissent pas, ou un doigt agit sur le mauvais écran ? Voyez ce que le système détecte, et réassociez chaque dalle tactile à son écran.',
+      run: 'Lancer le diagnostic',
+      remap: 'Réassocier les dalles tactiles',
+      running: 'Diagnostic en cours…',
+      remapping: 'Réassociation des dalles tactiles (jusqu’à une minute)…',
+      dialogTitle: 'Diagnostic des écrans tactiles',
+      dialogDescription: 'Ce que voit le système. Prenez cet écran en photo ou enregistrez-le sur une clé USB pour le support. Les lignes surlignées demandent votre attention.',
+      remapDone: 'Dalles tactiles réassociées',
+      remapFailed: 'La réassociation a signalé une erreur (voir le rapport)',
+      failed: 'Le diagnostic n’a pas pu être lancé : {error}',
+      saveUsb: 'Enregistrer sur la clé USB',
+      saveUsbNamed: 'Enregistrer sur {name}',
+      saved: 'Enregistré sur {drive} : {file}',
+      saveFailed: 'Enregistrement sur la clé USB impossible : {error}',
+      noUsb: 'Branchez une clé USB pour y enregistrer le rapport.'
+    }
   },
 
   show: {

@@ -935,6 +935,8 @@ export const IPC = {
   APP_QUIT: 'app:quit',
   APP_SET_LANGUAGE: 'app:set-language',
   APP_GAME_CONTROLLERS: 'app:game-controllers',
+  SYSTEM_TOUCH_REPORT: 'system:touch-report',
+  SYSTEM_TOUCH_REMAP: 'system:touch-remap',
 
   // USB sticks
   REMOVABLE_LIST: 'removable:list',
@@ -943,6 +945,7 @@ export const IPC = {
   REMOVABLE_BROWSE: 'removable:browse',
   REMOVABLE_SAVE_COPY: 'removable:save-copy',
   REMOVABLE_EJECT: 'removable:eject',
+  REMOVABLE_SAVE_TEXT: 'removable:save-text',
 
   // Stage Window
   STAGE_OPEN: 'stage:open',
